@@ -10,6 +10,15 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  /* Sidebar theme tokens */
+  --color-sidebar: var(--background);
+  --color-sidebar-foreground: var(--foreground);
+  /* Subtle borders and rings that adapt to theme */
+  --color-sidebar-border: color-mix(in oklab, var(--foreground) 12%, transparent);
+  --color-sidebar-ring: color-mix(in oklab, var(--foreground) 24%, transparent);
+  /* Accent surface for hover/active states */
+  --color-sidebar-accent: color-mix(in oklab, var(--background) 88%, var(--foreground) 12%);
+  --color-sidebar-accent-foreground: var(--foreground);
 }
 
 @media (prefers-color-scheme: dark) {
