@@ -91,7 +91,7 @@ export default function EditUserDialog({ user, open, onOpenChange, onSaved }: Ed
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !saving && onOpenChange(v)}>
+    <Dialog open={open} onOpenChange={(v: boolean) => !saving && onOpenChange(v)}>
       <DialogContent className="sm:max-w-[520px]">
         <DialogHeader>
           <DialogTitle>Edit user</DialogTitle>
@@ -126,7 +126,7 @@ export default function EditUserDialog({ user, open, onOpenChange, onSaved }: Ed
 
           <div className={fieldContainer}>
             <Label className={fieldLabel}>Role</Label>
-            <Select value={role as string} onValueChange={(v) => setRole(v as AppRole)}>
+            <Select value={role as string} onValueChange={(v: string) => setRole(v as AppRole)}>
               <SelectTrigger className={fieldControl}>
                 <SelectValue placeholder="Select a role" />
               </SelectTrigger>

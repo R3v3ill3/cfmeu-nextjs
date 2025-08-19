@@ -3,7 +3,7 @@
 import { createBrowserClient } from '@supabase/ssr'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-type GenericDatabase = unknown
+type GenericDatabase = any
 let browserClient: SupabaseClient<GenericDatabase> | null = null
 
 export function getSupabaseBrowserClient(): SupabaseClient<GenericDatabase> {

@@ -79,9 +79,9 @@ export const EbaAssignmentModal = ({ isOpen, onClose, employer }: EbaAssignmentM
       
       if (error) throw error;
       
-      return data.map(record => ({
+      return (data || []).map((record: any) => ({
         ...record,
-        company_name: record.employers?.name || 'Unknown Company'
+        company_name: (Array.isArray(record.employers) ? record.employers[0]?.name : record.employers?.name) || 'Unknown Company'
       })) as ExistingEba[];
     },
     enabled: isOpen && activeTab === "existing",
@@ -354,7 +354,7 @@ export const EbaAssignmentModal = ({ isOpen, onClose, employer }: EbaAssignmentM
                       <Calendar
                         mode="single"
                         selected={newEbaData.nominal_expiry_date}
-                        onSelect={(date) => setNewEbaData(prev => ({ ...prev, nominal_expiry_date: date }))}
+                        onSelect={(date: Date | undefined) => setNewEbaData(prev => ({ ...prev, nominal_expiry_date: date }))}
                         initialFocus
                         className="p-3 pointer-events-auto"
                       />
@@ -385,7 +385,7 @@ export const EbaAssignmentModal = ({ isOpen, onClose, employer }: EbaAssignmentM
                       <Calendar
                         mode="single"
                         selected={newEbaData.fwc_certified_date}
-                        onSelect={(date) => setNewEbaData(prev => ({ ...prev, fwc_certified_date: date }))}
+                        onSelect={(date: Date | undefined) => setNewEbaData(prev => ({ ...prev, fwc_certified_date: date }))}
                         initialFocus
                         className="p-3 pointer-events-auto"
                       />

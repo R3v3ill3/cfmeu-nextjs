@@ -26,6 +26,27 @@ export interface WorkerAssignment {
   sourceName?: string;
 }
 
+type WorkerRecord = {
+  id: string;
+  first_name: string;
+  surname: string;
+  member_number: string | null;
+  union_membership_status: string;
+  organiser_id: string | null;
+}
+
+type Employer = { id: string; name: string }
+type JobSite = { id: string; name: string; location: string }
+type OrganiserRecord = { id: string; full_name: string }
+type WorkerPlacementRecord = {
+  worker_id: string;
+  employer_id: string;
+  job_site_id: string;
+  workers?: { id: string; first_name: string; surname: string };
+  employers?: { id: string; name: string };
+  job_sites?: { id: string; name: string; location: string };
+}
+
 interface WorkerAssignmentTabsProps {
   selectedWorkers: WorkerAssignment[];
   onWorkersChange: (workers: WorkerAssignment[]) => void;
@@ -39,7 +60,7 @@ export function WorkerAssignmentTabs({ selectedWorkers, onWorkersChange }: Worke
   const [employerSiteSelections, setEmployerSiteSelections] = useState<Record<string, string[]>>({});
 
   // Fetch workers
-  const { data: workers = [] } = useQuery({
+  const { data: workers = [] } = useQuery<WorkerRecord[]>({
     queryKey: ["workers"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -55,12 +76,12 @@ export function WorkerAssignmentTabs({ selectedWorkers, onWorkersChange }: Worke
         .order("first_name");
       
       if (error) throw error;
-      return data;
+      return (data || []) as WorkerRecord[];
     }
   });
 
   // Fetch employers
-  const { data: employers = [] } = useQuery({
+  const { data: employers = [] } = useQuery<Employer[]>({
     queryKey: ["employers"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -69,12 +90,12 @@ export function WorkerAssignmentTabs({ selectedWorkers, onWorkersChange }: Worke
         .order("name");
       
       if (error) throw error;
-      return data;
+      return (data || []) as Employer[];
     }
   });
 
   // Fetch job sites
-  const { data: jobSites = [] } = useQuery({
+  const { data: jobSites = [] } = useQuery<JobSite[]>({
     queryKey: ["job_sites"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -83,12 +104,12 @@ export function WorkerAssignmentTabs({ selectedWorkers, onWorkersChange }: Worke
         .order("name");
       
       if (error) throw error;
-      return data;
+      return (data || []) as JobSite[];
     }
   });
 
   // Fetch organisers
-  const { data: organisers = [] } = useQuery({
+  const { data: organisers = [] } = useQuery<OrganiserRecord[]>({
     queryKey: ["organisers"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -97,12 +118,12 @@ export function WorkerAssignmentTabs({ selectedWorkers, onWorkersChange }: Worke
         .order("full_name");
       
       if (error) throw error;
-      return (data || []).map((p: any) => ({ id: p.id, full_name: p.full_name }));
+      return (data || []).map((p: any) => ({ id: p.id, full_name: p.full_name })) as OrganiserRecord[];
     }
   });
 
   // Fetch worker placements for employer-site combinations
-  const { data: workerPlacements = [] } = useQuery({
+  const { data: workerPlacements = [] } = useQuery<WorkerPlacementRecord[]>({
     queryKey: ["worker_placements"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -118,7 +139,7 @@ export function WorkerAssignmentTabs({ selectedWorkers, onWorkersChange }: Worke
         .not("end_date", "lt", new Date().toISOString().split('T')[0]);
       
       if (error) throw error;
-      return data;
+      return ((data || []) as unknown) as WorkerPlacementRecord[];
     }
   });
 
@@ -330,8 +351,8 @@ export function WorkerAssignmentTabs({ selectedWorkers, onWorkersChange }: Worke
                     <div className="flex items-center space-x-3">
                       <Checkbox
                         checked={isSelected}
-                        onCheckedChange={(checked) => 
-                          handleIndividualWorkerToggle(worker, checked as boolean)
+                        onCheckedChange={(checked: boolean | "indeterminate") => 
+                          handleIndividualWorkerToggle(worker, Boolean(checked))
                         }
                       />
                       <div className="flex-1">
@@ -373,8 +394,8 @@ export function WorkerAssignmentTabs({ selectedWorkers, onWorkersChange }: Worke
                       <div className="flex items-center space-x-3">
                         <Checkbox
                           checked={isSelected}
-                          onCheckedChange={(checked) => 
-                            handleEmployerSelection(employer.id, checked as boolean)
+                          onCheckedChange={(checked: boolean | "indeterminate") => 
+                            handleEmployerSelection(employer.id, Boolean(checked))
                           }
                         />
                         <div>
@@ -406,8 +427,8 @@ export function WorkerAssignmentTabs({ selectedWorkers, onWorkersChange }: Worke
                       <div className="flex items-center space-x-3">
                         <Checkbox
                           checked={isSelected}
-                          onCheckedChange={(checked) => 
-                            handleJobSiteSelection(jobSite.id, checked as boolean)
+                          onCheckedChange={(checked: boolean | "indeterminate") => 
+                            handleJobSiteSelection(jobSite.id, Boolean(checked))
                           }
                         />
                         <div>
@@ -439,8 +460,8 @@ export function WorkerAssignmentTabs({ selectedWorkers, onWorkersChange }: Worke
                       <div className="flex items-center space-x-3">
                         <Checkbox
                           checked={isSelected}
-                          onCheckedChange={(checked) => 
-                            handleOrganiserSelection(organiser.id, checked as boolean)
+                          onCheckedChange={(checked: boolean | "indeterminate") => 
+                            handleOrganiserSelection(organiser.id, Boolean(checked))
                           }
                         />
                         <div>
@@ -489,8 +510,8 @@ export function WorkerAssignmentTabs({ selectedWorkers, onWorkersChange }: Worke
                             <div className="flex items-center space-x-3">
                               <Checkbox
                                 checked={isSelected}
-                                onCheckedChange={(checked) => 
-                                  handleEmployerSiteSelection(employer.id, jobSite.id, checked as boolean)
+                                onCheckedChange={(checked: boolean | "indeterminate") => 
+                                  handleEmployerSiteSelection(employer.id, jobSite.id, Boolean(checked))
                                 }
                               />
                               <div>

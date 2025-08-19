@@ -144,7 +144,7 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
               />
             </div>
           ) : (
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "overview" | "eba" | "sites" | "workers")} className="space-y-6">
+            <Tabs value={activeTab} onValueChange={(v: string) => setActiveTab(v as "overview" | "eba" | "sites" | "workers")} className="space-y-6">
               <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="eba">EBA Details</TabsTrigger>
