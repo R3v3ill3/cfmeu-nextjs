@@ -16,7 +16,10 @@ import {
   Clock,
   Database
 } from "lucide-react";
-import { ParsedCSV, ColumnMapping, ValidationResult } from "@/pages/Upload";
+type ParsedCSV = { headers: string[]; rows: Array<Record<string, any>>; filename?: string };
+type ColumnMapping = { csvColumn: string; dbTable: string; dbColumn: string; action: 'map' | 'create' | 'skip'; confidence?: number; dataType?: 'text' | 'date' | 'number' | 'boolean' };
+type ValidationIssue = { row: number; column: string; message: string; value?: any };
+type ValidationResult = { isValid: boolean; errors: ValidationIssue[]; warnings: ValidationIssue[] };
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -86,9 +89,6 @@ const ImportProgress = ({
           }
         } else if (mapping.dataType === 'boolean') {
           value = ['true', 'yes', '1', 'y'].includes(String(value).toLowerCase());
-        } else if (mapping.dataType === 'array') {
-          // Handle arrays (split by comma)
-          value = String(value).split(',').map(v => v.trim()).filter(Boolean);
         }
       } else {
         value = null;

@@ -265,7 +265,7 @@ const roleBadge = (role: WorkerRoleLite) => (
         <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <div className="text-xs text-muted-foreground mb-1">Filter by union membership</div>
-            <Select value={membershipFilter} onValueChange={(v) => setMembershipFilter(v as any)}>
+            <Select value={membershipFilter} onValueChange={(v: string) => setMembershipFilter(v as any)}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="All" />
               </SelectTrigger>
@@ -280,7 +280,7 @@ const roleBadge = (role: WorkerRoleLite) => (
           </div>
           <div>
             <div className="text-xs text-muted-foreground mb-1">Filter by union role</div>
-            <Select value={roleFilter} onValueChange={(v) => setRoleFilter(v)}>
+            <Select value={roleFilter} onValueChange={(v: string) => setRoleFilter(v)}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="All roles" />
               </SelectTrigger>
@@ -367,7 +367,7 @@ const roleBadge = (role: WorkerRoleLite) => (
                           <MoreVertical className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenuContent align="end" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
                         {contextSiteId && (
                           <DropdownMenuItem onClick={() => removeFromSite(w.id)}>
                             Remove from this site

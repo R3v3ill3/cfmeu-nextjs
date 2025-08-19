@@ -126,7 +126,7 @@ export function TradeContractorsManager({
             <div className="grid gap-3">
               <div>
                 <Label>Trade type</Label>
-                <Select value={chosenTrade} onValueChange={(v) => { setChosenTrade(v); setChosenEmployer(""); }}>
+                <Select value={chosenTrade} onValueChange={(v: string) => { setChosenTrade(v); setChosenEmployer(""); }}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select trade" />
                   </SelectTrigger>

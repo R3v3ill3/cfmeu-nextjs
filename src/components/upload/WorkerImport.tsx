@@ -141,14 +141,14 @@ export default function WorkerImport({ csvData, selectedEmployer, onImportComple
       } else {
         // Match workers to existing employers and organisers
         const workersWithEmployers: WorkerWithEmployer[] = processed.map(worker => {
-          const employerMatch = findBestEmployerMatch(worker.company_name, existingEmployers);
+          const employerMatch = findBestEmployerMatch(worker.company_name, existingEmployers) || undefined;
           
           // Find organiser match if organiser info is available
           let organiserMatch: OrganiserMatch | undefined;
           let needsNewOrganiser = false;
           
           if (worker.organizer_full_name) {
-            organiserMatch = findBestOrganiserMatch(worker.organizer_full_name, existingOrganisers);
+            organiserMatch = findBestOrganiserMatch(worker.organizer_full_name, existingOrganisers) || undefined;
             needsNewOrganiser = !organiserMatch;
           }
           

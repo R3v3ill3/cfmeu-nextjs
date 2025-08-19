@@ -99,7 +99,7 @@ export default function ContractorSiteAssignmentModal({ projectId }: ContractorS
     onError: (err) => toast.error((err as Error).message),
   });
 
-  const toggle = (siteId: string, employerId: string, tradeType: string, checked: boolean | string) => {
+  const toggle = (siteId: string, employerId: string, tradeType: string, checked: boolean | "indeterminate") => {
     const key = `${siteId}:${employerId}:${tradeType}`;
     if (checked) assignMutation.mutate({ siteId, employerId, tradeType });
     else if (assignmentSet.has(key)) unassignMutation.mutate({ siteId, employerId, tradeType });
@@ -135,7 +135,7 @@ export default function ContractorSiteAssignmentModal({ projectId }: ContractorS
                     <TableCell key={s.id} className="text-center">
                       <Checkbox
                         checked={isChecked}
-                        onCheckedChange={(v) => toggle(s.id, row.employer_id, String(row.trade_type), v)}
+                        onCheckedChange={(v: boolean | "indeterminate") => toggle(s.id, row.employer_id, String(row.trade_type), v)}
                       />
                     </TableCell>
                   );

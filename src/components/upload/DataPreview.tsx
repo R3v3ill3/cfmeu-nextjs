@@ -8,7 +8,20 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Eye, AlertTriangle, CheckCircle, XCircle, Upload } from "lucide-react";
-import { ParsedCSV, ColumnMapping, ValidationResult } from "@/pages/Upload";
+type ParsedCSV = {
+  headers: string[];
+  rows: Array<Record<string, any>>;
+}
+type ColumnMapping = {
+  csvColumn: string;
+  dbTable: string;
+  dbColumn: string;
+  action: 'map' | 'create' | 'skip';
+  confidence?: number;
+  dataType?: 'text' | 'date' | 'number' | 'boolean';
+}
+type ValidationIssue = { row: number; column: string; message: string; value?: any };
+type ValidationResult = { isValid: boolean; errors: ValidationIssue[]; warnings: ValidationIssue[] };
 import ContractorImport from "./ContractorImport";
 import { EbaImport } from "./EbaImport";
 import WorkerImport from "./WorkerImport";

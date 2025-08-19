@@ -9,7 +9,18 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { ArrowLeft, Target, Plus, Eye, Brain, AlertTriangle } from "lucide-react";
-import { ParsedCSV, ColumnMapping } from "@/pages/Upload";
+type ParsedCSV = {
+  headers: string[];
+  rows: Array<Record<string, any>>;
+}
+type ColumnMapping = {
+  csvColumn: string;
+  dbTable: string;
+  dbColumn: string;
+  action: 'map' | 'create' | 'skip';
+  confidence?: number;
+  dataType?: 'text' | 'date' | 'number' | 'boolean';
+}
 
 interface ColumnMapperProps {
   parsedCSV: ParsedCSV;
@@ -204,7 +215,7 @@ const ColumnMapper = ({ parsedCSV, onMappingComplete, onBack }: ColumnMapperProp
 
     parsedCSV.headers.forEach(csvHeader => {
       const normalizedHeader = csvHeader.toLowerCase().replace(/[^a-z0-9]/g, '');
-      let bestMatch: { column: string; confidence: number } | null = null;
+      let bestMatch: { column: string; confidence: number } | null = null as any;
 
       // Exact match
       Object.keys(tableSchema.columns).forEach(dbColumn => {
@@ -497,7 +508,7 @@ const ColumnMapper = ({ parsedCSV, onMappingComplete, onBack }: ColumnMapperProp
                                 />
                                 <Select 
                                   value={mapping.dataType || 'text'} 
-                                  onValueChange={(value) => updateMapping(index, { dataType: value })}
+                                  onValueChange={(value: 'text' | 'date' | 'number' | 'boolean') => updateMapping(index, { dataType: value })}
                                 >
                                   <SelectTrigger className="w-24">
                                     <SelectValue />
@@ -515,7 +526,10 @@ const ColumnMapper = ({ parsedCSV, onMappingComplete, onBack }: ColumnMapperProp
 
                           {mapping.action === 'map' && mapping.dbColumn && (
                             <p className="text-xs text-muted-foreground">
-                              {DATABASE_TABLES[selectedTable as keyof typeof DATABASE_TABLES].columns[mapping.dbColumn]?.description}
+                              {(
+                                DATABASE_TABLES[selectedTable as keyof typeof DATABASE_TABLES]
+                                  .columns as Record<string, { description?: string }>
+                              )[mapping.dbColumn]?.description}
                             </p>
                           )}
                         </div>

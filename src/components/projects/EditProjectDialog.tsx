@@ -178,7 +178,7 @@ export function EditProjectDialog({
   return (
     <Dialog
       open={open}
-      onOpenChange={(v) => {
+      onOpenChange={(v: boolean) => {
         setOpen(v);
         if (v) {
           resetForm();

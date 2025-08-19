@@ -232,8 +232,8 @@ export const UnionRoleAssignmentModal = ({
               <PopoverContent className="w-auto p-0" align="start">
                 <Calendar
                   mode="single"
-                  selected={formData.endDate}
-                  onSelect={(date) => setFormData({ ...formData, endDate: date })}
+                  selected={formData.endDate ?? undefined}
+                  onSelect={(date) => setFormData({ ...formData, endDate: date ?? null })}
                   initialFocus
                   className="pointer-events-auto"
                 />
