@@ -79,7 +79,7 @@ export default function DesktopLayout({ children }: { children: React.ReactNode 
 
   return (
     <SidebarProvider>
-      <Sidebar>
+      <Sidebar collapsible="icon">
         <SidebarHeader>
           <div className="flex items-center gap-2 px-2 py-1">
             <Image src={cfmeuLogoLight} alt="CFMEU Construction Union Logo" width={28} height={28} className="h-7 w-auto dark:hidden" />
@@ -121,16 +121,16 @@ export default function DesktopLayout({ children }: { children: React.ReactNode 
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
-        <header className="flex h-12 items-center gap-2 border-b px-3">
+        <header className="sticky top-0 z-30 flex h-12 items-center gap-2 border-b px-3 bg-background/95 supports-[backdrop-filter]:bg-background/80 backdrop-blur">
           <SidebarTrigger />
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             <Image src={cfmeuLogoLight} alt="CFMEU Construction Union Logo" width={24} height={24} className="h-6 w-auto dark:hidden" />
             <Image src={cfmeuLogoDark} alt="CFMEU Construction Union Logo" width={24} height={24} className="h-6 w-auto hidden dark:block" />
-            <span className="font-medium">CFMEU Organiser</span>
+            <span className="font-medium truncate max-w-[40vw]">CFMEU Organiser</span>
           </div>
-          <div className="ml-auto text-sm text-muted-foreground hidden md:block">{user?.email}</div>
+          <div className="ml-auto text-sm text-muted-foreground hidden md:block truncate max-w-[40%]">{user?.email}</div>
         </header>
-        <main className="flex-1 p-6">{children}</main>
+        <main className="flex-1 p-6 min-w-0">{children}</main>
       </SidebarInset>
     </SidebarProvider>
   )
