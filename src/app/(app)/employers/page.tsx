@@ -6,18 +6,43 @@ import { supabase } from "@/integrations/supabase/client"
 import { EmployerCard } from "@/components/employers/EmployerCard"
 import { useState } from "react"
 import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal"
+import { Switch } from "@/components/ui/switch"
 
 export default function EmployersPage() {
-  const { data: employers = [], isFetching, refetch } = useQuery({
-    queryKey: ["employers-list"],
+  const [onlyEngaged, setOnlyEngaged] = useState(true)
+
+  const { data: employers = [], isFetching } = useQuery({
+    queryKey: ["employers-list", { onlyEngaged }],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("employers")
         .select(`
-          id, name, abn, industry, website, email, phone,
-          estimated_worker_count, current_worker_count, member_density_percent
+          id,
+          name,
+          abn,
+          employer_type,
+          website,
+          email,
+          phone,
+          estimated_worker_count,
+          enterprise_agreement_status,
+          company_eba_records!left(id),
+          worker_placements!left(id)
         `)
         .order("name", { ascending: true })
+
+      // Only load employers that are likely to be relevant/engaged by default
+      // Engaged means: has an EBA record OR has an estimated worker count > 0
+      if (onlyEngaged) {
+        query = query.or([
+          "estimated_worker_count.gt.0",
+          "enterprise_agreement_status.eq.true",
+          "company_eba_records.id.not.is.null",
+          "worker_placements.id.not.is.null",
+        ].join(","))
+      }
+
+      const { data, error } = await query
       if (error) throw error
       return data || []
     }
@@ -29,6 +54,10 @@ export default function EmployersPage() {
   return (
     <div className="p-6 space-y-4">
       <h1 className="text-2xl font-semibold">Employers</h1>
+      <div className="flex items-center gap-3">
+        <Switch checked={onlyEngaged} onCheckedChange={setOnlyEngaged} />
+        <span className="text-sm text-muted-foreground">Show engaged employers only (EBA or estimated workers)</span>
+      </div>
       {isFetching && <p className="text-sm text-muted-foreground">Loading…</p>}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {(employers as any[]).map((emp) => (
