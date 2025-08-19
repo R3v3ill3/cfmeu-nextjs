@@ -21,6 +21,19 @@ import {
 } from "lucide-react";
 import type { WorkerAssignment } from "./WorkerAssignmentTabs";
 
+type AssignedWorker = {
+  workerId: string;
+  workerName: string;
+};
+
+type PreviousDelegation = {
+  delegateWorkerId: string;
+  delegateWorkerName: string;
+  assignedWorkers: AssignedWorker[];
+  activityId: string;
+  activityDate: string;
+};
+
 export interface DelegationAssignment {
   delegateWorkerId: string;
   delegateWorkerName: string;
@@ -84,7 +97,7 @@ export function DelegationManager({
   });
 
   // Get previous delegations for carry-forward
-  const { data: previousDelegations = [] } = useQuery({
+  const { data: previousDelegations = [] } = useQuery<PreviousDelegation[]>({
     queryKey: ["previous_delegations"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -102,10 +115,11 @@ export function DelegationManager({
       if (error) throw error;
       
       // Group by delegate and get their most recent delegations
-      const delegationMap = new Map();
+      const delegationMap = new Map<string, PreviousDelegation>();
       data.forEach((del: any) => {
-        if (!delegationMap.has(del.delegate_worker_id)) {
-          delegationMap.set(del.delegate_worker_id, {
+        const key = String(del.delegate_worker_id);
+        if (!delegationMap.has(key)) {
+          delegationMap.set(key, {
             delegateWorkerId: del.delegate_worker_id,
             delegateWorkerName: `${del.workers.first_name} ${del.workers.surname}`,
             assignedWorkers: [],
@@ -113,14 +127,12 @@ export function DelegationManager({
             activityDate: del.union_activities.date
           });
         }
-        
-        const delegation = delegationMap.get(del.delegate_worker_id);
+        const delegation = delegationMap.get(key)!;
         delegation.assignedWorkers.push({
           workerId: del.assigned_worker_id,
           workerName: `${del.assigned_workers.first_name} ${del.assigned_workers.surname}`
         });
       });
-      
       return Array.from(delegationMap.values());
     },
     enabled: enableCarryForward
@@ -156,7 +168,7 @@ export function DelegationManager({
         const previousDelegation = previousDelegations.find(pd => pd.delegateWorkerId === delegate.workerId);
         if (previousDelegation) {
           // Only carry forward workers who are in the selected workers list
-          const carryForwardWorkers = previousDelegation.assignedWorkers.filter(aw =>
+          const carryForwardWorkers = previousDelegation.assignedWorkers.filter((aw: AssignedWorker) =>
             selectedWorkers.some(sw => sw.workerId === aw.workerId)
           );
           
@@ -356,12 +368,12 @@ export function DelegationManager({
                             <div key={worker.workerId} className="flex items-center space-x-3">
                               <Checkbox
                                 checked={isAssigned}
-                                onCheckedChange={(checked) => 
+                                onCheckedChange={(checked: boolean | "indeterminate") => 
                                   handleWorkerAssignment(
                                     delegation.delegateWorkerId, 
                                     worker.workerId, 
                                     worker.workerName, 
-                                    checked as boolean
+                                    Boolean(checked)
                                   )
                                 }
                               />

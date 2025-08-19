@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Menu, LogOut, Users, Building, MapPin, Activity, Upload, BarChart3, FolderOpen, FileCheck, Shield, AlertTriangle } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { supabase } from "@/integrations/supabase/client";
 import cfmeuLogoLight from "@/assets/cfmeu-logo-light.png";
@@ -104,14 +105,18 @@ const Layout = ({ children }: LayoutProps) => {
             <SheetContent side="left" className="w-64">
               <div className="flex flex-col gap-4">
                 <div className="flex items-center gap-3">
-                  <img 
-                    src={cfmeuLogoLight} 
-                    alt="CFMEU Construction Union Logo" 
+                  <Image
+                    src={cfmeuLogoLight}
+                    alt="CFMEU Construction Union Logo"
+                    width={32}
+                    height={32}
                     className="h-8 w-auto dark:hidden"
                   />
-                  <img 
-                    src={cfmeuLogoDark} 
-                    alt="CFMEU Construction Union Logo" 
+                  <Image
+                    src={cfmeuLogoDark}
+                    alt="CFMEU Construction Union Logo"
+                    width={32}
+                    height={32}
                     className="h-8 w-auto hidden dark:block"
                   />
                   <h2 className="text-lg font-semibold">CFMEU Organiser</h2>
@@ -123,14 +128,18 @@ const Layout = ({ children }: LayoutProps) => {
 
           {/* Logo */}
           <div className="flex items-center gap-3">
-            <img 
-              src={cfmeuLogoLight} 
-              alt="CFMEU Construction Union Logo" 
+            <Image
+              src={cfmeuLogoLight}
+              alt="CFMEU Construction Union Logo"
+              width={32}
+              height={32}
               className="h-8 w-auto dark:hidden"
             />
-            <img 
-              src={cfmeuLogoDark} 
-              alt="CFMEU Construction Union Logo" 
+            <Image
+              src={cfmeuLogoDark}
+              alt="CFMEU Construction Union Logo"
+              width={32}
+              height={32}
               className="h-8 w-auto hidden dark:block"
             />
             <h1 className="text-xl font-bold">CFMEU Organiser</h1>
