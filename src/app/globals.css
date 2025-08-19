@@ -3,6 +3,9 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  /* Fallbacks to ensure desktop sidebar sizing always has sane defaults */
+  --sidebar-width: 16rem;
+  --sidebar-width-icon: 3rem;
 }
 
 @theme inline {
