@@ -146,7 +146,16 @@ export default function ProjectDetailPage() {
                 {(sites as any[]).map((s) => (
                   <div key={s.id} className="flex items-center justify-between">
                     <div className="font-medium">{s.name}</div>
-                    <Button size="sm" onClick={() => setChartEmployer({ id: "", name: "" })} disabled>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        // In project context, open the chart once an employer is picked in contractors view
+                        // Here we open a blank chart requires employer selection elsewhere
+                        setChartEmployer({ id: "", name: "" })
+                        setChartOpen(true)
+                      }}
+                      disabled
+                    >
                       Open chart
                     </Button>
                   </div>
