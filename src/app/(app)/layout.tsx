@@ -1,6 +1,7 @@
 import { AuthProvider } from '@/hooks/useAuth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import Layout from '@/components/Layout'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,7 +13,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
   return (
     <AuthProvider>
-      {children}
+      <Layout>{children}</Layout>
     </AuthProvider>
   )
 }
