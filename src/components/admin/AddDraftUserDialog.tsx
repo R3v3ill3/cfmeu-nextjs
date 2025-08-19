@@ -37,7 +37,7 @@ export const AddDraftUserDialog = ({ open, onOpenChange, onSuccess }: AddDraftUs
       const { data: me } = await supabase.auth.getUser();
       const createdBy = me.user?.id ?? null;
 
-      const { error } = await supabase.from("pending_users").insert({
+      const { error } = await supabase.from("pending_users" as any).insert({
         email,
         full_name: fullName || email.split("@")[0],
         role,

@@ -259,7 +259,7 @@ export const EmployerCard = ({ employer, onClick }: EmployerCardProps) => {
                     Upload Workers
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                <DropdownMenuContent align="end" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
                   <DropdownMenuItem onClick={() => setIsManualWorkerOpen(true)}>
                     Manually enter worker details
                   </DropdownMenuItem>
@@ -298,7 +298,7 @@ export const EmployerCard = ({ employer, onClick }: EmployerCardProps) => {
                   Upload Workers
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+              <DropdownMenuContent align="end" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
                 <DropdownMenuItem onClick={() => setIsManualWorkerOpen(true)}>
                   Manually enter worker details
                 </DropdownMenuItem>
@@ -317,7 +317,7 @@ export const EmployerCard = ({ employer, onClick }: EmployerCardProps) => {
         employer={{ id: employer.id, name: employer.name }}
       />
       <Dialog open={isManualWorkerOpen} onOpenChange={setIsManualWorkerOpen}>
-        <DialogContent className="max-w-2xl" onClick={(e) => e.stopPropagation()}>
+        <DialogContent className="max-w-2xl" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
           <DialogHeader>
             <DialogTitle>Add New Worker</DialogTitle>
           </DialogHeader>

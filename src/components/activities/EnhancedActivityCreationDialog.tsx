@@ -25,7 +25,7 @@ const activitySchema = z.object({
   custom_activity_type: z.string().optional(),
   activity_type: z.string().min(1, "Activity type is required"),
   date: z.date({
-    required_error: "Date is required",
+    message: "Date is required",
   }),
   job_site_id: z.string().optional(),
   topic: z.string().optional(),
@@ -195,7 +195,7 @@ export function EnhancedActivityCreationDialog({
             {currentStep === 0 && (
               <ActivityTypeSelector
                 templates={templates}
-                selectedTemplate={selectedTemplate}
+                selectedTemplate={selectedTemplate ?? undefined}
                 onTemplateSelect={handleTemplateSelect}
                 onCustomActivityCreate={handleCustomActivityCreate}
               />
@@ -253,7 +253,7 @@ export function EnhancedActivityCreationDialog({
                                     mode="single"
                                     selected={field.value}
                                     onSelect={field.onChange}
-                                    disabled={(date) =>
+                                    disabled={(date: Date) =>
                                       date > new Date() || date < new Date("1900-01-01")
                                     }
                                     initialFocus
@@ -271,7 +271,7 @@ export function EnhancedActivityCreationDialog({
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Job Site (Optional)</FormLabel>
-                              <Select onValueChange={(v) => field.onChange(v === "none" ? "" : v)} defaultValue={field.value}>
+                              <Select onValueChange={(v: string) => field.onChange(v === "none" ? "" : v)} defaultValue={field.value}>
                                 <FormControl>
                                   <SelectTrigger>
                                     <SelectValue placeholder="Select a job site" />

@@ -169,7 +169,7 @@ export const EbaEditDatesModal = ({ isOpen, onClose, ebaRecord }: EbaEditDatesMo
                     <Calendar
                       mode="single"
                       selected={field.value}
-                      onSelect={(date) => handleDateChange(field.key, date)}
+                      onSelect={(date: Date | undefined) => handleDateChange(field.key, date)}
                       initialFocus
                       className="p-3 pointer-events-auto"
                     />
