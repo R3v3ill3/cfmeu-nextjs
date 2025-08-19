@@ -1,3 +1,4 @@
+"use client";
 import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 
@@ -14,20 +15,22 @@ const GOOGLE_SCRIPT_ID = "google-maps-script";
 
 function loadGoogleMaps(apiKey: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    if (window.google && window.google.maps && window.google.maps.places) {
+    const isPlacesReady = () => !!(window.google && window.google.maps && window.google.maps.places);
+
+    if (isPlacesReady()) {
       resolve();
       return;
     }
     if (document.getElementById(GOOGLE_SCRIPT_ID)) {
       const check = setInterval(() => {
-        if (window.google && window.google.maps && window.google.maps.places) {
+        if (isPlacesReady()) {
           clearInterval(check);
           resolve();
         }
       }, 100);
       setTimeout(() => {
         clearInterval(check);
-        if (!(window.google && window.google.maps && window.google.maps.places)) {
+        if (!isPlacesReady()) {
           reject(new Error("Google Maps failed to load"));
         }
       }, 10000);
@@ -46,7 +49,20 @@ function loadGoogleMaps(apiKey: string): Promise<void> {
           await window.google.maps.importLibrary("places");
         }
       } catch {}
-      resolve();
+
+      // Wait until places is actually ready before resolving
+      const check = setInterval(() => {
+        if (window.google && window.google.maps && window.google.maps.places) {
+          clearInterval(check);
+          resolve();
+        }
+      }, 100);
+      setTimeout(() => {
+        clearInterval(check);
+        if (!(window.google && window.google.maps && window.google.maps.places)) {
+          reject(new Error("Google Maps failed to load"));
+        }
+      }, 10000);
     };
     script.onerror = () => reject(new Error("Failed to load Google Maps"));
     document.head.appendChild(script);
@@ -111,7 +127,11 @@ export function GoogleAddressInput({
   }, []);
 
   useEffect(() => {
-    if (!loaded || !inputRef.current || !window.google) return;
+    if (!loaded || !inputRef.current) return;
+    if (!(window.google && window.google.maps && window.google.maps.places && window.google.maps.places.Autocomplete)) {
+      // Places library not available; keep manual entry working
+      return;
+    }
 
     if (!autocompleteRef.current) {
       autocompleteRef.current = new window.google.maps.places.Autocomplete(inputRef.current, {
