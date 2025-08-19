@@ -37,8 +37,8 @@ export default function EmployersPage() {
         query = query.or([
           "estimated_worker_count.gt.0",
           "enterprise_agreement_status.eq.true",
-          "company_eba_records.id.not.is.null",
-          "worker_placements.id.not.is.null",
+          "id.in.(select employer_id from company_eba_records)",
+          "id.in.(select employer_id from worker_placements)",
         ].join(","))
       }
 
