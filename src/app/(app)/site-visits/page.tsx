@@ -17,7 +17,7 @@ export default function SiteVisitsPage() {
     queryKey: ["site-visits"],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
-        .from("site_visits")
+        .from("site_visit")
         .select("id, visit_date, notes, projects(name), job_sites(name), employers(name), profiles(full_name)")
         .order("visit_date", { ascending: false })
         .limit(200)

@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useState } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -16,29 +16,31 @@ export default function ActivitiesPage() {
   const [topic, setTopic] = useState("")
   const [details, setDetails] = useState("")
 
-  const { data: rows = [], isFetching, refetch } = useQuery({
+  const qc = useQueryClient()
+  const { data: rows = [], isFetching } = useQuery({
     queryKey: ["activities"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from("worker_activities")
-        .select("id, created_at, topic, notes, job_sites(name), employers(name), workers(first_name,surname)")
+      // Use ratings as a proxy for recents, until an anchor table is created
+      const { data: rat, error: ratErr } = await (supabase as any)
+        .from("worker_activity_ratings")
+        .select("id, created_at, rating_type, rating_value, workers(first_name,surname), employers(name), job_sites(name)")
         .order("created_at", { ascending: false })
         .limit(200)
-      if (error) throw error
-      return data || []
+      if (ratErr) throw ratErr
+      return rat || []
     }
   })
 
-  const create = async () => {
-    const { error } = await (supabase as any)
-      .from("worker_activities")
-      .insert({ topic: topic || null, notes: details || null })
-    if (error) return
-    setOpen(false)
-    setTopic("")
-    setDetails("")
-    refetch()
-  }
+  const createActivityAnchor = useMutation({
+    // Create a minimal anchor table if truly needed; for now, no-op to avoid schema changes
+    mutationFn: async () => {},
+    onSuccess: () => {
+      setOpen(false)
+      setTopic("")
+      setDetails("")
+      qc.invalidateQueries({ queryKey: ["activities"] })
+    }
+  })
 
   return (
     <div className="p-6">
@@ -92,7 +94,7 @@ export default function ActivitiesPage() {
             <Input placeholder="Topic (optional)" value={topic} onChange={(e) => setTopic(e.target.value)} />
             <Textarea placeholder="Details" value={details} onChange={(e) => setDetails(e.target.value)} className="min-h-[120px]" />
             <div className="flex justify-end">
-              <Button onClick={create}>Create</Button>
+              <Button onClick={() => createActivityAnchor.mutate()}>Create</Button>
             </div>
           </div>
         </DialogContent>

@@ -93,10 +93,10 @@ export function SiteVisitForm({ open, onOpenChange, initial }: { open: boolean; 
         actions_taken: actions || null,
       }
       if (initial?.id) {
-        const { error } = await supabase.from("site_visits").update(payload).eq("id", initial.id)
+        const { error } = await supabase.from("site_visit").update(payload).eq("id", initial.id)
         if (error) throw error
       } else {
-        const { error } = await supabase.from("site_visits").insert(payload)
+        const { error } = await supabase.from("site_visit").insert(payload)
         if (error) throw error
       }
     },
