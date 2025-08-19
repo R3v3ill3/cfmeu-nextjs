@@ -3,7 +3,6 @@ import { Input } from "@/components/ui/input";
 
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 
 declare global {
   interface Window {
@@ -37,9 +36,18 @@ function loadGoogleMaps(apiKey: string): Promise<void> {
 
     const script = document.createElement("script");
     script.id = GOOGLE_SCRIPT_ID;
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
+    // Use loading=async per Google best practices and pin to weekly channel
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&loading=async&v=weekly`;
     script.async = true;
-    script.onload = () => resolve();
+    script.onload = async () => {
+      try {
+        // Ensure places library is actually available when using loading=async
+        if (window.google?.maps?.importLibrary) {
+          await window.google.maps.importLibrary("places");
+        }
+      } catch {}
+      resolve();
+    };
     script.onerror = () => reject(new Error("Failed to load Google Maps"));
     document.head.appendChild(script);
   });
@@ -86,9 +94,7 @@ export function GoogleAddressInput({
     let cancelled = false;
     (async () => {
       try {
-        const { data, error } = await supabase.functions.invoke("get-google-maps-key");
-        if (error) throw error;
-        const key = (data as any)?.key as string | undefined;
+        const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY as string | undefined;
         if (!key) {
           setError("Autocomplete unavailable");
           return;
