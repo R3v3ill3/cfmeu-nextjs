@@ -5,6 +5,10 @@ import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import JobSitesManager from "@/components/projects/JobSitesManager"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import EditProjectDialog from "@/components/projects/EditProjectDialog"
+import DeleteProjectDialog from "@/components/projects/DeleteProjectDialog"
 
 export default function ProjectsPage() {
   const { data: projects = [], isLoading } = useQuery({
@@ -38,7 +42,20 @@ export default function ProjectsPage() {
           {projects.map((p: any) => (
             <Card key={p.id}>
               <CardHeader>
-                <CardTitle>{p.name}</CardTitle>
+                <div className="flex items-center justify-between gap-3">
+                  <CardTitle>
+                    <Link href={`/projects/${p.id}`} className="hover:underline">
+                      {p.name}
+                    </Link>
+                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    <Link href={`/projects/${p.id}`}>
+                      <Button variant="secondary" size="sm">Open</Button>
+                    </Link>
+                    <EditProjectDialog project={p} triggerText="Edit" />
+                    <DeleteProjectDialog projectId={p.id} projectName={p.name} />
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
                 <JobSitesManager projectId={p.id} projectName={p.name} />

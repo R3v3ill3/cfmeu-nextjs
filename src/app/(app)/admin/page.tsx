@@ -5,6 +5,8 @@ import { PendingUsersTable } from "@/components/admin/PendingUsersTable"
 import { InviteUserDialog } from "@/components/admin/InviteUserDialog"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import UsersTable from "@/components/admin/UsersTable"
 
 export default function AdminPage() {
   const [open, setOpen] = useState(false)
@@ -15,7 +17,18 @@ export default function AdminPage() {
         <h1 className="text-2xl font-semibold">Administration</h1>
         <Button onClick={() => setOpen(true)}>Invite User</Button>
       </div>
-      <PendingUsersTable />
+      <Tabs defaultValue="users">
+        <TabsList>
+          <TabsTrigger value="users">Users</TabsTrigger>
+          <TabsTrigger value="invites">Invites</TabsTrigger>
+        </TabsList>
+        <TabsContent value="users">
+          <UsersTable />
+        </TabsContent>
+        <TabsContent value="invites">
+          <PendingUsersTable />
+        </TabsContent>
+      </Tabs>
       <InviteUserDialog open={open} onOpenChange={setOpen} onSuccess={() => {}} />
     </div>
   )
