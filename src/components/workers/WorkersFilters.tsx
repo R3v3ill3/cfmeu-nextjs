@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { WorkerFilters } from "@/pages/Workers";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -8,6 +7,15 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+type WorkerFilters = {
+  search: string;
+  unionStatus: string[];
+  jobSites: string[];
+  employmentStatus: string[];
+  hasEmail: boolean | null;
+  hasMobile: boolean | null;
+};
 
 interface WorkersFiltersProps {
   filters: WorkerFilters;

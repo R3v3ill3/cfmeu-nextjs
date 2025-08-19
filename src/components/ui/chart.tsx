@@ -100,19 +100,28 @@ ${colorConfig
 
 const ChartTooltip = RechartsPrimitive.Tooltip
 
+type CustomTooltipProps = {
+  active?: boolean
+  payload?: any[]
+  label?: any
+  className?: string
+  hideLabel?: boolean
+  hideIndicator?: boolean
+  indicator?: "line" | "dot" | "dashed"
+  nameKey?: string
+  labelKey?: string
+  color?: string
+  formatter?: any
+  labelFormatter?: any
+  labelClassName?: string
+}
+
 const ChartTooltipContent = React.forwardRef<
   HTMLDivElement,
-  React.ComponentProps<typeof RechartsPrimitive.Tooltip> &
-    React.ComponentProps<"div"> & {
-      hideLabel?: boolean
-      hideIndicator?: boolean
-      indicator?: "line" | "dot" | "dashed"
-      nameKey?: string
-      labelKey?: string
-    }
+  CustomTooltipProps
 >(
-  (
-    {
+  (rawProps: CustomTooltipProps, ref) => {
+    const {
       active,
       payload,
       className,
@@ -126,9 +135,7 @@ const ChartTooltipContent = React.forwardRef<
       color,
       nameKey,
       labelKey,
-    },
-    ref
-  ) => {
+    } = rawProps
     const { config } = useChart()
 
     const tooltipLabel = React.useMemo(() => {
@@ -256,13 +263,17 @@ ChartTooltipContent.displayName = "ChartTooltip"
 
 const ChartLegend = RechartsPrimitive.Legend
 
+type CustomLegendProps = {
+  className?: string
+  hideIcon?: boolean
+  nameKey?: string
+  verticalAlign?: "top" | "middle" | "bottom"
+  payload?: any[]
+}
+
 const ChartLegendContent = React.forwardRef<
   HTMLDivElement,
-  React.ComponentProps<"div"> &
-    Pick<RechartsPrimitive.LegendProps, "payload" | "verticalAlign"> & {
-      hideIcon?: boolean
-      nameKey?: string
-    }
+  CustomLegendProps
 >(
   (
     { className, hideIcon = false, payload, verticalAlign = "bottom", nameKey },

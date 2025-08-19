@@ -56,7 +56,7 @@ const ContractorsSummary = ({
                 {row.siteName ? (
                   row.siteId ? (
                     <Link
-                      to={`/patch/walls?projectId=${projectId}&siteId=${row.siteId}`}
+                      href={`/patch/walls?projectId=${projectId}&siteId=${row.siteId}`}
                       className="text-primary hover:underline"
                       aria-label={`Open Patch Wall for site ${row.siteName}`}
                     >

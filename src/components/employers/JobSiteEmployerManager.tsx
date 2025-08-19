@@ -55,20 +55,27 @@ export function JobSiteEmployerManager({
       if (jobSiteError) throw jobSiteError;
 
       // Combine employers from both sources
-      const allEmployers = new Map();
+      type EmployerBasic = { id: string; name: string };
+      const allEmployers = new Map<string, EmployerBasic>();
       
       // Add direct site contractors
-      siteContractors?.forEach(sc => {
-        if (sc.employer) {
-          allEmployers.set(sc.employer.id, sc.employer);
-        }
+      siteContractors?.forEach((sc: any) => {
+        const employers: EmployerBasic[] = Array.isArray(sc?.employer)
+          ? sc.employer
+          : sc?.employer
+          ? [sc.employer]
+          : [];
+        employers.forEach((e) => allEmployers.set(e.id, e));
       });
 
       // Add project employers
-      jobSite?.project?.project_employer_roles?.forEach(per => {
-        if (per.employer) {
-          allEmployers.set(per.employer.id, per.employer);
-        }
+      (jobSite as any)?.project?.project_employer_roles?.forEach((per: any) => {
+        const employers: EmployerBasic[] = Array.isArray(per?.employer)
+          ? per.employer
+          : per?.employer
+          ? [per.employer]
+          : [];
+        employers.forEach((e) => allEmployers.set(e.id, e));
       });
 
       return Array.from(allEmployers.values());
@@ -89,7 +96,7 @@ export function JobSiteEmployerManager({
     });
   };
 
-  const selectedEmployers = linkedEmployers.filter(emp => 
+  const selectedEmployers = (linkedEmployers as Array<{ id: string; name: string }>).filter((emp) =>
     selectedEmployerIds.includes(emp.id)
   );
 
@@ -116,13 +123,13 @@ export function JobSiteEmployerManager({
         </div>
       </div>
 
-      {linkedEmployers.length > selectedEmployers.length && (
+      {(linkedEmployers as Array<{ id: string; name: string }>).length > selectedEmployers.length && (
         <div>
           <label className="text-sm font-medium">Available Employers</label>
           <div className="mt-2 flex flex-wrap gap-2">
-            {linkedEmployers
-              .filter(emp => !selectedEmployerIds.includes(emp.id))
-              .map(employer => (
+            {(linkedEmployers as Array<{ id: string; name: string }>)
+              .filter((emp) => !selectedEmployerIds.includes(emp.id))
+              .map((employer) => (
                 <Badge 
                   key={employer.id} 
                   variant="outline" 

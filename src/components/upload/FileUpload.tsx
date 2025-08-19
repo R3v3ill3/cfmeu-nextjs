@@ -5,7 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Upload, FileText, AlertCircle, CheckCircle } from "lucide-react";
-import { ParsedCSV } from "@/pages/Upload";
+type ParsedCSV = {
+  headers: string[];
+  rows: Array<Record<string, any>>;
+  filename?: string;
+}
 import Papa from "papaparse";
 
 interface FileUploadProps {

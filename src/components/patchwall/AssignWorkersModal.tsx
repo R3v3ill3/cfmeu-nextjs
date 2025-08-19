@@ -269,7 +269,7 @@ export function AssignWorkersModal({
           if (error) throw error;
           workerId = created.id;
         }
-        createdIds.push(workerId);
+        if (workerId) createdIds.push(workerId);
       }
       await assignPlacements(createdIds);
     } catch (e) {
@@ -289,7 +289,7 @@ export function AssignWorkersModal({
           <div className="grid gap-2">
             <div className="text-sm font-medium">Assign to sites</div>
             <div className="flex items-center gap-3">
-              <Checkbox id="allsites" checked={allSites} onCheckedChange={(v) => setAllSites(!!v)} />
+              <Checkbox id="allsites" checked={allSites} onCheckedChange={(v: boolean | "indeterminate") => setAllSites(!!v)} />
               <label htmlFor="allsites" className="text-sm">All sites in this project</label>
             </div>
             {!allSites && (
@@ -298,7 +298,7 @@ export function AssignWorkersModal({
                   <label key={s.id} className="flex items-center gap-2 text-sm">
                     <Checkbox
                       checked={selectedSiteIds.includes(s.id)}
-                      onCheckedChange={(v) => {
+                      onCheckedChange={(v: boolean | "indeterminate") => {
                         const checked = !!v;
                         setSelectedSiteIds((prev) => (checked ? [...prev, s.id] : prev.filter((id) => id !== s.id)));
                       }}
@@ -331,7 +331,7 @@ export function AssignWorkersModal({
             </div>
           </div>
 
-          <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
+          <Tabs value={tab} onValueChange={(v: string) => setTab(v as any)}>
             <TabsList>
               <TabsTrigger value="existing">Existing</TabsTrigger>
               <TabsTrigger value="manual">Manual</TabsTrigger>
@@ -340,7 +340,7 @@ export function AssignWorkersModal({
 
             <TabsContent value="existing" className="pt-3">
               <div className="flex items-center gap-3 mb-3">
-                <Checkbox id="allworkforce" checked={selectAllWorkforce} onCheckedChange={(v) => setSelectAllWorkforce(!!v)} />
+                <Checkbox id="allworkforce" checked={selectAllWorkforce} onCheckedChange={(v: boolean | "indeterminate") => setSelectAllWorkforce(!!v)} />
                 <label htmlFor="allworkforce" className="text-sm">Assign all current workers at {employerName}</label>
                 <Badge variant="secondary">{workforce.length}</Badge>
               </div>

@@ -47,7 +47,7 @@ const FormSchema = z.object({
   state: z.string().optional().nullable(),
   postcode: z.string().optional().nullable(),
   contact_notes: z.string().optional().nullable(),
-  estimated_worker_count: z.coerce.number().min(0).optional().nullable(),
+  estimated_worker_count: z.number().min(0).optional().nullable(),
   enterprise_agreement_status: z.boolean().optional().nullable(),
 });
 
@@ -78,7 +78,7 @@ export default function EmployerEditForm({ employer, onCancel, onSaved }: Employ
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-const form = useForm<z.infer<typeof FormSchema>>({
+const form = useForm<z.input<typeof FormSchema>>({
   resolver: zodResolver(FormSchema),
   defaultValues: {
     name: employer.name ?? "",
@@ -181,25 +181,26 @@ const desiredTrades = useMemo(() => new Set(selectedTrades), [selectedTrades]);
     form.setValue("postcode", postcode, { shouldDirty: true });
   };
 
-const onSubmit = async (values: z.infer<typeof FormSchema>) => {
+const onSubmit = async (values: z.input<typeof FormSchema>) => {
+  const parsed = FormSchema.parse(values);
   const toNull = (v: any) => (v === "" ? null : v);
   // Prepare payload for RPC
   const updatePayload = {
-    name: values.name.trim(),
-    employer_type: values.employer_type,
-    abn: toNull(values.abn),
-    primary_contact_name: toNull(values.primary_contact_name),
-    phone: toNull(values.phone),
-    email: toNull(values.email),
-    website: toNull(values.website),
-    address_line_1: toNull(values.address_line_1),
-    address_line_2: toNull(values.address_line_2),
-    suburb: toNull(values.suburb),
-    state: toNull(values.state),
-    postcode: toNull(values.postcode),
-    contact_notes: toNull(values.contact_notes),
-    estimated_worker_count: values.estimated_worker_count ?? null,
-    enterprise_agreement_status: values.enterprise_agreement_status ?? null,
+    name: parsed.name.trim(),
+    employer_type: parsed.employer_type,
+    abn: toNull(parsed.abn),
+    primary_contact_name: toNull(parsed.primary_contact_name),
+    phone: toNull(parsed.phone),
+    email: toNull(parsed.email),
+    website: toNull(parsed.website),
+    address_line_1: toNull(parsed.address_line_1),
+    address_line_2: toNull(parsed.address_line_2),
+    suburb: toNull(parsed.suburb),
+    state: toNull(parsed.state),
+    postcode: toNull(parsed.postcode),
+    contact_notes: toNull(parsed.contact_notes),
+    estimated_worker_count: parsed.estimated_worker_count ?? null,
+    enterprise_agreement_status: parsed.enterprise_agreement_status ?? null,
   };
 
   const desiredTagsArray = Array.from(desiredTags);
@@ -310,7 +311,12 @@ const onSubmit = async (values: z.infer<typeof FormSchema>) => {
         <FormItem>
           <FormLabel>ABN</FormLabel>
           <FormControl>
-            <Input placeholder="ABN" {...field} />
+            <Input
+              placeholder="ABN"
+              {...field}
+              value={field.value ?? ""}
+              onChange={(e) => field.onChange(e.target.value === "" ? null : e.target.value)}
+            />
           </FormControl>
           <FormMessage />
         </FormItem>
@@ -324,7 +330,12 @@ const onSubmit = async (values: z.infer<typeof FormSchema>) => {
         <FormItem>
           <FormLabel>Website</FormLabel>
           <FormControl>
-            <Input placeholder="https://example.com" {...field} />
+            <Input
+              placeholder="https://example.com"
+              {...field}
+              value={field.value ?? ""}
+              onChange={(e) => field.onChange(e.target.value === "" ? null : e.target.value)}
+            />
           </FormControl>
           <FormMessage />
         </FormItem>
@@ -338,7 +349,18 @@ const onSubmit = async (values: z.infer<typeof FormSchema>) => {
         <FormItem>
           <FormLabel>Estimated Worker Count</FormLabel>
           <FormControl>
-            <Input type="number" placeholder="0" {...field} />
+            <Input
+              type="number"
+              placeholder="0"
+              {...field}
+              value={field.value ?? ""}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === "") return field.onChange(null);
+                const num = Number(v);
+                return field.onChange(Number.isNaN(num) ? null : num);
+              }}
+            />
           </FormControl>
           <FormMessage />
         </FormItem>
@@ -372,7 +394,12 @@ const onSubmit = async (values: z.infer<typeof FormSchema>) => {
         <FormItem>
           <FormLabel>Primary Contact</FormLabel>
           <FormControl>
-            <Input placeholder="Full name" {...field} />
+            <Input
+              placeholder="Full name"
+              {...field}
+              value={field.value ?? ""}
+              onChange={(e) => field.onChange(e.target.value === "" ? null : e.target.value)}
+            />
           </FormControl>
           <FormMessage />
         </FormItem>
@@ -386,7 +413,12 @@ const onSubmit = async (values: z.infer<typeof FormSchema>) => {
         <FormItem>
           <FormLabel>Phone</FormLabel>
           <FormControl>
-            <Input placeholder="Phone number" {...field} />
+            <Input
+              placeholder="Phone number"
+              {...field}
+              value={field.value ?? ""}
+              onChange={(e) => field.onChange(e.target.value === "" ? null : e.target.value)}
+            />
           </FormControl>
           <FormMessage />
         </FormItem>
@@ -400,7 +432,13 @@ const onSubmit = async (values: z.infer<typeof FormSchema>) => {
         <FormItem>
           <FormLabel>Email</FormLabel>
           <FormControl>
-            <Input type="email" placeholder="name@example.com" {...field} />
+            <Input
+              type="email"
+              placeholder="name@example.com"
+              {...field}
+              value={field.value ?? ""}
+              onChange={(e) => field.onChange(e.target.value === "" ? null : e.target.value)}
+            />
           </FormControl>
           <FormMessage />
         </FormItem>
@@ -421,7 +459,12 @@ const onSubmit = async (values: z.infer<typeof FormSchema>) => {
         <FormItem>
           <FormLabel>Address Line 2</FormLabel>
           <FormControl>
-            <Input placeholder="Suite, unit, etc." {...field} />
+            <Input
+              placeholder="Suite, unit, etc."
+              {...field}
+              value={field.value ?? ""}
+              onChange={(e) => field.onChange(e.target.value === "" ? null : e.target.value)}
+            />
           </FormControl>
           <FormMessage />
         </FormItem>
@@ -435,7 +478,12 @@ const onSubmit = async (values: z.infer<typeof FormSchema>) => {
         <FormItem>
           <FormLabel>Suburb</FormLabel>
           <FormControl>
-            <Input placeholder="Suburb" {...field} />
+            <Input
+              placeholder="Suburb"
+              {...field}
+              value={field.value ?? ""}
+              onChange={(e) => field.onChange(e.target.value === "" ? null : e.target.value)}
+            />
           </FormControl>
           <FormMessage />
         </FormItem>
@@ -449,7 +497,12 @@ const onSubmit = async (values: z.infer<typeof FormSchema>) => {
         <FormItem>
           <FormLabel>State</FormLabel>
           <FormControl>
-            <Input placeholder="State" {...field} />
+            <Input
+              placeholder="State"
+              {...field}
+              value={field.value ?? ""}
+              onChange={(e) => field.onChange(e.target.value === "" ? null : e.target.value)}
+            />
           </FormControl>
           <FormMessage />
         </FormItem>
@@ -463,7 +516,12 @@ const onSubmit = async (values: z.infer<typeof FormSchema>) => {
         <FormItem>
           <FormLabel>Postcode</FormLabel>
           <FormControl>
-            <Input placeholder="Postcode" {...field} />
+            <Input
+              placeholder="Postcode"
+              {...field}
+              value={field.value ?? ""}
+              onChange={(e) => field.onChange(e.target.value === "" ? null : e.target.value)}
+            />
           </FormControl>
           <FormMessage />
         </FormItem>
@@ -479,7 +537,12 @@ const onSubmit = async (values: z.infer<typeof FormSchema>) => {
       <FormItem>
         <FormLabel>Contact Notes</FormLabel>
         <FormControl>
-          <Textarea placeholder="Internal notes about contacts, preferences, etc." {...field} />
+          <Textarea
+            placeholder="Internal notes about contacts, preferences, etc."
+            {...field}
+            value={field.value ?? ""}
+            onChange={(e) => field.onChange(e.target.value === "" ? null : e.target.value)}
+          />
         </FormControl>
         <FormMessage />
       </FormItem>

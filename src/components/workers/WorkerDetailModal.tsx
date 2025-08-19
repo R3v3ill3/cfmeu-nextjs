@@ -122,7 +122,8 @@ export const WorkerDetailModal = ({ workerId, isOpen, onClose, onUpdate }: Worke
 
   const fullName = worker ? `${worker.first_name || ""} ${worker.surname || ""}`.trim() : "";
   const currentPlacement = worker?.worker_placements?.[0];
-  const activeUnionRoles = worker?.union_roles?.filter(role => !role.end_date || new Date(role.end_date) > new Date());
+  type WorkerUnionRole = { end_date: string | null } & Record<string, unknown>;
+  const activeUnionRoles = worker?.union_roles?.filter((role: WorkerUnionRole) => !role.end_date || new Date(role.end_date) > new Date());
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -177,7 +178,7 @@ export const WorkerDetailModal = ({ workerId, isOpen, onClose, onUpdate }: Worke
                 
                 {activeUnionRoles && activeUnionRoles.length > 0 && (
                   <div className="flex gap-1 mt-2">
-                    {activeUnionRoles.map(role => (
+                    {activeUnionRoles.map((role: WorkerUnionRole & { id: string; name: string; is_senior?: boolean }) => (
                       <Badge key={role.id} variant="secondary" className="text-xs">
                         {role.name}
                         {role.is_senior && " (Senior)"}

@@ -21,7 +21,7 @@ export function JVSelector({
       <Label>JV?</Label>
       <RadioGroup
         value={status}
-        onValueChange={(v) => onChangeStatus(v as JVStatus)}
+        onValueChange={(v: string) => onChangeStatus(v as JVStatus)}
         className="grid grid-cols-3 gap-2"
       >
         <div className="flex items-center space-x-2">

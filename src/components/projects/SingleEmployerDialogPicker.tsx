@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Search, X } from "lucide-react";
-import type { Database } from "@/integrations/supabase/types";
+// import type { Database } from "@/integrations/supabase/types";
 
 // Single selection dialog picker matching the MultiEmployerPicker UX
 // Shows a trigger button that opens a dialog with a search bar and a list of employers
@@ -16,7 +16,7 @@ import type { Database } from "@/integrations/supabase/types";
 
 type Employer = { id: string; name: string };
 type RoleTag = "builder" | "head_contractor";
-type EmployerType = Database["public"]["Enums"]["employer_type"];
+type EmployerType = "builder" | "principal_contractor" | "large_contractor" | "small_contractor" | "individual";
 
 export function SingleEmployerDialogPicker({
   label,
@@ -176,7 +176,7 @@ export function SingleEmployerDialogPicker({
                     <Label htmlFor="new_emp_type_se">Employer type</Label>
                     <Select
                       value={newEmployer.employer_type}
-                      onValueChange={(v) => setNewEmployer((p) => ({ ...p, employer_type: v as EmployerType }))}
+                      onValueChange={(v: string) => setNewEmployer((p) => ({ ...p, employer_type: v as EmployerType }))}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select employer type" />

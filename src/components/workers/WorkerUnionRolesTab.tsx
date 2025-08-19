@@ -42,7 +42,7 @@ const duesSchema = z.object({
 
 type DuesFormData = z.infer<typeof duesSchema>;
 
-type UnionRoleFormData = z.infer<typeof unionRoleSchema>;
+type UnionRoleFormData = z.input<typeof unionRoleSchema>;
 
 interface WorkerUnionRolesTabProps {
   workerId: string | null;
