@@ -2,6 +2,9 @@ import { AuthProvider } from '@/hooks/useAuth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Layout from '@/components/Layout'
+import DesktopLayout from '@/components/DesktopLayout'
+import { isMobileOrTablet } from '@/lib/device'
+import { headers } from 'next/headers'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,9 +14,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!user) {
     redirect('/auth')
   }
+  const hdrs = await headers()
+  const userAgent = hdrs.get('user-agent') || undefined
+  const isMobile = isMobileOrTablet(userAgent)
   return (
     <AuthProvider>
-      <Layout>{children}</Layout>
+      {isMobile ? <Layout>{children}</Layout> : <DesktopLayout>{children}</DesktopLayout>}
     </AuthProvider>
   )
 }
