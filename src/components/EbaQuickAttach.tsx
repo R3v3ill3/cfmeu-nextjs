@@ -43,7 +43,7 @@ export function EbaQuickAttach({ siteVisitId }: { siteVisitId: string }) {
 					<Input value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://..." />
 				</div>
 			</div>
-			<Button onClick={save} size="sm">Save EBA link</Button>
+			<Button onClick={save} className="h-9 px-3 text-sm">Save EBA link</Button>
 		</div>
 	);
 }

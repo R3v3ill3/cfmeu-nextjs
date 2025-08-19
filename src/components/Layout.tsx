@@ -37,7 +37,7 @@ const Layout = ({ children }: LayoutProps) => {
         .eq("id", user.id)
         .single();
       
-      setUserRole(profile?.role || null);
+      setUserRole((profile as { role?: string } | null)?.role || null);
     };
 
     checkUserRole();
