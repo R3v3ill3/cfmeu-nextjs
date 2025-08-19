@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 
 export const dynamic = 'force-dynamic'
@@ -10,15 +11,26 @@ export default function AuthPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const router = useRouter()
 
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError(null)
     const supabase = getSupabaseBrowserClient()
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) setError(error.message)
-    setLoading(false)
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) {
+        setError(error.message)
+      } else {
+        router.replace('/')
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unexpected error during sign-in'
+      setError(message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
