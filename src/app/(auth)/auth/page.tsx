@@ -1,7 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { supabase } from '@/lib/supabase/client'
+import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+
+export const dynamic = 'force-dynamic'
 
 export default function AuthPage() {
   const [email, setEmail] = useState('')
@@ -13,6 +15,7 @@ export default function AuthPage() {
     e.preventDefault()
     setLoading(true)
     setError(null)
+    const supabase = getSupabaseBrowserClient()
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) setError(error.message)
     setLoading(false)

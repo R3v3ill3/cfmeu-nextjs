@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 export default function ProjectsPage() {
   return (
     <main className="p-6">

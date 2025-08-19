@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { Session, User } from '@supabase/supabase-js'
-import { supabase } from '@/lib/supabase/client'
+import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 
 type AuthContextValue = {
   user: User | null
@@ -23,6 +23,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     async function loadSession() {
       try {
+        const supabase = getSupabaseBrowserClient()
         const { data } = await supabase.auth.getSession()
         if (!isMounted) return
         setSession(data.session ?? null)
@@ -34,13 +35,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     loadSession()
 
-    const { data: listener } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+    const supabase = getSupabaseBrowserClient()
+    const { data: listener } = supabase.auth.onAuthStateChange(async (event: string, newSession: Session | null) => {
       setSession(newSession)
       setUser(newSession?.user ?? null)
       if (event === 'SIGNED_IN') {
+        // fire-and-forget RPC if exists; ignore errors
         try {
-          // fire-and-forget RPC if exists; ignore errors
-          await supabase.rpc('apply_pending_user_on_login').catch(() => {})
+          await supabase.rpc('apply_pending_user_on_login')
         } catch {}
       }
     })
@@ -52,6 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const signOut = useCallback(async () => {
+    const supabase = getSupabaseBrowserClient()
     await supabase.auth.signOut()
   }, [])
 

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 export default function EmployersPage() {
   return (
     <main className="p-6">
