@@ -8,8 +8,9 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { supabase } from "@/integrations/supabase/client";
-import cfmeuLogoLight from "@/assets/cfmeu-logo-light.png";
-import cfmeuLogoDark from "@/assets/cfmeu-logo-dark.png";
+// Fallback to generic icon from public since original assets are not present
+const cfmeuLogoLight = "/icon.svg" as unknown as string;
+const cfmeuLogoDark = "/icon.svg" as unknown as string;
 
 const navItems = [
   { path: "/projects", label: "Projects", icon: FolderOpen },
