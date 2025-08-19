@@ -1,12 +1,18 @@
 import { AuthProvider } from '@/hooks/useAuth'
-import Protected from './protected'
+import { createServerSupabase } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
 
-export default function AppLayout({ children }: { children: React.ReactNode }) {
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const supabase = await createServerSupabase()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    redirect('/auth')
+  }
   return (
     <AuthProvider>
-      <Protected>{children}</Protected>
+      {children}
     </AuthProvider>
   )
 }
