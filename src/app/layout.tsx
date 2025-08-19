@@ -16,6 +16,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "CFMEU App",
   description: "Next.js App Router migrated from Vite",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({
