@@ -1,71 +1,81 @@
-'use client'
+import { useState, useEffect, createContext, useContext } from "react";
+import { User, Session } from "@supabase/supabase-js";
+import { supabase } from "@/integrations/supabase/client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-import { Session, User } from '@supabase/supabase-js'
-import { getSupabaseBrowserClient } from '@/lib/supabase/client'
-
-type AuthContextValue = {
-  user: User | null
-  session: Session | null
-  loading: boolean
-  signOut: () => Promise<void>
+interface AuthContextType {
+  user: User | null;
+  session: Session | null;
+  loading: boolean;
+  signOut: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextValue | undefined>(undefined)
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null)
-  const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let isMounted = true
-
-    async function loadSession() {
-      try {
-        const supabase = getSupabaseBrowserClient()
-        const { data } = await supabase.auth.getSession()
-        if (!isMounted) return
-        setSession(data.session ?? null)
-        setUser(data.session?.user ?? null)
-      } finally {
-        if (isMounted) setLoading(false)
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        setLoading(false);
+        if (session?.user) {
+          // Sync profile and apply any pending role
+          setTimeout(() => {
+            supabase.rpc('apply_pending_user_on_login');
+          }, 0);
+          // If user remains viewer, raise a pending request automatically
+          try {
+            const { data: prof } = await supabase
+              .from('profiles')
+              .select('role')
+              .eq('id', session.user.id)
+              .single();
+            if (prof && (prof as any).role === 'viewer') {
+              // Request access via direct database call since RPC types are not available
+              await supabase.from('pending_users').insert({
+                email: session.user.email || '',
+                role: 'organiser',
+                notes: 'Self-signup request'
+              });
+            }
+          } catch {}
+        }
       }
-    }
+    );
 
-    loadSession()
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
 
-    const supabase = getSupabaseBrowserClient()
-    const { data: listener } = supabase.auth.onAuthStateChange(async (event: string, newSession: Session | null) => {
-      setSession(newSession)
-      setUser(newSession?.user ?? null)
-      if (event === 'SIGNED_IN') {
-        // fire-and-forget RPC if exists; ignore errors
-        try {
-          await supabase.rpc('apply_pending_user_on_login')
-        } catch {}
-      }
-    })
+    return () => subscription.unsubscribe();
+  }, []);
 
-    return () => {
-      isMounted = false
-      listener.subscription.unsubscribe()
-    }
-  }, [])
+  const signOut = async () => {
+    await supabase.auth.signOut();
+  };
 
-  const signOut = useCallback(async () => {
-    const supabase = getSupabaseBrowserClient()
-    await supabase.auth.signOut()
-  }, [])
+  const value = {
+    user,
+    session,
+    loading,
+    signOut,
+  };
 
-  const value = useMemo<AuthContextValue>(() => ({ user, session, loading, signOut }), [user, session, loading, signOut])
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-}
-
-export function useAuth() {
-  const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider')
-  return ctx
-}
-
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
+};
