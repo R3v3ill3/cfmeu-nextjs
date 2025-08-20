@@ -33,17 +33,62 @@ export function usePatchDashboard(patchId?: string) {
         scopedSites = (prof as any)?.scoped_sites || []
       }
 
-      // Load job sites (scoped if provided), optionally filtered by patch
-      let sitesQuery = supabase.from('job_sites').select('id,name,location,project_id,patch')
-      if (scopedSites.length > 0) {
-        sitesQuery = sitesQuery.in('id', scopedSites)
-      }
+      // Resolve target site ids based on patch selection and/or legacy field
+      let sites: any[] = []
+      // If a patch id is provided, collect sites from patch mappings and trade employers
+      let tradeEmployerIds: string[] = []
       if (patchId) {
-        sitesQuery = (sitesQuery as any).eq('patch', patchId)
+        try {
+          const { data: mappedSites } = await supabase
+            .from('patch_job_sites')
+            .select('job_sites:job_site_id(id,name,location,project_id)')
+            .is('effective_to', null)
+            .eq('patch_id', patchId)
+          const list = ((mappedSites as any[]) || []).map(r => (r as any).job_sites).filter(Boolean)
+          sites = list
+        } catch {}
+        try {
+          const { data: mappedEmps } = await supabase
+            .from('patch_employers')
+            .select('employer_id')
+            .is('effective_to', null)
+            .eq('patch_id', patchId)
+          tradeEmployerIds = (((mappedEmps as any[]) || []).map((r: any) => r.employer_id).filter(Boolean))
+        } catch {}
       }
-      const { data: sitesRaw, error: sitesErr } = await sitesQuery
-      if (sitesErr) throw sitesErr
-      const sites = (sitesRaw as any[]) || []
+      // If trade employers exist, include any sites where they have placements
+      if (tradeEmployerIds.length > 0) {
+        const { data: tradePl } = await supabase
+          .from('worker_placements')
+          .select('job_site_id')
+          .in('employer_id', tradeEmployerIds)
+        const extraSiteIds = Array.from(new Set(((tradePl as any[]) || []).map((p: any) => p.job_site_id).filter(Boolean)))
+        if (extraSiteIds.length > 0) {
+          const knownIds = new Set((sites as any[]).map((s: any) => s.id))
+          const toFetch = extraSiteIds.filter((id) => !knownIds.has(id))
+          if (toFetch.length > 0) {
+            const { data: extraSites } = await supabase
+              .from('job_sites')
+              .select('id,name,location,project_id')
+              .in('id', toFetch)
+            sites = [...sites, ...(((extraSites as any[]) || []))]
+          }
+        }
+      }
+      if (sites.length === 0) {
+        // Fallback: direct query of job_sites, optionally filtered by legacy patch string
+        let sitesQuery: any = supabase.from('job_sites').select('id,name,location,project_id,patch')
+        if (scopedSites.length > 0) sitesQuery = sitesQuery.in('id', scopedSites)
+        if (patchId) sitesQuery = sitesQuery.eq('patch', patchId)
+        const { data: sitesRaw, error: sitesErr } = await sitesQuery
+        if (sitesErr) throw sitesErr
+        sites = (sitesRaw as any[]) || []
+      }
+      // Apply organiser scoping if present
+      if (scopedSites.length > 0) {
+        const allowed = new Set(scopedSites)
+        sites = sites.filter((s: any) => allowed.has(s.id))
+      }
       const siteIds = sites.map(s => s.id)
 
       // Map project names

@@ -12,6 +12,7 @@ import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { RoleHierarchyManager } from "@/components/admin/RoleHierarchyManager"
 import { OrganiserScopeManager } from "@/components/admin/OrganiserScopeManager"
+import PatchManager from "@/components/admin/PatchManager"
 
 export default function AdminPage() {
   const [open, setOpen] = useState(false)
@@ -28,6 +29,7 @@ export default function AdminPage() {
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="invites">Invites</TabsTrigger>
             <TabsTrigger value="hierarchy">Hierarchy</TabsTrigger>
+            <TabsTrigger value="patches">Patches</TabsTrigger>
             <TabsTrigger value="scoping">Scoping</TabsTrigger>
           </TabsList>
           <TabsContent value="users">
@@ -38,6 +40,9 @@ export default function AdminPage() {
           </TabsContent>
           <TabsContent value="hierarchy">
             <AdminHierarchyTab />
+          </TabsContent>
+          <TabsContent value="patches">
+            <PatchManager />
           </TabsContent>
           <TabsContent value="scoping">
             <OrganiserScopeManager />

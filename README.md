@@ -35,3 +35,13 @@ Railway uses `railway.toml`. Build uses `npm run build` and start uses `npm star
 ## Learn More
 
 See Next.js docs if needed: https://nextjs.org/docs
+
+## Database migrations for patches
+
+Run the following SQL files on your Supabase/Postgres instance in order:
+
+- `sql/001_patches.sql`: creates core tables, views and helper functions
+- `sql/002_patches_rls.sql`: enables RLS and basic policies
+- `sql/003_patches_backfill.sql`: optional backfill from legacy `job_sites.patch`
+
+After running, the Patch page and admin Patch Manager will populate from the new schema. The UI falls back to legacy fields until migrations are applied.
