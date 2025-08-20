@@ -56,6 +56,110 @@ export default function ProjectDetailPage() {
 
   const siteOptions = useMemo(() => (sites as any[]).map(s => ({ id: s.id as string, name: s.name as string })), [sites])
 
+  const { data: contractorSummary = [] } = useQuery({
+    queryKey: ["project-contractor-employers", projectId, (sites as any[]).length],
+    enabled: !!projectId && (sites as any[]).length > 0,
+    queryFn: async () => {
+      const siteIds = (sites as any[]).map((s) => s.id)
+      if (siteIds.length === 0) return []
+      const { data, error } = await (supabase as any)
+        .from("site_contractor_trades")
+        .select("employer_id, job_site_id")
+        .in("job_site_id", siteIds)
+      if (error) return []
+      const unique = Array.from(new Set((data || []).map((r: any) => r.employer_id).filter(Boolean)))
+      return unique
+    }
+  })
+
+  const { data: workerTotals } = useQuery({
+    queryKey: ["project-worker-totals", projectId],
+    enabled: !!projectId && (sites as any[]).length > 0,
+    queryFn: async () => {
+      const siteIds = (sites as any[]).map((s) => s.id)
+      // Fetch placements joined with workers to derive distinct workers and members on this project
+      const { data: placementRows } = await (supabase as any)
+        .from("worker_placements")
+        .select("worker_id, workers!inner(id, union_membership_status)")
+        .in("job_site_id", siteIds)
+
+      const workerMap: Record<string, { isMember: boolean }> = {}
+      ;(placementRows || []).forEach((row: any) => {
+        const wid = row.worker_id as string
+        const isMember = row.workers?.union_membership_status === "member"
+        if (!workerMap[wid]) workerMap[wid] = { isMember }
+        else if (isMember) workerMap[wid].isMember = true
+      })
+
+      const workerIds = Object.keys(workerMap)
+
+      // Leaders: active roles among these workers and on these sites
+      let leaders = new Set<string>()
+      if (workerIds.length > 0) {
+        const { data: roles } = await supabase
+          .from("union_roles")
+          .select("worker_id, job_site_id, name, end_date")
+          .in("job_site_id", siteIds)
+          .in("worker_id", workerIds)
+        const leaderRoleSet = new Set(["site_delegate", "shift_delegate", "company_delegate", "hsr"])
+        ;(roles || []).forEach((r: any) => {
+          const active = !r.end_date || new Date(r.end_date) > new Date()
+          if (active && leaderRoleSet.has(r.name)) {
+            leaders.add(r.worker_id as string)
+          }
+        })
+      }
+
+      return {
+        totalWorkers: workerIds.length,
+        totalMembers: Object.values(workerMap).filter((w) => w.isMember).length,
+        totalLeaders: leaders.size,
+      }
+    }
+  })
+
+  const { data: ebaStats } = useQuery({
+    queryKey: ["project-eba-stats", projectId, contractorSummary],
+    enabled: !!projectId && Array.isArray(contractorSummary),
+    queryFn: async () => {
+      const employerIds = contractorSummary as string[]
+      if (!employerIds || employerIds.length === 0) return { ebaCount: 0, employerCount: 0 }
+      const { data } = await supabase
+        .from("company_eba_records")
+        .select("employer_id")
+        .in("employer_id", employerIds)
+      const ebaEmployers = new Set((data || []).map((r: any) => r.employer_id))
+      return { ebaCount: ebaEmployers.size, employerCount: employerIds.length }
+    }
+  })
+
+  const { data: lastVisit } = useQuery({
+    queryKey: ["project-last-visit", projectId],
+    enabled: !!projectId,
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from("site_visit")
+        .select("visit_date")
+        .eq("project_id", projectId)
+        .order("visit_date", { ascending: false })
+        .limit(1)
+      return (data && data[0]?.visit_date) ? new Date(data[0].visit_date).toLocaleDateString() : "—"
+    }
+  })
+
+  const { data: contractorNames = [] } = useQuery({
+    queryKey: ["project-contractor-names", contractorSummary],
+    enabled: Array.isArray(contractorSummary) && (contractorSummary as string[]).length > 0,
+    queryFn: async () => {
+      const ids = contractorSummary as string[]
+      const { data } = await supabase
+        .from("employers")
+        .select("id, name")
+        .in("id", ids)
+      return (data || []).map((e: any) => e.name as string).sort((a: string, b: string) => a.localeCompare(b))
+    }
+  })
+
   const { data: contractorRows = [] } = useQuery({
     queryKey: ["project-contractors", projectId],
     enabled: !!projectId,
@@ -99,7 +203,42 @@ export default function ProjectDetailPage() {
               <CardTitle>Project Overview</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground">Manage sites, contractors, and view wallcharts using the tabs above.</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                <div className="space-y-1">
+                  <div className="font-medium">Sites</div>
+                  <div className="text-muted-foreground">{(sites as any[]).length}</div>
+                  <div className="text-muted-foreground truncate">
+                    {(sites as any[]).map((s) => s.name).join(', ') || '—'}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <div className="font-medium">Contractors</div>
+                  <div className="text-muted-foreground">{(contractorSummary as any[]).length}</div>
+                  <div className="text-muted-foreground truncate">
+                    {(contractorNames as string[]).join(', ') || '—'}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <div className="font-medium">Total workers</div>
+                  <div className="text-muted-foreground">{workerTotals?.totalWorkers ?? 0}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="font-medium">Total members</div>
+                  <div className="text-muted-foreground">{workerTotals?.totalMembers ?? 0}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="font-medium">Total leaders</div>
+                  <div className="text-muted-foreground">{workerTotals?.totalLeaders ?? 0}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="font-medium">EBA coverage</div>
+                  <div className="text-muted-foreground">{ebaStats ? `${ebaStats.ebaCount} eba: ${ebaStats.employerCount} employers` : "—"}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="font-medium">Last site visit</div>
+                  <div className="text-muted-foreground">{lastVisit || "—"}</div>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
