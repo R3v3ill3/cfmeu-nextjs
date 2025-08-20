@@ -359,7 +359,8 @@ const roleBadge = (role: WorkerRoleLite) => (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {filteredSortedWorkers.map((w) => {
                 const workerRoles = (data.roles[w.id] || []) as WorkerRoleLite[];
-                const colorClass = getWorkerColorCoding(w.union_membership_status || null, workerRoles);
+                const roleNames = workerRoles.map(r => r.name);
+                const colorInfo = getWorkerColorCoding(w.union_membership_status || null, roleNames);
                 return (
                   <Card key={w.id} className="p-3 border">
                     <div className="flex items-start justify-between gap-2">
@@ -371,7 +372,7 @@ const roleBadge = (role: WorkerRoleLite) => (
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
-                        <div className={`w-2 h-2 rounded-full mt-1 ${colorClass}`} />
+                        <div className={`w-2 h-2 rounded-full mt-1 ${colorInfo.backgroundColor}`} />
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button size="icon" variant="ghost"><MoreVertical className="h-4 w-4" /></Button>
