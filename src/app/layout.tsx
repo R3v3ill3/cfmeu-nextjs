@@ -17,7 +17,10 @@ export const metadata: Metadata = {
   title: "CFMEU App",
   description: "Next.js App Router migrated from Vite",
   icons: {
-    icon: "/icon.svg",
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
+    apple: "/icon.svg",
   },
 };
 
