@@ -403,10 +403,15 @@ const roleBadge = (role: WorkerRoleLite) => (
             />
 
             <UnionRoleAssignmentModal
-              workerId={roleWorkerId}
               isOpen={showRole}
               onClose={() => setShowRole(false)}
-              onAssigned={() => qc.invalidateQueries({ queryKey: ["employer-worker-chart"] })}
+              employerId={employerId!}
+              workers={filteredSortedWorkers.map((w) => ({
+                id: w.id,
+                first_name: w.first_name ?? "",
+                surname: w.surname ?? "",
+              }))}
+              onSuccess={() => qc.invalidateQueries({ queryKey: ["employer-worker-chart"] })}
             />
 
             <AssignWorkersModal
