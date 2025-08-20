@@ -1,6 +1,7 @@
 -- Helper: Generate CREATE INDEX statements for foreign keys lacking a covering index
 -- Usage: Run in Supabase SQL Editor, copy output, review, then execute
 -- Reference: https://supabase.com/docs/guides/database/database-linter?lint=0001_unindexed_foreign_keys
+-- Note: Excludes Supabase-managed and system schemas to avoid ownership errors
 
 with fks as (
   select
@@ -16,6 +17,20 @@ with fks as (
   join unnest(con.conkey) with ordinality as k(attnum, ordinality) on true
   join pg_attribute a on a.attrelid = con.conrelid and a.attnum = k.attnum
   where con.contype = 'f'
+    and n.nspname not in (
+      'pg_catalog',
+      'information_schema',
+      'pg_toast',
+      'extensions',
+      'auth',
+      'storage',
+      'graphql_public',
+      'realtime',
+      'supabase_functions',
+      'supabase_migrations'
+    )
+    and n.nspname not like 'pg_%'
+    and pg_has_role(current_user, c.relowner, 'USAGE')
   group by con.oid, n.nspname, c.relname, con.conname, con.conkey
 ),
 indexed as (
