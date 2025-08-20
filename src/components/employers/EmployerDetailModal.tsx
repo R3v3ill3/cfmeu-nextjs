@@ -102,6 +102,32 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
     enabled: !!employerId && isOpen,
   });
 
+  // Worksites for this employer, across all projects
+  const { data: employerSites = [], isFetching: isFetchingSites } = useQuery({
+    queryKey: ["employer-sites", employerId],
+    enabled: !!employerId && isOpen,
+    queryFn: async () => {
+      if (!employerId) return [];
+      // Find job sites where this employer has any trade assignment
+      const { data, error } = await (supabase as any)
+        .from("site_contractor_trades")
+        .select("job_site_id, job_sites(id, name, project_id, projects(name))")
+        .eq("employer_id", employerId);
+      if (error) throw error;
+      // De-duplicate by site id
+      const seen = new Set<string>();
+      const sites: { id: string; name: string; projectId: string; projectName?: string | null }[] = [];
+      (data || []).forEach((row: any) => {
+        const s = row.job_sites;
+        if (s?.id && !seen.has(s.id)) {
+          seen.add(s.id);
+          sites.push({ id: s.id as string, name: s.name as string, projectId: s.project_id as string, projectName: s.projects?.name ?? null });
+        }
+      });
+      return sites.sort((a, b) => a.name.localeCompare(b.name));
+    },
+  });
+
   if (!isOpen) return null;
 
   const ebaStatus = employer?.company_eba_records?.[0] ? getEbaStatusInfo(employer.company_eba_records[0]) : null;
@@ -385,15 +411,44 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
               </TabsContent>
 
               <TabsContent value="sites" className="space-y-4">
-                <Card>
-                  <CardContent className="flex flex-col items-center justify-center py-12">
-                    <Briefcase className="h-12 w-12 text-muted-foreground mb-4" />
-                    <h3 className="text-lg font-semibold mb-2">No Worksites</h3>
-                    <p className="text-muted-foreground text-center">
-                      No worksite information is currently available for this employer.
-                    </p>
-                  </CardContent>
-                </Card>
+                {isFetchingSites ? (
+                  <Card>
+                    <CardContent className="py-6 text-center text-sm text-muted-foreground">Loading worksites…</CardContent>
+                  </Card>
+                ) : employerSites.length > 0 ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <Briefcase className="h-5 w-5" />
+                        Worksites
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {employerSites.map((s) => (
+                          <div key={s.id} className="flex items-center justify-between border rounded px-3 py-2">
+                            <div className="truncate mr-3">
+                              <div className="font-medium truncate">{s.name}</div>
+                              {s.projectName && (
+                                <div className="text-xs text-muted-foreground truncate">{s.projectName}</div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card>
+                    <CardContent className="flex flex-col items-center justify-center py-12">
+                      <Briefcase className="h-12 w-12 text-muted-foreground mb-4" />
+                      <h3 className="text-lg font-semibold mb-2">No Worksites</h3>
+                      <p className="text-muted-foreground text-center">
+                        No worksite information is currently available for this employer.
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
               </TabsContent>
 
 <TabsContent value="workers" className="space-y-4">

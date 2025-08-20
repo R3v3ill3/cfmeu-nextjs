@@ -325,6 +325,7 @@ export default function ProjectDetailPage() {
                 rows={contractorRows as any}
                 showSiteColumn={true}
                 ebaEmployers={ebaEmployers}
+                projectId={projectId}
                 onEmployerClick={async (id) => {
                   try {
                     const { data: pct } = await (supabase as any)
@@ -430,11 +431,45 @@ export default function ProjectDetailPage() {
                   setEstSaving(true)
                   const est = Number(estValue)
                   if (!Number.isFinite(est) || est < 0) throw new Error('Invalid number')
-                  await (supabase as any)
+                  // Ensure there is at least one project_contractor_trades row for this employer on this project.
+                  const { data: existingPct, error: existingErr } = await (supabase as any)
                     .from('project_contractor_trades')
-                    .update({ estimated_project_workforce: est })
+                    .select('id, trade_type')
                     .eq('project_id', projectId)
                     .eq('employer_id', estPrompt.employerId)
+
+                  if (existingErr) throw existingErr
+
+                  if (!existingPct || existingPct.length === 0) {
+                    // Derive trades from site_contractor_trades for this employer across this project's sites
+                    const siteIds = (sites as any[]).map((s: any) => s.id)
+                    let trades: string[] = []
+                    if (siteIds.length > 0) {
+                      const { data: sct } = await (supabase as any)
+                        .from('site_contractor_trades')
+                        .select('trade_type')
+                        .in('job_site_id', siteIds)
+                        .eq('employer_id', estPrompt.employerId)
+                      trades = Array.from(new Set(((sct || []) as any[]).map((r: any) => String(r.trade_type))))
+                    }
+                    const rowsToInsert = (trades.length > 0 ? trades : ['labour_hire']).map((t: string) => ({
+                      project_id: projectId,
+                      employer_id: estPrompt.employerId,
+                      trade_type: t,
+                      eba_signatory: 'not_specified',
+                      estimated_project_workforce: est,
+                    }))
+                    await (supabase as any)
+                      .from('project_contractor_trades')
+                      .insert(rowsToInsert)
+                  } else {
+                    // Update all existing rows for this employer on this project
+                    await (supabase as any)
+                      .from('project_contractor_trades')
+                      .update({ estimated_project_workforce: est })
+                      .eq('project_id', projectId)
+                      .eq('employer_id', estPrompt.employerId)
+                  }
                   setSelectedEmployerId(estPrompt.employerId)
                 } catch (e) {
                   console.error(e)
