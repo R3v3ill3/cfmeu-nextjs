@@ -415,11 +415,13 @@ const roleBadge = (role: WorkerRoleLite) => (
             />
 
             <AssignWorkersModal
-              isOpen={showAssign}
-              onClose={() => setShowAssign(false)}
-              employerId={employerId}
+              open={showAssign}
+              onOpenChange={setShowAssign}
+              employerId={employerId!}
+              employerName={employerName}
+              projectId={null}
               siteOptions={siteOptions}
-              defaultSiteId={contextSiteId || undefined}
+              defaultSiteId={contextSiteId ?? null}
               onAssigned={() => qc.invalidateQueries({ queryKey: ["employer-worker-chart"] })}
             />
           </>
