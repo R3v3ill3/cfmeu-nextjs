@@ -11,6 +11,7 @@ import { WorkerRatingsTab } from "./WorkerRatingsTab";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Mail, Phone, MapPin } from "lucide-react";
+import { getWorkerColorCoding } from "@/utils/workerColorCoding";
 
 interface WorkerDetailModalProps {
   workerId: string | null;
@@ -87,16 +88,8 @@ export const WorkerDetailModal = ({ workerId, isOpen, onClose, onUpdate }: Worke
   };
 
   const getUnionStatusColor = (status: string) => {
-    switch (status) {
-      case "member":
-        return "bg-green-100 text-green-800 border-green-200";
-      case "potential":
-        return "bg-blue-100 text-blue-800 border-blue-200";
-      case "declined":
-        return "bg-yellow-100 text-yellow-800 border-yellow-200";
-      default:
-        return "bg-gray-100 text-gray-800 border-gray-200";
-    }
+    const info = getWorkerColorCoding(status || null);
+    return `${info.badgeClass} ${info.textColor} border`;
   };
 
   const formatUnionStatus = (status: string) => {
@@ -132,7 +125,10 @@ export const WorkerDetailModal = ({ workerId, isOpen, onClose, onUpdate }: Worke
           <div className="flex items-center justify-between">
             <DialogTitle>Worker Details</DialogTitle>
             {worker && (
-              <Badge className={getUnionStatusColor(worker.union_membership_status)}>
+              <Badge 
+                className={getUnionStatusColor(worker.union_membership_status)}
+                style={{ ...getWorkerColorCoding(worker.union_membership_status || null).badgeStyle, ...getWorkerColorCoding(worker.union_membership_status || null).borderStyle }}
+              >
                 {formatUnionStatus(worker.union_membership_status)}
               </Badge>
             )}
@@ -141,7 +137,10 @@ export const WorkerDetailModal = ({ workerId, isOpen, onClose, onUpdate }: Worke
           {worker && (
             <div className="flex items-center gap-4 p-4 bg-muted rounded-lg">
               <Avatar className="h-16 w-16">
-                <AvatarFallback className={getUnionStatusColor(worker.union_membership_status)}>
+                <AvatarFallback 
+                  className={getUnionStatusColor(worker.union_membership_status)}
+                  style={{ ...getWorkerColorCoding(worker.union_membership_status || null).badgeStyle, ...getWorkerColorCoding(worker.union_membership_status || null).borderStyle }}
+                >
                   {getInitials(worker.first_name, worker.surname)}
                 </AvatarFallback>
               </Avatar>

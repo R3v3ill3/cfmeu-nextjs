@@ -17,6 +17,7 @@ import {
   Search,
   CheckCircle2
 } from "lucide-react";
+import { getWorkerColorCoding } from "@/utils/workerColorCoding";
 
 export interface WorkerAssignment {
   workerId: string;
@@ -377,8 +378,8 @@ export function WorkerAssignmentTabs({ selectedWorkers, onWorkersChange }: Worke
                             </Badge>
                           )}
                           <Badge 
-                            variant={worker.union_membership_status === 'member' ? 'default' : 'secondary'}
-                            className="text-xs"
+                            className={`text-xs ${getWorkerColorCoding(worker.union_membership_status || null).badgeClass} ${getWorkerColorCoding(worker.union_membership_status || null).textColor} border`}
+                            style={{ ...getWorkerColorCoding(worker.union_membership_status || null).badgeStyle, ...getWorkerColorCoding(worker.union_membership_status || null).borderStyle }}
                           >
                             {worker.union_membership_status}
                           </Badge>
