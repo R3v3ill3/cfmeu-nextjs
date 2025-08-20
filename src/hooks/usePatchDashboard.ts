@@ -33,10 +33,13 @@ export function usePatchDashboard(patchId?: string) {
         scopedSites = (prof as any)?.scoped_sites || []
       }
 
-      // Load job sites (scoped if provided)
-      let sitesQuery = supabase.from('job_sites').select('id,name,location,project_id')
+      // Load job sites (scoped if provided), optionally filtered by patch
+      let sitesQuery = supabase.from('job_sites').select('id,name,location,project_id,patch')
       if (scopedSites.length > 0) {
         sitesQuery = sitesQuery.in('id', scopedSites)
+      }
+      if (patchId) {
+        sitesQuery = (sitesQuery as any).eq('patch', patchId)
       }
       const { data: sitesRaw, error: sitesErr } = await sitesQuery
       if (sitesErr) throw sitesErr

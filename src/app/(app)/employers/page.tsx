@@ -4,12 +4,15 @@ export const dynamic = 'force-dynamic'
 import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { EmployerCard } from "@/components/employers/EmployerCard"
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal"
 import { Switch } from "@/components/ui/switch"
+import { useSearchParams } from "next/navigation"
 
 export default function EmployersPage() {
   const [onlyEngaged, setOnlyEngaged] = useState(true)
+  const sp = useSearchParams()
+  const q = (sp.get("q") || "").toLowerCase()
 
   const { data: employers = [], isFetching } = useQuery({
     queryKey: ["employers-list", { onlyEngaged }],
@@ -60,7 +63,13 @@ export default function EmployersPage() {
       </div>
       {isFetching && <p className="text-sm text-muted-foreground">Loading…</p>}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {(employers as any[]).map((emp) => (
+        {(employers as any[])
+          .filter((emp: any) => {
+            if (!q) return true
+            const hay = [emp.name, emp.abn, emp.website, emp.email, emp.phone].map((v: any) => String(v || "").toLowerCase())
+            return hay.some((s: string) => s.includes(q))
+          })
+          .map((emp) => (
           <EmployerCard
             key={emp.id}
             employer={emp}

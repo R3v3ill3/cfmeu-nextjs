@@ -6,8 +6,11 @@ import { supabase } from "@/integrations/supabase/client"
 import { Card, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { useSearchParams } from "next/navigation"
 
 export default function ProjectsPage() {
+  const sp = useSearchParams()
+  const q = (sp.get("q") || "").toLowerCase()
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ["projects-list"],
     staleTime: 30000,
@@ -38,7 +41,9 @@ export default function ProjectsPage() {
         <p className="text-sm text-muted-foreground">No projects found.</p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {projects.map((p: any) => (
+          {projects
+            .filter((p: any) => (q ? String(p.name || "").toLowerCase().includes(q) : true))
+            .map((p: any) => (
             <Link key={p.id} href={`/projects/${p.id}`} className="group">
               <Card className="transition-colors hover:bg-accent cursor-pointer">
                 <CardHeader className="p-4">

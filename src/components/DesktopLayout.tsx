@@ -135,7 +135,7 @@ export default function DesktopLayout({ children }: { children: React.ReactNode 
             </div>
             <div className="ml-auto text-sm text-muted-foreground hidden md:block truncate max-w-[40%]">{user?.email}</div>
           </div>
-          <FiltersBar />
+          {userRole === "admin" && <FiltersBar />}
         </header>
         <main className="flex-1 p-6 min-w-0">{children}</main>
       </SidebarInset>
