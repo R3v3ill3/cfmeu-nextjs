@@ -35,11 +35,73 @@ export function FiltersBar({ patchOptions, statusOptions }: FiltersBarProps) {
     return `${href}?${sp.toString()}`
   }
 
-  // Dynamic patch options derived from job sites' patch field or projects if available
+  // Patch options: prefer dedicated patches table (scoped by user role), fallback to legacy job_sites.patch
   const { data: dynamicPatches = [] } = useQuery({
     queryKey: ["filtersbar-patches"],
     queryFn: async () => {
-      // Try job_sites.patch first; fallback to projects.region or name groupings
+      // Determine user and role
+      let userId: string | null = null
+      let role: string | null = null
+      try {
+        const { data: auth } = await supabase.auth.getUser()
+        userId = (auth as any)?.user?.id || null
+        if (userId) {
+          const { data: prof } = await (supabase as any)
+            .from("profiles")
+            .select("role")
+            .eq("id", userId)
+            .single()
+          role = (prof as any)?.role || null
+        }
+      } catch {}
+
+      // Attempt to read from patches with role-aware scoping
+      try {
+        let patchRows: any[] = []
+        if (role === "admin") {
+          const { data } = await (supabase as any)
+            .from("patches")
+            .select("id, name, type")
+            .order("name")
+          patchRows = (data as any[]) || []
+        } else if (role === "lead_organiser") {
+          // Patches assigned to lead organiser or to organisers they manage
+          const [direct, team] = await Promise.all([
+            (supabase as any)
+              .from("lead_organiser_patch_assignments")
+              .select("patches:patch_id(id,name,type)")
+              .is("effective_to", null)
+              .eq("lead_organiser_id", userId),
+            (supabase as any)
+              .from("organiser_patch_assignments")
+              .select("patches:patch_id(id,name,type)")
+              .is("effective_to", null)
+          ])
+          const list: any[] = []
+          const pushRow = (r: any) => { if (r?.patches) list.push(r.patches) }
+          ;(((direct as any)?.data as any[]) || []).forEach(pushRow)
+          ;(((team as any)?.data as any[]) || []).forEach(pushRow)
+          // De-dupe by id
+          const seen = new Set<string>()
+          patchRows = list.filter((p) => (p?.id && !seen.has(p.id) && seen.add(p.id)))
+        } else if (role === "organiser") {
+          const { data } = await (supabase as any)
+            .from("organiser_patch_assignments")
+            .select("patches:patch_id(id,name,type)")
+            .is("effective_to", null)
+            .eq("organiser_id", userId)
+          patchRows = ((data as any[]) || []).map((r: any) => r.patches).filter(Boolean)
+        }
+
+        // If we have rows, return them as options
+        if (Array.isArray(patchRows) && patchRows.length > 0) {
+          return patchRows.map((p: any) => ({ value: p.id, label: p.name || p.id }))
+        }
+      } catch {
+        // tables might not exist yet → fall back
+      }
+
+      // Fallback legacy: derive from job_sites.patch; then optional projects.region
       const { data: sites } = await (supabase as any)
         .from("job_sites")
         .select("id, patch")
@@ -49,7 +111,6 @@ export function FiltersBar({ patchOptions, statusOptions }: FiltersBarProps) {
         const val = (s as any).patch
         if (typeof val === "string" && val.trim() !== "") set.add(val.trim())
       })
-      // If none found, attempt from projects table (optional region/name prefix)
       if (set.size === 0) {
         const { data: projects } = await (supabase as any)
           .from("projects")
