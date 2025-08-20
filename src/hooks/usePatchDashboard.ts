@@ -24,23 +24,97 @@ export function usePatchDashboard(patchId?: string) {
   return useQuery<{ kpis: PatchKpis; rows: PatchRow[] }>({
     queryKey: ["patch-dashboard", patchId || "default"],
     queryFn: async () => {
-      // TODO: Replace with campaign service aggregations when available
-      // Attempt minimal reads to verify connectivity, otherwise return seed
-      try {
-        await supabase.from("job_sites").select("id").limit(1)
-      } catch {}
-
-      const kpis: PatchKpis = {
-        members: { current: 124, goal: 180 },
-        dd: { current: 80, goal: 140 },
-        leaders: { current: 9, goal: 15 },
-        openAudits: 6,
+      // Resolve current user and optional site scoping
+      const { data: auth } = await supabase.auth.getUser()
+      const userId = auth?.user?.id
+      let scopedSites: string[] = []
+      if (userId) {
+        const { data: prof } = await supabase.from('profiles').select('scoped_sites').eq('id', userId).single()
+        scopedSites = (prof as any)?.scoped_sites || []
       }
-      const rows: PatchRow[] = [
-        { id: "s1", site: "Metro Tunnel - CBD South", project: "Metro Tunnel", employers: 12, members: { current: 56, goal: 80 }, dd: { current: 34, goal: 60 }, leadersScore: 3.2, lastVisit: new Date(Date.now() - 1000*60*60*24*2).toISOString() },
-        { id: "s2", site: "West Gate Bridge", project: "West Gate", employers: 8, members: { current: 22, goal: 50 }, dd: { current: 10, goal: 35 }, leadersScore: 2.1, lastVisit: new Date(Date.now() - 1000*60*60*24*10).toISOString() },
-        { id: "s3", site: "Airport Rail Link - Tulla", project: "ARL", employers: 5, members: { current: 30, goal: 40 }, dd: { current: 24, goal: 35 }, leadersScore: 4.0, lastVisit: new Date(Date.now() - 1000*60*60*24*1).toISOString() },
-      ]
+
+      // Load job sites (scoped if provided)
+      let sitesQuery = supabase.from('job_sites').select('id,name,location,project_id')
+      if (scopedSites.length > 0) {
+        sitesQuery = sitesQuery.in('id', scopedSites)
+      }
+      const { data: sitesRaw, error: sitesErr } = await sitesQuery
+      if (sitesErr) throw sitesErr
+      const sites = (sitesRaw as any[]) || []
+      const siteIds = sites.map(s => s.id)
+
+      // Map project names
+      const projectIds = Array.from(new Set(sites.map(s => s.project_id).filter(Boolean)))
+      let projectNameById: Record<string, string> = {}
+      if (projectIds.length > 0) {
+        const { data: projects } = await supabase.from('projects').select('id,name').in('id', projectIds)
+        ;(projects as any[] || []).forEach(p => { projectNameById[p.id] = p.name })
+      }
+
+      // Worker placements with workers to compute members and employer counts
+      let placements: any[] = []
+      if (siteIds.length > 0) {
+        const { data: pl } = await supabase
+          .from('worker_placements')
+          .select('job_site_id, employer_id, workers!inner(union_membership_status)')
+          .in('job_site_id', siteIds)
+        placements = (pl as any[]) || []
+      }
+
+      // Union roles per site for leaders score
+      let roles: any[] = []
+      if (siteIds.length > 0) {
+        const { data: rls } = await supabase
+          .from('union_roles')
+          .select('job_site_id, name')
+          .in('job_site_id', siteIds)
+        roles = (rls as any[]) || []
+      }
+
+      // Last site visit per site
+      let visits: any[] = []
+      if (siteIds.length > 0) {
+        const { data: vs } = await supabase
+          .from('site_visit')
+          .select('job_site_id, date')
+          .in('job_site_id', siteIds)
+          .order('date', { ascending: false })
+        visits = (vs as any[]) || []
+      }
+
+      // Aggregate per site
+      const leaderRoleSet = new Set([ 'site_delegate', 'shift_delegate', 'company_delegate', 'hsr' ])
+      const lastVisitBySite: Record<string, string> = {}
+      visits.forEach(v => { if (!lastVisitBySite[v.job_site_id]) lastVisitBySite[v.job_site_id] = v.date })
+
+      const rows: PatchRow[] = sites.map(s => {
+        const sitePlacements = placements.filter(p => p.job_site_id === s.id)
+        const employerSet = new Set(sitePlacements.map(p => p.employer_id).filter(Boolean))
+        const membersCurrent = sitePlacements.filter(p => p.workers?.union_membership_status === 'member').length
+        const siteRoles = roles.filter(r => r.job_site_id === s.id)
+        const leadersCurrent = siteRoles.filter(r => leaderRoleSet.has(r.name)).length
+        const leadersScore = leadersCurrent // Placeholder score = count; can be replaced with breadth/depth calc
+        return {
+          id: s.id,
+          site: s.name,
+          project: projectNameById[s.project_id] || '—',
+          employers: employerSet.size,
+          members: { current: membersCurrent, goal: 0 },
+          dd: { current: 0, goal: 0 },
+          leadersScore,
+          lastVisit: lastVisitBySite[s.id],
+        }
+      })
+
+      // Top-level KPIs
+      const totalMembers = rows.reduce((sum, r) => sum + r.members.current, 0)
+      const totalLeaders = roles.filter(r => leaderRoleSet.has(r.name)).length
+      const kpis: PatchKpis = {
+        members: { current: totalMembers, goal: 0 },
+        dd: { current: 0, goal: 0 },
+        leaders: { current: totalLeaders, goal: 0 },
+        openAudits: 0,
+      }
       return { kpis, rows }
     }
   })
