@@ -64,6 +64,9 @@ const Layout = ({ children }: LayoutProps) => {
     if (userRole === "admin") {
       items.push({ path: "/admin", label: "Administration", icon: Shield });
     }
+    if (userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") {
+      items.push({ path: "/campaigns", label: "Campaigns", icon: BarChart3 });
+    }
     return items;
   };
 
