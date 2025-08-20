@@ -21,7 +21,7 @@ import {
   SidebarSeparator,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
-import { LogOut, Users, Building, FolderOpen, FileCheck, Shield } from "lucide-react"
+import { LogOut, Users, Building, FolderOpen, FileCheck, Shield, BarChart3 } from "lucide-react"
 import { supabase } from "@/integrations/supabase/client"
 
 const cfmeuLogoLight = "/icon.svg" as unknown as string
@@ -64,6 +64,9 @@ function useVisibleNavItems(userRole: string | null): NavItem[] {
   if (!(userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin")) {
     const siteVisitsIndex = items.findIndex((i) => i.path === "/site-visits")
     if (siteVisitsIndex > -1) items.splice(siteVisitsIndex, 1)
+  }
+  if (userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") {
+    items.push({ path: "/campaigns", label: "Campaigns", icon: BarChart3 })
   }
   if (userRole === "admin") {
     items.push({ path: "/admin", label: "Administration", icon: Shield })
