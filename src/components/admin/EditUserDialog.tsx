@@ -45,7 +45,7 @@ export default function EditUserDialog({ user, open, onOpenChange, onSaved }: Ed
     setPhone(user.phone ?? "");
     setRole((user.role as AppRole) ?? "viewer");
     setActive(user.is_active ?? true);
-  }, [user?.id]);
+  }, [user]);
 
   const handleSave = async () => {
     if (!fullName.trim()) {

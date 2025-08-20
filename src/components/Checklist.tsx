@@ -17,7 +17,7 @@ export function Checklist({ svId, onChanged }: { svId: string; onChanged?: (map:
 			setResponses(map);
 			onChanged?.(map);
 		})();
-	}, [svId]);
+	}, [svId, onChanged]);
 
 	async function saveResponse(itemCode: string, option: string) {
 		const next = { ...responses, [itemCode]: option };
