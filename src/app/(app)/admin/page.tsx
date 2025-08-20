@@ -8,6 +8,10 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import UsersTable from "@/components/admin/UsersTable"
 import RoleGuard from "@/components/guards/RoleGuard"
+import { useQuery } from "@tanstack/react-query"
+import { supabase } from "@/integrations/supabase/client"
+import { RoleHierarchyManager } from "@/components/admin/RoleHierarchyManager"
+import { OrganiserScopeManager } from "@/components/admin/OrganiserScopeManager"
 
 export default function AdminPage() {
   const [open, setOpen] = useState(false)
@@ -23,6 +27,8 @@ export default function AdminPage() {
           <TabsList>
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="invites">Invites</TabsTrigger>
+            <TabsTrigger value="hierarchy">Hierarchy</TabsTrigger>
+            <TabsTrigger value="scoping">Scoping</TabsTrigger>
           </TabsList>
           <TabsContent value="users">
             <UsersTable />
@@ -30,10 +36,31 @@ export default function AdminPage() {
           <TabsContent value="invites">
             <PendingUsersTable />
           </TabsContent>
+          <TabsContent value="hierarchy">
+            <AdminHierarchyTab />
+          </TabsContent>
+          <TabsContent value="scoping">
+            <OrganiserScopeManager />
+          </TabsContent>
         </Tabs>
         <InviteUserDialog open={open} onOpenChange={setOpen} onSuccess={() => {}} />
       </div>
     </RoleGuard>
   )
+}
+
+function AdminHierarchyTab() {
+  const { data: users = [] } = useQuery({
+    queryKey: ["admin-hierarchy-users"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("profiles")
+        .select("id, full_name, email, role")
+        .order("full_name")
+      if (error) throw error
+      return data || []
+    }
+  })
+  return <RoleHierarchyManager users={users as any} />
 }
 
