@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button"
 export default function ProjectsPage() {
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ["projects-list"],
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("projects")

@@ -35,6 +35,8 @@ export default function ProjectDetailPage() {
   const { data: project } = useQuery({
     queryKey: ["project-detail", projectId],
     enabled: !!projectId,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("projects")
@@ -49,6 +51,8 @@ export default function ProjectDetailPage() {
   const { data: sites = [] } = useQuery({
     queryKey: ["project-sites", projectId],
     enabled: !!projectId,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("job_sites")
@@ -61,12 +65,18 @@ export default function ProjectDetailPage() {
   })
 
   const siteOptions = useMemo(() => (sites as any[]).map(s => ({ id: s.id as string, name: s.name as string })), [sites])
+  const sortedSiteIds = useMemo(
+    () => Array.from(new Set(((sites as any[]) || []).map((s: any) => String(s.id)).filter(Boolean))).sort(),
+    [sites]
+  )
 
   const { data: contractorSummary = [] } = useQuery({
-    queryKey: ["project-contractor-employers", projectId, (sites as any[]).length],
-    enabled: !!projectId && (sites as any[]).length > 0,
+    queryKey: ["project-contractor-employers", projectId, sortedSiteIds],
+    enabled: !!projectId && sortedSiteIds.length > 0,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
-      const siteIds = (sites as any[]).map((s) => s.id)
+      const siteIds = sortedSiteIds
       if (siteIds.length === 0) return []
       const { data, error } = await (supabase as any)
         .from("site_contractor_trades")
@@ -79,10 +89,12 @@ export default function ProjectDetailPage() {
   })
 
   const { data: workerTotals } = useQuery({
-    queryKey: ["project-worker-totals", projectId],
-    enabled: !!projectId && (sites as any[]).length > 0,
+    queryKey: ["project-worker-totals", projectId, sortedSiteIds],
+    enabled: !!projectId && sortedSiteIds.length > 0,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
-      const siteIds = (sites as any[]).map((s) => s.id)
+      const siteIds = sortedSiteIds
       // Fetch placements joined with workers to derive distinct workers and members on this project
       const { data: placementRows } = await (supabase as any)
         .from("worker_placements")
@@ -124,11 +136,17 @@ export default function ProjectDetailPage() {
     }
   })
 
+  const stableEmployerIds = useMemo(
+    () => Array.from(new Set(((contractorSummary as string[]) || []).filter(Boolean))).sort(),
+    [contractorSummary]
+  )
   const { data: ebaStats } = useQuery({
-    queryKey: ["project-eba-stats", projectId, contractorSummary],
-    enabled: !!projectId && Array.isArray(contractorSummary),
+    queryKey: ["project-eba-stats", projectId, stableEmployerIds],
+    enabled: !!projectId && stableEmployerIds.length > 0,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
-      const employerIds = contractorSummary as string[]
+      const employerIds = stableEmployerIds
       if (!employerIds || employerIds.length === 0) return { ebaCount: 0, employerCount: 0 }
       const { data } = await supabase
         .from("company_eba_records")
@@ -142,6 +160,8 @@ export default function ProjectDetailPage() {
   const { data: lastVisit } = useQuery({
     queryKey: ["project-last-visit", projectId],
     enabled: !!projectId,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const { data } = await (supabase as any)
         .from("site_visit")
@@ -154,10 +174,12 @@ export default function ProjectDetailPage() {
   })
 
   const { data: contractorNames = [] } = useQuery({
-    queryKey: ["project-contractor-names", contractorSummary],
-    enabled: Array.isArray(contractorSummary) && (contractorSummary as string[]).length > 0,
+    queryKey: ["project-contractor-names", stableEmployerIds],
+    enabled: stableEmployerIds.length > 0,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
-      const ids = contractorSummary as string[]
+      const ids = stableEmployerIds
       const { data } = await supabase
         .from("employers")
         .select("id, name")
@@ -168,8 +190,10 @@ export default function ProjectDetailPage() {
 
   // Build contractor rows client-side to include: builders, head contractor and site-trade contractors
   const { data: contractorRows = [] } = useQuery({
-    queryKey: ["project-contractors-v2", projectId],
+    queryKey: ["project-contractors-v2", projectId, sortedSiteIds],
     enabled: !!projectId,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       if (!projectId) return []
       const rows: any[] = []
@@ -196,7 +220,7 @@ export default function ProjectDetailPage() {
       const { data: sct } = await (supabase as any)
         .from("site_contractor_trades")
         .select("id, job_site_id, employer_id, trade_type, job_sites(name), employers(name)")
-        .in("job_site_id", (sites as any[]).map((s) => s.id))
+        .in("job_site_id", sortedSiteIds)
 
       const tradeMap = new Map<string, string>((await import("@/constants/trades")).TRADE_OPTIONS.map((t: any) => [t.value, t.label]))
 
@@ -227,11 +251,17 @@ export default function ProjectDetailPage() {
   })
 
   // Fetch EBA employer ids for fast lookup and make EBA badge actionable
+  const stableContractorEmployerIds = useMemo(
+    () => Array.from(new Set(((contractorRows as any[]) || []).map((r: any) => r.employerId).filter(Boolean))).sort(),
+    [contractorRows]
+  )
   const { data: ebaEmployerIds = [] } = useQuery({
-    queryKey: ["project-eba-employers", contractorRows.map((r: any) => r.employerId)],
-    enabled: (contractorRows as any[]).length > 0,
+    queryKey: ["project-eba-employers", stableContractorEmployerIds],
+    enabled: stableContractorEmployerIds.length > 0,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
-      const ids = Array.from(new Set((contractorRows as any[]).map((r: any) => r.employerId)))
+      const ids = stableContractorEmployerIds
       if (ids.length === 0) return []
       const { data } = await supabase.from("company_eba_records").select("employer_id, fwc_document_url").in("employer_id", ids)
       return (data || []).map((r: any) => r.employer_id as string)
