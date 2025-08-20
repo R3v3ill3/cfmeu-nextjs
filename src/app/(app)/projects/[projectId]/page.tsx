@@ -360,7 +360,6 @@ export default function ProjectDetailPage() {
                     toast.error("No FWC URL on record for this employer.")
                   }
                 }}
-                projectId={projectId}
               />
             </CardContent>
           </Card>
