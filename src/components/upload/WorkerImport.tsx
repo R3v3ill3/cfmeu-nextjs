@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { getWorkerColorCoding } from "@/utils/workerColorCoding";
 import { CheckCircle, AlertCircle, Upload, Users, Building } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -439,7 +440,10 @@ export default function WorkerImport({ csvData, selectedEmployer, onImportComple
                       {worker.first_name} {worker.surname}
                     </CardTitle>
                     <div className="flex gap-2">
-                      <Badge variant="outline">
+                      <Badge 
+                        className={`${getWorkerColorCoding(worker.union_membership_status || null).badgeClass} ${getWorkerColorCoding(worker.union_membership_status || null).textColor} border`}
+                        style={{ ...getWorkerColorCoding(worker.union_membership_status || null).badgeStyle, ...getWorkerColorCoding(worker.union_membership_status || null).borderStyle }}
+                      >
                         {worker.union_membership_status.replace('_', ' ')}
                       </Badge>
                       {selectedEmployer ? (

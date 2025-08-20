@@ -199,11 +199,14 @@ export const EmployerWorkerChart = ({
   }, [data]);
 
   const formatName = (w: WorkerLite) => `${w.first_name ?? ""} ${w.surname ?? ""}`.trim() || "Unnamed";
-  const membershipBadge = (status: string | null) => (    
-    <Badge variant={status === "member" ? "default" : status === "potential" ? "secondary" : status === "declined" ? "destructive" : "outline"}>
-      {status ? status.split("_").join(" ") : "unknown"}
-    </Badge>
-  );
+  const membershipBadge = (status: string | null) => {
+    const info = getWorkerColorCoding(status || null);
+    return (
+      <Badge className={`${info.badgeClass} ${info.textColor} border`} style={{ ...info.badgeStyle, ...info.borderStyle }}>
+        {status ? status.split("_").join(" ") : "unknown"}
+      </Badge>
+    );
+  };
 
 const roleBadge = (role: WorkerRoleLite) => (
   <Badge key={role.name} variant="secondary">
@@ -340,16 +343,16 @@ const roleBadge = (role: WorkerRoleLite) => (
         ) : data && data.workers.length > 0 ? (
 
           <>
-            {/* Color Legend */}
+            {/* Colour Legend */}
             <div className="mb-4 p-3 bg-muted/50 rounded-lg border">
               <div className="flex items-center gap-2 mb-2">
                 <Info className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">Color Coding</span>
+                <span className="text-sm font-medium">Colour Coding</span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
                 {getWorkerColorLegend().map((item) => (
                   <div key={item.label} className="flex items-center gap-1">
-                    <div className={cn("w-3 h-3 rounded border", item.color)} />
+                    <div className={cn("w-3 h-3 rounded border", item.color)} style={item.style} />
                     <span className="text-muted-foreground">{item.description}</span>
                   </div>
                 ))}
@@ -362,7 +365,7 @@ const roleBadge = (role: WorkerRoleLite) => (
                 const roleNames = workerRoles.map(r => r.name);
                 const colorInfo = getWorkerColorCoding(w.union_membership_status || null, roleNames);
                 return (
-                  <Card key={w.id} className="p-3 border">
+                  <Card key={w.id} className={`p-3 border ${colorInfo.bgFadedClass}`} style={colorInfo.bgStyle}>
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <div className="font-medium">{formatName(w)}</div>
@@ -372,7 +375,7 @@ const roleBadge = (role: WorkerRoleLite) => (
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
-                        <div className={`w-2 h-2 rounded-full mt-1 ${colorInfo.backgroundColor}`} />
+                        <div className={`w-2 h-2 rounded-full mt-1 ${colorInfo.indicatorClass}`} style={colorInfo.indicatorStyle} />
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button size="icon" variant="ghost"><MoreVertical className="h-4 w-4" /></Button>
