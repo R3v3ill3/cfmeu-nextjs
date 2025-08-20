@@ -366,7 +366,14 @@ export default function ProjectDetailPage() {
           </Card>
 
           {project && (
-            <ContractorSiteAssignmentModal projectId={project.id} />
+            <Dialog open={showAssign} onOpenChange={(v: boolean) => setShowAssign(v)}>
+              <DialogContent className="max-w-[95vw] w-[1100px]">
+                <DialogHeader>
+                  <DialogTitle>Assign contractors to sites</DialogTitle>
+                </DialogHeader>
+                <ContractorSiteAssignmentModal projectId={project.id} />
+              </DialogContent>
+            </Dialog>
           )}
         </TabsContent>
 
