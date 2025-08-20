@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -98,7 +98,7 @@ const DataPreview = ({
   }, [parsedCSV, columnMappings]);
 
   // Validation logic
-  const validateData = async () => {
+  const validateData = useCallback(async () => {
     setIsValidating(true);
     setValidationProgress(0);
     
@@ -192,11 +192,11 @@ const DataPreview = ({
     setValidationProgress(100);
     setIsValidating(false);
     onValidationComplete(result);
-  };
+  }, [parsedCSV, columnMappings, onValidationComplete]);
 
   useEffect(() => {
     validateData();
-  }, [parsedCSV, columnMappings]);
+  }, [validateData]);
 
   const handleImport = () => {
     onImportStart();

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -100,7 +100,7 @@ const ImportProgress = ({
     return transformedRow;
   };
 
-  const performImport = async () => {
+  const performImport = useCallback(async () => {
     setStartTime(new Date());
     setProgress(prev => ({ ...prev, status: 'running', processed: 0 }));
     
@@ -191,14 +191,14 @@ const ImportProgress = ({
         variant: "destructive"
       });
     }
-  };
+  }, [parsedCSV, selectedTable, columnMappings, onComplete, toast]);
 
   useEffect(() => {
     if (progress.status === 'idle') {
       // Auto-start import when component mounts
       performImport();
     }
-  }, []);
+  }, [performImport, progress.status]);
 
   const getProgressPercentage = () => {
     if (progress.total === 0) return 0;

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
@@ -201,7 +201,7 @@ export function WorkerAssignmentTabs({ selectedWorkers, onWorkersChange }: Worke
     updateWorkerAssignments();
   };
 
-  const updateWorkerAssignments = () => {
+  const updateWorkerAssignments = useCallback(() => {
     const newAssignments: WorkerAssignment[] = [];
 
     // Add assignments from employers
@@ -292,11 +292,22 @@ export function WorkerAssignmentTabs({ selectedWorkers, onWorkersChange }: Worke
     });
 
     onWorkersChange(Array.from(uniqueAssignments.values()));
-  };
+  }, [
+    selectedEmployers,
+    employers,
+    workerPlacements,
+    selectedJobSites,
+    jobSites,
+    selectedOrganisers,
+    organisers,
+    employerSiteSelections,
+    selectedWorkers,
+    onWorkersChange
+  ]);
 
   useEffect(() => {
     updateWorkerAssignments();
-  }, [selectedEmployers, selectedJobSites, selectedOrganisers, employerSiteSelections]);
+  }, [updateWorkerAssignments]);
 
   return (
     <div className="space-y-6">
