@@ -8,7 +8,6 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -48,7 +47,7 @@ const FormSchema = z.object({
   postcode: z.string().optional().nullable(),
   contact_notes: z.string().optional().nullable(),
   estimated_worker_count: z.number().min(0).optional().nullable(),
-  enterprise_agreement_status: z.boolean().optional().nullable(),
+  
 });
 
 export type EmployerEditFormProps = {
@@ -68,7 +67,7 @@ export type EmployerEditFormProps = {
     postcode?: string | null;
     contact_notes?: string | null;
     estimated_worker_count?: number | null;
-    enterprise_agreement_status?: boolean | null;
+    
   };
   onCancel: () => void;
   onSaved: (updated: { id: string; name: string; employer_type: string }) => void;
@@ -95,7 +94,7 @@ const form = useForm<z.input<typeof FormSchema>>({
     postcode: employer.postcode ?? null,
     contact_notes: employer.contact_notes ?? null,
     estimated_worker_count: employer.estimated_worker_count ?? null,
-    enterprise_agreement_status: employer.enterprise_agreement_status ?? null,
+    
   },
 });
 
@@ -200,7 +199,7 @@ const onSubmit = async (values: z.input<typeof FormSchema>) => {
     postcode: toNull(parsed.postcode),
     contact_notes: toNull(parsed.contact_notes),
     estimated_worker_count: parsed.estimated_worker_count ?? null,
-    enterprise_agreement_status: parsed.enterprise_agreement_status ?? null,
+    
   };
 
   const desiredTagsArray = Array.from(desiredTags);
@@ -367,22 +366,7 @@ const onSubmit = async (values: z.input<typeof FormSchema>) => {
       )}
     />
 
-    <FormField
-      control={form.control}
-      name="enterprise_agreement_status"
-      render={({ field }) => (
-        <FormItem>
-          <FormLabel>Enterprise Agreement</FormLabel>
-          <FormControl>
-            <div className="flex items-center gap-3">
-              <Switch checked={!!field.value} onCheckedChange={field.onChange} />
-              <span className="text-sm text-muted-foreground">Has EBA</span>
-            </div>
-          </FormControl>
-          <FormMessage />
-        </FormItem>
-      )}
-    />
+    
   </div>
 
   {/* Contact Information */}
