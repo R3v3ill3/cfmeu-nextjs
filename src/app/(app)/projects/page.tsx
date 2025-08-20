@@ -3,12 +3,9 @@ export const dynamic = 'force-dynamic'
 
 import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import JobSitesManager from "@/components/projects/JobSitesManager"
+import { Card, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import EditProjectDialog from "@/components/projects/EditProjectDialog"
-import DeleteProjectDialog from "@/components/projects/DeleteProjectDialog"
 
 export default function ProjectsPage() {
   const { data: projects = [], isLoading } = useQuery({
@@ -38,29 +35,17 @@ export default function ProjectsPage() {
       {projects.length === 0 ? (
         <p className="text-sm text-muted-foreground">No projects found.</p>
       ) : (
-        <div className="space-y-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {projects.map((p: any) => (
-            <Card key={p.id}>
-              <CardHeader>
-                <div className="flex items-center justify-between gap-3">
-                  <CardTitle>
-                    <Link href={`/projects/${p.id}`} className="hover:underline">
-                      {p.name}
-                    </Link>
+            <Link key={p.id} href={`/projects/${p.id}`} className="group">
+              <Card className="transition-colors hover:bg-accent cursor-pointer">
+                <CardHeader className="p-4">
+                  <CardTitle className="text-base font-medium group-hover:underline">
+                    {p.name}
                   </CardTitle>
-                  <div className="flex items-center gap-2">
-                    <Link href={`/projects/${p.id}`}>
-                      <Button variant="secondary" size="sm">Open</Button>
-                    </Link>
-                    <EditProjectDialog project={p} triggerText="Edit" />
-                    <DeleteProjectDialog projectId={p.id} projectName={p.name} />
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <JobSitesManager projectId={p.id} projectName={p.name} />
-              </CardContent>
-            </Card>
+                </CardHeader>
+              </Card>
+            </Link>
           ))}
         </div>
       )}
