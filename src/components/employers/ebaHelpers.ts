@@ -168,3 +168,49 @@ export function getEbaProgress(ebaRecord: any): { stage: string; percentage: num
     percentage: Math.round(((milestoneIndex + 1) / milestoneOrder.length) * 100)
   };
 }
+
+// New simplified categorisation used for employer listing and engagement checks
+export type EbaCategoryInfo = {
+  category: 'active' | 'lodged' | 'pending' | 'no';
+  label: string;
+  variant: "default" | "secondary" | "destructive" | "outline";
+};
+
+export function getEbaCategory(ebaRecord: any): EbaCategoryInfo {
+  const today = new Date();
+
+  const getDate = (d?: string | null): Date | null => {
+    if (!d) return null;
+    const dt = new Date(d);
+    return isNaN(dt.getTime()) ? null : dt;
+  };
+
+  const withinMonths = (date: Date | null, months: number): boolean => {
+    if (!date) return false;
+    const cutoff = new Date(today);
+    cutoff.setMonth(cutoff.getMonth() - months);
+    return date >= cutoff;
+  };
+
+  const withinYears = (date: Date | null, years: number): boolean => withinMonths(date, years * 12);
+
+  const certifiedDate = getDate(ebaRecord.fwc_certified_date);
+  const lodgedDate = getDate(ebaRecord.eba_lodged_fwc);
+  // Support both potential spellings for safety
+  const voteOccurredDate = getDate(ebaRecord.date_vote_occurred ?? ebaRecord.date_vote_occured);
+  const signedDate = getDate(ebaRecord.date_eba_signed);
+
+  if (withinYears(certifiedDate, 4)) {
+    return { category: 'active', label: 'Active', variant: 'default' };
+  }
+
+  if (withinYears(lodgedDate, 1)) {
+    return { category: 'lodged', label: 'Lodged', variant: 'outline' };
+  }
+
+  if (withinMonths(voteOccurredDate, 6) || withinMonths(signedDate, 6)) {
+    return { category: 'pending', label: 'Pending', variant: 'secondary' };
+  }
+
+  return { category: 'no', label: 'No EBA', variant: 'destructive' };
+}
