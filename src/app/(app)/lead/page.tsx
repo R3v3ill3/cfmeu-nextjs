@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import RoleGuard from "@/components/guards/RoleGuard"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import LeadConsole from "@/components/lead/LeadConsole"
 
 export default function LeadOverviewPage() {
   return (
@@ -14,11 +15,11 @@ export default function LeadOverviewPage() {
             <CardTitle>Organisers roll-up</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">Stub page: aggregate KPIs per organiser and drill into each patch.</p>
+            <p className="text-sm text-muted-foreground">Manage organisers and patches you own.</p>
           </CardContent>
         </Card>
+        <LeadConsole />
       </div>
     </RoleGuard>
   )
 }
-
