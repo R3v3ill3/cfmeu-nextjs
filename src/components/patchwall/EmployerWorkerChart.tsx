@@ -59,6 +59,7 @@ export const EmployerWorkerChart = ({
 
   const [membershipFilter, setMembershipFilter] = useState<"all" | "member" | "potential" | "non_member" | "declined">("all");
   const [roleFilter, setRoleFilter] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<"membership" | "activity" | "dd_status">("membership");
 
   const { data, isLoading } = useQuery({
     queryKey: ["employer-worker-chart", filters],
@@ -83,7 +84,7 @@ export const EmployerWorkerChart = ({
       const workerIds = Array.from(new Set((vWorkers || []).map((v: any) => v.worker_id).filter(Boolean)));
 
       if (workerIds.length === 0) {
-        return { workers: [] as WorkerLite[], roles: {}, ratings: {} };
+        return { workers: [] as WorkerLite[], roles: {}, ratings: {} } as any;
       }
 
       // 2) Basic worker details
@@ -121,7 +122,15 @@ export const EmployerWorkerChart = ({
         if (ratings[r.worker_id].length < 5) ratings[r.worker_id].push(r);
       });
 
-      return { workers: wRows || [], roles, ratings };
+      // 5) Membership dues status for DD sorting
+      const { data: duesRows } = await supabase
+        .from("worker_memberships")
+        .select("worker_id, dd_status")
+        .in("worker_id", workerIds);
+      const dues: Record<string, string> = {};
+      (duesRows || []).forEach((r: any) => { if (r.worker_id) dues[r.worker_id] = r.dd_status });
+
+      return { workers: wRows || [], roles, ratings, dues } as any;
     },
   });
 
@@ -207,6 +216,7 @@ const roleBadge = (role: WorkerRoleLite) => (
   const filteredSortedWorkers = useMemo(() => {
     if (!data) return [] as WorkerLite[];
     const rolesMap = (data.roles || {}) as Record<string, WorkerRoleLite[]>;
+    const duesMap = (data as any).dues as Record<string, string> | undefined;
 
     const matchesMembership = (w: WorkerLite) =>
       membershipFilter === "all" || (w.union_membership_status as any) === membershipFilter;
@@ -229,11 +239,28 @@ const roleBadge = (role: WorkerRoleLite) => (
       declined: 3,
     } as const as any;
 
-    const toPriorityTuple = (w: WorkerLite): [number, number, string] => {
+    const ddPriority: Record<string, number> = { active: 0, in_progress: 1, not_started: 2, failed: 3 } as const as any;
+    const activityScore = (w: WorkerLite): number => {
+      const list = (data.ratings || ({} as any))[w.id] as any[] | undefined;
+      if (!list || list.length === 0) return Number.POSITIVE_INFINITY; // lowest activity last
+      // newer activity first: earlier date -> lower score
+      return 0 - new Date(list[0].created_at).getTime();
+    };
+    const toPriorityTuple = (w: WorkerLite): [number, number, number, string] => {
       const p0 = hasAdditionalRole(w) ? 0 : 1;
-      const p1 = membershipPriority[w.union_membership_status || "zzz"] ?? 4;
-      const p2 = formatName(w).toLowerCase();
-      return [p0, p1, p2];
+      const pName = formatName(w).toLowerCase();
+      if (sortBy === "membership") {
+        const p1 = membershipPriority[w.union_membership_status || "zzz"] ?? 4;
+        return [p0, p1, 0, pName];
+      }
+      if (sortBy === "activity") {
+        const p1 = activityScore(w);
+        return [p0, p1, 0, pName];
+      }
+      // dd_status
+      const status = duesMap?.[w.id] || "zzz";
+      const p1 = ddPriority[status] ?? 5;
+      return [p0, p1, 0, pName];
     };
 
     return (data.workers as WorkerLite[])
@@ -241,11 +268,12 @@ const roleBadge = (role: WorkerRoleLite) => (
       .sort((a, b) => {
         const ta = toPriorityTuple(a);
         const tb = toPriorityTuple(b);
-        if (ta[0] !== tb[0]) return ta[0] - tb[0];
-        if (ta[1] !== tb[1]) return ta[1] - tb[1];
-        return ta[2] < tb[2] ? -1 : ta[2] > tb[2] ? 1 : 0;
+        for (let i = 0; i < 3; i++) {
+          if (ta[i] !== tb[i]) return ta[i] < tb[i] ? -1 : 1;
+        }
+        return ta[3] < tb[3] ? -1 : ta[3] > tb[3] ? 1 : 0;
       });
-  }, [data, membershipFilter, roleFilter]);
+  }, [data, membershipFilter, roleFilter, sortBy]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -262,7 +290,7 @@ const roleBadge = (role: WorkerRoleLite) => (
         </DialogHeader>
 
         {/* Filters and sort controls */}
-        <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <div className="text-xs text-muted-foreground mb-1">Filter by union membership</div>
             <Select value={membershipFilter} onValueChange={(v: string) => setMembershipFilter(v as any)}>
@@ -292,6 +320,19 @@ const roleBadge = (role: WorkerRoleLite) => (
               </SelectContent>
             </Select>
           </div>
+          <div>
+            <div className="text-xs text-muted-foreground mb-1">Sort by</div>
+            <Select value={sortBy} onValueChange={(v: string) => setSortBy(v as any)}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Sort by" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="membership">Membership status</SelectItem>
+                <SelectItem value="activity">Activity rating</SelectItem>
+                <SelectItem value="dd_status">DD status</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {isLoading ? (
@@ -318,98 +359,66 @@ const roleBadge = (role: WorkerRoleLite) => (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {filteredSortedWorkers.map((w) => {
                 const workerRoles = (data.roles[w.id] || []) as WorkerRoleLite[];
-                const colorInfo = getWorkerColorCoding(
-                  w.union_membership_status,
-                  workerRoles.map((r) => r.name)
-                );
-
+                const colorClass = getWorkerColorCoding(w.union_membership_status || null, workerRoles);
                 return (
-                  <Card
-                    key={w.id}
-                    className={cn(
-                      "p-3 flex items-start justify-between border-2 transition-colors cursor-pointer hover:scale-[1.02] relative",
-                      colorInfo.backgroundColor
-                    )}
-                    onClick={() => setDetailWorkerId(w.id)}
-                    role="button"
-                    tabIndex={0}
-                  >
-                    <div className={cn("flex-1 pr-3", colorInfo.textColor)}>
-                      <div className="font-medium">{formatName(w)}</div>
-                      <div className="mt-1 flex flex-wrap items-center gap-2">
-                        {membershipBadge(w.union_membership_status)}
-                        {workerRoles.length > 0 && (
-                          <div className="flex flex-wrap gap-1">
-                            {workerRoles.slice(0, 3).map(roleBadge)}
-                          </div>
-                        )}
-                      </div>
-                      {data.ratings[w.id] && data.ratings[w.id].length > 0 && (
-                        <div className="mt-2 text-xs opacity-75">
-                          Recent ratings: {data.ratings[w.id]
-                            .map((r) => `${r.rating_type}:${r.rating_value}`)
-                            .join(" • ")}
+                  <Card key={w.id} className="p-3 border">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="font-medium">{formatName(w)}</div>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {membershipBadge(w.union_membership_status)}
+                          {workerRoles.map((r) => roleBadge(r))}
                         </div>
-                      )}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className={`w-2 h-2 rounded-full mt-1 ${colorClass}`} />
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button size="icon" variant="ghost"><MoreVertical className="h-4 w-4" /></Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => setDetailWorkerId(w.id)}>View details</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => { setRoleWorkerId(w.id); setShowRole(true); }}>Assign union role</DropdownMenuItem>
+                            {siteIds && siteIds.length > 0 && (
+                              <DropdownMenuItem onClick={() => removeFromProject(w.id)}>Remove from project</DropdownMenuItem>
+                            )}
+                            {contextSiteId && (
+                              <DropdownMenuItem onClick={() => removeFromSite(w.id)}>Remove from site</DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem onClick={() => removeFromEmployer(w.id)}>Remove from employer</DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label="Worker actions"
-                          className={cn(
-                            "hover:bg-black/10 dark:hover:bg-white/10 shrink-0",
-                            colorInfo.textColor
-                          )}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
-                        {contextSiteId && (
-                          <DropdownMenuItem onClick={() => removeFromSite(w.id)}>
-                            Remove from this site
-                          </DropdownMenuItem>
-                        )}
-                        {siteIds && siteIds.length > 0 && (
-                          <DropdownMenuItem onClick={() => removeFromProject(w.id)}>
-                            Remove from project
-                          </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem onClick={() => removeFromEmployer(w.id)}>
-                          Remove from employer
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
                   </Card>
                 );
               })}
             </div>
+
+            <WorkerDetailModal
+              workerId={detailWorkerId}
+              isOpen={!!detailWorkerId}
+              onClose={() => setDetailWorkerId(null)}
+            />
+
+            <UnionRoleAssignmentModal
+              workerId={roleWorkerId}
+              isOpen={showRole}
+              onClose={() => setShowRole(false)}
+              onAssigned={() => qc.invalidateQueries({ queryKey: ["employer-worker-chart"] })}
+            />
+
+            <AssignWorkersModal
+              isOpen={showAssign}
+              onClose={() => setShowAssign(false)}
+              employerId={employerId}
+              siteOptions={siteOptions}
+              defaultSiteId={contextSiteId || undefined}
+              onAssigned={() => qc.invalidateQueries({ queryKey: ["employer-worker-chart"] })}
+            />
           </>
         ) : (
-          <div className="text-sm text-muted-foreground">No workers found for this employer in the selected context. Workers are only counted when they have active placements on project sites.</div>
-        )}
-
-        <WorkerDetailModal
-  workerId={detailWorkerId}
-  isOpen={!!detailWorkerId}
-  onClose={() => setDetailWorkerId(null)}
-  onUpdate={() => qc.invalidateQueries({ queryKey: ["employer-worker-chart"] })}
-/>
-
-        {employerId && (
-          <AssignWorkersModal
-            open={showAssign}
-            onOpenChange={setShowAssign}
-            employerId={employerId}
-            employerName={employerName}
-            projectId={projectIds && projectIds.length > 0 ? projectIds[0] : null}
-            siteOptions={siteOptions || []}
-            defaultSiteId={contextSiteId || null}
-            onAssigned={() => qc.invalidateQueries({ queryKey: ["employer-worker-chart"] })}
-          />
+          <div className="text-sm text-muted-foreground">No workers found for this selection.</div>
         )}
       </DialogContent>
     </Dialog>

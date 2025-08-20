@@ -1,7 +1,7 @@
 "use client"
 export const dynamic = 'force-dynamic'
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useEffect } from "react"
 import { useParams } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
@@ -12,9 +12,12 @@ import EditProjectDialog from "@/components/projects/EditProjectDialog"
 import DeleteProjectDialog from "@/components/projects/DeleteProjectDialog"
 import ContractorsSummary from "@/components/projects/ContractorsSummary"
 import { Button } from "@/components/ui/button"
+import { toast } from "sonner"
 import ContractorSiteAssignmentModal from "@/components/projects/ContractorSiteAssignmentModal"
 import { EmployerWorkerChart } from "@/components/patchwall/EmployerWorkerChart"
 import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 
 export default function ProjectDetailPage() {
   const params = useParams()
@@ -25,6 +28,9 @@ export default function ProjectDetailPage() {
   const [showEbaForEmployerId, setShowEbaForEmployerId] = useState<string | null>(null)
   const [chartEmployer, setChartEmployer] = useState<{ id: string; name: string } | null>(null)
   const [chartOpen, setChartOpen] = useState(false)
+  const [estPrompt, setEstPrompt] = useState<{ employerId: string; employerName: string } | null>(null)
+  const [estValue, setEstValue] = useState<string>("")
+  const [estSaving, setEstSaving] = useState(false)
 
   const { data: project } = useQuery({
     queryKey: ["project-detail", projectId],
@@ -160,22 +166,78 @@ export default function ProjectDetailPage() {
     }
   })
 
+  // Build contractor rows client-side to include: builders, head contractor and site-trade contractors
   const { data: contractorRows = [] } = useQuery({
-    queryKey: ["project-contractors", projectId],
+    queryKey: ["project-contractors-v2", projectId],
     enabled: !!projectId,
     queryFn: async () => {
-      // Expect view or tables to derive summary; fallback to simple join via RPC or manual queries if needed
-      const { data, error } = await (supabase as any)
-        .rpc('get_project_contractors_summary', { p_project_id: projectId })
-      if (error) {
-        // Fallback: empty list; UI still functions
-        return []
-      }
-      return data as any[]
+      if (!projectId) return []
+      const rows: any[] = []
+
+      // 1) Project roles: builders and head contractor
+      const { data: roles } = await supabase
+        .from("project_employer_roles")
+        .select("role, employer_id, employers(name)")
+        .eq("project_id", projectId)
+
+      ;(roles || []).forEach((r: any, idx: number) => {
+        if (!r.employer_id) return
+        rows.push({
+          id: `role:${r.role}:${r.employer_id}:${idx}`,
+          employerId: r.employer_id,
+          employerName: r.employers?.name || r.employer_id,
+          siteName: r.role === 'builder' ? 'Builder' : r.role === 'head_contractor' ? 'Head contractor' : r.role,
+          siteId: null,
+          tradeLabel: r.role === 'builder' ? 'Builder' : r.role === 'head_contractor' ? 'Head Contractor' : r.role,
+        })
+      })
+
+      // 2) Site contractors by trade
+      const { data: sct } = await (supabase as any)
+        .from("site_contractor_trades")
+        .select("id, job_site_id, employer_id, trade_type, job_sites(name), employers(name)")
+        .in("job_site_id", (sites as any[]).map((s) => s.id))
+
+      const tradeMap = new Map<string, string>((await import("@/constants/trades")).TRADE_OPTIONS.map((t: any) => [t.value, t.label]))
+
+      ;(sct || []).forEach((r: any) => {
+        if (!r.employer_id) return
+        const tradeLabel = tradeMap.get(String(r.trade_type)) || String(r.trade_type)
+        rows.push({
+          id: `sct:${r.id}`,
+          employerId: r.employer_id,
+          employerName: r.employers?.name || r.employer_id,
+          siteName: r.job_sites?.name || null,
+          siteId: r.job_site_id,
+          tradeLabel,
+        })
+      })
+
+      // De-duplicate identical employer+site+trade rows
+      const seen = new Set<string>()
+      const deduped = rows.filter((r) => {
+        const key = `${r.employerId}:${r.siteId || ''}:${r.tradeLabel}`
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+
+      return deduped
     }
   })
 
-  const ebaEmployers = useMemo(() => new Set<string>(), [])
+  // Fetch EBA employer ids for fast lookup and make EBA badge actionable
+  const { data: ebaEmployerIds = [] } = useQuery({
+    queryKey: ["project-eba-employers", contractorRows.map((r: any) => r.employerId)],
+    enabled: (contractorRows as any[]).length > 0,
+    queryFn: async () => {
+      const ids = Array.from(new Set((contractorRows as any[]).map((r: any) => r.employerId)))
+      if (ids.length === 0) return []
+      const { data } = await supabase.from("company_eba_records").select("employer_id, fwc_document_url").in("employer_id", ids)
+      return (data || []).map((r: any) => r.employer_id as string)
+    }
+  })
+  const ebaEmployers = useMemo(() => new Set<string>(ebaEmployerIds as string[]), [ebaEmployerIds])
 
   return (
     <div className="p-6 space-y-6">
@@ -263,8 +325,40 @@ export default function ProjectDetailPage() {
                 rows={contractorRows as any}
                 showSiteColumn={true}
                 ebaEmployers={ebaEmployers}
-                onEmployerClick={(id) => setSelectedEmployerId(id)}
-                onEbaClick={(id) => setShowEbaForEmployerId(id)}
+                onEmployerClick={async (id) => {
+                  try {
+                    const { data: pct } = await (supabase as any)
+                      .from("project_contractor_trades")
+                      .select("id, estimated_project_workforce")
+                      .eq("project_id", projectId)
+                      .eq("employer_id", id)
+                      .limit(10)
+                    const hasEstimate = (pct || []).some((r: any) => typeof r.estimated_project_workforce === 'number' && r.estimated_project_workforce > 0)
+                    if (!hasEstimate) {
+                      const { data: emp } = await supabase.from('employers').select('name').eq('id', id).maybeSingle()
+                      setEstPrompt({ employerId: id, employerName: emp?.name || 'Employer' })
+                      setEstValue("")
+                    } else {
+                      setSelectedEmployerId(id)
+                    }
+                  } catch {
+                    setSelectedEmployerId(id)
+                  }
+                }}
+                onEbaClick={async (id) => {
+                  // Try open FWC URL in new tab; otherwise show Employer modal at EBA tab
+                  const { data } = await supabase
+                    .from("company_eba_records")
+                    .select("fwc_document_url")
+                    .eq("employer_id", id)
+                    .maybeSingle()
+                  const url = data?.fwc_document_url
+                  if (url) {
+                    try { window.open(url, '_blank') } catch {}
+                  } else {
+                    toast.error("No FWC URL on record for this employer.")
+                  }
+                }}
                 projectId={projectId}
               />
             </CardContent>
@@ -282,24 +376,18 @@ export default function ProjectDetailPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {(sites as any[]).map((s) => (
-                  <div key={s.id} className="flex items-center justify-between">
-                    <div className="font-medium">{s.name}</div>
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        // In project context, open the chart once an employer is picked in contractors view
-                        // Here we open a blank chart requires employer selection elsewhere
-                        setChartEmployer({ id: "", name: "" })
-                        setChartOpen(true)
-                      }}
-                      disabled
-                    >
-                      Open chart
-                    </Button>
-                  </div>
-                ))}
-                <p className="text-sm text-muted-foreground">Open wallcharts via contractor rows or the Patch/Walls page for employer-specific views.</p>
+                <div className="text-sm text-muted-foreground">Select an employer on this project to view their wallchart, filtered to this project.</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {(Array.from(new Map((contractorRows as any[]).map((r: any) => [r.employerId, r.employerName])).entries()).map(([id, name]) => ({ id, name })) as any[]).map((e) => (
+                    <div key={e.id} className="flex items-center justify-between border rounded px-3 py-2">
+                      <div className="font-medium truncate mr-3">{e.name}</div>
+                      <Button size="sm" onClick={() => { setChartEmployer({ id: e.id, name: e.name }); setChartOpen(true) }}>Open chart</Button>
+                    </div>
+                  ))}
+                </div>
+                {(contractorRows as any[]).length === 0 && (
+                  <p className="text-sm text-muted-foreground">No employers found on this project yet.</p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -307,9 +395,10 @@ export default function ProjectDetailPage() {
       </Tabs>
 
       <EmployerDetailModal
-        employerId={selectedEmployerId}
-        isOpen={!!selectedEmployerId}
-        onClose={() => setSelectedEmployerId(null)}
+        employerId={selectedEmployerId || showEbaForEmployerId}
+        isOpen={!!selectedEmployerId || !!showEbaForEmployerId}
+        onClose={() => { setSelectedEmployerId(null); setShowEbaForEmployerId(null) }}
+        initialTab={showEbaForEmployerId ? "eba" : "overview"}
       />
 
       {chartEmployer && (
@@ -324,7 +413,41 @@ export default function ProjectDetailPage() {
           siteOptions={siteOptions}
         />
       )}
+
+      <Dialog open={!!estPrompt} onOpenChange={(v: boolean) => { if (!v) setEstPrompt(null) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Estimated workers on this project</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">Enter an estimated number of workers for {estPrompt?.employerName} on this project.</p>
+            <Input type="number" min={0} value={estValue} onChange={(e) => setEstValue(e.target.value)} placeholder="e.g. 25" />
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => { if (estPrompt) { setSelectedEmployerId(estPrompt.employerId) } setEstPrompt(null) }}>Skip</Button>
+              <Button disabled={!estValue || estSaving} onClick={async () => {
+                if (!estPrompt) return
+                try {
+                  setEstSaving(true)
+                  const est = Number(estValue)
+                  if (!Number.isFinite(est) || est < 0) throw new Error('Invalid number')
+                  await (supabase as any)
+                    .from('project_contractor_trades')
+                    .update({ estimated_project_workforce: est })
+                    .eq('project_id', projectId)
+                    .eq('employer_id', estPrompt.employerId)
+                  setSelectedEmployerId(estPrompt.employerId)
+                } catch (e) {
+                  console.error(e)
+                  setSelectedEmployerId(estPrompt.employerId)
+                } finally {
+                  setEstSaving(false)
+                  setEstPrompt(null)
+                }
+              }}>{estSaving ? 'Saving…' : 'Save'}</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
-

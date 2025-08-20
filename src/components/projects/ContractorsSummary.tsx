@@ -74,9 +74,12 @@ const ContractorsSummary = ({
             <TableCell>
               <button
                 type="button"
-                className="cursor-pointer"
-                onClick={() => onEbaClick(row.employerId)}
+                className={`cursor-pointer ${ebaEmployers.has(row.employerId) ? '' : 'opacity-60 cursor-not-allowed'}`}
+                onClick={() => {
+                  if (ebaEmployers.has(row.employerId)) onEbaClick(row.employerId)
+                }}
                 aria-label="View EBA details"
+                disabled={!ebaEmployers.has(row.employerId)}
               >
                 {ebaEmployers.has(row.employerId) ? (
                   <Badge variant="default">EBA</Badge>
