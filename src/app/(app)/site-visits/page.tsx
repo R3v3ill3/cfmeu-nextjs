@@ -8,10 +8,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import SiteVisitForm from "@/components/siteVisits/SiteVisitForm"
+import { useSearchParams } from "next/navigation"
 
 export default function SiteVisitsPage() {
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<any | null>(null)
+  const sp = useSearchParams()
+  const q = (sp.get("q") || "").toLowerCase()
+  const status = (sp.get("status") || "")
 
   const { data: rows = [], isFetching, refetch } = useQuery({
     queryKey: ["site-visits"],
@@ -22,7 +26,23 @@ export default function SiteVisitsPage() {
         .order("visit_date", { ascending: false })
         .limit(200)
       if (error) throw error
-      return data || []
+      let list = (data || []) as any[]
+      if (status === "stale") {
+        const cutoff = Date.now() - 1000*60*60*24*7
+        list = list.filter((r) => {
+          const t = new Date(r.visit_date).getTime()
+          return isFinite(t) && t < cutoff
+        })
+      }
+      if (q) {
+        const s = q
+        list = list.filter((r) => {
+          const hay = [r.profiles?.full_name, r.projects?.name, r.job_sites?.name, r.employers?.name, r.notes]
+            .map((v: any) => String(v || "").toLowerCase())
+          return hay.some((h: string) => h.includes(s))
+        })
+      }
+      return list
     }
   })
 

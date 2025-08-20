@@ -166,7 +166,7 @@ const Layout = ({ children }: LayoutProps) => {
             </Button>
           </div>
         </div>
-        <FiltersBar />
+        {userRole === "admin" && <FiltersBar />}
       </header>
 
       {/* Main content */}
