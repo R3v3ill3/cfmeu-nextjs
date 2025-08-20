@@ -22,6 +22,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { LogOut, Users, Building, FolderOpen, FileCheck, Shield, BarChart3 } from "lucide-react"
+import { FiltersBar } from "@/components/context/FiltersBar"
 import { supabase } from "@/integrations/supabase/client"
 
 const cfmeuLogoLight = "/icon.svg" as unknown as string
@@ -124,14 +125,17 @@ export default function DesktopLayout({ children }: { children: React.ReactNode 
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
-        <header className="sticky top-0 z-30 flex h-12 items-center gap-2 border-b px-3 bg-background/95 supports-[backdrop-filter]:bg-background/80 backdrop-blur">
-          <SidebarTrigger />
-          <div className="flex items-center gap-2 min-w-0">
-            <Image src={cfmeuLogoLight} alt="CFMEU Construction Union Logo" width={24} height={24} className="h-6 w-auto dark:hidden" />
-            <Image src={cfmeuLogoDark} alt="CFMEU Construction Union Logo" width={24} height={24} className="h-6 w-auto hidden dark:block" />
-            <span className="font-medium truncate max-w-[40vw]">CFMEU Organiser</span>
+        <header className="sticky top-0 z-30">
+          <div className="flex h-12 items-center gap-2 border-b px-3 bg-background/95 supports-[backdrop-filter]:bg-background/80 backdrop-blur">
+            <SidebarTrigger />
+            <div className="flex items-center gap-2 min-w-0">
+              <Image src={cfmeuLogoLight} alt="CFMEU Construction Union Logo" width={24} height={24} className="h-6 w-auto dark:hidden" />
+              <Image src={cfmeuLogoDark} alt="CFMEU Construction Union Logo" width={24} height={24} className="h-6 w-auto hidden dark:block" />
+              <span className="font-medium truncate max-w-[40vw]">CFMEU Organiser</span>
+            </div>
+            <div className="ml-auto text-sm text-muted-foreground hidden md:block truncate max-w-[40%]">{user?.email}</div>
           </div>
-          <div className="ml-auto text-sm text-muted-foreground hidden md:block truncate max-w-[40%]">{user?.email}</div>
+          <FiltersBar />
         </header>
         <main className="flex-1 p-6 min-w-0">{children}</main>
       </SidebarInset>

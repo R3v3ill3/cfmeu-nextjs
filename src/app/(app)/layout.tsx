@@ -3,8 +3,8 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Layout from '@/components/Layout'
 import DesktopLayout from '@/components/DesktopLayout'
-import { isMobileOrTablet } from '@/lib/device'
 import { headers } from 'next/headers'
+import { isMobileOrTablet } from '@/lib/device'
 
 export const dynamic = 'force-dynamic'
 
