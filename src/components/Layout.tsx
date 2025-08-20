@@ -8,6 +8,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { supabase } from "@/integrations/supabase/client";
+import { FiltersBar } from "@/components/context/FiltersBar";
 // Fallback to generic icon from public since original assets are not present
 const cfmeuLogoLight = "/icon.svg" as unknown as string;
 const cfmeuLogoDark = "/icon.svg" as unknown as string;
@@ -97,7 +98,7 @@ const Layout = ({ children }: LayoutProps) => {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b">
+      <header className="border-b sticky top-0 z-30 bg-background/95 supports-[backdrop-filter]:bg-background/80 backdrop-blur">
         <div className="flex h-16 items-center px-4">
           {/* Mobile menu */}
           <Sheet open={isOpen} onOpenChange={setIsOpen}>
@@ -165,6 +166,7 @@ const Layout = ({ children }: LayoutProps) => {
             </Button>
           </div>
         </div>
+        <FiltersBar />
       </header>
 
       {/* Main content */}

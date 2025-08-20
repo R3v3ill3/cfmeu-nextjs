@@ -1,30 +1,71 @@
 "use client"
 export const dynamic = 'force-dynamic'
 
+import RoleGuard from "@/components/guards/RoleGuard"
+import { PatchKPICards, PatchSitesTable } from "@/components/patch"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
+import { useMemo } from "react"
+import { useSearchParams } from "next/navigation"
+import { usePatchDashboard } from "@/hooks/usePatchDashboard"
 
 export default function PatchPage() {
+  const sp = useSearchParams()
+  const patch = sp.get("patch") || undefined
+  const status = sp.get("status") || undefined
+  const q = sp.get("q")?.toLowerCase() || ""
+
+  const { data } = usePatchDashboard(patch)
+  const kpis = data?.kpis || { members: { current: 0, goal: 0 }, dd: { current: 0, goal: 0 }, leaders: { current: 0, goal: 0 }, openAudits: 0 }
+  const rows = useMemo(() => {
+    const base = data?.rows || []
+    let filtered = base
+    if (q) filtered = filtered.filter(r => r.site.toLowerCase().includes(q) || r.project.toLowerCase().includes(q))
+    if (status === "stale") {
+      const cutoff = Date.now() - 1000*60*60*24*7
+      filtered = filtered.filter(r => !r.lastVisit || new Date(r.lastVisit).getTime() < cutoff)
+    }
+    return filtered
+  }, [data, q, status])
+
+  const handleRowAction = (action: string, siteId: string) => {
+    // For now, just route to relevant stub pages or download endpoints
+    switch (action) {
+      case "visit-sheet":
+        window.open(`/site-visits/new?siteId=${siteId}`, "_blank")
+        break
+      case "worker-list":
+        window.location.href = `/workers?siteId=${siteId}`
+        break
+      case "employer-compliance":
+        window.location.href = `/employers?siteId=${siteId}&view=compliance`
+        break
+    }
+  }
+
   return (
-    <div className="p-6 space-y-4">
-      <h1 className="text-2xl font-semibold">Patch</h1>
-      <Card>
-        <CardHeader>
-          <CardTitle>Wallcharts</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground mb-4">
-            Open the wallchart for a specific project and site to view workers by employer.
-          </p>
-          <p>
-            Go to a project and click a site name to open its wallchart, or open the walls index:
-          </p>
-          <div className="mt-3">
-            <Link href="/patch/walls" className="text-primary hover:underline">Open Walls</Link>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+    <RoleGuard allow={["organiser", "lead_organiser", "admin"]}>
+      <div className="p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-semibold">Patch dashboard</h1>
+          <Link href="/patch/walls" className="text-primary hover:underline">Open Walls</Link>
+        </div>
+        <PatchKPICards data={{
+          members: { label: "Members", ...kpis.members },
+          dd: { label: "Direct Debit", ...kpis.dd },
+          leaders: { label: "Delegates/HSR", ...kpis.leaders },
+          openAudits: kpis.openAudits,
+        }} />
+        <Card>
+          <CardHeader>
+            <CardTitle>Sites in patch</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <PatchSitesTable rows={rows as any} onAction={handleRowAction} />
+          </CardContent>
+        </Card>
+      </div>
+    </RoleGuard>
   )
 }
 
