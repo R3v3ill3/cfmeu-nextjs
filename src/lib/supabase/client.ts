@@ -11,7 +11,10 @@ export function getSupabaseBrowserClient(): SupabaseClient<GenericDatabase> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   if (!url || !key) {
-    // Defer actual network usage until runtime; create a client with empty strings to avoid build-time throws.
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY')
+    }
+    // Dev-only fallback
     browserClient = createBrowserClient('http://localhost', 'public-anon-key')
     return browserClient
   }

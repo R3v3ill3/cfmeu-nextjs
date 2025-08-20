@@ -10,7 +10,13 @@ export const dynamic = 'force-dynamic'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createServerSupabase()
-  const { data: { user } } = await supabase.auth.getUser()
+  let user = null as null | { id: string }
+  try {
+    const { data } = await supabase.auth.getUser()
+    user = data.user
+  } catch (err) {
+    // Ignore and treat as unauthenticated
+  }
   if (!user) {
     redirect('/auth')
   }
