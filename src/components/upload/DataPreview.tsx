@@ -250,25 +250,38 @@ const DataPreview = ({
 
   // Handle EBA tracking imports differently
   console.log('DataPreview: selectedTable =', selectedTable);
-  if (selectedTable === 'company_eba_records') {
+  if (selectedTable === 'company_eba_records' || selectedTable === 'patches') {
     return (
-      <EbaImport
-        csvData={parsedCSV.rows}
-        onImportComplete={(results) => {
-          onValidationComplete({
-            isValid: true,
-            errors: [],
-            warnings: results.errors.map(error => ({
-              row: 0,
-              column: '',
-              message: error,
-              value: ''
-            }))
-          });
-          onImportStart();
-        }}
-        onBack={onBack}
-      />
+      selectedTable === 'company_eba_records' ? (
+        <EbaImport
+          csvData={parsedCSV.rows}
+          onImportComplete={(results) => {
+            onValidationComplete({
+              isValid: true,
+              errors: [],
+              warnings: results.errors.map(error => ({
+                row: 0,
+                column: '',
+                message: error,
+                value: ''
+              }))
+            });
+            onImportStart();
+          }}
+          onBack={onBack}
+        />
+      ) : (
+        // For patches we will use the dedicated importer in the next step of the wizard; just mark validation okay
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Patches mapping ready</CardTitle>
+            <CardDescription>Proceed to import to upsert patches and organiser links.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={onImportStart}>Continue</Button>
+          </CardContent>
+        </Card>
+      )
     );
   }
 

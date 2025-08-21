@@ -11,6 +11,7 @@ import WorkerImport from "@/components/upload/WorkerImport"
 import ContractorImport from "@/components/upload/ContractorImport"
 import { EbaImport } from "@/components/upload/EbaImport"
 import { Button } from "@/components/ui/button"
+import PatchImport from "@/components/upload/PatchImport"
 import { ArrowLeft } from "lucide-react"
 
 export default function UploadPage() {
@@ -20,7 +21,7 @@ export default function UploadPage() {
 
   type ParsedCSV = { headers: string[]; rows: Record<string, any>[]; filename?: string }
   const [step, setStep] = useState<"choose" | "upload" | "map" | "import">("choose")
-  const [importType, setImportType] = useState<"workers" | "contractors" | "eba">("workers")
+  const [importType, setImportType] = useState<"workers" | "contractors" | "eba" | "patches">("workers")
   const [csv, setCsv] = useState<ParsedCSV | null>(null)
   const [mappedRows, setMappedRows] = useState<Record<string, any>[]>([])
 
@@ -34,7 +35,7 @@ export default function UploadPage() {
     setStep("map")
   }
 
-  const onMappingComplete = (_table: string, mappings: any[]) => {
+  const onMappingComplete = (table: string, mappings: any[]) => {
     if (!csv) return
     // Simple projection using mapped columns
     const output = csv.rows.map((row) => {
@@ -76,6 +77,7 @@ export default function UploadPage() {
                 <TabsTrigger value="workers">Workers</TabsTrigger>
                 <TabsTrigger value="contractors">Contractors</TabsTrigger>
                 <TabsTrigger value="eba">EBA</TabsTrigger>
+                <TabsTrigger value="patches">Patches</TabsTrigger>
               </TabsList>
               <TabsContent value="workers">
                 <FileUpload onFileUploaded={onFileUploaded} />
@@ -84,6 +86,9 @@ export default function UploadPage() {
                 <FileUpload onFileUploaded={onFileUploaded} />
               </TabsContent>
               <TabsContent value="eba">
+                <FileUpload onFileUploaded={onFileUploaded} />
+              </TabsContent>
+              <TabsContent value="patches">
                 <FileUpload onFileUploaded={onFileUploaded} />
               </TabsContent>
             </Tabs>
@@ -122,6 +127,13 @@ export default function UploadPage() {
             )}
             {importType === "eba" && (
               <EbaImport
+                csvData={mappedRows.length > 0 ? mappedRows : csv.rows}
+                onImportComplete={() => setStep("choose")}
+                onBack={() => setStep("map")}
+              />
+            )}
+            {importType === "patches" && (
+              <PatchImport
                 csvData={mappedRows.length > 0 ? mappedRows : csv.rows}
                 onImportComplete={() => setStep("choose")}
                 onBack={() => setStep("map")}
