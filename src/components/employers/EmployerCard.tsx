@@ -157,6 +157,9 @@ export const EmployerCard = ({ employer, onClick }: EmployerCardProps) => {
                 <Badge variant="secondary" className="text-xs">
                   {analytics.current_worker_count}
                 </Badge>
+                {analytics.estimated_worker_count > analytics.current_worker_count && (
+                  <span className="text-xs text-muted-foreground">(+{analytics.estimated_worker_count - analytics.current_worker_count} unknown)</span>
+                )}
               </div>
               
               <div className="flex items-center gap-2">
@@ -185,6 +188,12 @@ export const EmployerCard = ({ employer, onClick }: EmployerCardProps) => {
                   <span>{analytics.estimated_density_percent}%</span>
                 </div>
                 <Progress value={analytics.estimated_worker_count} className="h-2" indicatorClassName={getProgressIndicatorClass(analytics.estimated_density_percent)} />
+              </div>
+            )}
+
+            {analytics.current_worker_count > analytics.estimated_worker_count && (
+              <div className="text-xs flex items-center gap-1 text-amber-700 dark:text-amber-300">
+                <AlertTriangle className="h-3 w-3" /> Estimate exceeded — auto-adjusting to current count
               </div>
             )}
 

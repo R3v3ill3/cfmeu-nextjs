@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -13,6 +13,8 @@ import { UnionRoleAssignmentModal } from "@/components/workers/UnionRoleAssignme
 import { AssignWorkersModal } from "./AssignWorkersModal";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getWorkerColorCoding } from "@/utils/workerColorCoding";
+
+import { QuickAddWorkerModal } from "@/components/workers/QuickAddWorkerModal";
 
 interface EmployerWorkerChartProps {
   isOpen: boolean;
@@ -53,6 +55,8 @@ export const EmployerWorkerChart = ({
   const [showRole, setShowRole] = useState(false);
   const [roleWorkerId, setRoleWorkerId] = useState<string>("");
   const [showAssign, setShowAssign] = useState(false);
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [autoAdjustedMsg, setAutoAdjustedMsg] = useState<string | null>(null);
 
   const filters = useMemo(() => ({ employerId, projectIds, siteIds, contextSiteId }), [employerId, projectIds, siteIds, contextSiteId]);
 
@@ -129,9 +133,76 @@ export const EmployerWorkerChart = ({
       const dues: Record<string, string> = {};
       (duesRows || []).forEach((r: any) => { if (r.worker_id) dues[r.worker_id] = r.dd_status });
 
-      return { workers: wRows || [], roles, ratings, dues } as any;
+      // 6) Estimated counts: project-level else employer-level
+      let estimated: number | null = null;
+      let estimatedScope: "project" | "employer" | null = null;
+      if (projectIds && projectIds.length > 0) {
+        const { data: pctRows } = await (supabase as any)
+          .from("project_contractor_trades")
+          .select("estimated_project_workforce, project_id")
+          .eq("employer_id", employerId)
+          .in("project_id", projectIds)
+        const vals = ((pctRows || []) as any[])
+          .map(r => Number(r.estimated_project_workforce) || 0)
+          .filter(v => Number.isFinite(v) && v > 0)
+        if (vals.length > 0) {
+          estimated = Math.max(...vals)
+          estimatedScope = "project"
+        }
+      }
+      if (estimated == null) {
+        const { data: empRow } = await (supabase as any)
+          .from("employers")
+          .select("estimated_worker_count")
+          .eq("id", employerId)
+          .maybeSingle()
+        const v = Number((empRow as any)?.estimated_worker_count)
+        if (Number.isFinite(v) && v > 0) {
+          estimated = v
+          estimatedScope = "employer"
+        }
+      }
+
+      return { workers: wRows || [], roles, ratings, dues, estimated, estimatedScope } as any;
     },
   });
+
+  const qcInvalidate = () => {
+    qc.invalidateQueries({ queryKey: ["employer-worker-chart"] })
+  }
+
+  useEffect(() => {
+    if (!data) return
+    const actual = (data.workers || []).length
+    const est = (data as any).estimated as number | null
+    const scope = (data as any).estimatedScope as "project" | "employer" | null
+    if (est != null && actual > est) {
+      const adjust = async () => {
+        try {
+          if (scope === "project" && projectIds && projectIds.length > 0) {
+            await (supabase as any)
+              .from("project_contractor_trades")
+              .update({ estimated_project_workforce: actual })
+              .eq("employer_id", employerId)
+              .in("project_id", projectIds)
+          } else if (scope === "employer") {
+            await (supabase as any)
+              .from("employers")
+              .update({ estimated_worker_count: actual })
+              .eq("id", employerId)
+          }
+          setAutoAdjustedMsg(`Estimate adjusted to ${actual} to match assigned workers`)
+          qcInvalidate()
+        } catch (e) {
+          console.error(e)
+        }
+      }
+      adjust()
+    } else {
+      setAutoAdjustedMsg(null)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify({ count: data?.workers?.length || 0, est: (data as any)?.estimated || null, scope: (data as any)?.estimatedScope || null })])
 
   const endPlacements = async (where: Record<string, any>) => {
     const today = new Date().toISOString().slice(0, 10);
@@ -342,7 +413,14 @@ const roleBadge = (role: WorkerRoleLite) => (
         ) : data && data.workers.length > 0 ? (
 
           <>
-            
+
+            {autoAdjustedMsg && (
+              <div className="mb-3 text-xs px-2 py-1 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-300/50">
+                {autoAdjustedMsg}
+              </div>
+            )}
+            {/* Legend removed as per design: colours are self-evident with labels */}
+
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {filteredSortedWorkers.map((w) => {
@@ -382,6 +460,26 @@ const roleBadge = (role: WorkerRoleLite) => (
                   </Card>
                 );
               })}
+              {(() => {
+                const actual = filteredSortedWorkers.length
+                const est = (data as any).estimated as number | null
+                const placeholders = est && est > actual ? est - actual : 0
+                if (placeholders <= 0) return null
+                return Array.from({ length: placeholders }).map((_, idx) => (
+                  <Card key={`unknown-${idx}`} className="p-3 border border-dashed cursor-pointer hover:bg-muted/50" onClick={() => setShowQuickAdd(true)}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="font-medium">Unknown worker</div>
+                        <div className="mt-1 text-xs text-muted-foreground">Click to add details</div>
+                        <div className="mt-1">
+                          <Badge variant="secondary">unknown</Badge>
+                        </div>
+                      </div>
+                      <div className="w-2 h-2 rounded-full mt-1 bg-muted-foreground/40" />
+                    </div>
+                  </Card>
+                ))
+              })()}
             </div>
 
             <WorkerDetailModal
@@ -416,6 +514,13 @@ const roleBadge = (role: WorkerRoleLite) => (
         ) : (
           <div className="text-sm text-muted-foreground">No workers found for this selection.</div>
         )}
+        <QuickAddWorkerModal
+          open={showQuickAdd}
+          onOpenChange={setShowQuickAdd}
+          employerId={employerId!}
+          jobSiteId={contextSiteId || null}
+          onAdded={() => qcInvalidate()}
+        />
       </DialogContent>
     </Dialog>
   );
