@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useMemo, useState, useEffect } from "react"
-import { useParams } from "next/navigation"
+import { useParams, useSearchParams } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -21,8 +21,9 @@ import { Input } from "@/components/ui/input"
 
 export default function ProjectDetailPage() {
   const params = useParams()
+  const sp = useSearchParams()
   const projectId = params?.projectId as string
-  const [tab, setTab] = useState("overview")
+  const [tab, setTab] = useState(sp.get("tab") || "overview")
   const [showAssign, setShowAssign] = useState(false)
   const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null)
   const [showEbaForEmployerId, setShowEbaForEmployerId] = useState<string | null>(null)
