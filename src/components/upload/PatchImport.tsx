@@ -36,9 +36,10 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
   const [isImporting, setIsImporting] = useState(false);
   const [preview, setPreview] = useState<any[]>([]);
   const [organisers, setOrganisers] = useState<Array<{ id: string; full_name: string; email: string | null }>>([]);
+  const [pendingOrganisers, setPendingOrganisers] = useState<Array<{ id: string; full_name: string | null; email: string | null; status: string }>>([]);
   const [resolverOpen, setResolverOpen] = useState(false);
   const [nameToOrganiserId, setNameToOrganiserId] = useState<Record<string, string>>({});
-  const [pendingNewOrganisers, setPendingNewOrganisers] = useState<Record<string, { full_name: string; email: string; created?: boolean }>>({});
+  const [pendingNewOrganisers, setPendingNewOrganisers] = useState<Record<string, { full_name: string; email: string; created?: boolean; existingPendingId?: string }>>({});
   const [resolverSearch, setResolverSearch] = useState<Record<string, string>>({});
   const { toast } = useToast();
 
@@ -68,6 +69,25 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
       }
     };
     load();
+  }, []);
+
+  useEffect(() => {
+    const loadPending = async () => {
+      try {
+        const { data, error } = await (supabase as any)
+          .from("pending_users")
+          .select("id,email,full_name,status,role")
+          .eq("role", "organiser")
+          .in("status", ["draft", "invited"]) 
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+        setPendingOrganisers(((data || []) as any[]).map((r: any) => ({ id: r.id, email: r.email, full_name: r.full_name, status: r.status })));
+      } catch (e) {
+        console.warn("Failed to load pending organisers for resolver", e);
+        setPendingOrganisers([]);
+      }
+    };
+    loadPending();
   }, []);
 
   // Normalize rows into a consistent structure for preview and import
@@ -127,6 +147,13 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
   const suggestMatches = (query: string) => {
     const q = String(query).toLowerCase();
     return organisers
+      .filter((o) => (o.full_name || "").toLowerCase().includes(q) || (o.email || "").toLowerCase().includes(q))
+      .slice(0, 10);
+  };
+
+  const suggestPendingMatches = (query: string) => {
+    const q = String(query).toLowerCase();
+    return pendingOrganisers
       .filter((o) => (o.full_name || "").toLowerCase().includes(q) || (o.email || "").toLowerCase().includes(q))
       .slice(0, 10);
   };
@@ -232,12 +259,23 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
     if (!info || !info.full_name || !info.created) return;
     const email = (info.email && info.email.trim()) ? info.email.trim() : inferDefaultEmail(info.full_name);
     if (!email) return;
-    const { data: pending } = await (supabase as any)
-      .from("pending_users")
-      .select("id,assigned_patch_ids")
-      .ilike("email", email)
-      .eq("role", "organiser")
-      .maybeSingle();
+    let pending: any = null;
+    if (info.existingPendingId) {
+      const { data } = await (supabase as any)
+        .from("pending_users")
+        .select("id,assigned_patch_ids")
+        .eq("id", info.existingPendingId)
+        .maybeSingle();
+      pending = data;
+    } else {
+      const { data } = await (supabase as any)
+        .from("pending_users")
+        .select("id,assigned_patch_ids")
+        .ilike("email", email)
+        .eq("role", "organiser")
+        .maybeSingle();
+      pending = data;
+    }
     if (!pending) return;
     const current = new Set<string>((pending as any).assigned_patch_ids || []);
     if (current.has(patchId)) return;
@@ -477,6 +515,30 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
                                 {suggestMatches(resolverSearch[label] ?? label).length === 0 && (
                                   <div className="px-3 py-2 text-xs text-muted-foreground">No matches</div>
                                 )}
+                              <div className="px-3 py-1 text-xs text-muted-foreground border-t">Draft/Invited</div>
+                              {suggestPendingMatches(resolverSearch[label] ?? label).map((p) => {
+                                const selectedPending = Boolean(pendingNewOrganisers[label]?.created && (pendingNewOrganisers[label]?.email || "").toLowerCase() === (p.email || "").toLowerCase());
+                                return (
+                                  <button
+                                    key={`pending-${p.id}`}
+                                    type="button"
+                                    className={`w-full text-left px-3 py-2 text-sm hover:bg-accent ${selectedPending ? "bg-accent" : ""}`}
+                                    onClick={() => {
+                                      setNameToOrganiserId((prev) => {
+                                        const clone = { ...prev } as any;
+                                        delete clone[label];
+                                        return clone;
+                                      });
+                                      setPendingNewOrganisers((prev) => ({
+                                        ...prev,
+                                        [label]: { full_name: p.full_name || String(label), email: p.email || inferDefaultEmail(String(label)), created: true, existingPendingId: p.id }
+                                      }));
+                                    }}
+                                  >
+                                    {(p.full_name || p.email || label)} {p.email ? `(${p.email})` : ""} {p.status ? `• ${p.status}` : ""}
+                                  </button>
+                                );
+                              })}
                               </div>
                             </div>
                           </div>
