@@ -6,14 +6,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Card } from "@/components/ui/card";
-import { Loader2, MoreVertical, X, Info } from "lucide-react";
+import { Loader2, MoreVertical } from "lucide-react";
 import { toast } from "sonner";
 import { WorkerDetailModal } from "@/components/workers/WorkerDetailModal";
 import { UnionRoleAssignmentModal } from "@/components/workers/UnionRoleAssignmentModal";
 import { AssignWorkersModal } from "./AssignWorkersModal";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { getWorkerColorCoding, getWorkerColorLegend } from "@/utils/workerColorCoding";
-import { cn } from "@/lib/utils";
+import { getWorkerColorCoding } from "@/utils/workerColorCoding";
 import { QuickAddWorkerModal } from "@/components/workers/QuickAddWorkerModal";
 
 interface EmployerWorkerChartProps {
@@ -418,21 +417,7 @@ const roleBadge = (role: WorkerRoleLite) => (
                 {autoAdjustedMsg}
               </div>
             )}
-            {/* Colour Legend */}
-            <div className="mb-4 p-3 bg-muted/50 rounded-lg border">
-              <div className="flex items-center gap-2 mb-2">
-                <Info className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">Colour Coding</span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
-                {getWorkerColorLegend().map((item) => (
-                  <div key={item.label} className="flex items-center gap-1">
-                    <div className={cn("w-3 h-3 rounded border", item.color)} style={item.style} />
-                    <span className="text-muted-foreground">{item.description}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            {/* Legend removed as per design: colours are self-evident with labels */}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {filteredSortedWorkers.map((w) => {
