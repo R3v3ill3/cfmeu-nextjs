@@ -38,7 +38,7 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
   const [organisers, setOrganisers] = useState<Array<{ id: string; full_name: string; email: string | null }>>([]);
   const [resolverOpen, setResolverOpen] = useState(false);
   const [nameToOrganiserId, setNameToOrganiserId] = useState<Record<string, string>>({});
-  const [pendingNewOrganisers, setPendingNewOrganisers] = useState<Record<string, { full_name: string; email: string }>>({});
+  const [pendingNewOrganisers, setPendingNewOrganisers] = useState<Record<string, { full_name: string; email: string; created?: boolean }>>({});
   const [resolverSearch, setResolverSearch] = useState<Record<string, string>>({});
   const { toast } = useToast();
 
@@ -106,8 +106,13 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
   }, [uniqueOrganiserNames]);
 
   const unresolvedOrganiserNames = useMemo(() => {
-    return uniqueOrganiserNames.filter((name) => !nameToOrganiserId[name]);
-  }, [uniqueOrganiserNames, nameToOrganiserId]);
+    // Consider entries resolved only if matched to existing (nameToOrganiserId) or a draft was actually created
+    return uniqueOrganiserNames.filter((name) => {
+      if (nameToOrganiserId[name]) return false;
+      const pending = pendingNewOrganisers[name];
+      return !(pending && pending.created);
+    });
+  }, [uniqueOrganiserNames, nameToOrganiserId, pendingNewOrganisers]);
 
   const suggestMatches = (query: string) => {
     const q = String(query).toLowerCase();
@@ -120,11 +125,23 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
     // Create pending users for any entries marked for creation
     for (const [label, info] of Object.entries(pendingNewOrganisers)) {
       if (!info.full_name || !info.email) continue;
+      if (info.created) continue; // already created via the button
       try {
-        const { error } = await (supabase as any)
+        // Avoid duplicate drafts by checking existing pending/invited by email
+        const { data: existing } = await (supabase as any)
           .from("pending_users")
-          .insert({ email: info.email, full_name: info.full_name, role: "organiser", status: "draft" });
-        if (error) throw error;
+          .select("id")
+          .eq("email", info.email)
+          .eq("role", "organiser")
+          .maybeSingle();
+        if (!existing) {
+          const { error } = await (supabase as any)
+            .from("pending_users")
+            .insert({ email: info.email, full_name: info.full_name, role: "organiser", status: "draft" });
+          if (error) throw error;
+        }
+        // Mark as created in local state so it is treated as resolved
+        setPendingNewOrganisers((prev) => ({ ...prev, [label]: { ...info, created: true } }));
       } catch (e: any) {
         toast({ title: "Failed to create pending organiser", description: e?.message || String(e), variant: "destructive" });
         return;
@@ -141,10 +158,20 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
       return;
     }
     try {
-      const { error } = await (supabase as any)
+      // Skip insert if already exists
+      const { data: existing } = await (supabase as any)
         .from("pending_users")
-        .insert({ email: info.email, full_name: info.full_name, role: "organiser", status: "draft" });
-      if (error) throw error;
+        .select("id")
+        .eq("email", info.email)
+        .eq("role", "organiser")
+        .maybeSingle();
+      if (!existing) {
+        const { error } = await (supabase as any)
+          .from("pending_users")
+          .insert({ email: info.email, full_name: info.full_name, role: "organiser", status: "draft" });
+        if (error) throw error;
+      }
+      setPendingNewOrganisers((prev) => ({ ...prev, [label]: { ...info, created: true } }));
       toast({ title: "Draft organiser created", description: `${info.full_name} (${info.email})` });
     } catch (e: any) {
       toast({ title: "Failed to create draft", description: e?.message || String(e), variant: "destructive" });
@@ -350,11 +377,11 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
               <div className="text-sm text-muted-foreground">No unresolved organisers.</div>
             ) : (
               <div className="space-y-4">
-                {unresolvedOrganiserNames.map((label) => {
+                {unresolvedOrganiserNames.map((label, index) => {
                   const selectedExisting = nameToOrganiserId[label] || "";
                   const newInfo = pendingNewOrganisers[label] || { full_name: label, email: "" };
                   return (
-                    <Card key={label}>
+                    <Card key={`${label}-${index}`}>
                       <CardHeader>
                         <CardTitle className="text-base">{label}</CardTitle>
                         <CardDescription>Match to an existing organiser or create a new draft organiser</CardDescription>
@@ -424,7 +451,15 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
                               />
                             </div>
                             <div className="mt-2">
-                              <Button size="sm" variant="outline" onClick={() => createDraftForLabel(label)}>Create draft organiser</Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={!newInfo.full_name?.trim() || !newInfo.email?.trim() || Boolean(newInfo.created)}
+                                onClick={() => createDraftForLabel(label)}
+                              >
+                                {newInfo.created ? "Draft created" : "Create draft organiser"}
+                              </Button>
                             </div>
                           </div>
                         </div>
@@ -435,8 +470,8 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
               </div>
             )}
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setResolverOpen(false)}>Close</Button>
-              <Button onClick={handleResolverConfirm}>Save</Button>
+              <Button type="button" variant="outline" onClick={() => setResolverOpen(false)}>Close</Button>
+              <Button type="button" onClick={handleResolverConfirm}>Save</Button>
             </div>
           </div>
         </DialogContent>
