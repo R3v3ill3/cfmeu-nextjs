@@ -203,52 +203,37 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
 
     for (const row of normalizedRows) {
       try {
-        // Resolve existing patch by code (preferred) or by case-insensitive name
+        // Resolve existing patch by case-insensitive name only (schema does not include code)
         let existing: any = null;
-        if (row.code !== null) {
-          const { data } = await supabase.from("patches").select("id, code").eq("code", row.code).maybeSingle();
-          existing = data || null;
-        }
-        if (!existing && row.name) {
-          const { data } = await supabase.from("patches").select("id, name").ilike("name", row.name).limit(1).maybeSingle();
+        if (row.name) {
+          const { data } = await supabase
+            .from("patches")
+            .select("id, name")
+            .ilike("name", row.name)
+            .limit(1)
+            .maybeSingle();
           existing = data || null;
         }
 
         let patchId: string;
         if (existing) {
-          // Try full update first; if it fails due to unknown columns, retry with minimal fields
-          const tryUpdate = async (payload: any) => {
-            const res = await supabase.from("patches").update(payload).eq("id", existing.id).select("id").single();
-            return res;
-          };
-          let { data, error } = await tryUpdate({
-            name: row.name,
-            description: row.description,
-            type: row.type,
-            sub_sectors: row.subSectors.length > 0 ? row.subSectors : null,
-            code: row.code,
-          });
-          if (error && /column .* does not exist/i.test(error.message || "")) {
-            ({ data, error } = await tryUpdate({ name: row.name, description: row.description, type: row.type }));
-          }
+          // Update only columns that exist in schema
+          const { data, error } = await supabase
+            .from("patches")
+            .update({ name: row.name, type: row.type })
+            .eq("id", existing.id)
+            .select("id")
+            .single();
           if (error) throw error;
           patchId = (data as any).id;
           results.updated++;
         } else {
-          const tryInsert = async (payload: any) => {
-            const res = await supabase.from("patches").insert(payload).select("id").single();
-            return res;
-          };
-          let { data, error } = await tryInsert({
-            name: row.name,
-            description: row.description,
-            type: row.type,
-            sub_sectors: row.subSectors.length > 0 ? row.subSectors : null,
-            code: row.code,
-          });
-          if (error && /column .* does not exist/i.test(error.message || "")) {
-            ({ data, error } = await tryInsert({ name: row.name, description: row.description, type: row.type }));
-          }
+          // Insert only columns that exist in schema
+          const { data, error } = await supabase
+            .from("patches")
+            .insert({ name: row.name, type: row.type })
+            .select("id")
+            .single();
           if (error) throw error;
           patchId = (data as any).id;
           results.created++;
