@@ -22,6 +22,15 @@ export const AddDraftUserDialog = ({ open, onOpenChange, onSuccess }: AddDraftUs
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
+  const inferDefaultEmail = (name: string): string => {
+    const parts = String(name || '').trim().split(/\s+/)
+    if (parts.length === 0) return ''
+    const first = parts[0] || ''
+    const last = parts[parts.length - 1] || ''
+    const local = `${first.slice(0,1)}${last}`.toLowerCase().replace(/[^a-z0-9]/g, '')
+    return local ? `${local}@testing.org` : ''
+  }
+
   const handleAdd = async () => {
     if (!email) {
       toast({
@@ -38,8 +47,8 @@ export const AddDraftUserDialog = ({ open, onOpenChange, onSuccess }: AddDraftUs
       const createdBy = me.user?.id ?? null;
 
       const { error } = await supabase.from("pending_users" as any).insert({
-        email,
-        full_name: fullName || email.split("@")[0],
+        email: email || inferDefaultEmail(fullName),
+        full_name: fullName || (email ? email.split("@")[0] : ""),
         role,
         notes: notes || null,
         status: "draft",
@@ -76,6 +85,24 @@ export const AddDraftUserDialog = ({ open, onOpenChange, onSuccess }: AddDraftUs
 
         <div className="space-y-4">
           <div className="space-y-2">
+            <Label htmlFor="name">Full Name</Label>
+            <Input
+              id="name"
+              placeholder="Full name (optional)"
+              value={fullName}
+              onChange={(e) => {
+                const v = e.target.value
+                setFullName(v)
+                // If email not manually set, derive default from name
+                if (!email || email === inferDefaultEmail(fullName)) {
+                  setEmail(inferDefaultEmail(v))
+                }
+              }}
+              disabled={loading}
+            />
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="email">Email Address</Label>
             <Input
               id="email"
@@ -83,17 +110,6 @@ export const AddDraftUserDialog = ({ open, onOpenChange, onSuccess }: AddDraftUs
               placeholder="user@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              disabled={loading}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="name">Full Name</Label>
-            <Input
-              id="name"
-              placeholder="Full name (optional)"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
               disabled={loading}
             />
           </div>

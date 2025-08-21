@@ -33,6 +33,7 @@ export default function PatchManager() {
   const [assignDialogPatchId, setAssignDialogPatchId] = useState<string | null>(null)
   const [draftDialogOpen, setDraftDialogOpen] = useState(false)
   const [selectedDraftIds, setSelectedDraftIds] = useState<Set<string>>(new Set())
+  const [selectedPatchIds, setSelectedPatchIds] = useState<Set<string>>(new Set())
 
   const { data: patches = [], isLoading } = useQuery({
     queryKey: ["admin-patches"],
@@ -125,6 +126,23 @@ export default function PatchManager() {
     onError: (e: any) => toast({ title: "Error", description: e?.message || "Failed to create patch", variant: "destructive" })
   })
 
+  const deletePatches = useMutation({
+    mutationFn: async (ids: string[]) => {
+      if (!ids.length) return
+      const { error } = await (supabase as any)
+        .from("patches")
+        .delete()
+        .in("id", ids)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      setSelectedPatchIds(new Set())
+      qc.invalidateQueries({ queryKey: ["admin-patches"] })
+      toast({ title: "Patches deleted" })
+    },
+    onError: (e) => toast({ title: "Failed to delete patches", description: (e as any)?.message || String(e), variant: "destructive" })
+  })
+
   const assignToOrganiser = useMutation({
     mutationFn: async ({ organiserId, patchId, assigned }: { organiserId: string; patchId: string; assigned: boolean }) => {
       if (assigned) {
@@ -198,6 +216,13 @@ export default function PatchManager() {
         <div className="flex items-center justify-between">
           <div className="text-sm text-muted-foreground">{isLoading ? "Loading…" : `${(patches as any[]).length} patches`}</div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="destructive"
+              disabled={Array.from(selectedPatchIds).length === 0}
+              onClick={() => deletePatches.mutate(Array.from(selectedPatchIds))}
+            >
+              Delete selected
+            </Button>
             <Button variant="outline" onClick={() => setImportOpen(true)}>Import CSV</Button>
             <Button onClick={() => setCreateOpen(true)}>Create Patch</Button>
           </div>
@@ -206,6 +231,16 @@ export default function PatchManager() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={(patches as Patch[]).length > 0 && Array.from(selectedPatchIds).length === (patches as Patch[]).length}
+                    onCheckedChange={(v) => {
+                      if (Boolean(v)) setSelectedPatchIds(new Set((patches as Patch[]).map(p => p.id)))
+                      else setSelectedPatchIds(new Set())
+                    }}
+                    aria-label="Select all patches"
+                  />
+                </TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Organisers</TableHead>
@@ -215,6 +250,19 @@ export default function PatchManager() {
             <TableBody>
               {(patches as Patch[]).map(p => (
                 <TableRow key={p.id}>
+                  <TableCell className="w-10">
+                    <Checkbox
+                      checked={selectedPatchIds.has(p.id)}
+                      onCheckedChange={(v) => {
+                        setSelectedPatchIds(prev => {
+                          const next = new Set(prev)
+                          if (Boolean(v)) next.add(p.id); else next.delete(p.id)
+                          return next
+                        })
+                      }}
+                      aria-label={`Select patch ${p.name}`}
+                    />
+                  </TableCell>
                   <TableCell className="font-medium">{p.name}</TableCell>
                   <TableCell>{p.status}</TableCell>
                   <TableCell className="max-w-[280px]">

@@ -403,7 +403,7 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
               <div className="space-y-4">
                 {unresolvedOrganiserNames.map((label, index) => {
                   const selectedExisting = nameToOrganiserId[label] || "";
-                  const newInfo = pendingNewOrganisers[label] || { full_name: label, email: "" };
+                  const newInfo = pendingNewOrganisers[label] || { full_name: label, email: inferDefaultEmail(String(label)) };
                   return (
                     <Card key={`${label}-${index}`}>
                       <CardHeader>
@@ -452,7 +452,11 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
                                 value={newInfo.full_name}
                                 onChange={(e) => {
                                   const v = e.target.value;
-                                  setPendingNewOrganisers((prev) => ({ ...prev, [label]: { ...newInfo, full_name: v } }));
+                                  // Update full name and keep email aligned if user has not manually edited it away from the inferred default
+                                  const prevEmail = newInfo.email || ""
+                                  const wasDefault = prevEmail === inferDefaultEmail(String(newInfo.full_name || label))
+                                  const nextEmail = wasDefault ? inferDefaultEmail(v) : prevEmail
+                                  setPendingNewOrganisers((prev) => ({ ...prev, [label]: { ...newInfo, full_name: v, email: nextEmail } }));
                                   setNameToOrganiserId((prev) => {
                                     const clone = { ...prev } as any;
                                     delete clone[label];
