@@ -19,7 +19,6 @@ type EmployerWithEba = {
   name: string;
   abn: string | null;
   employer_type: string;
-  enterprise_agreement_status: boolean | null;
   address_line_1: string | null;
   address_line_2: string | null;
   suburb: string | null;

@@ -20,7 +20,6 @@ type EmployerWithEba = {
   name: string;
   abn: string | null;
   employer_type: string;
-  enterprise_agreement_status: boolean | null;
   estimated_worker_count?: number;
   company_eba_records: {
     id: string;
