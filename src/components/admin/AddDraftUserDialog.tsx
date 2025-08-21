@@ -32,13 +32,14 @@ export const AddDraftUserDialog = ({ open, onOpenChange, onSuccess }: AddDraftUs
   }
 
   const handleAdd = async () => {
-    if (!email) {
+    const finalEmail = (email && email.trim()) || inferDefaultEmail(fullName)
+    if (!finalEmail) {
       toast({
         title: "Error",
-        description: "Please enter an email address",
+        description: "Please enter a name or email address",
         variant: "destructive",
-      });
-      return;
+      })
+      return
     }
 
     setLoading(true);
@@ -47,8 +48,8 @@ export const AddDraftUserDialog = ({ open, onOpenChange, onSuccess }: AddDraftUs
       const createdBy = me.user?.id ?? null;
 
       const { error } = await supabase.from("pending_users" as any).insert({
-        email: email || inferDefaultEmail(fullName),
-        full_name: fullName || (email ? email.split("@")[0] : ""),
+        email: finalEmail,
+        full_name: fullName || finalEmail.split("@")[0],
         role,
         notes: notes || null,
         status: "draft",
@@ -57,7 +58,7 @@ export const AddDraftUserDialog = ({ open, onOpenChange, onSuccess }: AddDraftUs
 
       if (error) throw error;
 
-      toast({ title: "Draft created", description: `Saved ${email} as a draft user.` });
+      toast({ title: "Draft created", description: `Saved ${finalEmail} as a draft user.` });
       setEmail("");
       setFullName("");
       setRole("viewer");
