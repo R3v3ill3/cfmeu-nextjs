@@ -61,7 +61,7 @@ export function FiltersBar({ patchOptions, statusOptions }: FiltersBarProps) {
         if (role === "admin") {
           const { data } = await (supabase as any)
             .from("patches")
-            .select("id, name, type")
+            .select("id, name")
             .order("name")
           patchRows = (data as any[]) || []
         } else if (role === "lead_organiser") {
@@ -69,12 +69,12 @@ export function FiltersBar({ patchOptions, statusOptions }: FiltersBarProps) {
           const [direct, team] = await Promise.all([
             (supabase as any)
               .from("lead_organiser_patch_assignments")
-              .select("patches:patch_id(id,name,type)")
+              .select("patches:patch_id(id,name)")
               .is("effective_to", null)
               .eq("lead_organiser_id", userId),
             (supabase as any)
               .from("organiser_patch_assignments")
-              .select("patches:patch_id(id,name,type)")
+              .select("patches:patch_id(id,name)")
               .is("effective_to", null)
           ])
           const list: any[] = []
@@ -87,7 +87,7 @@ export function FiltersBar({ patchOptions, statusOptions }: FiltersBarProps) {
         } else if (role === "organiser") {
           const { data } = await (supabase as any)
             .from("organiser_patch_assignments")
-            .select("patches:patch_id(id,name,type)")
+            .select("patches:patch_id(id,name)")
             .is("effective_to", null)
             .eq("organiser_id", userId)
           patchRows = ((data as any[]) || []).map((r: any) => r.patches).filter(Boolean)
@@ -100,32 +100,8 @@ export function FiltersBar({ patchOptions, statusOptions }: FiltersBarProps) {
       } catch {
         // tables might not exist yet → fall back
       }
-
-      // Fallback legacy: derive from job_sites.patch; then optional projects.region
-      const set = new Set<string>()
-      try {
-        const { data: sites } = await (supabase as any)
-          .from("job_sites")
-          .select("id, patch")
-          .limit(2000)
-        ;(sites as any[] || []).forEach((s) => {
-          const val = (s as any).patch
-          if (typeof val === "string" && val.trim() !== "") set.add(val.trim())
-        })
-      } catch {}
-      if (set.size === 0) {
-        try {
-          const { data: projects } = await (supabase as any)
-            .from("projects")
-            .select("id, region")
-            .limit(2000)
-          ;(projects as any[] || []).forEach((p) => {
-            const val = (p as any).region
-            if (typeof val === "string" && val.trim() !== "") set.add(val.trim())
-          })
-        } catch {}
-      }
-      return Array.from(set).sort().map((v) => ({ value: v, label: v.charAt(0).toUpperCase() + v.slice(1) }))
+      // No patches available or tables missing
+      return []
     }
   })
 

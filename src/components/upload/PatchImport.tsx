@@ -220,7 +220,7 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
           // Update only columns that exist in schema
           const { data, error } = await supabase
             .from("patches")
-            .update({ name: row.name, type: row.type })
+            .update({ name: row.name })
             .eq("id", existing.id)
             .select("id")
             .single();
@@ -231,7 +231,7 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
           // Insert only columns that exist in schema
           const { data, error } = await supabase
             .from("patches")
-            .insert({ name: row.name, type: row.type })
+            .insert({ name: row.name })
             .select("id")
             .single();
           if (error) throw error;

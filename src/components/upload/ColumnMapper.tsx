@@ -36,7 +36,6 @@ const DATABASE_TABLES = {
     columns: {
       code: { type: "number", required: false, description: "Numeric patch code (e.g., 100)" },
       name: { type: "text", required: true, description: "Patch name (e.g., Sydney)" },
-      type: { type: "text", required: false, description: "Patch type: geo or trade (optional; inferred if blank)" },
       description: { type: "text", required: false, description: "Patch description" },
       organiser1: { type: "text", required: false, description: "Organiser 1 (full name or email)" },
       organiser2: { type: "text", required: false, description: "Organiser 2 (full name or email)" },
