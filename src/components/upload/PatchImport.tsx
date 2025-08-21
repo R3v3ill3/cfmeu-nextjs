@@ -133,6 +133,8 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
 
   const handleResolverConfirm = async () => {
     // Create pending users for any entries marked for creation
+    const { data: me } = await (supabase as any).auth.getUser();
+    const createdBy = (me as any)?.user?.id ?? null;
     for (const [label, info] of Object.entries(pendingNewOrganisers)) {
       if (!info.full_name) continue;
       const email = (info.email && info.email.trim()) ? info.email.trim() : inferDefaultEmail(info.full_name)
@@ -143,14 +145,21 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
         const { data: existing } = await (supabase as any)
           .from("pending_users")
           .select("id")
-          .eq("email", email)
+          .ilike("email", email)
           .eq("role", "organiser")
           .maybeSingle();
         if (!existing) {
           const { error } = await (supabase as any)
             .from("pending_users")
-            .insert({ email, full_name: info.full_name, role: "organiser", status: "draft" });
-          if (error) throw error;
+            .insert({ email: String(email).toLowerCase(), full_name: info.full_name, role: "organiser", status: "draft", created_by: createdBy });
+          if (error) {
+            const message = (error as any)?.message || "";
+            if (/duplicate/i.test(message) || /unique/i.test(message)) {
+              // Treat duplicates as already created
+            } else {
+              throw error;
+            }
+          }
         }
         // Mark as created in local state so it is treated as resolved
         setPendingNewOrganisers((prev) => ({ ...prev, [label]: { ...info, created: true } }));
@@ -170,18 +179,27 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
       return;
     }
     try {
+      const { data: me } = await (supabase as any).auth.getUser();
+      const createdBy = (me as any)?.user?.id ?? null;
       // Skip insert if already exists
       const { data: existing } = await (supabase as any)
         .from("pending_users")
         .select("id")
-        .eq("email", (info.email && info.email.trim()) ? info.email.trim() : inferDefaultEmail(info.full_name))
+        .ilike("email", (info.email && info.email.trim()) ? info.email.trim() : inferDefaultEmail(info.full_name))
         .eq("role", "organiser")
         .maybeSingle();
       if (!existing) {
         const { error } = await (supabase as any)
           .from("pending_users")
-          .insert({ email: (info.email && info.email.trim()) ? info.email.trim() : inferDefaultEmail(info.full_name), full_name: info.full_name, role: "organiser", status: "draft" });
-        if (error) throw error;
+          .insert({ email: String((info.email && info.email.trim()) ? info.email.trim() : inferDefaultEmail(info.full_name)).toLowerCase(), full_name: info.full_name, role: "organiser", status: "draft", created_by: createdBy });
+        if (error) {
+          const message = (error as any)?.message || "";
+          if (/duplicate/i.test(message) || /unique/i.test(message)) {
+            // ignore; consider created
+          } else {
+            throw error;
+          }
+        }
       }
       setPendingNewOrganisers((prev) => ({ ...prev, [label]: { ...info, created: true } }));
       toast({ title: "Draft organiser created", description: `${info.full_name} (${info.email || inferDefaultEmail(info.full_name)})` });
@@ -217,7 +235,7 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
     const { data: pending } = await (supabase as any)
       .from("pending_users")
       .select("id,assigned_patch_ids")
-      .eq("email", email)
+      .ilike("email", email)
       .eq("role", "organiser")
       .maybeSingle();
     if (!pending) return;
@@ -262,14 +280,32 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
           patchId = (data as any).id;
           results.updated++;
         } else {
-          // Insert only columns that exist in schema
-          const { data, error } = await supabase
-            .from("patches")
-            .insert({ name: row.name })
-            .select("id")
-            .single();
-          if (error) throw error;
-          patchId = (data as any).id;
+          // Insert, prefer including type if the column exists in schema
+          let inserted: any = null;
+          try {
+            const { data, error } = await supabase
+              .from("patches")
+              .insert({ name: row.name, type: row.type || "geo" } as any)
+              .select("id")
+              .single();
+            if (error) throw error;
+            inserted = data;
+          } catch (err: any) {
+            const msg = err?.message || "";
+            // Fallback if type column does not exist in target schema
+            if (/column\s+\"?type\"?\s+does not exist/i.test(msg) || /missing column/i.test(msg)) {
+              const { data, error } = await supabase
+                .from("patches")
+                .insert({ name: row.name } as any)
+                .select("id")
+                .single();
+              if (error) throw error;
+              inserted = data;
+            } else {
+              throw err;
+            }
+          }
+          patchId = (inserted as any).id;
           results.created++;
         }
 
