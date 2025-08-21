@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Users, UserCheck, Shield, Phone, Mail, Plus } from "lucide-react";
 import { UnionRoleAssignmentModal } from "./UnionRoleAssignmentModal";
 import { WorkerDetailModal } from "./WorkerDetailModal";
 import { WorkerCard } from "./WorkerCard";
+import { QuickAddWorkerModal } from "./QuickAddWorkerModal";
 
 interface EmployerWorkersListProps {
   employerId: string;
@@ -42,6 +43,9 @@ export const EmployerWorkersList = ({ employerId }: EmployerWorkersListProps) =>
   const [showRoleAssignment, setShowRoleAssignment] = useState(false);
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
   const [showWorkerDetail, setShowWorkerDetail] = useState(false);
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [autoAdjustedMsg, setAutoAdjustedMsg] = useState<string | null>(null);
+  const qc = useQueryClient();
 
   const { data: workers, isLoading, refetch } = useQuery({
     queryKey: ["employer-workers", employerId],
@@ -79,6 +83,41 @@ export const EmployerWorkersList = ({ employerId }: EmployerWorkersListProps) =>
     enabled: !!employerId,
   });
 
+  const { data: employerRow } = useQuery({
+    queryKey: ["employer-estimate", employerId],
+    enabled: !!employerId,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("employers")
+        .select("estimated_worker_count")
+        .eq("id", employerId)
+        .maybeSingle()
+      return (data as any) || null
+    }
+  })
+
+  useEffect(() => {
+    const actual = (workers || []).length
+    const est = Number(employerRow?.estimated_worker_count) || 0
+    if (est > 0 && actual > est) {
+      const adjust = async () => {
+        try {
+          await supabase
+            .from("employers")
+            .update({ estimated_worker_count: actual })
+            .eq("id", employerId)
+          setAutoAdjustedMsg(`Estimate adjusted to ${actual} to match assigned workers`)
+          await qc.invalidateQueries({ queryKey: ["employer-estimate", employerId] })
+        } catch (e) {
+          console.error(e)
+        }
+      }
+      adjust()
+    } else {
+      setAutoAdjustedMsg(null)
+    }
+  }, [workers, employerRow, employerId, qc])
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -108,6 +147,12 @@ export const EmployerWorkersList = ({ employerId }: EmployerWorkersListProps) =>
           <p className="text-muted-foreground text-center">
             No workers are currently allocated to this employer.
           </p>
+          <div className="mt-4">
+            <Button onClick={() => setShowQuickAdd(true)} className="flex items-center gap-2">
+              <Plus className="h-4 w-4" /> Add worker
+            </Button>
+          </div>
+          <QuickAddWorkerModal open={showQuickAdd} onOpenChange={setShowQuickAdd} employerId={employerId} onAdded={() => refetch()} />
         </CardContent>
       </Card>
     );
@@ -139,6 +184,13 @@ export const EmployerWorkersList = ({ employerId }: EmployerWorkersListProps) =>
 
   return (
     <div className="space-y-6">
+      {autoAdjustedMsg && (
+        <Card className="border border-amber-300/50 bg-amber-50 dark:bg-amber-900/20">
+          <CardContent className="py-2 text-xs text-amber-800 dark:text-amber-300">
+            {autoAdjustedMsg}
+          </CardContent>
+        </Card>
+      )}
       {/* Union Roles Assignment Prompt */}
       {!hasUnionRoles && (
         <Card className="border-dashed border-2 border-primary/20">
@@ -213,7 +265,11 @@ export const EmployerWorkersList = ({ employerId }: EmployerWorkersListProps) =>
           <div className="flex items-center justify-between mb-4">
             <CardTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
-              Workers ({regularWorkers.length})
+              Workers ({regularWorkers.length}{(() => {
+                const est = Number(employerRow?.estimated_worker_count) || 0
+                const placeholders = est > regularWorkers.length + delegates.length + hsrs.length ? (est - (regularWorkers.length + delegates.length + hsrs.length)) : 0
+                return placeholders > 0 ? ` + ${placeholders} unknown` : ""
+              })()})
             </CardTitle>
             {hasUnionRoles && (
               <Button size="sm" variant="outline" onClick={() => setShowRoleAssignment(true)}>
@@ -231,6 +287,32 @@ export const EmployerWorkersList = ({ employerId }: EmployerWorkersListProps) =>
               onUpdate={refetch}
             />
           ))}
+          {(() => {
+            const est = Number(employerRow?.estimated_worker_count) || 0
+            const actual = workers.length
+            const placeholders = est > actual ? est - actual : 0
+            if (placeholders <= 0) return null
+            return (
+              <div className="mt-2 grid grid-cols-1 gap-2">
+                {Array.from({ length: placeholders }).map((_, idx) => (
+                  <Card key={`unknown-${idx}`} className="p-3 border border-dashed cursor-pointer hover:bg-muted/50" onClick={() => setShowQuickAdd(true)}>
+                    <CardContent className="p-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="font-medium">Unknown worker</div>
+                          <div className="mt-1 text-xs text-muted-foreground">Click to add details</div>
+                          <div className="mt-1">
+                            <Badge variant="secondary">unknown</Badge>
+                          </div>
+                        </div>
+                        <div className="w-2 h-2 rounded-full mt-1 bg-muted-foreground/40" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )
+          })()}
         </div>
       )}
 
@@ -256,6 +338,8 @@ export const EmployerWorkersList = ({ employerId }: EmployerWorkersListProps) =>
         }}
         onUpdate={refetch}
       />
+
+      <QuickAddWorkerModal open={showQuickAdd} onOpenChange={setShowQuickAdd} employerId={employerId} onAdded={() => refetch()} />
     </div>
   );
 };
