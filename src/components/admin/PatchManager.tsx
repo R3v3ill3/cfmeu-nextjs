@@ -114,10 +114,22 @@ export default function PatchManager() {
       if (!name.trim()) throw new Error("Enter a name")
       const { data: auth } = await (supabase as any).auth.getUser()
       const createdBy = (auth as any)?.user?.id ?? null
-      const { error } = await (supabase as any)
-        .from("patches")
-        .insert({ name: name.trim(), type: "geo", created_by: createdBy })
-      if (error) throw error
+      try {
+        const { error } = await (supabase as any)
+          .from("patches")
+          .insert({ name: name.trim(), type: "geo", created_by: createdBy })
+        if (error) throw error
+      } catch (err: any) {
+        const msg = err?.message || ""
+        if (/column\s+\"?type\"?\s+does not exist/i.test(msg) || /missing column/i.test(msg)) {
+          const { error: fallbackErr } = await (supabase as any)
+            .from("patches")
+            .insert({ name: name.trim(), created_by: createdBy })
+          if (fallbackErr) throw fallbackErr
+        } else {
+          throw err
+        }
+      }
     },
     onSuccess: () => {
       setCreateOpen(false)
