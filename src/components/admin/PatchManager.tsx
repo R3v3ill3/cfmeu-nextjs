@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
 
-type Patch = { id: string; name: string; type: string; status: string; code?: number | null; description?: string | null; sub_sectors?: string[] | null }
+type Patch = { id: string; name: string; type: string; status: string }
 type ProfileUser = { id: string; full_name: string | null; email: string | null; role: string | null; is_active: boolean | null }
 type PendingUser = { id: string; email: string; full_name: string | null; role: string; status: string; assigned_patch_ids?: string[] | null }
 
@@ -40,7 +40,7 @@ export default function PatchManager() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("patches")
-        .select("id,name,type,status,code,description,sub_sectors")
+        .select("id,name,type,status")
         .order("name")
       if (error) throw error
       return (data || []) as Patch[]
@@ -195,8 +195,8 @@ export default function PatchManager() {
                 <TableHead>Name</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Code</TableHead>
-                <TableHead>Sub-sectors</TableHead>
+                
+                
                 <TableHead>Organisers</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -207,8 +207,8 @@ export default function PatchManager() {
                   <TableCell className="font-medium">{p.name}</TableCell>
                   <TableCell>{p.type}</TableCell>
                   <TableCell>{p.status}</TableCell>
-                  <TableCell>{(p as any).code ?? '—'}</TableCell>
-                  <TableCell>{((p as any).sub_sectors || []).length || 0}</TableCell>
+                  
+                  
                   <TableCell className="max-w-[280px]">
                     <div className="flex flex-wrap gap-1">
                       {(assignmentsByPatch as Record<string, string[]>)[p.id]?.map(orgId => {
