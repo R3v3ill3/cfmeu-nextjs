@@ -16,13 +16,14 @@ export default function SiteVisitsPage() {
   const sp = useSearchParams()
   const q = (sp.get("q") || "").toLowerCase()
   const status = (sp.get("status") || "")
+  const projectId = sp.get("projectId")
 
   const { data: rows = [], isFetching, refetch } = useQuery({
     queryKey: ["site-visits"],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("site_visit")
-        .select("id, visit_date, notes, projects(name), job_sites(name), employers(name), profiles(full_name)")
+        .select("id, visit_date, notes, projects(name), job_sites(name,full_address,location), employers(name), profiles(full_name)")
         .order("visit_date", { ascending: false })
         .limit(200)
       if (error) throw error
@@ -75,7 +76,14 @@ export default function SiteVisitsPage() {
                     <TableCell className="whitespace-nowrap">{new Date(r.visit_date).toLocaleDateString()}</TableCell>
                     <TableCell>{r.profiles?.full_name || "—"}</TableCell>
                     <TableCell>{r.projects?.name || "—"}</TableCell>
-                    <TableCell>{r.job_sites?.name || "—"}</TableCell>
+                    <TableCell>
+                      <div className="leading-tight">
+                        <div>{r.job_sites?.name || "—"}</div>
+                        {r.job_sites && (r.job_sites.full_address || r.job_sites.location) && (
+                          <div className="text-xs text-muted-foreground truncate max-w-[260px]">{r.job_sites.full_address || r.job_sites.location}</div>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>{r.employers?.name || "—"}</TableCell>
                     <TableCell className="max-w-[380px] truncate">{r.notes || ""}</TableCell>
                   </TableRow>
@@ -91,7 +99,7 @@ export default function SiteVisitsPage() {
         </CardContent>
       </Card>
 
-      <SiteVisitForm open={open} onOpenChange={(v) => { setOpen(v); if (!v) refetch() }} initial={editing ?? {}} />
+      <SiteVisitForm open={open} onOpenChange={(v) => { setOpen(v); if (!v) refetch() }} initial={editing ?? (projectId ? { project_id: projectId } : {})} />
     </div>
   )
 }
