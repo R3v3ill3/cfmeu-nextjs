@@ -114,9 +114,7 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
             name: row.name,
             description: row.description,
             type: row.type,
-            // @ts-ignore optional column
             sub_sectors: row.subSectors.length > 0 ? row.subSectors : null,
-            // @ts-ignore optional column
             code: row.code,
           });
           if (error && /column .* does not exist/i.test(error.message || "")) {
@@ -134,9 +132,7 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
             name: row.name,
             description: row.description,
             type: row.type,
-            // @ts-ignore optional
             sub_sectors: row.subSectors.length > 0 ? row.subSectors : null,
-            // @ts-ignore optional
             code: row.code,
           });
           if (error && /column .* does not exist/i.test(error.message || "")) {
