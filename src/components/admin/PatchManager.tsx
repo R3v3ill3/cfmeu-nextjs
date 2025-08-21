@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
 
 type Patch = { id: string; name: string; type: string; status: string }
@@ -239,6 +239,7 @@ export default function PatchManager() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Create Patch</DialogTitle>
+              <DialogDescription>Define a patch name and type.</DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
               <div>
@@ -268,6 +269,7 @@ export default function PatchManager() {
           <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Import patches from CSV</DialogTitle>
+              <DialogDescription>Upload a CSV, map its columns, and import patches with organiser links.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               {importStep === "upload" && (
@@ -303,6 +305,7 @@ export default function PatchManager() {
           <DialogContent className="max-w-3xl">
             <DialogHeader>
               <DialogTitle>Manage organisers for this patch</DialogTitle>
+              <DialogDescription>Toggle active organiser assignments and plan allocations for draft/invited users.</DialogDescription>
             </DialogHeader>
             {assignDialogPatchId && (
               <div className="space-y-6">
