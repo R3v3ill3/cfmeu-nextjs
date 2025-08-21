@@ -18,13 +18,13 @@ export const metadata: Metadata = {
   description: "Next.js App Router migrated from Vite",
   icons: {
     icon: [
-      { url: "/icon?v=2", type: "image/png" },
-      { url: "/favicon.ico?v=2", type: "image/x-icon" },
+      { url: "/favicon.svg?v=4", type: "image/svg+xml" },
+      { url: "/favicon.ico?v=4", type: "image/x-icon" }
     ],
-    apple: "/apple-icon?v=2",
-    shortcut: "/icon?v=2",
+    apple: "/favicon.svg?v=4",
+    shortcut: "/favicon.svg?v=4",
     other: [
-      { rel: "mask-icon", url: "/icon.svg?v=2", color: "#0b2a5b" },
+      { rel: "mask-icon", url: "/mask-icon.svg?v=4", color: "#000000" }
     ],
   },
 };
