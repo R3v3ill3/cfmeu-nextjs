@@ -34,25 +34,28 @@ export default function CampaignsPage() {
   })
 
   const [name, setName] = useState("")
-  const [type, setType] = useState<'compliance_blitz' | 'general' | undefined>(undefined)
+  const [type, setType] = useState<'compliance_blitz' | 'general' | ''>('')
   const [start, setStart] = useState("")
   const [end, setEnd] = useState("")
 
   const createCampaign = useMutation({
     mutationFn: async () => {
       if (!name || !type || !start || !end) throw new Error("Fill all fields")
+      const { data: userData } = await supabase.auth.getUser()
+      const createdBy = userData.user?.id ?? null
       const { error } = await supabase.from("campaigns").insert({
         name,
         type,
         start_date: start,
         end_date: end,
-        status: 'planned'
+        status: 'planned',
+        created_by: createdBy,
       })
       if (error) throw error
     },
     onSuccess: async () => {
       setName("")
-      setType(undefined)
+      setType('')
       setStart("")
       setEnd("")
       await qc.invalidateQueries({ queryKey: ["campaigns-list"] })
