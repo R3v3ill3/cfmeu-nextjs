@@ -154,7 +154,11 @@ function useProjectStats(projectId: string) {
       active.sort((a: any, b: any) => byPriority(a.name) - byPriority(b.name))
       const d = active[0]
       if (!d) return null
-      return { workerId: d.worker_id as string, name: `${d.workers?.first_name || ''} ${d.workers?.surname || ''}`.trim() }
+      const workers: any = (d as any).workers
+      const w = Array.isArray(workers) ? workers[0] : workers
+      const firstName = w?.first_name || ''
+      const surname = w?.surname || ''
+      return { workerId: d.worker_id as string, name: `${firstName} ${surname}`.trim() }
     }
   })
 
