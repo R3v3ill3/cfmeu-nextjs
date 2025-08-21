@@ -102,24 +102,28 @@ export function FiltersBar({ patchOptions, statusOptions }: FiltersBarProps) {
       }
 
       // Fallback legacy: derive from job_sites.patch; then optional projects.region
-      const { data: sites } = await (supabase as any)
-        .from("job_sites")
-        .select("id, patch")
-        .limit(2000)
       const set = new Set<string>()
-      ;(sites as any[] || []).forEach((s) => {
-        const val = (s as any).patch
-        if (typeof val === "string" && val.trim() !== "") set.add(val.trim())
-      })
-      if (set.size === 0) {
-        const { data: projects } = await (supabase as any)
-          .from("projects")
-          .select("id, region")
+      try {
+        const { data: sites } = await (supabase as any)
+          .from("job_sites")
+          .select("id, patch")
           .limit(2000)
-        ;(projects as any[] || []).forEach((p) => {
-          const val = (p as any).region
+        ;(sites as any[] || []).forEach((s) => {
+          const val = (s as any).patch
           if (typeof val === "string" && val.trim() !== "") set.add(val.trim())
         })
+      } catch {}
+      if (set.size === 0) {
+        try {
+          const { data: projects } = await (supabase as any)
+            .from("projects")
+            .select("id, region")
+            .limit(2000)
+          ;(projects as any[] || []).forEach((p) => {
+            const val = (p as any).region
+            if (typeof val === "string" && val.trim() !== "") set.add(val.trim())
+          })
+        } catch {}
       }
       return Array.from(set).sort().map((v) => ({ value: v, label: v.charAt(0).toUpperCase() + v.slice(1) }))
     }

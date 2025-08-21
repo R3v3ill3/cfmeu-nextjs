@@ -76,11 +76,15 @@ function useProjectStats(projectId: string) {
     staleTime: 30000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      // Contractors via site_contractor_trades
-      const { data: sct } = await (supabase as any)
-        .from("site_contractor_trades")
-        .select("employer_id, job_site_id")
-        .in("job_site_id", siteIds.length > 0 ? siteIds : ["-"])
+      // Contractors via site_contractor_trades (skip query if there are no sites)
+      let sct: any[] = []
+      if (siteIds.length > 0) {
+        const { data } = await (supabase as any)
+          .from("site_contractor_trades")
+          .select("employer_id, job_site_id")
+          .in("job_site_id", siteIds)
+        sct = (data as any[]) || []
+      }
 
       const employerIds = Array.from(new Set(((sct || []).map((r: any) => r.employer_id).filter(Boolean)))) as string[]
 
