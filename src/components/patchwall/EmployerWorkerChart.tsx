@@ -13,6 +13,7 @@ import { UnionRoleAssignmentModal } from "@/components/workers/UnionRoleAssignme
 import { AssignWorkersModal } from "./AssignWorkersModal";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getWorkerColorCoding } from "@/utils/workerColorCoding";
+
 import { QuickAddWorkerModal } from "@/components/workers/QuickAddWorkerModal";
 
 interface EmployerWorkerChartProps {
@@ -412,12 +413,14 @@ const roleBadge = (role: WorkerRoleLite) => (
         ) : data && data.workers.length > 0 ? (
 
           <>
+
             {autoAdjustedMsg && (
               <div className="mb-3 text-xs px-2 py-1 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-300/50">
                 {autoAdjustedMsg}
               </div>
             )}
             {/* Legend removed as per design: colours are self-evident with labels */}
+
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {filteredSortedWorkers.map((w) => {
