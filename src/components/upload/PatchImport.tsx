@@ -1,13 +1,13 @@
 import { useState, useEffect, useMemo } from "react";
-import { useSupabase } from "@/hooks/useSupabase";
+import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Alert, AlertDescription, AlertCircle } from "@/components/ui/alert";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { CheckCircle, Upload, Users } from "lucide-react";
+import { AlertCircle, CheckCircle, Upload, Users } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
 
