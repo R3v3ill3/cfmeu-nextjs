@@ -291,8 +291,21 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
     setIsImporting(true);
     const results: ImportResults = { created: 0, updated: 0, organiserLinks: 0, failed: 0, errors: [] };
 
+    try {
+      const { data: auth } = await (supabase as any).auth.getUser();
+      var createdBy = (auth as any)?.user?.id ?? null;
+    } catch {
+      var createdBy = null as any;
+    }
+
     for (const row of normalizedRows) {
       try {
+        // Require name; skip if missing
+        if (!row.name || !String(row.name).trim()) {
+          results.failed++;
+          results.errors.push("Row missing name; skipped");
+          continue;
+        }
         // Resolve existing patch by case-insensitive name only (schema does not include code)
         let existing: any = null;
         if (row.name) {
@@ -323,7 +336,7 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
           try {
             const { data, error } = await supabase
               .from("patches")
-              .insert({ name: row.name, type: row.type || "geo" } as any)
+              .insert({ name: row.name, type: row.type || "geo", created_by: createdBy } as any)
               .select("id")
               .single();
             if (error) throw error;
@@ -334,11 +347,13 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
             if (/column\s+\"?type\"?\s+does not exist/i.test(msg) || /missing column/i.test(msg)) {
               const { data, error } = await supabase
                 .from("patches")
-                .insert({ name: row.name } as any)
+                .insert({ name: row.name, created_by: createdBy } as any)
                 .select("id")
                 .single();
               if (error) throw error;
               inserted = data;
+            } else if (/new row violates row-level security policy/i.test(msg) || /violates row level security/i.test(msg)) {
+              throw new Error("Insufficient permissions to insert patches. Ensure admin role or RLS policy allows insert.");
             } else {
               throw err;
             }

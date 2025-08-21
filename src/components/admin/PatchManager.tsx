@@ -112,9 +112,11 @@ export default function PatchManager() {
   const createPatch = useMutation({
     mutationFn: async () => {
       if (!name.trim()) throw new Error("Enter a name")
+      const { data: auth } = await (supabase as any).auth.getUser()
+      const createdBy = (auth as any)?.user?.id ?? null
       const { error } = await (supabase as any)
         .from("patches")
-        .insert({ name: name.trim() })
+        .insert({ name: name.trim(), type: "geo", created_by: createdBy })
       if (error) throw error
     },
     onSuccess: () => {
