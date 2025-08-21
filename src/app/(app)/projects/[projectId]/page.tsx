@@ -141,22 +141,7 @@ export default function ProjectDetailPage() {
     () => Array.from(new Set(((contractorSummary as string[]) || []).filter(Boolean))).sort(),
     [contractorSummary]
   )
-  const { data: ebaStats } = useQuery({
-    queryKey: ["project-eba-stats", projectId, stableEmployerIds],
-    enabled: !!projectId && stableEmployerIds.length > 0,
-    staleTime: 30000,
-    refetchOnWindowFocus: false,
-    queryFn: async () => {
-      const employerIds = stableEmployerIds
-      if (!employerIds || employerIds.length === 0) return { ebaCount: 0, employerCount: 0 }
-      const { data } = await supabase
-        .from("company_eba_records")
-        .select("employer_id")
-        .in("employer_id", employerIds)
-      const ebaEmployers = new Set((data || []).map((r: any) => r.employer_id))
-      return { ebaCount: ebaEmployers.size, employerCount: employerIds.length }
-    }
-  })
+  // ebaStats will be computed after contractorRows is available lower in the file
 
   const { data: lastVisit } = useQuery({
     queryKey: ["project-last-visit", projectId],
@@ -248,6 +233,28 @@ export default function ProjectDetailPage() {
       })
 
       return deduped
+    }
+  })
+
+  // Compute EBA stats including all employers represented in contractorRows (includes head contractor)
+  const stableAllEmployerIds = useMemo(
+    () => Array.from(new Set(((contractorRows as any[]) || []).map((r: any) => r.employerId).filter(Boolean))).sort(),
+    [contractorRows]
+  )
+  const { data: ebaStats } = useQuery({
+    queryKey: ["project-eba-stats", projectId, stableAllEmployerIds],
+    enabled: !!projectId && stableAllEmployerIds.length > 0,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const employerIds = stableAllEmployerIds
+      if (!employerIds || employerIds.length === 0) return { ebaCount: 0, employerCount: 0 }
+      const { data } = await supabase
+        .from("company_eba_records")
+        .select("employer_id")
+        .in("employer_id", employerIds)
+      const ebaEmployers = new Set((data || []).map((r: any) => r.employer_id))
+      return { ebaCount: ebaEmployers.size, employerCount: employerIds.length }
     }
   })
 
@@ -478,34 +485,24 @@ export default function ProjectDetailPage() {
                   if (existingErr) throw existingErr
 
                   if (!existingPct || existingPct.length === 0) {
-                    // Derive trades from site_contractor_trades for this employer across this project's sites
-                    const siteIds = (sites as any[]).map((s: any) => s.id)
-                    let trades: string[] = []
-                    if (siteIds.length > 0) {
-                      const { data: sct } = await (supabase as any)
-                        .from('site_contractor_trades')
-                        .select('trade_type')
-                        .in('job_site_id', siteIds)
-                        .eq('employer_id', estPrompt.employerId)
-                      trades = Array.from(new Set(((sct || []) as any[]).map((r: any) => String(r.trade_type))))
-                    }
-                    const rowsToInsert = (trades.length > 0 ? trades : ['labour_hire']).map((t: string) => ({
-                      project_id: projectId,
-                      employer_id: estPrompt.employerId,
-                      trade_type: t,
-                      eba_signatory: 'not_specified',
-                      estimated_project_workforce: est,
-                    }))
+                    // Insert a single employer-level estimate row
                     await (supabase as any)
                       .from('project_contractor_trades')
-                      .insert(rowsToInsert)
+                      .insert([{ project_id: projectId, employer_id: estPrompt.employerId, trade_type: 'labour_hire', eba_signatory: 'not_specified', estimated_project_workforce: est }])
                   } else {
-                    // Update all existing rows for this employer on this project
+                    // Zero existing rows to avoid double counting, then set one row to the estimate
                     await (supabase as any)
                       .from('project_contractor_trades')
-                      .update({ estimated_project_workforce: est })
+                      .update({ estimated_project_workforce: 0 })
                       .eq('project_id', projectId)
                       .eq('employer_id', estPrompt.employerId)
+                    const firstId = (existingPct as any[])[0]?.id
+                    if (firstId) {
+                      await (supabase as any)
+                        .from('project_contractor_trades')
+                        .update({ estimated_project_workforce: est })
+                        .eq('id', firstId)
+                    }
                   }
                   setSelectedEmployerId(estPrompt.employerId)
                 } catch (e) {
