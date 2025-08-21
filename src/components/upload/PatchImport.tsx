@@ -36,9 +36,10 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
   const [isImporting, setIsImporting] = useState(false);
   const [preview, setPreview] = useState<any[]>([]);
   const [organisers, setOrganisers] = useState<Array<{ id: string; full_name: string; email: string | null }>>([]);
+  const [pendingOrganisers, setPendingOrganisers] = useState<Array<{ id: string; full_name: string | null; email: string | null; status: string }>>([]);
   const [resolverOpen, setResolverOpen] = useState(false);
   const [nameToOrganiserId, setNameToOrganiserId] = useState<Record<string, string>>({});
-  const [pendingNewOrganisers, setPendingNewOrganisers] = useState<Record<string, { full_name: string; email: string; created?: boolean }>>({});
+  const [pendingNewOrganisers, setPendingNewOrganisers] = useState<Record<string, { full_name: string; email: string; created?: boolean; existingPendingId?: string }>>({});
   const [resolverSearch, setResolverSearch] = useState<Record<string, string>>({});
   const { toast } = useToast();
 
@@ -68,6 +69,25 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
       }
     };
     load();
+  }, []);
+
+  useEffect(() => {
+    const loadPending = async () => {
+      try {
+        const { data, error } = await (supabase as any)
+          .from("pending_users")
+          .select("id,email,full_name,status,role")
+          .eq("role", "organiser")
+          .in("status", ["draft", "invited"]) 
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+        setPendingOrganisers(((data || []) as any[]).map((r: any) => ({ id: r.id, email: r.email, full_name: r.full_name, status: r.status })));
+      } catch (e) {
+        console.warn("Failed to load pending organisers for resolver", e);
+        setPendingOrganisers([]);
+      }
+    };
+    loadPending();
   }, []);
 
   // Normalize rows into a consistent structure for preview and import
@@ -131,8 +151,17 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
       .slice(0, 10);
   };
 
+  const suggestPendingMatches = (query: string) => {
+    const q = String(query).toLowerCase();
+    return pendingOrganisers
+      .filter((o) => (o.full_name || "").toLowerCase().includes(q) || (o.email || "").toLowerCase().includes(q))
+      .slice(0, 10);
+  };
+
   const handleResolverConfirm = async () => {
     // Create pending users for any entries marked for creation
+    const { data: me } = await (supabase as any).auth.getUser();
+    const createdBy = (me as any)?.user?.id ?? null;
     for (const [label, info] of Object.entries(pendingNewOrganisers)) {
       if (!info.full_name) continue;
       const email = (info.email && info.email.trim()) ? info.email.trim() : inferDefaultEmail(info.full_name)
@@ -143,14 +172,21 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
         const { data: existing } = await (supabase as any)
           .from("pending_users")
           .select("id")
-          .eq("email", email)
+          .ilike("email", email)
           .eq("role", "organiser")
           .maybeSingle();
         if (!existing) {
           const { error } = await (supabase as any)
             .from("pending_users")
-            .insert({ email, full_name: info.full_name, role: "organiser", status: "draft" });
-          if (error) throw error;
+            .insert({ email: String(email).toLowerCase(), full_name: info.full_name, role: "organiser", status: "draft", created_by: createdBy });
+          if (error) {
+            const message = (error as any)?.message || "";
+            if (/duplicate/i.test(message) || /unique/i.test(message)) {
+              // Treat duplicates as already created
+            } else {
+              throw error;
+            }
+          }
         }
         // Mark as created in local state so it is treated as resolved
         setPendingNewOrganisers((prev) => ({ ...prev, [label]: { ...info, created: true } }));
@@ -170,18 +206,27 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
       return;
     }
     try {
+      const { data: me } = await (supabase as any).auth.getUser();
+      const createdBy = (me as any)?.user?.id ?? null;
       // Skip insert if already exists
       const { data: existing } = await (supabase as any)
         .from("pending_users")
         .select("id")
-        .eq("email", (info.email && info.email.trim()) ? info.email.trim() : inferDefaultEmail(info.full_name))
+        .ilike("email", (info.email && info.email.trim()) ? info.email.trim() : inferDefaultEmail(info.full_name))
         .eq("role", "organiser")
         .maybeSingle();
       if (!existing) {
         const { error } = await (supabase as any)
           .from("pending_users")
-          .insert({ email: (info.email && info.email.trim()) ? info.email.trim() : inferDefaultEmail(info.full_name), full_name: info.full_name, role: "organiser", status: "draft" });
-        if (error) throw error;
+          .insert({ email: String((info.email && info.email.trim()) ? info.email.trim() : inferDefaultEmail(info.full_name)).toLowerCase(), full_name: info.full_name, role: "organiser", status: "draft", created_by: createdBy });
+        if (error) {
+          const message = (error as any)?.message || "";
+          if (/duplicate/i.test(message) || /unique/i.test(message)) {
+            // ignore; consider created
+          } else {
+            throw error;
+          }
+        }
       }
       setPendingNewOrganisers((prev) => ({ ...prev, [label]: { ...info, created: true } }));
       toast({ title: "Draft organiser created", description: `${info.full_name} (${info.email || inferDefaultEmail(info.full_name)})` });
@@ -214,12 +259,23 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
     if (!info || !info.full_name || !info.created) return;
     const email = (info.email && info.email.trim()) ? info.email.trim() : inferDefaultEmail(info.full_name);
     if (!email) return;
-    const { data: pending } = await (supabase as any)
-      .from("pending_users")
-      .select("id,assigned_patch_ids")
-      .eq("email", email)
-      .eq("role", "organiser")
-      .maybeSingle();
+    let pending: any = null;
+    if (info.existingPendingId) {
+      const { data } = await (supabase as any)
+        .from("pending_users")
+        .select("id,assigned_patch_ids")
+        .eq("id", info.existingPendingId)
+        .maybeSingle();
+      pending = data;
+    } else {
+      const { data } = await (supabase as any)
+        .from("pending_users")
+        .select("id,assigned_patch_ids")
+        .ilike("email", email)
+        .eq("role", "organiser")
+        .maybeSingle();
+      pending = data;
+    }
     if (!pending) return;
     const current = new Set<string>((pending as any).assigned_patch_ids || []);
     if (current.has(patchId)) return;
@@ -262,14 +318,32 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
           patchId = (data as any).id;
           results.updated++;
         } else {
-          // Insert only columns that exist in schema
-          const { data, error } = await supabase
-            .from("patches")
-            .insert({ name: row.name })
-            .select("id")
-            .single();
-          if (error) throw error;
-          patchId = (data as any).id;
+          // Insert, prefer including type if the column exists in schema
+          let inserted: any = null;
+          try {
+            const { data, error } = await supabase
+              .from("patches")
+              .insert({ name: row.name, type: row.type || "geo" } as any)
+              .select("id")
+              .single();
+            if (error) throw error;
+            inserted = data;
+          } catch (err: any) {
+            const msg = err?.message || "";
+            // Fallback if type column does not exist in target schema
+            if (/column\s+\"?type\"?\s+does not exist/i.test(msg) || /missing column/i.test(msg)) {
+              const { data, error } = await supabase
+                .from("patches")
+                .insert({ name: row.name } as any)
+                .select("id")
+                .single();
+              if (error) throw error;
+              inserted = data;
+            } else {
+              throw err;
+            }
+          }
+          patchId = (inserted as any).id;
           results.created++;
         }
 
@@ -441,6 +515,30 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
                                 {suggestMatches(resolverSearch[label] ?? label).length === 0 && (
                                   <div className="px-3 py-2 text-xs text-muted-foreground">No matches</div>
                                 )}
+                              <div className="px-3 py-1 text-xs text-muted-foreground border-t">Draft/Invited</div>
+                              {suggestPendingMatches(resolverSearch[label] ?? label).map((p) => {
+                                const selectedPending = Boolean(pendingNewOrganisers[label]?.created && (pendingNewOrganisers[label]?.email || "").toLowerCase() === (p.email || "").toLowerCase());
+                                return (
+                                  <button
+                                    key={`pending-${p.id}`}
+                                    type="button"
+                                    className={`w-full text-left px-3 py-2 text-sm hover:bg-accent ${selectedPending ? "bg-accent" : ""}`}
+                                    onClick={() => {
+                                      setNameToOrganiserId((prev) => {
+                                        const clone = { ...prev } as any;
+                                        delete clone[label];
+                                        return clone;
+                                      });
+                                      setPendingNewOrganisers((prev) => ({
+                                        ...prev,
+                                        [label]: { full_name: p.full_name || String(label), email: p.email || inferDefaultEmail(String(label)), created: true, existingPendingId: p.id }
+                                      }));
+                                    }}
+                                  >
+                                    {(p.full_name || p.email || label)} {p.email ? `(${p.email})` : ""} {p.status ? `• ${p.status}` : ""}
+                                  </button>
+                                );
+                              })}
                               </div>
                             </div>
                           </div>
