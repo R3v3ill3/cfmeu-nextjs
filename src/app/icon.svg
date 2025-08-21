@@ -20,4 +20,8 @@
   <g transform="translate(0,88)"><use href="#star8"/></g>
   <g transform="translate(-88,0)"><use href="#star8"/></g>
   <g transform="translate(88,0)"><use href="#star8"/></g>
+  <!-- Center star for Eureka Stockade -->
+  <g transform="translate(0,0)">
+    <polygon class="star" points="128,120 136,128 128,136 120,128"/>
+  </g>
 </svg>
