@@ -76,10 +76,9 @@ export function usePatchDashboard(patchId?: string) {
         }
       }
       if (sites.length === 0) {
-        // Fallback: direct query of job_sites, optionally filtered by legacy patch string
-        let sitesQuery: any = supabase.from('job_sites').select('id,name,location,project_id,patch')
+        // Fallback: direct query of job_sites only
+        let sitesQuery: any = supabase.from('job_sites').select('id,name,location,project_id')
         if (scopedSites.length > 0) sitesQuery = sitesQuery.in('id', scopedSites)
-        if (patchId) sitesQuery = sitesQuery.eq('patch', patchId)
         const { data: sitesRaw, error: sitesErr } = await sitesQuery
         if (sitesErr) throw sitesErr
         sites = (sitesRaw as any[]) || []

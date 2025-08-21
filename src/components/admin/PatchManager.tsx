@@ -13,12 +13,11 @@ import { supabase } from "@/integrations/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
 
-type Patch = { id: string; name: string; type: string; status: string }
+type Patch = { id: string; name: string; status: string | null }
 type ProfileUser = { id: string; full_name: string | null; email: string | null; role: string | null; is_active: boolean | null }
 type PendingUser = { id: string; email: string; full_name: string | null; role: string; status: string; assigned_patch_ids?: string[] | null }
 
@@ -27,7 +26,6 @@ export default function PatchManager() {
   const { toast } = useToast()
   const [createOpen, setCreateOpen] = useState(false)
   const [name, setName] = useState("")
-  const [type, setType] = useState<"geo" | "trade">("geo")
   const [importOpen, setImportOpen] = useState(false)
   const [importStep, setImportStep] = useState<"upload" | "map" | "import">("upload")
   const [csv, setCsv] = useState<{ headers: string[]; rows: Record<string, any>[]; filename?: string } | null>(null)
@@ -40,7 +38,7 @@ export default function PatchManager() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("patches")
-        .select("id,name,type,status")
+        .select("id,name,status")
         .order("name")
       if (error) throw error
       return (data || []) as Patch[]
@@ -93,18 +91,15 @@ export default function PatchManager() {
 
   const createPatch = useMutation({
     mutationFn: async () => {
-      const { data, error } = await (supabase as any)
+      if (!name.trim()) throw new Error("Enter a name")
+      const { error } = await (supabase as any)
         .from("patches")
-        .insert({ name, type })
-        .select("id")
-        .single()
+        .insert({ name: name.trim() })
       if (error) throw error
-      return data as { id: string }
     },
     onSuccess: () => {
       setCreateOpen(false)
       setName("")
-      setType("geo")
       qc.invalidateQueries({ queryKey: ["admin-patches"] })
       toast({ title: "Patch created" })
     },
@@ -193,10 +188,7 @@ export default function PatchManager() {
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
-                <TableHead>Type</TableHead>
                 <TableHead>Status</TableHead>
-                
-                
                 <TableHead>Organisers</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -205,10 +197,7 @@ export default function PatchManager() {
               {(patches as Patch[]).map(p => (
                 <TableRow key={p.id}>
                   <TableCell className="font-medium">{p.name}</TableCell>
-                  <TableCell>{p.type}</TableCell>
                   <TableCell>{p.status}</TableCell>
-                  
-                  
                   <TableCell className="max-w-[280px]">
                     <div className="flex flex-wrap gap-1">
                       {(assignmentsByPatch as Record<string, string[]>)[p.id]?.map(orgId => {
@@ -239,24 +228,13 @@ export default function PatchManager() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Create Patch</DialogTitle>
-              <DialogDescription>Define a patch name and type.</DialogDescription>
+              <DialogDescription>Define a patch name.</DialogDescription>
+
             </DialogHeader>
             <div className="space-y-3">
               <div>
                 <div className="text-sm mb-1">Name</div>
                 <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. North East" />
-              </div>
-              <div>
-                <div className="text-sm mb-1">Type</div>
-                <Select value={type} onValueChange={(v: any) => setType(v)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="geo">Geographic</SelectItem>
-                    <SelectItem value="trade">Trade</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
               <div className="flex justify-end">
                 <Button onClick={() => createPatch.mutate()} disabled={!name.trim()}>Create</Button>

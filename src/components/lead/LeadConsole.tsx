@@ -29,7 +29,7 @@ export default function LeadConsole() {
     queryFn: async () => {
       const { data } = await (supabase as any)
         .from('lead_organiser_patch_assignments')
-        .select('patches:patch_id(id,name,type)')
+        .select('patches:patch_id(id,name)')
         .is('effective_to', null)
         .eq('lead_organiser_id', (me as any)?.id)
       return (((data as any[]) || []).map(r => r.patches).filter(Boolean))
