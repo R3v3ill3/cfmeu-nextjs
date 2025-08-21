@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Upload, CheckCircle, AlertCircle, Users } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
+import { useState, useEffect, useMemo } from "react";
+import { useSupabase } from "@/hooks/useSupabase";
+import { useToast } from "@/components/ui/use-toast";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertCircle } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { CheckCircle, Upload, Users } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
 
@@ -41,6 +41,16 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
   const [pendingNewOrganisers, setPendingNewOrganisers] = useState<Record<string, { full_name: string; email: string; created?: boolean }>>({});
   const [resolverSearch, setResolverSearch] = useState<Record<string, string>>({});
   const { toast } = useToast();
+
+  const inferDefaultEmail = (fullName: string): string => {
+    const parts = String(fullName || '').trim().split(/\s+/)
+    if (parts.length === 0) return ''
+    const first = parts[0] || ''
+    const last = parts[parts.length - 1] || ''
+    const local = `${first.slice(0,1)}${last}`.toLowerCase().replace(/[^a-z0-9]/g, '')
+    if (!local) return ''
+    return `${local}@testing.org`
+  }
 
   useEffect(() => {
     const load = async () => {
@@ -124,20 +134,22 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
   const handleResolverConfirm = async () => {
     // Create pending users for any entries marked for creation
     for (const [label, info] of Object.entries(pendingNewOrganisers)) {
-      if (!info.full_name || !info.email) continue;
+      if (!info.full_name) continue;
+      const email = (info.email && info.email.trim()) ? info.email.trim() : inferDefaultEmail(info.full_name)
+      if (!email) continue;
       if (info.created) continue; // already created via the button
       try {
         // Avoid duplicate drafts by checking existing pending/invited by email
         const { data: existing } = await (supabase as any)
           .from("pending_users")
           .select("id")
-          .eq("email", info.email)
+          .eq("email", email)
           .eq("role", "organiser")
           .maybeSingle();
         if (!existing) {
           const { error } = await (supabase as any)
             .from("pending_users")
-            .insert({ email: info.email, full_name: info.full_name, role: "organiser", status: "draft" });
+            .insert({ email, full_name: info.full_name, role: "organiser", status: "draft" });
           if (error) throw error;
         }
         // Mark as created in local state so it is treated as resolved
@@ -153,8 +165,8 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
 
   const createDraftForLabel = async (label: string) => {
     const info = pendingNewOrganisers[label];
-    if (!info || !info.full_name || !info.email) {
-      toast({ title: "Missing details", description: "Enter full name and email to create a draft organiser.", variant: "destructive" });
+    if (!info || !info.full_name) {
+      toast({ title: "Missing details", description: "Enter full name to create a draft organiser.", variant: "destructive" });
       return;
     }
     try {
@@ -162,17 +174,17 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
       const { data: existing } = await (supabase as any)
         .from("pending_users")
         .select("id")
-        .eq("email", info.email)
+        .eq("email", (info.email && info.email.trim()) ? info.email.trim() : inferDefaultEmail(info.full_name))
         .eq("role", "organiser")
         .maybeSingle();
       if (!existing) {
         const { error } = await (supabase as any)
           .from("pending_users")
-          .insert({ email: info.email, full_name: info.full_name, role: "organiser", status: "draft" });
+          .insert({ email: (info.email && info.email.trim()) ? info.email.trim() : inferDefaultEmail(info.full_name), full_name: info.full_name, role: "organiser", status: "draft" });
         if (error) throw error;
       }
       setPendingNewOrganisers((prev) => ({ ...prev, [label]: { ...info, created: true } }));
-      toast({ title: "Draft organiser created", description: `${info.full_name} (${info.email})` });
+      toast({ title: "Draft organiser created", description: `${info.full_name} (${info.email || inferDefaultEmail(info.full_name)})` });
     } catch (e: any) {
       toast({ title: "Failed to create draft", description: e?.message || String(e), variant: "destructive" });
     }
@@ -195,6 +207,28 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
     } catch {
       return false;
     }
+  };
+
+  const planPendingAssignmentByLabel = async (label: string, patchId: string) => {
+    const info = pendingNewOrganisers[label];
+    if (!info || !info.full_name || !info.created) return;
+    const email = (info.email && info.email.trim()) ? info.email.trim() : inferDefaultEmail(info.full_name);
+    if (!email) return;
+    const { data: pending } = await (supabase as any)
+      .from("pending_users")
+      .select("id,assigned_patch_ids")
+      .eq("email", email)
+      .eq("role", "organiser")
+      .maybeSingle();
+    if (!pending) return;
+    const current = new Set<string>((pending as any).assigned_patch_ids || []);
+    if (current.has(patchId)) return;
+    current.add(patchId);
+    const next = Array.from(current);
+    await (supabase as any)
+      .from("pending_users")
+      .update({ assigned_patch_ids: next })
+      .eq("id", (pending as any).id);
   };
 
   const importRows = async () => {
@@ -245,10 +279,14 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
         if (resolved1) {
           const ok = await upsertOrganiserLink(resolved1, patchId);
           if (ok) results.organiserLinks++;
+        } else if (row.organiser1) {
+          await planPendingAssignmentByLabel(String(row.organiser1).trim(), patchId);
         }
         if (resolved2 && resolved2 !== resolved1) {
           const ok = await upsertOrganiserLink(resolved2, patchId);
           if (ok) results.organiserLinks++;
+        } else if (row.organiser2) {
+          await planPendingAssignmentByLabel(String(row.organiser2).trim(), patchId);
         }
       } catch (e: any) {
         results.failed++;
@@ -441,7 +479,7 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                disabled={!newInfo.full_name?.trim() || !newInfo.email?.trim() || Boolean(newInfo.created)}
+                                disabled={!newInfo.full_name?.trim() || Boolean(newInfo.created)}
                                 onClick={() => createDraftForLabel(label)}
                               >
                                 {newInfo.created ? "Draft created" : "Create draft organiser"}

@@ -32,6 +32,7 @@ export default function PatchManager() {
   const [mappedRows, setMappedRows] = useState<Record<string, any>[]>([])
   const [assignDialogPatchId, setAssignDialogPatchId] = useState<string | null>(null)
   const [draftDialogOpen, setDraftDialogOpen] = useState(false)
+  const [selectedDraftIds, setSelectedDraftIds] = useState<Set<string>>(new Set())
 
   const { data: patches = [], isLoading } = useQuery({
     queryKey: ["admin-patches"],
@@ -70,6 +71,24 @@ export default function PatchManager() {
       if (error) throw error
       return (data || []) as PendingUser[]
     }
+  })
+
+  const deleteDrafts = useMutation({
+    mutationFn: async (ids: string[]) => {
+      if (!ids.length) return
+      const { error } = await (supabase as any)
+        .from("pending_users")
+        .delete()
+        .in("id", ids)
+        .eq("status", "draft")
+      if (error) throw error
+    },
+    onSuccess: () => {
+      setSelectedDraftIds(new Set())
+      refetchPending()
+      toast({ title: "Draft organisers deleted" })
+    },
+    onError: (e) => toast({ title: "Failed to delete", description: (e as any)?.message || String(e), variant: "destructive" })
   })
 
   const { data: assignmentsByPatch = {} } = useQuery({
@@ -280,7 +299,7 @@ export default function PatchManager() {
         </Dialog>
 
         <Dialog open={!!assignDialogPatchId} onOpenChange={(o) => { if (!o) closeAssignDialog() }}>
-          <DialogContent className="max-w-3xl">
+          <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Manage organisers for this patch</DialogTitle>
               <DialogDescription>Toggle active organiser assignments and plan allocations for draft/invited users.</DialogDescription>
@@ -326,15 +345,26 @@ export default function PatchManager() {
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <div className="text-sm font-medium">Draft and invited organisers</div>
-                    <Button size="sm" onClick={() => setDraftDialogOpen(true)}><Plus className="h-4 w-4 mr-1" />Add draft organiser</Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={Array.from(selectedDraftIds).length === 0}
+                        onClick={() => deleteDrafts.mutate(Array.from(selectedDraftIds))}
+                      >
+                        Delete selected
+                      </Button>
+                      <Button size="sm" onClick={() => setDraftDialogOpen(true)}><Plus className="h-4 w-4 mr-1" />Add draft organiser</Button>
+                    </div>
                   </div>
-                  <div className="rounded border">
+                  <div className="rounded border max-h-80 overflow-y-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead>Organiser</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead className="text-right">Planned assignment</TableHead>
+                          <TableHead className="text-right">Select</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -350,6 +380,19 @@ export default function PatchManager() {
                                 <Checkbox
                                   checked={planned}
                                   onCheckedChange={(v) => updatePendingAllocations.mutate({ pendingId: pu.id, patchId: assignDialogPatchId!, add: Boolean(v) })}
+                                />
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Checkbox
+                                  checked={selectedDraftIds.has(pu.id)}
+                                  disabled={pu.status !== 'draft'}
+                                  onCheckedChange={(v) => {
+                                    setSelectedDraftIds(prev => {
+                                      const next = new Set(prev)
+                                      if (Boolean(v)) next.add(pu.id); else next.delete(pu.id)
+                                      return next
+                                    })
+                                  }}
                                 />
                               </TableCell>
                             </TableRow>
