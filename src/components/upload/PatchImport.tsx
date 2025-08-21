@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
 
 type ImportResults = {
   created: number;
@@ -39,6 +39,7 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
   const [resolverOpen, setResolverOpen] = useState(false);
   const [nameToOrganiserId, setNameToOrganiserId] = useState<Record<string, string>>({});
   const [pendingNewOrganisers, setPendingNewOrganisers] = useState<Record<string, { full_name: string; email: string }>>({});
+  const [resolverSearch, setResolverSearch] = useState<Record<string, string>>({});
   const { toast } = useToast();
 
   useEffect(() => {
@@ -249,7 +250,7 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
                 <Alert>
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
-                    {unresolvedOrganiserNames.length} organiser name(s) require resolution. Please match to an existing organiser or create a new draft organiser.
+                    {unresolvedOrganiserNames.length} organiser name(s) are unresolved. You can resolve them now or proceed; unresolved names will be skipped when linking organisers.
                     <Button variant="outline" size="sm" className="ml-2" onClick={() => setResolverOpen(true)}>Resolve organisers</Button>
                   </AlertDescription>
                 </Alert>
@@ -302,7 +303,7 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
 
               <div className="flex gap-2">
                 <Button variant="outline" onClick={onBack}>Back to Mapping</Button>
-                <Button onClick={importRows} disabled={isImporting || unresolvedOrganiserNames.length > 0} className="ml-auto">
+                <Button onClick={importRows} disabled={isImporting} className="ml-auto">
                   <CheckCircle className="h-4 w-4 mr-2" />
                   {isImporting ? "Importing..." : `Import ${csvData.length} Patches`}
                 </Button>
@@ -323,7 +324,6 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
             ) : (
               <div className="space-y-4">
                 {unresolvedOrganiserNames.map((label) => {
-                  const suggestions = suggestMatches(label);
                   const selectedExisting = nameToOrganiserId[label] || "";
                   const newInfo = pendingNewOrganisers[label] || { full_name: label, email: "" };
                   return (
@@ -336,26 +336,35 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           <div>
                             <div className="text-xs text-muted-foreground mb-1">Match existing</div>
-                            <Select
-                              value={selectedExisting}
-                              onValueChange={(v) => {
-                                setNameToOrganiserId((prev) => ({ ...prev, [label]: v }));
-                                setPendingNewOrganisers((prev) => {
-                                  const clone = { ...prev } as any;
-                                  delete clone[label];
-                                  return clone;
-                                });
-                              }}
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder={suggestions.length ? `Suggest: ${suggestions[0].full_name}` : "Search by name/email"} />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {suggestions.map((o) => (
-                                  <SelectItem key={o.id} value={o.id}>{o.full_name} {o.email ? `(${o.email})` : ""}</SelectItem>
+                            <div className="space-y-2">
+                              <Input
+                                placeholder="Search by name or email"
+                                value={resolverSearch[label] ?? ""}
+                                onChange={(e) => setResolverSearch((prev) => ({ ...prev, [label]: e.target.value }))}
+                              />
+                              <div className="rounded border max-h-40 overflow-y-auto">
+                                {suggestMatches(resolverSearch[label] ?? label).map((o) => (
+                                  <button
+                                    key={o.id}
+                                    type="button"
+                                    className={`w-full text-left px-3 py-2 text-sm hover:bg-accent ${selectedExisting === o.id ? "bg-accent" : ""}`}
+                                    onClick={() => {
+                                      setNameToOrganiserId((prev) => ({ ...prev, [label]: o.id }));
+                                      setPendingNewOrganisers((prev) => {
+                                        const clone = { ...prev } as any;
+                                        delete clone[label];
+                                        return clone;
+                                      });
+                                    }}
+                                  >
+                                    {o.full_name} {o.email ? `(${o.email})` : ""}
+                                  </button>
                                 ))}
-                              </SelectContent>
-                            </Select>
+                                {suggestMatches(resolverSearch[label] ?? label).length === 0 && (
+                                  <div className="px-3 py-2 text-xs text-muted-foreground">No matches</div>
+                                )}
+                              </div>
+                            </div>
                           </div>
                           <div>
                             <div className="text-xs text-muted-foreground mb-1">Or create new draft</div>
