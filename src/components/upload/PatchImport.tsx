@@ -6,6 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Upload, CheckCircle, AlertCircle, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type ImportResults = {
   created: number;
@@ -32,6 +36,9 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
   const [isImporting, setIsImporting] = useState(false);
   const [preview, setPreview] = useState<any[]>([]);
   const [organisers, setOrganisers] = useState<Array<{ id: string; full_name: string; email: string | null }>>([]);
+  const [resolverOpen, setResolverOpen] = useState(false);
+  const [nameToOrganiserId, setNameToOrganiserId] = useState<Record<string, string>>({});
+  const [pendingNewOrganisers, setPendingNewOrganisers] = useState<Record<string, { full_name: string; email: string }>>({});
   const { toast } = useToast();
 
   useEffect(() => {
@@ -66,6 +73,55 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
   useEffect(() => {
     setPreview(normalizedRows.slice(0, 10));
   }, [normalizedRows]);
+
+  // Collect unique organiser strings from the CSV
+  const uniqueOrganiserNames = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of normalizedRows) {
+      if (r.organiser1 && String(r.organiser1).trim()) set.add(String(r.organiser1).trim());
+      if (r.organiser2 && String(r.organiser2).trim()) set.add(String(r.organiser2).trim());
+    }
+    return Array.from(set);
+  }, [normalizedRows]);
+
+  // Pre-resolve obvious matches
+  useEffect(() => {
+    const map: Record<string, string> = {};
+    uniqueOrganiserNames.forEach((name) => {
+      const id = findOrganiserId(name);
+      if (id) map[name] = id;
+    });
+    setNameToOrganiserId((prev) => ({ ...map, ...prev }));
+  }, [uniqueOrganiserNames]);
+
+  const unresolvedOrganiserNames = useMemo(() => {
+    return uniqueOrganiserNames.filter((name) => !nameToOrganiserId[name]);
+  }, [uniqueOrganiserNames, nameToOrganiserId]);
+
+  const suggestMatches = (query: string) => {
+    const q = String(query).toLowerCase();
+    return organisers
+      .filter((o) => (o.full_name || "").toLowerCase().includes(q) || (o.email || "").toLowerCase().includes(q))
+      .slice(0, 10);
+  };
+
+  const handleResolverConfirm = async () => {
+    // Create pending users for any entries marked for creation
+    for (const [label, info] of Object.entries(pendingNewOrganisers)) {
+      if (!info.full_name || !info.email) continue;
+      try {
+        const { error } = await (supabase as any)
+          .from("pending_users")
+          .insert({ email: info.email, full_name: info.full_name, role: "organiser", status: "draft" });
+        if (error) throw error;
+      } catch (e: any) {
+        toast({ title: "Failed to create pending organiser", description: e?.message || String(e), variant: "destructive" });
+        return;
+      }
+    }
+    setResolverOpen(false);
+    toast({ title: "Organiser resolution saved", description: "New organisers drafted where needed." });
+  };
 
   const findOrganiserId = (value: any): string | null => {
     if (!value) return null;
@@ -143,15 +199,15 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
           results.created++;
         }
 
-        // Link organisers
-        const org1Id = findOrganiserId(row.organiser1);
-        const org2Id = findOrganiserId(row.organiser2);
-        if (org1Id) {
-          const ok = await upsertOrganiserLink(org1Id, patchId);
+        // Link organisers (resolved mapping preferred)
+        const resolved1 = nameToOrganiserId[String(row.organiser1 || "")] || findOrganiserId(row.organiser1);
+        const resolved2 = nameToOrganiserId[String(row.organiser2 || "")] || findOrganiserId(row.organiser2);
+        if (resolved1) {
+          const ok = await upsertOrganiserLink(resolved1, patchId);
           if (ok) results.organiserLinks++;
         }
-        if (org2Id && org2Id !== org1Id) {
-          const ok = await upsertOrganiserLink(org2Id, patchId);
+        if (resolved2 && resolved2 !== resolved1) {
+          const ok = await upsertOrganiserLink(resolved2, patchId);
           if (ok) results.organiserLinks++;
         }
       } catch (e: any) {
@@ -189,6 +245,16 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
             </Alert>
           ) : (
             <>
+              {unresolvedOrganiserNames.length > 0 && (
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    {unresolvedOrganiserNames.length} organiser name(s) require resolution. Please match to an existing organiser or create a new draft organiser.
+                    <Button variant="outline" size="sm" className="ml-2" onClick={() => setResolverOpen(true)}>Resolve organisers</Button>
+                  </AlertDescription>
+                </Alert>
+              )}
+
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
                 <div className="space-y-1">
                   <div className="text-2xl font-bold">{csvData.length}</div>
@@ -213,28 +279,30 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
 
               <div className="space-y-2">
                 <h4 className="font-medium">Preview (first 10 rows)</h4>
-                <div className="grid grid-cols-1 gap-2">
-                  {preview.map((r, i) => (
-                    <div key={i} className="p-3 rounded border text-sm">
-                      <div className="flex items-center justify-between">
-                        <div className="font-medium">{r.code ?? "—"} — {r.name ?? "(no name)"}</div>
-                        <Badge variant="secondary">{r.type}</Badge>
+                <ScrollArea className="max-h-80">
+                  <div className="grid grid-cols-1 gap-2 pr-2">
+                    {preview.map((r, i) => (
+                      <div key={i} className="p-3 rounded border text-sm">
+                        <div className="flex items-center justify-between">
+                          <div className="font-medium">{r.code ?? "—"} — {r.name ?? "(no name)"}</div>
+                          <Badge variant="secondary">{r.type}</Badge>
+                        </div>
+                        {r.description && <div className="text-muted-foreground">{r.description}</div>}
+                        {r.subSectors?.length > 0 && (
+                          <div className="text-xs text-muted-foreground mt-1">Sub-sectors: {r.subSectors.join(", ")}</div>
+                        )}
+                        {(r.organiser1 || r.organiser2) && (
+                          <div className="text-xs text-muted-foreground mt-1">Organisers: {[r.organiser1, r.organiser2].filter(Boolean).join(", ")}</div>
+                        )}
                       </div>
-                      {r.description && <div className="text-muted-foreground">{r.description}</div>}
-                      {r.subSectors?.length > 0 && (
-                        <div className="text-xs text-muted-foreground mt-1">Sub-sectors: {r.subSectors.join(", ")}</div>
-                      )}
-                      {(r.organiser1 || r.organiser2) && (
-                        <div className="text-xs text-muted-foreground mt-1">Organisers: {[r.organiser1, r.organiser2].filter(Boolean).join(", ")}</div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                </ScrollArea>
               </div>
 
               <div className="flex gap-2">
                 <Button variant="outline" onClick={onBack}>Back to Mapping</Button>
-                <Button onClick={importRows} disabled={isImporting} className="ml-auto">
+                <Button onClick={importRows} disabled={isImporting || unresolvedOrganiserNames.length > 0} className="ml-auto">
                   <CheckCircle className="h-4 w-4 mr-2" />
                   {isImporting ? "Importing..." : `Import ${csvData.length} Patches`}
                 </Button>
@@ -243,7 +311,97 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={resolverOpen} onOpenChange={setResolverOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Resolve organisers</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {unresolvedOrganiserNames.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No unresolved organisers.</div>
+            ) : (
+              <div className="space-y-4">
+                {unresolvedOrganiserNames.map((label) => {
+                  const suggestions = suggestMatches(label);
+                  const selectedExisting = nameToOrganiserId[label] || "";
+                  const newInfo = pendingNewOrganisers[label] || { full_name: label, email: "" };
+                  return (
+                    <Card key={label}>
+                      <CardHeader>
+                        <CardTitle className="text-base">{label}</CardTitle>
+                        <CardDescription>Match to an existing organiser or create a new draft organiser</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div>
+                            <div className="text-xs text-muted-foreground mb-1">Match existing</div>
+                            <Select
+                              value={selectedExisting}
+                              onValueChange={(v) => {
+                                setNameToOrganiserId((prev) => ({ ...prev, [label]: v }));
+                                setPendingNewOrganisers((prev) => {
+                                  const clone = { ...prev } as any;
+                                  delete clone[label];
+                                  return clone;
+                                });
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder={suggestions.length ? `Suggest: ${suggestions[0].full_name}` : "Search by name/email"} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {suggestions.map((o) => (
+                                  <SelectItem key={o.id} value={o.id}>{o.full_name} {o.email ? `(${o.email})` : ""}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <div className="text-xs text-muted-foreground mb-1">Or create new draft</div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                              <Input
+                                placeholder="Full name"
+                                value={newInfo.full_name}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  setPendingNewOrganisers((prev) => ({ ...prev, [label]: { ...newInfo, full_name: v } }));
+                                  setNameToOrganiserId((prev) => {
+                                    const clone = { ...prev } as any;
+                                    delete clone[label];
+                                    return clone;
+                                  });
+                                }}
+                              />
+                              <Input
+                                placeholder="Email"
+                                value={newInfo.email}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  setPendingNewOrganisers((prev) => ({ ...prev, [label]: { ...newInfo, email: v } }));
+                                  setNameToOrganiserId((prev) => {
+                                    const clone = { ...prev } as any;
+                                    delete clone[label];
+                                    return clone;
+                                  });
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setResolverOpen(false)}>Close</Button>
+              <Button onClick={handleResolverConfirm}>Save</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-

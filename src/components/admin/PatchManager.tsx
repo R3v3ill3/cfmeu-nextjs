@@ -265,7 +265,7 @@ export default function PatchManager() {
         </Dialog>
 
         <Dialog open={importOpen} onOpenChange={(o) => { setImportOpen(o); if (!o) resetImport() }}>
-          <DialogContent className="max-w-4xl">
+          <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Import patches from CSV</DialogTitle>
             </DialogHeader>
@@ -278,6 +278,7 @@ export default function PatchManager() {
                   parsedCSV={csv}
                   onBack={() => setImportStep("upload")}
                   onMappingComplete={onMappingComplete}
+                  defaultTable="patches"
                 />
               )}
               {importStep === "import" && csv && (

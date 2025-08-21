@@ -26,6 +26,7 @@ interface ColumnMapperProps {
   parsedCSV: ParsedCSV;
   onMappingComplete: (table: string, mappings: ColumnMapping[]) => void;
   onBack: () => void;
+  defaultTable?: string;
 }
 
 // Database schema for mapping
@@ -212,14 +213,20 @@ const DATABASE_TABLES = {
   }
 };
 
-const ColumnMapper = ({ parsedCSV, onMappingComplete, onBack }: ColumnMapperProps) => {
-  const [selectedTable, setSelectedTable] = useState<string>('');
+const ColumnMapper = ({ parsedCSV, onMappingComplete, onBack, defaultTable }: ColumnMapperProps) => {
+  const [selectedTable, setSelectedTable] = useState<string>(defaultTable || '');
   const [mappings, setMappings] = useState<ColumnMapping[]>([]);
   const [newFields, setNewFields] = useState<Array<{
     name: string;
     type: string;
     csvColumn: string;
   }>>([]);
+
+  useEffect(() => {
+    if (defaultTable && !selectedTable) {
+      setSelectedTable(defaultTable);
+    }
+  }, [defaultTable, selectedTable]);
 
   // Generate smart mapping suggestions
   const generateSuggestions = useMemo(() => {
