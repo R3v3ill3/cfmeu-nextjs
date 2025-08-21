@@ -7,7 +7,7 @@ import { Upload, CheckCircle, AlertCircle, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 
 
@@ -356,6 +356,7 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Resolve organisers</DialogTitle>
+            <DialogDescription>Match organiser names from the CSV to existing users or create draft organisers.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             {unresolvedOrganiserNames.length === 0 ? (

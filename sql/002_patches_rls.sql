@@ -24,9 +24,6 @@ create policy patches_read_lead on patches for select
   using (
     exists (select 1 from lead_organiser_patch_assignments a
             where a.patch_id = patches.id and a.effective_to is null and a.lead_organiser_id = auth.uid())
-    or exists (select 1 from organiser_patch_assignments oa
-               join role_hierarchy rh on rh.parent_user_id = auth.uid() and rh.child_user_id = oa.organiser_id
-               where oa.patch_id = patches.id and oa.effective_to is null)
   );
 
 drop policy if exists patches_read_org on patches;
