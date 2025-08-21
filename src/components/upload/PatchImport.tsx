@@ -44,8 +44,18 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
 
   useEffect(() => {
     const load = async () => {
-      const { data } = await supabase.from("profiles").select("id, full_name, email");
-      setOrganisers((data as any[]) || []);
+      try {
+        const { data, error } = await (supabase as any)
+          .from("profiles")
+          .select("id, full_name, email, role")
+          .in("role", ["organiser", "lead_organiser"]) // align with policies and admin views
+          .order("full_name");
+        if (error) throw error;
+        setOrganisers((data as any[]) || []);
+      } catch (e) {
+        console.warn("Failed to load organisers for resolver", e);
+        setOrganisers([]);
+      }
     };
     load();
   }, []);
@@ -122,6 +132,23 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
     }
     setResolverOpen(false);
     toast({ title: "Organiser resolution saved", description: "New organisers drafted where needed." });
+  };
+
+  const createDraftForLabel = async (label: string) => {
+    const info = pendingNewOrganisers[label];
+    if (!info || !info.full_name || !info.email) {
+      toast({ title: "Missing details", description: "Enter full name and email to create a draft organiser.", variant: "destructive" });
+      return;
+    }
+    try {
+      const { error } = await (supabase as any)
+        .from("pending_users")
+        .insert({ email: info.email, full_name: info.full_name, role: "organiser", status: "draft" });
+      if (error) throw error;
+      toast({ title: "Draft organiser created", description: `${info.full_name} (${info.email})` });
+    } catch (e: any) {
+      toast({ title: "Failed to create draft", description: e?.message || String(e), variant: "destructive" });
+    }
   };
 
   const findOrganiserId = (value: any): string | null => {
@@ -395,6 +422,9 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
                                   });
                                 }}
                               />
+                            </div>
+                            <div className="mt-2">
+                              <Button size="sm" variant="outline" onClick={() => createDraftForLabel(label)}>Create draft organiser</Button>
                             </div>
                           </div>
                         </div>
