@@ -7,7 +7,7 @@ import { supabase } from "@/integrations/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
-import { Progress } from "@/components/ui/progress"
+// Progress replaced by custom gradient bar
 import { Badge } from "@/components/ui/badge"
 import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal"
 import { WorkerDetailModal } from "@/components/workers/WorkerDetailModal"
@@ -84,7 +84,7 @@ function useProjectStats(projectId: string) {
     }
   })
 
-  // Engaged contractors (by site trades) and project-level estimated workforce
+  // Engaged contractors (by site trades + head contractor) and project-level estimated workforce
   const { data: contractorAndEst } = useQuery({
     queryKey: ["project-contractors-estimate", projectId, siteIds],
     enabled: true,
@@ -101,7 +101,23 @@ function useProjectStats(projectId: string) {
         sct = (data as any[]) || []
       }
 
-      const employerIds = Array.from(new Set(((sct || []).map((r: any) => r.employer_id).filter(Boolean)))) as string[]
+      const employerIdSet = new Set<string>(
+        ((sct || []).map((r: any) => r.employer_id).filter(Boolean)) as string[]
+      )
+
+      // Include head contractor in engaged employer ids
+      try {
+        const { data: roles } = await (supabase as any)
+          .from("project_employer_roles")
+          .select("role, employer_id")
+          .eq("project_id", projectId)
+          .in("role", ["head_contractor"]) // extend if builders should also be counted
+        ;(roles || []).forEach((r: any) => {
+          if (r?.employer_id) employerIdSet.add(String(r.employer_id))
+        })
+      } catch {}
+
+      const employerIds = Array.from(employerIdSet)
 
       // Estimated workforce via project_contractor_trades
       const { data: pct } = await (supabase as any)
@@ -109,7 +125,7 @@ function useProjectStats(projectId: string) {
         .select("employer_id, estimated_project_workforce")
         .eq("project_id", projectId)
 
-      const estimatedTotal = (pct || []).reduce((sum: number, r: any) => sum + (Number(r.estimated_project_workforce) || 0), 0)
+      // Sum estimates by employer to avoid double-counting across multiple trade rows
       const estByEmployer: Record<string, number> = {}
       ;(pct || []).forEach((r: any) => {
         const eid = r.employer_id as string
@@ -118,11 +134,13 @@ function useProjectStats(projectId: string) {
         estByEmployer[eid] += v
       })
 
+      const estimatedTotal = Object.values(estByEmployer).reduce((a, b) => a + b, 0)
+
       return { employerIds, estimatedTotal, estByEmployer }
     }
   })
 
-  // EBA active employers among engaged contractors
+  // EBA employers among engaged contractors (count any employer with an EBA record)
   const { data: ebaActive } = useQuery({
     queryKey: ["project-eba-active", projectId, contractorAndEst?.employerIds || []],
     enabled: (contractorAndEst?.employerIds?.length || 0) > 0,
@@ -132,23 +150,10 @@ function useProjectStats(projectId: string) {
       const ids = contractorAndEst!.employerIds
       const { data } = await supabase
         .from("company_eba_records")
-        .select("employer_id, fwc_certified_date, eba_lodged_fwc, date_vote_occurred, date_eba_signed")
+        .select("employer_id")
         .in("employer_id", ids)
-      // Reduce to set with active EBA (certified within recent window)
-      const active = new Set<string>()
-      const today = new Date()
-      const withinYears = (d: string | null | undefined, years: number) => {
-        if (!d) return false
-        const dt = new Date(d)
-        if (isNaN(dt.getTime())) return false
-        const cutoff = new Date(today)
-        cutoff.setFullYear(cutoff.getFullYear() - years)
-        return dt >= cutoff
-      }
-      ;(data || []).forEach((r: any) => {
-        if (withinYears(r.fwc_certified_date, 4)) active.add(r.employer_id as string)
-      })
-      return { activeCount: active.size, total: ids.length }
+      const withEba = new Set<string>((data || []).map((r: any) => r.employer_id as string))
+      return { activeCount: withEba.size, total: ids.length }
     }
   })
 
@@ -190,28 +195,49 @@ function useProjectStats(projectId: string) {
   }
 }
 
+function GradientBar({ percent, baseRgb }: { percent: number; baseRgb: string }) {
+  const pct = Math.max(0, Math.min(100, Math.round(percent)))
+  const stops: string[] = []
+  for (let i = 0; i < 10; i++) {
+    const start = i * 10
+    const end = start + 10
+    const alpha = (i + 1) / 10 // 0.1 .. 1.0
+    stops.push(`rgba(${baseRgb},${alpha}) ${start}%`, `rgba(${baseRgb},${alpha}) ${end}%`)
+  }
+  const gradient = `linear-gradient(to right, ${stops.join(', ')})`
+  return (
+    <div className="w-full h-1 rounded bg-muted/30 overflow-hidden">
+      <div className="h-full" style={{ width: `${pct}%`, background: gradient }} />
+    </div>
+  )
+}
+
 function CompactStatBar({ label, value, of, onClick }: { label: string; value: number; of: number; onClick?: () => void }) {
-  const pct = of > 0 ? Math.round((value / of) * 100) : 0
+  const pct = of > 0 ? (value / of) * 100 : 0
+  // Member red from worker color coding (rgb values)
+  const memberRedRgb = '222,27,18'
   return (
     <button type="button" onClick={onClick} className="w-full text-left rounded border border-dashed border-muted-foreground/30 hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 px-2 py-1 transition">
       <div className="flex items-center justify-between text-[11px] text-muted-foreground">
         <span>{label}</span>
-        <span>{value}/{of} ({pct}%)</span>
+        <span className="sr-only">{Math.round(pct)}%</span>
       </div>
-      <Progress value={of > 0 ? (value / of) * 100 : 0} className="h-1.5" />
+      <GradientBar percent={pct} baseRgb={memberRedRgb} />
     </button>
   )
 }
 
 function EbaPercentBar({ active, total, onClick }: { active: number; total: number; onClick?: () => void }) {
-  const pct = total > 0 ? Math.round((active / total) * 100) : 0
+  const pct = total > 0 ? (active / total) * 100 : 0
+  // Use a pleasant green for EBA coverage bar
+  const ebaGreenRgb = '34,197,94' // tailwind green-500
   return (
     <button type="button" onClick={onClick} className="w-full text-left rounded border border-dashed border-muted-foreground/30 hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 px-2 py-1 transition">
       <div className="flex items-center justify-between text-[11px] text-muted-foreground">
         <span>EBA</span>
-        <span>{active}/{total} ({pct}%)</span>
+        <span className="sr-only">{Math.round(pct)}%</span>
       </div>
-      <Progress value={total > 0 ? (active / total) * 100 : 0} className="h-1.5" />
+      <GradientBar percent={pct} baseRgb={ebaGreenRgb} />
     </button>
   )
 }
@@ -371,31 +397,26 @@ function ProjectListCard({ p, onOpenEmployer, onOpenWorker }: { p: ProjectWithRo
                     .eq('employer_id', row.employerId)
                   if (existingErr) continue
                   if (!existingPct || existingPct.length === 0) {
-                    let trades: string[] = []
-                    if (siteIds.length > 0) {
-                      const { data: sct } = await (supabase as any)
-                        .from('site_contractor_trades')
-                        .select('trade_type')
-                        .in('job_site_id', siteIds)
-                        .eq('employer_id', row.employerId)
-                      trades = Array.from(new Set(((sct || []) as any[]).map((r: any) => String(r.trade_type))))
-                    }
-                    const rowsToInsert = (trades.length > 0 ? trades : ['labour_hire']).map((t: string) => ({
-                      project_id: p.id,
-                      employer_id: row.employerId,
-                      trade_type: t,
-                      eba_signatory: 'not_specified',
-                      estimated_project_workforce: est,
-                    }))
+                    // Insert a single estimate row to represent employer-level estimate
+                    const trade: string = 'labour_hire'
                     await (supabase as any)
                       .from('project_contractor_trades')
-                      .insert(rowsToInsert)
+                      .insert([{ project_id: p.id, employer_id: row.employerId, trade_type: trade, eba_signatory: 'not_specified', estimated_project_workforce: est }])
                   } else {
+                    // Zero-out all rows, then set a single row to the employer-level estimate to avoid double counting
                     await (supabase as any)
                       .from('project_contractor_trades')
-                      .update({ estimated_project_workforce: est })
+                      .update({ estimated_project_workforce: 0 })
                       .eq('project_id', p.id)
                       .eq('employer_id', row.employerId)
+
+                    const firstId = (existingPct as any[])[0]?.id
+                    if (firstId) {
+                      await (supabase as any)
+                        .from('project_contractor_trades')
+                        .update({ estimated_project_workforce: est })
+                        .eq('id', firstId)
+                    }
                   }
                 }
                 // Refresh stats for this project card
