@@ -228,16 +228,22 @@ function CompactStatBar({ label, value, of, onClick }: { label: string; value: n
 }
 
 function EbaPercentBar({ active, total, onClick }: { active: number; total: number; onClick?: () => void }) {
-  const pct = total > 0 ? (active / total) * 100 : 0
-  // Use a pleasant green for EBA coverage bar
-  const ebaGreenRgb = '34,197,94' // tailwind green-500
+  const safeTotal = Math.max(0, total)
+  const safeActive = Math.max(0, Math.min(active, safeTotal))
   return (
     <button type="button" onClick={onClick} className="w-full text-left rounded border border-dashed border-muted-foreground/30 hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 px-2 py-1 transition">
       <div className="flex items-center justify-between text-[11px] text-muted-foreground">
         <span>EBA</span>
-        <span className="sr-only">{Math.round(pct)}%</span>
+        <span>{safeTotal}</span>
       </div>
-      <GradientBar percent={pct} baseRgb={ebaGreenRgb} />
+      <div className="w-full h-1 rounded bg-muted/30 overflow-hidden flex gap-px">
+        {Array.from({ length: safeTotal }).map((_, i) => (
+          <div
+            key={i}
+            className={`h-full flex-1 ${i < safeActive ? 'bg-green-500' : 'bg-transparent'}`}
+          />
+        ))}
+      </div>
     </button>
   )
 }

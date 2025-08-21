@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { PendingUsersTable } from "@/components/admin/PendingUsersTable"
 import { InviteUserDialog } from "@/components/admin/InviteUserDialog"
+import { AddDraftUserDialog } from "@/components/admin/AddDraftUserDialog"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
@@ -16,6 +17,7 @@ import PatchManager from "@/components/admin/PatchManager"
 
 export default function AdminPage() {
   const [open, setOpen] = useState(false)
+  const [addDraftOpen, setAddDraftOpen] = useState(false)
 
   return (
     <RoleGuard allow={["admin"]}>
@@ -36,6 +38,10 @@ export default function AdminPage() {
             <UsersTable />
           </TabsContent>
           <TabsContent value="invites">
+            <div className="flex items-center justify-between mb-2">
+              <div />
+              <Button variant="outline" onClick={() => setAddDraftOpen(true)}>Add draft organiser</Button>
+            </div>
             <PendingUsersTable />
           </TabsContent>
           <TabsContent value="hierarchy">
@@ -49,6 +55,7 @@ export default function AdminPage() {
           </TabsContent>
         </Tabs>
         <InviteUserDialog open={open} onOpenChange={setOpen} onSuccess={() => {}} />
+        <AddDraftUserDialog open={addDraftOpen} onOpenChange={setAddDraftOpen} onSuccess={() => {}} />
       </div>
     </RoleGuard>
   )

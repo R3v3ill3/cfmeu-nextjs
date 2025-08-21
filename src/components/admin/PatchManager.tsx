@@ -229,6 +229,7 @@ export default function PatchManager() {
             <DialogHeader>
               <DialogTitle>Create Patch</DialogTitle>
               <DialogDescription>Define a patch name.</DialogDescription>
+
             </DialogHeader>
             <div className="space-y-3">
               <div>
