@@ -32,10 +32,10 @@ export const InviteUserDialog = ({ open, onOpenChange, onSuccess }: InviteUserDi
 
     setLoading(true);
     try {
-      // Send Magic Link (no service role required)
+      const emailLower = email.trim().toLowerCase();
       const redirectUrl = `${window.location.origin}/`;
       const { error: otpError } = await supabase.auth.signInWithOtp({
-        email,
+        email: emailLower,
         options: {
           emailRedirectTo: redirectUrl,
           shouldCreateUser: true,
@@ -45,24 +45,35 @@ export const InviteUserDialog = ({ open, onOpenChange, onSuccess }: InviteUserDi
 
       if (otpError) throw otpError;
 
-      // Mark or create pending user as invited
-      await supabase
+      // Try to find an existing pending row (store emails in lower-case to align with unique index)
+      const { data: existing, error: selErr } = await supabase
         .from("pending_users")
-        .upsert(
-          {
-            email,
-            full_name: email.split('@')[0],
+        .select("id")
+        .eq("email", emailLower)
+        .eq("role", role)
+        .limit(1);
+      if (selErr) throw selErr;
+
+      if (existing && existing.length > 0) {
+        const { error: updErr } = await supabase
+          .from("pending_users")
+          .update({ status: "invited", invited_at: new Date().toISOString() })
+          .eq("id", existing[0].id);
+        if (updErr) throw updErr;
+      } else {
+        const { error: insErr } = await supabase
+          .from("pending_users")
+          .insert({
+            email: emailLower,
+            full_name: emailLower.split('@')[0],
             role,
             status: "invited",
             invited_at: new Date().toISOString(),
-          },
-          { onConflict: "email" }
-        );
+          } as any);
+        if (insErr) throw insErr;
+      }
 
-      toast({
-        title: "Success",
-        description: `Invitation sent to ${email}`,
-      });
+      toast({ title: "Success", description: `Invitation sent to ${emailLower}` });
 
       setEmail("");
       setRole("viewer");
@@ -70,11 +81,7 @@ export const InviteUserDialog = ({ open, onOpenChange, onSuccess }: InviteUserDi
       onSuccess();
     } catch (error: any) {
       console.error("Error inviting user:", error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to send invitation",
-        variant: "destructive"
-      });
+      toast({ title: "Error", description: error.message || "Failed to send invitation", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -96,14 +103,7 @@ export const InviteUserDialog = ({ open, onOpenChange, onSuccess }: InviteUserDi
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email">Email Address</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="user@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={loading}
-            />
+            <Input id="email" type="email" placeholder="user@example.com" value={email} onChange={(e) => setEmail(e.target.value)} disabled={loading} />
           </div>
           
           <div className="space-y-2">
@@ -124,24 +124,12 @@ export const InviteUserDialog = ({ open, onOpenChange, onSuccess }: InviteUserDi
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
-            Cancel
-          </Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>Cancel</Button>
           <Button onClick={handleInvite} disabled={loading}>
-            {loading ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Sending...
-              </>
-            ) : (
-              <>
-                <Mail className="h-4 w-4 mr-2" />
-                Send Invitation
-              </>
-            )}
+            {loading ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" />Sending...</>) : (<><Mail className="h-4 w-4 mr-2" />Send Invitation</>)}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
-};
+}
