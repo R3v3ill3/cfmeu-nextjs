@@ -610,18 +610,41 @@ function ProjectListCard({ p, onOpenEmployer, onOpenWorker }: { p: ProjectWithRo
 export default function ProjectsPage() {
   const sp = useSearchParams()
   const q = (sp.get("q") || "").toLowerCase()
+  const patchId = sp.get("patch") || ""
 
   const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null)
   const [isEmployerOpen, setIsEmployerOpen] = useState(false)
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null)
   const [isWorkerOpen, setIsWorkerOpen] = useState(false)
 
-  const { data: projects = [], isLoading } = useQuery<ProjectWithRoles[]>({
-    queryKey: ["projects-list"],
+  // If a patch is selected, compute project ids that have at least one site linked to this patch
+  const { data: patchProjectIds = [], isFetching: fetchingPatchProjects } = useQuery<string[]>({
+    queryKey: ["project-ids-for-patch", patchId],
+    enabled: !!patchId,
     staleTime: 30000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data } = await (supabase as any)
+        .from("patch_job_sites")
+        .select("job_sites:job_site_id(project_id)")
+        .is("effective_to", null)
+        .eq("patch_id", patchId)
+      const projIds = new Set<string>()
+      ;((data as any[]) || []).forEach((row: any) => {
+        const js = Array.isArray(row.job_sites) ? row.job_sites[0] : row.job_sites
+        const pid = js?.project_id as string | undefined
+        if (pid) projIds.add(pid)
+      })
+      return Array.from(projIds)
+    }
+  })
+
+  const { data: projects = [], isLoading } = useQuery<ProjectWithRoles[]>({
+    queryKey: ["projects-list", patchId, patchProjectIds],
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      let qy: any = supabase
         .from("projects")
         .select(`
           id,
@@ -634,6 +657,11 @@ export default function ProjectsPage() {
           )
         `)
         .order("created_at", { ascending: false })
+      if (patchId) {
+        if ((patchProjectIds as string[]).length === 0) return []
+        qy = qy.in('id', patchProjectIds as string[])
+      }
+      const { data, error } = await qy
       if (error) throw error
       return (data as any) || []
     }

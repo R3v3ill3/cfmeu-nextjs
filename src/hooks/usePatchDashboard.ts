@@ -35,8 +35,7 @@ export function usePatchDashboard(patchId?: string) {
 
       // Resolve target site ids based on patch selection and/or legacy field
       let sites: any[] = []
-      // If a patch id is provided, collect sites from patch mappings and trade employers
-      let tradeEmployerIds: string[] = []
+      // If a patch id is provided, collect sites strictly from patch mappings
       if (patchId) {
         try {
           const { data: mappedSites } = await supabase
@@ -47,36 +46,9 @@ export function usePatchDashboard(patchId?: string) {
           const list = ((mappedSites as any[]) || []).map(r => (r as any).job_sites).filter(Boolean)
           sites = list
         } catch {}
-        try {
-          const { data: mappedEmps } = await supabase
-            .from('patch_employers')
-            .select('employer_id')
-            .is('effective_to', null)
-            .eq('patch_id', patchId)
-          tradeEmployerIds = (((mappedEmps as any[]) || []).map((r: any) => r.employer_id).filter(Boolean))
-        } catch {}
       }
-      // If trade employers exist, include any sites where they have placements
-      if (tradeEmployerIds.length > 0) {
-        const { data: tradePl } = await supabase
-          .from('worker_placements')
-          .select('job_site_id')
-          .in('employer_id', tradeEmployerIds)
-        const extraSiteIds = Array.from(new Set(((tradePl as any[]) || []).map((p: any) => p.job_site_id).filter(Boolean)))
-        if (extraSiteIds.length > 0) {
-          const knownIds = new Set((sites as any[]).map((s: any) => s.id))
-          const toFetch = extraSiteIds.filter((id) => !knownIds.has(id))
-          if (toFetch.length > 0) {
-            const { data: extraSites } = await supabase
-              .from('job_sites')
-              .select('id,name,location,project_id')
-              .in('id', toFetch)
-            sites = [...sites, ...(((extraSites as any[]) || []))]
-          }
-        }
-      }
-      if (sites.length === 0) {
-        // Fallback: direct query of job_sites only
+      // If no patch selected, fallback: direct query of job_sites only
+      if (!patchId && sites.length === 0) {
         let sitesQuery: any = supabase.from('job_sites').select('id,name,location,project_id')
         if (scopedSites.length > 0) sitesQuery = sitesQuery.in('id', scopedSites)
         const { data: sitesRaw, error: sitesErr } = await sitesQuery
