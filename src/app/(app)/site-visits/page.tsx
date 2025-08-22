@@ -23,22 +23,22 @@ export default function SiteVisitsPage() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("site_visit")
-        .select("id, visit_date, notes, projects(name), job_sites(name,full_address,location), employers(name), profiles(full_name)")
-        .order("visit_date", { ascending: false })
+        .select("id, date, notes, job_sites(name,full_address,location,projects(name)), employers(name), profiles(full_name)")
+        .order("date", { ascending: false })
         .limit(200)
       if (error) throw error
       let list = (data || []) as any[]
       if (status === "stale") {
         const cutoff = Date.now() - 1000*60*60*24*7
         list = list.filter((r) => {
-          const t = new Date(r.visit_date).getTime()
+          const t = new Date(r.date).getTime()
           return isFinite(t) && t < cutoff
         })
       }
       if (q) {
         const s = q
         list = list.filter((r) => {
-          const hay = [r.profiles?.full_name, r.projects?.name, r.job_sites?.name, r.employers?.name, r.notes]
+          const hay = [r.profiles?.full_name, r.job_sites?.projects?.name, r.job_sites?.name, r.employers?.name, r.notes]
             .map((v: any) => String(v || "").toLowerCase())
           return hay.some((h: string) => h.includes(s))
         })
@@ -73,9 +73,9 @@ export default function SiteVisitsPage() {
               <TableBody>
                 {(rows as any[]).map((r) => (
                   <TableRow key={r.id}>
-                    <TableCell className="whitespace-nowrap">{new Date(r.visit_date).toLocaleDateString()}</TableCell>
+                    <TableCell className="whitespace-nowrap">{new Date(r.date).toLocaleDateString()}</TableCell>
                     <TableCell>{r.profiles?.full_name || "—"}</TableCell>
-                    <TableCell>{r.projects?.name || "—"}</TableCell>
+                    <TableCell>{r.job_sites?.projects?.name || "—"}</TableCell>
                     <TableCell>
                       <div className="leading-tight">
                         <div>{r.job_sites?.name || "—"}</div>
