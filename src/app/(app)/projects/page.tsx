@@ -458,11 +458,14 @@ function ProjectListCard({ p, onOpenEmployer, onOpenWorker }: { p: ProjectWithRo
         </div>
         <div className="pt-1 text-xs text-muted-foreground flex items-center justify-between">
           {delegate?.name ? (
-            <button type="button" className="text-primary hover:underline truncate rounded border border-dashed border-transparent hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 px-1" onClick={() => onOpenWorker(delegate.workerId)} title={delegate.name}>
-              {delegate.name}
-            </button>
+            <div className="truncate">
+              <span className="mr-1">Site delegate:</span>
+              <button type="button" className="text-primary hover:underline truncate rounded border border-dashed border-transparent hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 px-1" onClick={() => onOpenWorker(delegate.workerId)} title={delegate.name}>
+                {delegate.name}
+              </button>
+            </div>
           ) : (
-            <span className="truncate">No delegate recorded</span>
+            <span className="truncate">Site delegate: —</span>
           )}
           {(totals?.totalWorkers || 0) > 0 && (
             <Badge variant="secondary" className="text-[10px]">{totals?.totalWorkers} workers</Badge>

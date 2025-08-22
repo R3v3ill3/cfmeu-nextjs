@@ -391,6 +391,42 @@ export default function ProjectDetailPage() {
     }
   })
 
+  // Overlay employer enterprise_agreement_status where available (e.g., 'active') onto EBA categories
+  const { data: employerStatuses = [] } = useQuery({
+    queryKey: ["project-employer-statuses", stableContractorEmployerIds],
+    enabled: stableContractorEmployerIds.length > 0,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const ids = stableContractorEmployerIds
+      const { data } = await supabase
+        .from("employers")
+        .select("id, enterprise_agreement_status")
+        .in("id", ids)
+      return (data as any[]) || []
+    }
+  })
+
+  const statusByEmployer = useMemo(() => {
+    const map: Record<string, string> = {}
+    ;(employerStatuses as any[]).forEach((r: any) => {
+      if (r?.id) map[String(r.id)] = String(r.enterprise_agreement_status || '')
+    })
+    return map
+  }, [employerStatuses])
+
+  const finalEbaCategoryByEmployer = useMemo(() => {
+    const base = (ebaCategoryByEmployer as Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }>) || {}
+    const merged: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = { ...base }
+    ;(stableContractorEmployerIds as string[]).forEach((id) => {
+      const status = statusByEmployer[id]
+      if (status && String(status).toLowerCase() === 'active') {
+        merged[id] = { label: 'Active', variant: 'default' }
+      }
+    })
+    return merged
+  }, [ebaCategoryByEmployer, statusByEmployer, stableContractorEmployerIds])
+
   // Membership by employer-site for contractors table membership bars
   const { data: membershipByEmployerSite = {} } = useQuery({
     queryKey: ["project-membership-by-employer-site", projectId, sortedSiteIds],
@@ -492,7 +528,7 @@ export default function ProjectDetailPage() {
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="sites">Sites</TabsTrigger>
+          {/* Sites tab trigger hidden; accessible via Overview 'Sites' link */}
           <TabsTrigger value="contractors">Contractors</TabsTrigger>
           <TabsTrigger value="wallcharts">Wallcharts</TabsTrigger>
         </TabsList>
@@ -505,7 +541,9 @@ export default function ProjectDetailPage() {
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                 <div className="space-y-1">
-                  <div className="font-medium">Sites</div>
+                  <button type="button" className="font-medium text-left text-primary hover:underline" onClick={() => setTab("sites")}>
+                    Sites
+                  </button>
                   <div className="text-muted-foreground">{(sites as any[]).length}</div>
                   <div className="text-muted-foreground truncate">
                     {(sites as any[]).map((s) => s.name).join(', ') || '—'}
@@ -603,7 +641,7 @@ export default function ProjectDetailPage() {
                 projectId={projectId}
                 groupBySite={true}
                 membershipByEmployerSite={membershipByEmployerSite as any}
-                ebaCategoryByEmployer={ebaCategoryByEmployer as any}
+                ebaCategoryByEmployer={finalEbaCategoryByEmployer as any}
                 onEmployerClick={async (id) => {
                   try {
                     const { data: pct } = await (supabase as any)
