@@ -133,7 +133,7 @@ export const EmployerWorkerChart = ({
       const dues: Record<string, string> = {};
       (duesRows || []).forEach((r: any) => { if (r.worker_id) dues[r.worker_id] = r.dd_status });
 
-      // 6) Estimated counts: project-level else employer-level
+      // 6) Estimated counts: prefer employer+project, else employer
       let estimated: number | null = null;
       let estimatedScope: "project" | "employer" | null = null;
       if (projectIds && projectIds.length > 0) {
