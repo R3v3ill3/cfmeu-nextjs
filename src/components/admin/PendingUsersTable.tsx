@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Mail, Trash2 } from "lucide-react";
+import { Loader2, Mail, Trash2, Pencil } from "lucide-react";
+import EditPendingUserDialog from "@/components/admin/EditPendingUserDialog";
 
 interface PendingUser {
   id: string;
@@ -22,6 +23,8 @@ export const PendingUsersTable = () => {
   const [pending, setPending] = useState<PendingUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [invitingId, setInvitingId] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingRow, setEditingRow] = useState<PendingUser | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -42,13 +45,11 @@ export const PendingUsersTable = () => {
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const sendInvite = async (row: PendingUser) => {
     setInvitingId(row.id);
     try {
-      // Send Magic Link to the user's email
       const redirectUrl = `${window.location.origin}/`;
       const { error: otpError } = await supabase.auth.signInWithOtp({
         email: row.email,
@@ -60,7 +61,6 @@ export const PendingUsersTable = () => {
       });
       if (otpError) throw otpError;
 
-      // Mark pending user as invited
       await supabase
         .from("pending_users")
         .update({ status: "invited", invited_at: new Date().toISOString() })
@@ -86,6 +86,11 @@ export const PendingUsersTable = () => {
       console.error("Delete draft error", err);
       toast({ title: "Error", description: err.message || "Failed to remove draft", variant: "destructive" });
     }
+  };
+
+  const openEdit = (row: PendingUser) => {
+    setEditingRow(row);
+    setEditOpen(true);
   };
 
   return (
@@ -136,6 +141,11 @@ export const PendingUsersTable = () => {
                   <TableCell>{new Date(row.created_at).toLocaleDateString()}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
+                      {row.status === "draft" && (
+                        <Button size="sm" variant="outline" onClick={() => openEdit(row)}>
+                          <Pencil className="h-4 w-4 mr-2" /> Edit
+                        </Button>
+                      )}
                       <Button size="sm" onClick={() => sendInvite(row)} disabled={invitingId === row.id}>
                         {invitingId === row.id ? (
                           <>
@@ -157,6 +167,12 @@ export const PendingUsersTable = () => {
             </TableBody>
           </Table>
         )}
+        <EditPendingUserDialog
+          open={editOpen}
+          onOpenChange={(o) => { setEditOpen(o); if (!o) setEditingRow(null) }}
+          pendingUser={editingRow}
+          onSaved={() => load()}
+        />
       </CardContent>
     </Card>
   );
