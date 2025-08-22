@@ -423,7 +423,7 @@ function ProjectListCard({ p, onOpenEmployer, onOpenWorker }: { p: ProjectWithRo
             </>
           )}
         </div>
-        <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           {(projectPatches as any[]).length > 0 ? (
             <>
               <span>
@@ -437,7 +437,9 @@ function ProjectListCard({ p, onOpenEmployer, onOpenWorker }: { p: ProjectWithRo
           ) : (
             <span>No patch assigned</span>
           )}
-          <Button size="sm" variant="outline" className="h-6 px-2 ml-auto" onClick={() => setPatchAssignOpen(true)}>Assign patch</Button>
+          {(projectPatches as any[]).length === 0 && (
+            <Button size="sm" variant="outline" className="h-6 px-2 ml-auto" onClick={() => setPatchAssignOpen(true)}>Assign patch</Button>
+          )}
         </div>
       </CardHeader>
       <CardContent className="px-4 pb-4 pt-0 space-y-2">
