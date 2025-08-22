@@ -18,6 +18,7 @@ import { EmployerWorkerChart } from "@/components/patchwall/EmployerWorkerChart"
 import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { getEbaCategory } from "@/components/employers/ebaHelpers"
 
 export default function ProjectDetailPage() {
   const params = useParams()
@@ -181,6 +182,43 @@ export default function ProjectDetailPage() {
     }
   })
 
+  // Per-site membership totals for overview bars
+  const { data: siteMembershipTotals = {} } = useQuery({
+    queryKey: ["project-site-membership-totals", projectId, sortedSiteIds],
+    enabled: !!projectId && sortedSiteIds.length > 0,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const siteIds = sortedSiteIds
+      if (siteIds.length === 0) return {}
+      const { data: placementRows } = await (supabase as any)
+        .from("worker_placements")
+        .select("worker_id, job_site_id, workers!inner(id, union_membership_status)")
+        .in("job_site_id", siteIds)
+
+      const bySiteToWorkers = new Map<string, Set<string>>()
+      const bySiteToMembers = new Map<string, Set<string>>()
+      ;(placementRows || []).forEach((row: any) => {
+        const siteId = String(row.job_site_id)
+        const wid = String(row.worker_id)
+        if (!bySiteToWorkers.has(siteId)) bySiteToWorkers.set(siteId, new Set<string>())
+        bySiteToWorkers.get(siteId)!.add(wid)
+        const isMember = row.workers?.union_membership_status === "member"
+        if (isMember) {
+          if (!bySiteToMembers.has(siteId)) bySiteToMembers.set(siteId, new Set<string>())
+          bySiteToMembers.get(siteId)!.add(wid)
+        }
+      })
+      const result: Record<string, { members: number; total: number }> = {}
+      Array.from(bySiteToWorkers.keys()).forEach((sid) => {
+        const total = bySiteToWorkers.get(sid)!.size
+        const members = (bySiteToMembers.get(sid)?.size) || 0
+        result[sid] = { members, total }
+      })
+      return result
+    }
+  })
+
   const stableEmployerIds = useMemo(
     () => Array.from(new Set(((contractorSummary as string[]) || []).filter(Boolean))).sort(),
     [contractorSummary]
@@ -321,6 +359,124 @@ export default function ProjectDetailPage() {
   })
   const ebaEmployers = useMemo(() => new Set<string>(ebaEmployerIds as string[]), [ebaEmployerIds])
 
+  // EBA category map for color coding in contractors table
+  const { data: ebaCategoryByEmployer = {} } = useQuery({
+    queryKey: ["project-eba-categories", stableContractorEmployerIds],
+    enabled: stableContractorEmployerIds.length > 0,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const ids = stableContractorEmployerIds
+      if (ids.length === 0) return {}
+      const { data } = await supabase
+        .from("company_eba_records")
+        .select("employer_id, fwc_certified_date, eba_lodged_fwc, date_eba_signed, date_vote_occurred, date_vote_occured")
+        .in("employer_id", ids)
+      const byId = new Map<string, any>()
+      ;(data || []).forEach((r: any) => {
+        // Keep first record; for advanced handling we could pick the best category
+        if (!byId.has(r.employer_id)) byId.set(r.employer_id, r)
+      })
+      const result: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {}
+      ids.forEach((id) => {
+        const rec = byId.get(id)
+        if (rec) {
+          const cat = getEbaCategory(rec)
+          result[id] = { label: cat.label, variant: cat.variant }
+        } else {
+          result[id] = { label: 'No EBA', variant: 'destructive' }
+        }
+      })
+      return result
+    }
+  })
+
+  // Membership by employer-site for contractors table membership bars
+  const { data: membershipByEmployerSite = {} } = useQuery({
+    queryKey: ["project-membership-by-employer-site", projectId, sortedSiteIds],
+    enabled: !!projectId && sortedSiteIds.length > 0,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const siteIds = sortedSiteIds
+      if (siteIds.length === 0) return {}
+      const { data: placementRows } = await (supabase as any)
+        .from("worker_placements")
+        .select("worker_id, employer_id, job_site_id, workers!inner(id, union_membership_status)")
+        .in("job_site_id", siteIds)
+
+      const byKeyToWorkers = new Map<string, Set<string>>()
+      const byKeyToMembers = new Map<string, Set<string>>()
+      ;(placementRows || []).forEach((row: any) => {
+        const key = `${String(row.job_site_id)}:${String(row.employer_id)}`
+        const wid = String(row.worker_id)
+        if (!byKeyToWorkers.has(key)) byKeyToWorkers.set(key, new Set<string>())
+        byKeyToWorkers.get(key)!.add(wid)
+        const isMember = row.workers?.union_membership_status === "member"
+        if (isMember) {
+          if (!byKeyToMembers.has(key)) byKeyToMembers.set(key, new Set<string>())
+          byKeyToMembers.get(key)!.add(wid)
+        }
+      })
+      const result: Record<string, { members: number; total: number }> = {}
+      Array.from(byKeyToWorkers.keys()).forEach((k) => {
+        const total = byKeyToWorkers.get(k)!.size
+        const members = (byKeyToMembers.get(k)?.size) || 0
+        result[k] = { members, total }
+      })
+      return result
+    }
+  })
+
+  // Helper components for overview bars (slightly larger)
+  function GradientBar({ percent, baseRgb, heightClass = "h-2" }: { percent: number; baseRgb: string; heightClass?: string }) {
+    const pct = Math.max(0, Math.min(100, Math.round(percent)))
+    const stops: string[] = []
+    for (let i = 0; i < 10; i++) {
+      const start = i * 10
+      const end = start + 10
+      const alpha = (i + 1) / 10
+      stops.push(`rgba(${baseRgb},${alpha}) ${start}%`, `rgba(${baseRgb},${alpha}) ${end}%`)
+    }
+    const gradient = `linear-gradient(to right, ${stops.join(', ')})`
+    return (
+      <div className={`w-full ${heightClass} rounded bg-muted/30 overflow-hidden`}>
+        <div className="h-full" style={{ width: `${pct}%`, background: gradient }} />
+      </div>
+    )
+  }
+  function EbaBlocks({ active, total, heightClass = "h-2" }: { active: number; total: number; heightClass?: string }) {
+    const safeTotal = Math.max(0, total)
+    const safeActive = Math.max(0, Math.min(active, safeTotal))
+    return (
+      <div className={`w-full ${heightClass} rounded bg-muted/30 overflow-hidden flex gap-px`}>
+        {Array.from({ length: safeTotal }).map((_, i) => (
+          <div key={i} className={`h-full flex-1 ${i < safeActive ? 'bg-green-500' : 'bg-transparent'}`} />
+        ))}
+      </div>
+    )
+  }
+  const memberRedRgb = '222,27,18'
+
+  // Derive per-site EBA counts from contractorRows and ebaEmployers
+  const ebaBySite = useMemo(() => {
+    const map = new Map<string, { active: number; total: number }>()
+    const bySiteToEmployers = new Map<string, Set<string>>()
+    ;((contractorRows as any[]) || []).forEach((r: any) => {
+      if (!r.siteId) return
+      const sid = String(r.siteId)
+      if (!bySiteToEmployers.has(sid)) bySiteToEmployers.set(sid, new Set<string>())
+      bySiteToEmployers.get(sid)!.add(String(r.employerId))
+    })
+    Array.from(bySiteToEmployers.entries()).forEach(([sid, set]) => {
+      const total = set.size
+      let active = 0
+      set.forEach((eid) => { if (ebaEmployers.has(eid)) active += 1 })
+      map.set(sid, { active, total })
+    })
+    return map
+  }, [contractorRows, ebaEmployers])
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -395,6 +551,32 @@ export default function ProjectDetailPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Per-site bars */}
+              {(sites as any[]).length > 0 && (
+                <div className="mt-4 space-y-3">
+                  {(sites as any[]).map((s: any) => {
+                    const sid = String(s.id)
+                    const mem = (siteMembershipTotals as Record<string, { members: number; total: number }>)[sid] || { members: 0, total: 0 }
+                    const pct = mem.total > 0 ? (mem.members / mem.total) * 100 : 0
+                    const eba = ebaBySite.get(sid) || { active: 0, total: 0 }
+                    return (
+                      <div key={sid} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <div className="text-xs text-muted-foreground mb-1">{s.name} — Members</div>
+                          <GradientBar percent={pct} baseRgb={memberRedRgb} heightClass="h-2.5" />
+                          <div className="mt-1 text-[11px] text-muted-foreground">{mem.members}/{mem.total}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-muted-foreground mb-1">{s.name} — EBA</div>
+                          <EbaBlocks active={eba.active} total={eba.total} heightClass="h-2.5" />
+                          <div className="mt-1 text-[11px] text-muted-foreground">{eba.active}/{eba.total} employers</div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -417,9 +599,11 @@ export default function ProjectDetailPage() {
             <CardContent>
               <ContractorsSummary
                 rows={contractorRows as any}
-                showSiteColumn={true}
                 ebaEmployers={ebaEmployers}
                 projectId={projectId}
+                groupBySite={true}
+                membershipByEmployerSite={membershipByEmployerSite as any}
+                ebaCategoryByEmployer={ebaCategoryByEmployer as any}
                 onEmployerClick={async (id) => {
                   try {
                     const { data: pct } = await (supabase as any)
@@ -457,23 +641,12 @@ export default function ProjectDetailPage() {
               />
             </CardContent>
           </Card>
-
-          {project && (
-            <Dialog open={showAssign} onOpenChange={(v: boolean) => setShowAssign(v)}>
-              <DialogContent className="max-w-[95vw] w-[1100px]">
-                <DialogHeader>
-                  <DialogTitle>Assign contractors to sites</DialogTitle>
-                </DialogHeader>
-                <ContractorSiteAssignmentModal projectId={project.id} />
-              </DialogContent>
-            </Dialog>
-          )}
         </TabsContent>
 
         <TabsContent value="wallcharts">
           <Card>
             <CardHeader>
-              <CardTitle>Wallcharts</CardTitle>
+              <CardTitle>Employer Workers</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
@@ -495,63 +668,43 @@ export default function ProjectDetailPage() {
         </TabsContent>
       </Tabs>
 
-      <EmployerDetailModal
-        employerId={selectedEmployerId || showEbaForEmployerId}
-        isOpen={!!selectedEmployerId || !!showEbaForEmployerId}
-        onClose={() => { setSelectedEmployerId(null); setShowEbaForEmployerId(null) }}
-        initialTab={showEbaForEmployerId ? "eba" : "overview"}
+      <ContractorSiteAssignmentModal
+        projectId={projectId}
       />
 
-      {chartEmployer && (
-        <EmployerWorkerChart
-          isOpen={chartOpen}
-          onClose={() => setChartOpen(false)}
-          employerId={chartEmployer.id}
-          employerName={chartEmployer.name}
-          projectIds={[projectId]}
-          siteIds={[]}
-          contextSiteId={null}
-          siteOptions={siteOptions}
-        />
-      )}
+      <EmployerDetailModal
+        employerId={selectedEmployerId}
+        isOpen={!!selectedEmployerId}
+        onClose={() => setSelectedEmployerId(null)}
+        initialTab="overview"
+      />
 
+      {/* Estimate prompt dialog */}
       <Dialog open={!!estPrompt} onOpenChange={(v: boolean) => { if (!v) setEstPrompt(null) }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Estimated workers on this project</DialogTitle>
+            <DialogTitle>Set estimated workforce</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">Enter an estimated number of workers for {estPrompt?.employerName} on this project.</p>
-            <Input type="number" min={0} value={estValue} onChange={(e) => setEstValue(e.target.value)} placeholder="e.g. 25" />
+            <div className="text-sm">Enter estimated workers for {estPrompt?.employerName}</div>
+            <Input type="number" min={0} value={estValue} onChange={(e) => setEstValue(e.target.value)} />
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => { if (estPrompt) { setSelectedEmployerId(estPrompt.employerId) } setEstPrompt(null) }}>Skip</Button>
-              <Button disabled={!estValue || estSaving} onClick={async () => {
-                if (!estPrompt) return
+              <Button variant="outline" onClick={() => setEstPrompt(null)}>Cancel</Button>
+              <Button disabled={!estValue} onClick={async () => {
                 try {
-                  setEstSaving(true)
                   const est = Number(estValue)
-                  if (!Number.isFinite(est) || est < 0) throw new Error('Invalid number')
-                  // Ensure there is at least one project_contractor_trades row for this employer on this project.
-                  const { data: existingPct, error: existingErr } = await (supabase as any)
+                  if (!Number.isFinite(est) || est < 0) return
+                  // Upsert a single estimate row per employer on this project
+                  const { data: existingPct } = await (supabase as any)
                     .from('project_contractor_trades')
-                    .select('id, trade_type')
+                    .select('id')
                     .eq('project_id', projectId)
-                    .eq('employer_id', estPrompt.employerId)
-
-                  if (existingErr) throw existingErr
-
+                    .eq('employer_id', estPrompt!.employerId)
                   if (!existingPct || existingPct.length === 0) {
-                    // Insert a single employer-level estimate row
                     await (supabase as any)
                       .from('project_contractor_trades')
-                      .insert([{ project_id: projectId, employer_id: estPrompt.employerId, trade_type: 'labour_hire', eba_signatory: 'not_specified', estimated_project_workforce: est }])
+                      .insert([{ project_id: projectId, employer_id: estPrompt!.employerId, trade_type: 'labour_hire', eba_signatory: 'not_specified', estimated_project_workforce: est }])
                   } else {
-                    // Zero existing rows to avoid double counting, then set one row to the estimate
-                    await (supabase as any)
-                      .from('project_contractor_trades')
-                      .update({ estimated_project_workforce: 0 })
-                      .eq('project_id', projectId)
-                      .eq('employer_id', estPrompt.employerId)
                     const firstId = (existingPct as any[])[0]?.id
                     if (firstId) {
                       await (supabase as any)
@@ -560,19 +713,26 @@ export default function ProjectDetailPage() {
                         .eq('id', firstId)
                     }
                   }
-                  setSelectedEmployerId(estPrompt.employerId)
-                } catch (e) {
-                  console.error(e)
-                  setSelectedEmployerId(estPrompt.employerId)
                 } finally {
-                  setEstSaving(false)
                   setEstPrompt(null)
                 }
-              }}>{estSaving ? 'Saving…' : 'Save'}</Button>
+              }}>Save</Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Chart modal */}
+      <EmployerWorkerChart
+        isOpen={chartOpen}
+        onClose={() => setChartOpen(false)}
+        employerId={chartEmployer?.id || null}
+        employerName={chartEmployer?.name}
+        projectIds={[projectId]}
+        siteIds={[]}
+        contextSiteId={null}
+        siteOptions={siteOptions}
+      />
     </div>
   )
 }
