@@ -23,7 +23,7 @@ export default function SiteVisitsPage() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("site_visit")
-        .select("id, date, notes, projects(name), job_sites(name,full_address,location), employers(name), profiles(full_name)")
+        .select("id, date, notes, job_sites(name,full_address,location,projects(name)), employers(name), profiles(full_name)")
         .order("date", { ascending: false })
         .limit(200)
       if (error) throw error
@@ -38,7 +38,7 @@ export default function SiteVisitsPage() {
       if (q) {
         const s = q
         list = list.filter((r) => {
-          const hay = [r.profiles?.full_name, r.projects?.name, r.job_sites?.name, r.employers?.name, r.notes]
+          const hay = [r.profiles?.full_name, r.job_sites?.projects?.name, r.job_sites?.name, r.employers?.name, r.notes]
             .map((v: any) => String(v || "").toLowerCase())
           return hay.some((h: string) => h.includes(s))
         })
@@ -75,7 +75,7 @@ export default function SiteVisitsPage() {
                   <TableRow key={r.id}>
                     <TableCell className="whitespace-nowrap">{new Date(r.date).toLocaleDateString()}</TableCell>
                     <TableCell>{r.profiles?.full_name || "—"}</TableCell>
-                    <TableCell>{r.projects?.name || "—"}</TableCell>
+                    <TableCell>{r.job_sites?.projects?.name || "—"}</TableCell>
                     <TableCell>
                       <div className="leading-tight">
                         <div>{r.job_sites?.name || "—"}</div>

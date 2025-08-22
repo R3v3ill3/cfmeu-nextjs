@@ -3,8 +3,11 @@
 
 do $$
 begin
-	-- project_id → projects(id)
-	if not exists (
+	-- project_id → projects(id) [add only if column exists]
+	if exists (
+		select 1 from information_schema.columns
+		where table_schema = 'public' and table_name = 'site_visit' and column_name = 'project_id'
+	) and not exists (
 		select 1 from pg_constraint c
 		join pg_class t on t.oid = c.conrelid and t.relname = 'site_visit'
 		where c.contype = 'f' and c.conname = 'site_visit_project_id_fkey'
