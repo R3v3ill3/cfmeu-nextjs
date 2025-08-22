@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { JVSelector } from "@/components/projects/JVSelector";
 import { MultiEmployerPicker } from "@/components/projects/MultiEmployerPicker";
 import { SingleEmployerDialogPicker } from "@/components/projects/SingleEmployerDialogPicker";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type EditableProject = {
   id: string;
@@ -42,6 +43,10 @@ export function EditProjectDialog({
   const [jvLabel, setJvLabel] = useState<string>("");
   const [loadingRelations, setLoadingRelations] = useState<boolean>(false);
 
+  // Patch assignment state
+  const [selectedPatchId, setSelectedPatchId] = useState<string>("");
+  const [patchSaving, setPatchSaving] = useState<boolean>(false);
+
   const queryClient = useQueryClient();
 
   const resetForm = () => {
@@ -55,6 +60,7 @@ export function EditProjectDialog({
     setHeadContractorId("");
     setJvStatus("no");
     setJvLabel("");
+    setSelectedPatchId("");
   };
 
   const loadRelations = async () => {
@@ -100,6 +106,90 @@ export function EditProjectDialog({
       setHeadContractorId(builderIds[0]);
     }
   }, [jvStatus, builderIds, headContractorId]);
+
+  // Sites for this project (to apply patch links)
+  const [siteIds, setSiteIds] = useState<string[]>([]);
+  useEffect(() => {
+    const fetchSites = async () => {
+      const { data } = await (supabase as any)
+        .from("job_sites")
+        .select("id")
+        .eq("project_id", project.id);
+      setSiteIds(((data as any[]) || []).map((r: any) => String(r.id)));
+    };
+    if (open) fetchSites();
+  }, [open, project.id]);
+
+  // Current patches on this project via its sites
+  const [projectPatches, setProjectPatches] = useState<Array<{ id: string; name: string }>>([]);
+  const [organiserNames, setOrganiserNames] = useState<string[]>([]);
+  useEffect(() => {
+    const loadPatchesAndOrganisers = async () => {
+      if (siteIds.length === 0) { setProjectPatches([]); setOrganiserNames([]); return; }
+      const { data: pjs } = await (supabase as any)
+        .from("patch_job_sites")
+        .select("patch_id, patches:patch_id(id,name)")
+        .in("job_site_id", siteIds);
+      const byId = new Map<string, { id: string; name: string }>();
+      ;((pjs as any[]) || []).forEach((r: any) => {
+        const patch = Array.isArray(r.patches) ? r.patches[0] : r.patches;
+        if (patch?.id) byId.set(patch.id, { id: patch.id, name: patch.name });
+      });
+      const patches = Array.from(byId.values());
+      setProjectPatches(patches);
+      const patchIds = patches.map(p => p.id);
+      if (patchIds.length === 0) { setOrganiserNames([]); return; }
+      const { data: orgs } = await (supabase as any)
+        .from("organiser_patch_assignments")
+        .select("organiser_id, effective_to, profiles:organiser_id(full_name)")
+        .is("effective_to", null)
+        .in("patch_id", patchIds);
+      const names = new Map<string, string>();
+      ;((orgs as any[]) || []).forEach((r: any) => {
+        const prof = Array.isArray(r.profiles) ? r.profiles[0] : r.profiles;
+        const n = prof?.full_name as string | undefined;
+        if (n && r.organiser_id) names.set(r.organiser_id, n);
+      });
+      setOrganiserNames(Array.from(names.values()));
+    };
+    if (open) loadPatchesAndOrganisers();
+  }, [open, siteIds]);
+
+  // All patches and labels for selection UI
+  const [allPatches, setAllPatches] = useState<Array<{ id: string; name: string }>>([]);
+  const [patchOptionLabels, setPatchOptionLabels] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const loadOptions = async () => {
+      const { data: pts } = await (supabase as any)
+        .from("patches")
+        .select("id,name")
+        .order("name");
+      setAllPatches(((pts as any[]) || []) as any);
+      const labels = new Map<string, string>();
+      const { data: orgs } = await (supabase as any)
+        .from("organiser_patch_assignments")
+        .select("patch_id, organiser_id, profiles:organiser_id(full_name)")
+        .is("effective_to", null);
+      ;((orgs as any[]) || []).forEach((r: any) => {
+        const pid = r.patch_id as string;
+        const prof = Array.isArray(r.profiles) ? r.profiles[0] : r.profiles;
+        const name = (prof?.full_name as string) || r.organiser_id;
+        if (!labels.has(pid)) labels.set(pid, name);
+      });
+      const { data: pending } = await (supabase as any)
+        .from("pending_users")
+        .select("id,full_name,assigned_patch_ids,status,role")
+        .in("status", ["draft", "invited"]);
+      ;((pending as any[]) || []).forEach((pu: any) => {
+        const name = (pu.full_name as string) || (pu.email as string) || pu.id;
+        ;(pu.assigned_patch_ids || []).forEach((pid: string) => {
+          if (!labels.has(pid)) labels.set(pid, `${name}${pu.role === 'lead_organiser' ? ' (lead)' : ''}`);
+        });
+      });
+      setPatchOptionLabels(Object.fromEntries(labels.entries()));
+    };
+    if (open) loadOptions();
+  }, [open]);
 
   const updateMutation = useMutation({
     mutationFn: async () => {
@@ -235,6 +325,92 @@ export function EditProjectDialog({
             onChangeStatus={setJvStatus}
             onChangeLabel={setJvLabel}
           />
+
+          {/* Patch & organiser info with assign capability */}
+          <div className="space-y-2">
+            <div className="text-sm font-medium">Patch</div>
+            <div className="text-sm text-muted-foreground">
+              {projectPatches.length > 0 ? `${projectPatches[0]?.name}${projectPatches.length > 1 ? ` +${projectPatches.length - 1}` : ''}` : 'No patch assigned'}
+            </div>
+            <div className="text-sm font-medium">Organiser{organiserNames.length === 1 ? '' : 's'}</div>
+            <div className="text-sm text-muted-foreground truncate">{organiserNames.slice(0, 4).join(', ') || '—'}</div>
+            <div>
+              <Label>Assign patch</Label>
+              <Select value={selectedPatchId} onValueChange={(v: string) => setSelectedPatchId(v)}>
+                <SelectTrigger className="mt-1 w-full">
+                  <SelectValue placeholder="Select a patch" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(allPatches as any[]).map((pt: any) => {
+                    const left = (patchOptionLabels as Record<string, string>)[pt.id];
+                    return (
+                      <SelectItem key={pt.id} value={pt.id}>
+                        <span className="inline-flex items-center gap-2">
+                          <span className="text-muted-foreground w-40 text-left truncate">{left || '—'}</span>
+                          <span className="text-foreground">{pt.name}</span>
+                        </span>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+              <div className="flex justify-end gap-2 mt-2">
+                <Button variant="outline" onClick={() => setSelectedPatchId("")}>Clear</Button>
+                <Button disabled={!selectedPatchId || siteIds.length === 0 || patchSaving} onClick={async () => {
+                  try {
+                    setPatchSaving(true);
+                    for (const sid of siteIds) {
+                      try {
+                        await (supabase as any).rpc('upsert_patch_site', { p_patch: selectedPatchId, p_site: sid });
+                      } catch (e) {
+                        await (supabase as any).from('patch_job_sites').insert({ patch_id: selectedPatchId, job_site_id: sid });
+                      }
+                    }
+                    // refresh local and external queries
+                    queryClient.invalidateQueries({ queryKey: ["project-patches", project.id] });
+                    queryClient.invalidateQueries({ queryKey: ["project-patch-organisers", project.id] });
+                    // reload local display
+                    setSelectedPatchId("");
+                    toast.success("Patch assigned to project sites");
+                    // reload patches/organisers locally
+                    const { data: pjs2 } = await (supabase as any)
+                      .from("patch_job_sites")
+                      .select("patch_id, patches:patch_id(id,name)")
+                      .in("job_site_id", siteIds);
+                    const byId2 = new Map<string, { id: string; name: string }>();
+                    ;((pjs2 as any[]) || []).forEach((r: any) => {
+                      const patch = Array.isArray(r.patches) ? r.patches[0] : r.patches;
+                      if (patch?.id) byId2.set(patch.id, { id: patch.id, name: patch.name });
+                    });
+                    const patches2 = Array.from(byId2.values());
+                    setProjectPatches(patches2);
+                    const patchIds2 = patches2.map(p => p.id);
+                    if (patchIds2.length > 0) {
+                      const { data: orgs2 } = await (supabase as any)
+                        .from("organiser_patch_assignments")
+                        .select("organiser_id, effective_to, profiles:organiser_id(full_name)")
+                        .is("effective_to", null)
+                        .in("patch_id", patchIds2);
+                      const names2 = new Map<string, string>();
+                      ;((orgs2 as any[]) || []).forEach((r: any) => {
+                        const prof = Array.isArray(r.profiles) ? r.profiles[0] : r.profiles;
+                        const n = prof?.full_name as string | undefined;
+                        if (n && r.organiser_id) names2.set(r.organiser_id, n);
+                      });
+                      setOrganiserNames(Array.from(names2.values()));
+                    } else {
+                      setOrganiserNames([]);
+                    }
+                  } finally {
+                    setPatchSaving(false);
+                  }
+                }}>{patchSaving ? "Saving..." : "Save patch"}</Button>
+              </div>
+              {siteIds.length === 0 && (
+                <div className="text-xs text-amber-600 mt-1">Create at least one job site to link a patch.</div>
+              )}
+            </div>
+          </div>
 
           <MultiEmployerPicker
             label="Builder(s)"

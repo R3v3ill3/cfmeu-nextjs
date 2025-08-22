@@ -71,6 +71,50 @@ export default function ProjectDetailPage() {
     [sites]
   )
 
+  // Patch and organiser info for this project (via linked job sites)
+  const { data: projectPatches = [] } = useQuery({
+    queryKey: ["project-patches", projectId, sortedSiteIds],
+    enabled: !!projectId && sortedSiteIds.length > 0,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from("patch_job_sites")
+        .select("patch_id, patches:patch_id(id,name)")
+        .in("job_site_id", sortedSiteIds)
+      const list = ((data as any[]) || [])
+      const byId = new Map<string, { id: string; name: string }>()
+      list.forEach((r: any) => {
+        const patch = Array.isArray(r.patches) ? r.patches[0] : r.patches
+        if (patch?.id) byId.set(patch.id, { id: patch.id, name: patch.name })
+      })
+      return Array.from(byId.values())
+    }
+  })
+
+  const patchIds = useMemo(() => (projectPatches as any[]).map((pp: any) => pp.id), [projectPatches])
+
+  const { data: patchOrganisers = [] } = useQuery({
+    queryKey: ["project-patch-organisers", projectId, patchIds],
+    enabled: !!projectId && patchIds.length > 0,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from("organiser_patch_assignments")
+        .select("organiser_id, effective_to, profiles:organiser_id(full_name)")
+        .is("effective_to", null)
+        .in("patch_id", patchIds)
+      const names = new Map<string, string>()
+      ;((data as any[]) || []).forEach((r: any) => {
+        const prof = Array.isArray(r.profiles) ? r.profiles[0] : r.profiles
+        const n = prof?.full_name as string | undefined
+        if (n && r.organiser_id) names.set(r.organiser_id, n)
+      })
+      return Array.from(names.values())
+    }
+  })
+
   const { data: contractorSummary = [] } = useQuery({
     queryKey: ["project-contractor-employers", projectId, sortedSiteIds],
     enabled: !!projectId && sortedSiteIds.length > 0,
@@ -337,6 +381,18 @@ export default function ProjectDetailPage() {
                 <div className="space-y-1">
                   <div className="font-medium">Last site visit</div>
                   <div className="text-muted-foreground">{lastVisit || "—"}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="font-medium">Patch</div>
+                  <div className="text-muted-foreground truncate">
+                    {(projectPatches as any[]).length > 0 ? `${(projectPatches as any[])[0]?.name}${(projectPatches as any[]).length > 1 ? ` +${(projectPatches as any[]).length - 1}` : ''}` : '—'}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <div className="font-medium">Organiser{(patchOrganisers as any[]).length === 1 ? '' : 's'}</div>
+                  <div className="text-muted-foreground truncate">
+                    {(patchOrganisers as any[]).slice(0, 4).join(', ') || '—'}
+                  </div>
                 </div>
               </div>
             </CardContent>
