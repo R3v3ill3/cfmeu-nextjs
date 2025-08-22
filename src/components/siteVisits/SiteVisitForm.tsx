@@ -14,7 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 
 type SiteVisit = {
   id?: string
-  visit_date: string
+  date: string
   organiser_id: string | null
   project_id: string | null
   job_site_id: string | null
@@ -25,7 +25,7 @@ type SiteVisit = {
 
 export function SiteVisitForm({ open, onOpenChange, initial }: { open: boolean; onOpenChange: (v: boolean) => void; initial?: Partial<SiteVisit> }) {
   const qc = useQueryClient()
-  const [visitDate, setVisitDate] = useState<string>(() => initial?.visit_date || new Date().toISOString().slice(0, 10))
+  const [visitDate, setVisitDate] = useState<string>(() => (initial as any)?.date || new Date().toISOString().slice(0, 10))
   const [organiserId, setOrganiserId] = useState<string | null>(initial?.organiser_id || null)
   const [projectId, setProjectId] = useState<string | null>(initial?.project_id || null)
   const [siteId, setSiteId] = useState<string | null>(initial?.job_site_id || null)
@@ -38,7 +38,7 @@ export function SiteVisitForm({ open, onOpenChange, initial }: { open: boolean; 
 
   useEffect(() => {
     if (open && initial) {
-      setVisitDate(initial.visit_date || new Date().toISOString().slice(0, 10))
+      setVisitDate((initial as any).date || new Date().toISOString().slice(0, 10))
       setOrganiserId(initial.organiser_id || null)
       setProjectId(initial.project_id || null)
       setSiteId(initial.job_site_id || null)
@@ -221,7 +221,7 @@ export function SiteVisitForm({ open, onOpenChange, initial }: { open: boolean; 
     mutationFn: async () => {
       // Build base payload
       const base = {
-        visit_date: visitDate,
+        date: visitDate,
         organiser_id: organiserId,
         project_id: projectId,
         job_site_id: siteId,

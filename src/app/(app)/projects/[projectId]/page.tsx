@@ -151,11 +151,11 @@ export default function ProjectDetailPage() {
     queryFn: async () => {
       const { data } = await (supabase as any)
         .from("site_visit")
-        .select("visit_date")
+        .select("date")
         .eq("project_id", projectId)
-        .order("visit_date", { ascending: false })
+        .order("date", { ascending: false })
         .limit(1)
-      return (data && data[0]?.visit_date) ? new Date(data[0].visit_date).toLocaleDateString() : "—"
+      return (data && data[0]?.date) ? new Date(data[0].date).toLocaleDateString() : "—"
     }
   })
 
