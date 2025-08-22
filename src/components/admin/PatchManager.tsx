@@ -26,6 +26,10 @@ export default function PatchManager() {
   const { toast } = useToast()
   const [createOpen, setCreateOpen] = useState(false)
   const [name, setName] = useState("")
+  const [code, setCode] = useState("")
+  const [typeValue, setTypeValue] = useState<string>("geo")
+  const [description, setDescription] = useState("")
+  const [subSectorsInput, setSubSectorsInput] = useState("")
   const [importOpen, setImportOpen] = useState(false)
   const [importStep, setImportStep] = useState<"upload" | "map" | "import">("upload")
   const [csv, setCsv] = useState<{ headers: string[]; rows: Record<string, any>[]; filename?: string } | null>(null)
@@ -111,29 +115,31 @@ export default function PatchManager() {
 
   const createPatch = useMutation({
     mutationFn: async () => {
+      if (!code.trim()) throw new Error("Enter a code")
       if (!name.trim()) throw new Error("Enter a name")
       const { data: auth } = await (supabase as any).auth.getUser()
       const createdBy = (auth as any)?.user?.id ?? null
-      try {
-        const { error } = await (supabase as any)
-          .from("patches")
-          .insert({ name: name.trim(), type: "geo", created_by: createdBy })
-        if (error) throw error
-      } catch (err: any) {
-        const msg = err?.message || ""
-        if (/column\s+\"?type\"?\s+does not exist/i.test(msg) || /missing column/i.test(msg)) {
-          const { error: fallbackErr } = await (supabase as any)
-            .from("patches")
-            .insert({ name: name.trim(), created_by: createdBy })
-          if (fallbackErr) throw fallbackErr
-        } else {
-          throw err
-        }
+      const payload: any = {
+        code: code.trim(),
+        name: name.trim(),
+        type: (typeValue || "geo").trim(),
+        created_by: createdBy,
       }
+      if (description.trim()) payload.description = description.trim()
+      const subs = subSectorsInput.split(',').map(s => s.trim()).filter(Boolean)
+      if (subs.length > 0) payload.sub_sectors = subs
+      const { error } = await (supabase as any)
+        .from("patches")
+        .insert(payload)
+      if (error) throw error
     },
     onSuccess: () => {
       setCreateOpen(false)
       setName("")
+      setCode("")
+      setTypeValue("geo")
+      setDescription("")
+      setSubSectorsInput("")
       qc.invalidateQueries({ queryKey: ["admin-patches"] })
       toast({ title: "Patch created" })
     },
@@ -309,16 +315,36 @@ export default function PatchManager() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Create Patch</DialogTitle>
-              <DialogDescription>Define a patch name.</DialogDescription>
+              <DialogDescription>Define patch code, name, type, and optional details.</DialogDescription>
 
             </DialogHeader>
             <div className="space-y-3">
               <div>
+                <div className="text-sm mb-1">Code</div>
+                <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. 100" />
+              </div>
+              <div>
                 <div className="text-sm mb-1">Name</div>
                 <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. North East" />
               </div>
+              <div>
+                <div className="text-sm mb-1">Type</div>
+                <select className="border rounded h-10 w-full px-2" value={typeValue} onChange={(e) => setTypeValue(e.target.value)}>
+                  <option value="geo">geo</option>
+                  <option value="trade">trade</option>
+                  <option value="sub-sector">sub-sector</option>
+                </select>
+              </div>
+              <div>
+                <div className="text-sm mb-1">Description</div>
+                <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional description" />
+              </div>
+              <div>
+                <div className="text-sm mb-1">Sub-sectors (comma-separated)</div>
+                <Input value={subSectorsInput} onChange={(e) => setSubSectorsInput(e.target.value)} placeholder="e.g. scaffolding, steel, electrical" />
+              </div>
               <div className="flex justify-end">
-                <Button onClick={() => createPatch.mutate()} disabled={!name.trim()}>Create</Button>
+                <Button onClick={() => createPatch.mutate()} disabled={!code.trim() || !name.trim()}>Create</Button>
               </div>
             </div>
           </DialogContent>

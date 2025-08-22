@@ -34,9 +34,10 @@ const DATABASE_TABLES = {
   patches: {
     label: "Patches",
     columns: {
-      code: { type: "number", required: false, description: "Numeric patch code (e.g., 100)" },
+      code: { type: "text", required: false, description: "Patch code (text, unique)" },
       name: { type: "text", required: true, description: "Patch name (e.g., Sydney)" },
       description: { type: "text", required: false, description: "Patch description" },
+      type: { type: "text", required: false, description: "Patch type: geo, trade, or sub-sector" },
       organiser1: { type: "text", required: false, description: "Organiser 1 (full name or email)" },
       organiser2: { type: "text", required: false, description: "Organiser 2 (full name or email)" },
       sub_sector_1: { type: "text", required: false, description: "Sub-sector 1 (for trade patches)" },
