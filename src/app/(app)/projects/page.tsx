@@ -610,25 +610,26 @@ function ProjectListCard({ p, onOpenEmployer, onOpenWorker }: { p: ProjectWithRo
 export default function ProjectsPage() {
   const sp = useSearchParams()
   const q = (sp.get("q") || "").toLowerCase()
-  const patchId = sp.get("patch") || ""
+  const patchParam = sp.get("patch") || ""
+  const patchIds = patchParam.split(",").map(s => s.trim()).filter(Boolean)
 
   const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null)
   const [isEmployerOpen, setIsEmployerOpen] = useState(false)
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null)
   const [isWorkerOpen, setIsWorkerOpen] = useState(false)
 
-  // If a patch is selected, compute project ids that have at least one site linked to this patch
+  // If a patch is selected, compute project ids that have at least one site linked to these patches
   const { data: patchProjectIds = [], isFetching: fetchingPatchProjects } = useQuery<string[]>({
-    queryKey: ["project-ids-for-patch", patchId],
-    enabled: !!patchId,
+    queryKey: ["project-ids-for-patch", patchIds],
+    enabled: patchIds.length > 0,
     staleTime: 30000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
       const { data } = await (supabase as any)
         .from("patch_job_sites")
-        .select("job_sites:job_site_id(project_id)")
+        .select("job_sites:job_site_id(project_id), patch_id")
         .is("effective_to", null)
-        .eq("patch_id", patchId)
+        .in("patch_id", patchIds)
       const projIds = new Set<string>()
       ;((data as any[]) || []).forEach((row: any) => {
         const js = Array.isArray(row.job_sites) ? row.job_sites[0] : row.job_sites
@@ -640,7 +641,7 @@ export default function ProjectsPage() {
   })
 
   const { data: projects = [], isLoading } = useQuery<ProjectWithRoles[]>({
-    queryKey: ["projects-list", patchId, patchProjectIds],
+    queryKey: ["projects-list", patchIds, patchProjectIds],
     staleTime: 30000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
@@ -657,7 +658,7 @@ export default function ProjectsPage() {
           )
         `)
         .order("created_at", { ascending: false })
-      if (patchId) {
+      if (patchIds.length > 0) {
         if ((patchProjectIds as string[]).length === 0) return []
         qy = qy.in('id', patchProjectIds as string[])
       }
