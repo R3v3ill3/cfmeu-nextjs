@@ -95,7 +95,8 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
     const lower = (s: any) => (s ? String(s).toLowerCase() : "");
     const isTruthy = (v: any) => v !== undefined && v !== null && String(v).trim() !== "";
     const rows = (csvData || []).map((r) => {
-      const code = toInt(r["code"] ?? r["Patch code"] ?? r["patch_code"] ?? r["patch code"]);
+      const codeRaw = r["code"] ?? r["Patch code"] ?? r["patch_code"] ?? r["patch code"];
+      const code = codeRaw !== undefined && codeRaw !== null ? String(codeRaw).trim() : null;
       const name = r["name"] ?? r["Patch name"] ?? r["patch"] ?? r["Patch"] ?? r["Patch description"] ?? r["description"];
       const description = r["description"] ?? r["Patch description"] ?? r["patch_description"];
       const org1 = r["organiser1"] ?? r["organiser 1"] ?? r["Organiser 1"] ?? r["Organizer 1"];
@@ -105,10 +106,12 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
       const subSectors = subCols
         .map((k) => String(r[k]).trim())
         .filter((v) => isTruthy(v));
-      const type = subSectors.length > 0 || /trade/.test(lower(description)) ? "trade" : "geo";
+      const typeCsv = r["type"] ?? r["Type"] ?? r["patch_type"] ?? r["Patch type"];
+      const inferredType = subSectors.length > 0 || /trade/.test(lower(description)) ? "trade" : "geo";
+      const type = (typeCsv ? String(typeCsv).toLowerCase().replace(/[\s_]+/g, "-") : inferredType);
       return { code, name: name ? String(name).trim() : null, description: description || null, organiser1: org1 || null, organiser2: org2 || null, subSectors, type };
     });
-    return rows.filter((r) => r.code !== null || r.name);
+    return rows.filter((r) => Boolean(r.code || r.name));
   }, [csvData]);
 
   useEffect(() => {
@@ -300,18 +303,20 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
 
     for (const row of normalizedRows) {
       try {
-        // Require name; skip if missing
-        if (!row.name || !String(row.name).trim()) {
-          results.failed++;
-          results.errors.push("Row missing name; skipped");
-          continue;
-        }
-        // Resolve existing patch by case-insensitive name only (schema does not include code)
+        // Resolve existing patch: by code first (exact), else by case-insensitive name
         let existing: any = null;
-        if (row.name) {
+        if (row.code) {
           const { data } = await supabase
             .from("patches")
-            .select("id, name")
+            .select("id, code, name")
+            .eq("code", row.code)
+            .maybeSingle();
+          existing = data || null;
+        }
+        if (!existing && row.name) {
+          const { data } = await supabase
+            .from("patches")
+            .select("id, code, name")
             .ilike("name", row.name)
             .limit(1)
             .maybeSingle();
@@ -320,10 +325,17 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
 
         let patchId: string;
         if (existing) {
-          // Update only columns that exist in schema
+          // Build selective update payload
+          const updatePayload: any = {};
+          if (row.code && row.code !== existing.code) updatePayload.code = row.code;
+          if (row.name) updatePayload.name = row.name;
+          if (row.description !== undefined) updatePayload.description = row.description;
+          if (row.type) updatePayload.type = row.type;
+          if (Array.isArray(row.subSectors)) updatePayload.sub_sectors = row.subSectors;
+          if (createdBy) updatePayload.updated_by = createdBy;
           const { data, error } = await supabase
             .from("patches")
-            .update({ name: row.name })
+            .update(updatePayload)
             .eq("id", existing.id)
             .select("id")
             .single();
@@ -331,34 +343,27 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
           patchId = (data as any).id;
           results.updated++;
         } else {
-          // Insert, prefer including type if the column exists in schema
-          let inserted: any = null;
-          try {
-            const { data, error } = await supabase
-              .from("patches")
-              .insert({ name: row.name, type: row.type || "geo", created_by: createdBy } as any)
-              .select("id")
-              .single();
-            if (error) throw error;
-            inserted = data;
-          } catch (err: any) {
-            const msg = err?.message || "";
-            // Fallback if type column does not exist in target schema
-            if (/column\s+\"?type\"?\s+does not exist/i.test(msg) || /missing column/i.test(msg)) {
-              const { data, error } = await supabase
-                .from("patches")
-                .insert({ name: row.name, created_by: createdBy } as any)
-                .select("id")
-                .single();
-              if (error) throw error;
-              inserted = data;
-            } else if (/new row violates row-level security policy/i.test(msg) || /violates row level security/i.test(msg)) {
-              throw new Error("Insufficient permissions to insert patches. Ensure admin role or RLS policy allows insert.");
-            } else {
-              throw err;
-            }
+          // Insert requires code; default name to code if name missing
+          if (!row.code) {
+            results.failed++;
+            results.errors.push("Row missing code for insert; skipped");
+            continue;
           }
-          patchId = (inserted as any).id;
+          const insertPayload: any = {
+            code: row.code,
+            name: row.name || row.code,
+            type: row.type || "geo",
+            created_by: createdBy,
+          };
+          if (row.description !== undefined) insertPayload.description = row.description;
+          if (Array.isArray(row.subSectors)) insertPayload.sub_sectors = row.subSectors;
+          const { data, error } = await supabase
+            .from("patches")
+            .insert(insertPayload)
+            .select("id")
+            .single();
+          if (error) throw error;
+          patchId = (data as any).id;
           results.created++;
         }
 
