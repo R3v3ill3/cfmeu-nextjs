@@ -25,8 +25,8 @@ import { LogOut, Users, Building, FolderOpen, FileCheck, Shield, BarChart3 } fro
 import { FiltersBar } from "@/components/context/FiltersBar"
 import { supabase } from "@/integrations/supabase/client"
 
-const cfmeuLogoLight = "/icon.svg" as unknown as string
-const cfmeuLogoDark = "/icon.svg" as unknown as string
+const cfmeuLogoLight = "/favicon.svg" as unknown as string
+const cfmeuLogoDark = "/favicon.svg" as unknown as string
 
 type NavItem = { path: string; label: string; icon: any }
 
