@@ -271,12 +271,22 @@ export function usePatchDashboard(patchId?: string) {
         }
       })
 
-      // Top-level KPIs
-      const totalMembers = rows.reduce((sum, r) => sum + r.members.current, 0)
+      // Top-level KPIs (deduplicated across sites)
+      const uniqueMemberIds = new Set<string>(
+        placements
+          .filter(p => p.workers?.union_membership_status === 'member')
+          .map(p => String(p.worker_id))
+      )
+      const totalMembers = uniqueMemberIds.size
       const totalMembersGoal = rows.reduce((sum, r) => sum + r.members.goal, 0)
       const totalLeaders = roles.filter(r => leaderRoleSet.has(r.name)).length
       const totalLeadersGoal = rows.reduce((sum, r) => sum + (targetsBySite[r.id]?.leaders || 0), 0)
-      const totalDd = rows.reduce((sum, r) => sum + r.dd.current, 0)
+      const uniqueDdIds = new Set<string>(
+        placements
+          .filter(p => ddByWorkerId[p.worker_id] === 'direct_debit')
+          .map(p => String(p.worker_id))
+      )
+      const totalDd = uniqueDdIds.size
       const totalDdGoal = rows.reduce((sum, r) => sum + r.dd.goal, 0)
       const totalOpenIssues = sites.reduce((sum, s) => sum + (openIssuesBySite[s.id] || 0), 0)
       const kpis: PatchKpis = {

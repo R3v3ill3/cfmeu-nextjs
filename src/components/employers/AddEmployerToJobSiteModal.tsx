@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { SingleEmployerPicker } from "@/components/projects/SingleEmployerPicker";
 import { useToast } from "@/hooks/use-toast";
+import { Input } from "@/components/ui/input";
 
 interface AddEmployerToJobSiteModalProps {
   isOpen: boolean;
@@ -29,6 +30,7 @@ export function AddEmployerToJobSiteModal({
   const { toast } = useToast();
   const [selectedEmployerId, setSelectedEmployerId] = useState("");
   const [isAdding, setIsAdding] = useState(false);
+  const [estimate, setEstimate] = useState<string>("");
 
   // Get job site details including project
   const { data: jobSite } = useQuery({
@@ -48,6 +50,11 @@ export function AddEmployerToJobSiteModal({
 
   const handleAddEmployer = async () => {
     if (!selectedEmployerId || !jobSite) return;
+    const est = Number(estimate)
+    if (!Number.isFinite(est) || est <= 0) {
+      toast({ title: "Estimated workers required", description: "Enter a positive estimate for this employer at this site.", variant: "destructive" })
+      return
+    }
 
     setIsAdding(true);
     try {
@@ -80,12 +87,35 @@ export function AddEmployerToJobSiteModal({
         throw siteError;
       }
 
+      // Upsert project-level estimate row for this employer
+      if (jobSite.project_id) {
+        // Try to find an existing project_contractor_trades row; otherwise insert one
+        const { data: existingPct } = await (supabase as any)
+          .from("project_contractor_trades")
+          .select("id")
+          .eq("project_id", jobSite.project_id)
+          .eq("employer_id", selectedEmployerId)
+
+        if ((existingPct as any[])?.length) {
+          const firstId = (existingPct as any[])[0].id
+          await (supabase as any)
+            .from("project_contractor_trades")
+            .update({ estimated_project_workforce: est })
+            .eq("id", firstId)
+        } else {
+          await (supabase as any)
+            .from("project_contractor_trades")
+            .insert([{ project_id: jobSite.project_id, employer_id: selectedEmployerId, trade_type: "labour_hire", eba_signatory: "not_specified", estimated_project_workforce: est }])
+        }
+      }
+
       toast({
         title: "Success",
         description: "Employer has been linked to the job site and project.",
       });
 
       setSelectedEmployerId("");
+      setEstimate("");
       onEmployerAdded();
     } catch (error: any) {
       console.error("Error adding employer:", error);
@@ -101,6 +131,7 @@ export function AddEmployerToJobSiteModal({
 
   const handleClose = () => {
     setSelectedEmployerId("");
+    setEstimate("");
     onClose();
   };
 
@@ -128,6 +159,11 @@ export function AddEmployerToJobSiteModal({
               selectedId={selectedEmployerId}
               onChange={setSelectedEmployerId}
             />
+          </div>
+
+          <div>
+            <Label>Estimated workers at this project</Label>
+            <Input type="number" min={1} placeholder="e.g., 10" value={estimate} onChange={(e) => setEstimate(e.target.value)} />
           </div>
 
           <div className="flex justify-end gap-3">

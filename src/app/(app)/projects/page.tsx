@@ -14,6 +14,7 @@ import { WorkerDetailModal } from "@/components/workers/WorkerDetailModal"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 type ProjectWithRoles = {
   id: string
@@ -257,6 +258,67 @@ function ProjectListCard({ p, onOpenEmployer, onOpenWorker }: { p: ProjectWithRo
   const [estRows, setEstRows] = useState<Array<{ employerId: string; employerName: string; assigned: number; estimated: number; value: string }>>([])
   const [saving, setSaving] = useState(false)
 
+  // Patch and organiser display + assignment
+  const [patchAssignOpen, setPatchAssignOpen] = useState(false)
+  const [selectedPatchId, setSelectedPatchId] = useState<string>("")
+
+  const { data: projectPatches = [] } = useQuery({
+    queryKey: ["project-patches", p.id, siteIds],
+    enabled: siteIds.length > 0,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from("patch_job_sites")
+        .select("patch_id, patches:patch_id(id,name)")
+        .in("job_site_id", siteIds)
+      const list = ((data as any[]) || [])
+      // Deduplicate by patch_id
+      const byId = new Map<string, { id: string; name: string }>()
+      list.forEach((r: any) => {
+        const patch = Array.isArray(r.patches) ? r.patches[0] : r.patches
+        if (patch?.id) byId.set(patch.id, { id: patch.id, name: patch.name })
+      })
+      return Array.from(byId.values())
+    }
+  })
+
+  const patchIds = useMemo(() => (projectPatches as any[]).map((pp: any) => pp.id), [projectPatches])
+
+  const { data: patchOrganisers = [] } = useQuery({
+    queryKey: ["project-patch-organisers", p.id, patchIds],
+    enabled: patchIds.length > 0,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from("organiser_patch_assignments")
+        .select("organiser_id, effective_to, profiles:organiser_id(full_name)")
+        .is("effective_to", null)
+        .in("patch_id", patchIds)
+      const names = new Map<string, string>()
+      ;((data as any[]) || []).forEach((r: any) => {
+        const prof = Array.isArray(r.profiles) ? r.profiles[0] : r.profiles
+        const n = prof?.full_name as string | undefined
+        if (n && r.organiser_id) names.set(r.organiser_id, n)
+      })
+      return Array.from(names.values())
+    }
+  })
+
+  const { data: allPatches = [] } = useQuery({
+    queryKey: ["patches-options"],
+    staleTime: 300000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from("patches")
+        .select("id,name")
+        .order("name")
+      return (data as any[]) || []
+    }
+  })
+
   const builderNames = useMemo(() => {
     const builders = (p.project_employer_roles || []).filter((r) => r.role === 'builder')
     return builders.map((r) => ({ id: r.employer_id, name: r.employers?.name || r.employer_id }))
@@ -330,6 +392,22 @@ function ProjectListCard({ p, onOpenEmployer, onOpenWorker }: { p: ProjectWithRo
             </>
           )}
         </div>
+        <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+          {(projectPatches as any[]).length > 0 ? (
+            <>
+              <span>
+                Patch: {(projectPatches as any[])[0]?.name}{(projectPatches as any[]).length > 1 ? ` +${(projectPatches as any[]).length - 1}` : ''}
+              </span>
+              <span className="text-muted-foreground">·</span>
+              <span>
+                Organiser{(patchOrganisers as any[]).length === 1 ? '' : 's'}: {(patchOrganisers as any[]).slice(0, 2).join(', ')}{(patchOrganisers as any[]).length > 2 ? '…' : ''}
+              </span>
+            </>
+          ) : (
+            <span>No patch assigned</span>
+          )}
+          <Button size="sm" variant="outline" className="h-6 px-2 ml-auto" onClick={() => setPatchAssignOpen(true)}>Assign patch</Button>
+        </div>
       </CardHeader>
       <CardContent className="px-4 pb-4 pt-0 space-y-2">
         <div className="space-y-2">
@@ -359,6 +437,53 @@ function ProjectListCard({ p, onOpenEmployer, onOpenWorker }: { p: ProjectWithRo
         </div>
       </CardContent>
     </Card>
+
+    {/* Assign Patch Dialog */}
+    <Dialog open={patchAssignOpen} onOpenChange={(v: boolean) => setPatchAssignOpen(v)}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Assign a patch to this project</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          {siteIds.length === 0 && (
+            <div className="text-sm text-amber-600">Create at least one job site to link a patch.</div>
+          )}
+          <div>
+            <label className="text-sm font-medium">Patch</label>
+            <Select value={selectedPatchId} onValueChange={(v: string) => setSelectedPatchId(v)}>
+              <SelectTrigger className="mt-1 w-full">
+                <SelectValue placeholder="Select a patch" />
+              </SelectTrigger>
+              <SelectContent>
+                {(allPatches as any[]).map((pt: any) => (
+                  <SelectItem key={pt.id} value={pt.id}>{pt.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setPatchAssignOpen(false)}>Cancel</Button>
+            <Button disabled={!selectedPatchId || siteIds.length === 0} onClick={async () => {
+              try {
+                // Link selected patch to all current project sites
+                for (const sid of siteIds) {
+                  try {
+                    await (supabase as any).rpc('upsert_patch_site', { p_patch: selectedPatchId, p_site: sid })
+                  } catch (e) {
+                    // fallback: direct insert if RPC unavailable
+                    await (supabase as any).from('patch_job_sites').insert({ patch_id: selectedPatchId, job_site_id: sid })
+                  }
+                }
+                queryClient.invalidateQueries({ queryKey: ["project-patches", p.id] })
+                queryClient.invalidateQueries({ queryKey: ["project-patch-organisers", p.id] })
+                setPatchAssignOpen(false)
+                setSelectedPatchId("")
+              } catch {}
+            }}>Save</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
 
     <Dialog open={estOpen} onOpenChange={(v: boolean) => setEstOpen(v)}>
       <DialogContent className="max-w-lg">

@@ -148,29 +148,92 @@ export function AssignWorkersModal({
     }
 
     try {
-      for (const siteId of effectiveSiteIds) {
-        // find existing active placements to avoid duplicates
-        const { data: existing, error: existErr } = await supabase
-          .from("worker_placements")
-          .select("worker_id")
-          .eq("employer_id", employerId)
-          .eq("job_site_id", siteId)
-          .is("end_date", null)
-          .in("worker_id", workerIds);
-        if (existErr) throw existErr;
-        const existingIds = new Set((existing || []).map((r: any) => r.worker_id));
-        const toInsert = workerIds
-          .filter((id) => !existingIds.has(id))
-          .map((id) => ({
-            worker_id: id,
+      // Detect conflicts: for the same employer, find active placements on other sites
+      const { data: currentActive } = await supabase
+        .from("worker_placements")
+        .select("worker_id, job_site_id")
+        .eq("employer_id", employerId)
+        .is("end_date", null)
+        .in("worker_id", workerIds)
+
+      const byWorkerSites = new Map<string, Set<string>>()
+      ;((currentActive as any[]) || []).forEach((r: any) => {
+        if (!byWorkerSites.has(r.worker_id)) byWorkerSites.set(r.worker_id, new Set<string>())
+        byWorkerSites.get(r.worker_id)!.add(String(r.job_site_id))
+      })
+
+      // If any worker is already placed at different sites than selected, prompt once for policy
+      let policy: "move" | "keep" | "multi" = "move"
+      const hasConflict = workerIds.some((wid) => {
+        const set = byWorkerSites.get(wid)
+        if (!set || set.size === 0) return false
+        // conflict if selected sites include a site not already in set or vice versa
+        const selected = new Set(effectiveSiteIds)
+        const already = set
+        const diff = Array.from(selected).some((sid) => !already.has(sid)) || Array.from(already).some((sid) => !selected.has(sid))
+        return diff
+      })
+
+      if (hasConflict) {
+        // Lightweight prompt using window.confirm fallbacks to avoid adding extra UI dependencies
+        // First ask if move; if not, ask if multi-assign; else keep
+        const move = window.confirm("Some selected workers are already assigned to a different site for this employer. Click OK to move them to the new site(s). Click Cancel for more options.")
+        if (move) policy = "move"
+        else {
+          const multi = window.confirm("Assign these workers to multiple sites for this employer? Click OK for multi-assign, Cancel to keep them only at their current sites.")
+          policy = multi ? "multi" : "keep"
+        }
+      }
+
+      // Apply policy per worker
+      const today = new Date().toISOString().slice(0, 10)
+      for (const wid of workerIds) {
+        const already = byWorkerSites.get(wid) || new Set<string>()
+        const targetSet = new Set(effectiveSiteIds)
+
+        if (policy === "move") {
+          // End all current placements for this employer/worker on other sites
+          if (already.size > 0) {
+            await supabase
+              .from("worker_placements")
+              .update({ end_date: today })
+              .eq("worker_id", wid)
+              .eq("employer_id", employerId)
+              .is("end_date", null)
+          }
+          // Insert new placements for selected sites
+          const toInsert = Array.from(targetSet).map((sid) => ({
+            worker_id: wid,
             employer_id: employerId,
-            job_site_id: siteId,
+            job_site_id: sid,
             employment_status: employmentStatus as any,
             start_date: startDate,
-          }));
-        if (toInsert.length > 0) {
-          const { error: insErr } = await supabase.from("worker_placements").insert(toInsert);
-          if (insErr) throw insErr;
+          }))
+          if (toInsert.length > 0) await supabase.from("worker_placements").insert(toInsert)
+        } else if (policy === "multi") {
+          // Keep existing; add missing selected sites
+          const toInsert = Array.from(targetSet)
+            .filter((sid) => !already.has(sid))
+            .map((sid) => ({
+              worker_id: wid,
+              employer_id: employerId,
+              job_site_id: sid,
+              employment_status: employmentStatus as any,
+              start_date: startDate,
+            }))
+          if (toInsert.length > 0) await supabase.from("worker_placements").insert(toInsert)
+        } else {
+          // keep: do nothing if already elsewhere; only add where not placed anywhere
+          if (already.size === 0) {
+            const toInsert = Array.from(targetSet).map((sid) => ({
+              worker_id: wid,
+              employer_id: employerId,
+              job_site_id: sid,
+              employment_status: employmentStatus as any,
+              start_date: startDate,
+            }))
+            if (toInsert.length > 0) await supabase.from("worker_placements").insert(toInsert)
+          }
         }
       }
       toast({ title: "Workers assigned", description: `${workerIds.length} worker(s) assigned` });
