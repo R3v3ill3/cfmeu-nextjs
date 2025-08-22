@@ -319,6 +319,37 @@ function ProjectListCard({ p, onOpenEmployer, onOpenWorker }: { p: ProjectWithRo
     }
   })
 
+  // For each patch option, load organiser and draft organiser labels
+  const { data: patchOptionLabels = {} } = useQuery({
+    queryKey: ["patches-option-labels"],
+    staleTime: 300000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const labels = new Map<string, string>()
+      const { data: orgs } = await (supabase as any)
+        .from("organiser_patch_assignments")
+        .select("patch_id, organiser_id, profiles:organiser_id(full_name)")
+        .is("effective_to", null)
+      ;((orgs as any[]) || []).forEach((r: any) => {
+        const pid = r.patch_id as string
+        const prof = Array.isArray(r.profiles) ? r.profiles[0] : r.profiles
+        const name = (prof?.full_name as string) || r.organiser_id
+        if (!labels.has(pid)) labels.set(pid, name)
+      })
+      const { data: pending } = await (supabase as any)
+        .from("pending_users")
+        .select("id,full_name,assigned_patch_ids,status,role")
+        .in("status", ["draft", "invited"]) 
+      ;((pending as any[]) || []).forEach((pu: any) => {
+        const name = (pu.full_name as string) || (pu.email as string) || pu.id
+        ;(pu.assigned_patch_ids || []).forEach((pid: string) => {
+          if (!labels.has(pid)) labels.set(pid, `${name}${pu.role === 'lead_organiser' ? ' (lead)' : ''}`)
+        })
+      })
+      return Object.fromEntries(labels.entries()) as Record<string, string>
+    }
+  })
+
   const builderNames = useMemo(() => {
     const builders = (p.project_employer_roles || []).filter((r) => r.role === 'builder')
     return builders.map((r) => ({ id: r.employer_id, name: r.employers?.name || r.employer_id }))
@@ -455,9 +486,17 @@ function ProjectListCard({ p, onOpenEmployer, onOpenWorker }: { p: ProjectWithRo
                 <SelectValue placeholder="Select a patch" />
               </SelectTrigger>
               <SelectContent>
-                {(allPatches as any[]).map((pt: any) => (
-                  <SelectItem key={pt.id} value={pt.id}>{pt.name}</SelectItem>
-                ))}
+                {(allPatches as any[]).map((pt: any) => {
+                  const left = (patchOptionLabels as Record<string, string>)[pt.id]
+                  return (
+                    <SelectItem key={pt.id} value={pt.id}>
+                      <span className="inline-flex items-center gap-2">
+                        <span className="text-muted-foreground w-40 text-left truncate">{left || '—'}</span>
+                        <span className="text-foreground">{pt.name}</span>
+                      </span>
+                    </SelectItem>
+                  )
+                })}
               </SelectContent>
             </Select>
           </div>

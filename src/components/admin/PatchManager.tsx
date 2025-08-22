@@ -63,14 +63,16 @@ export default function PatchManager() {
       return (data || []) as ProfileUser[]
     }
   })
+  const activeOrganisers = useMemo(() => (organisers as ProfileUser[]).filter(u => u.role === "organiser"), [organisers])
+  const activeLeads = useMemo(() => (organisers as ProfileUser[]).filter(u => u.role === "lead_organiser"), [organisers])
 
-  const { data: pendingOrganisers = [], refetch: refetchPending } = useQuery({
-    queryKey: ["admin-patch-pending-organisers"],
+  const { data: pendingUsers = [], refetch: refetchPending } = useQuery({
+    queryKey: ["admin-patch-pending-users"],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("pending_users")
         .select("id,email,full_name,role,status,assigned_patch_ids")
-        .eq("role", "organiser")
+        .in("role", ["organiser", "lead_organiser"]) 
         .in("status", ["draft", "invited"]) 
         .order("created_at", { ascending: false })
       if (error) throw error
@@ -108,6 +110,22 @@ export default function PatchManager() {
       ;(data as any[]).forEach((row: any) => {
         if (!map[row.patch_id]) map[row.patch_id] = []
         map[row.patch_id].push(row.organiser_id)
+      })
+      return map
+    }
+  })
+  const { data: leadAssignmentsByPatch = {} } = useQuery({
+    queryKey: ["admin-patch-lead-assignments"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("lead_organiser_patch_assignments")
+        .select("lead_organiser_id, patch_id, effective_to")
+        .is("effective_to", null)
+      if (error) throw error
+      const map: Record<string, string[]> = {}
+      ;(data as any[]).forEach((row: any) => {
+        if (!map[row.patch_id]) map[row.patch_id] = []
+        map[row.patch_id].push(row.lead_organiser_id)
       })
       return map
     }
@@ -178,9 +196,24 @@ export default function PatchManager() {
     onError: (e) => toast({ title: "Failed to update", description: (e as any)?.message || String(e), variant: "destructive" })
   })
 
+  const assignToLead = useMutation({
+    mutationFn: async ({ leadId, patchId, assigned }: { leadId: string; patchId: string; assigned: boolean }) => {
+      if (assigned) {
+        await (supabase as any).rpc("upsert_lead_patch", { p_lead: leadId, p_patch: patchId })
+      } else {
+        await (supabase as any).rpc("close_lead_patch", { p_lead: leadId, p_patch: patchId })
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-patch-lead-assignments"] })
+      toast({ title: "Lead assignments updated" })
+    },
+    onError: (e) => toast({ title: "Failed to update lead", description: (e as any)?.message || String(e), variant: "destructive" })
+  })
+
   const updatePendingAllocations = useMutation({
     mutationFn: async ({ pendingId, patchId, add }: { pendingId: string; patchId: string; add: boolean }) => {
-      const pending = (pendingOrganisers as PendingUser[]).find(p => p.id === pendingId)
+      const pending = (pendingUsers as PendingUser[]).find(p => p.id === pendingId)
       const current = new Set<string>(pending?.assigned_patch_ids || [])
       if (add) current.add(patchId); else current.delete(patchId)
       const next = Array.from(current)
@@ -294,10 +327,20 @@ export default function PatchManager() {
                           <Badge key={orgId} variant="secondary">{label}</Badge>
                         )
                       }) || null}
-                      {(pendingOrganisers as PendingUser[]).filter(po => (po.assigned_patch_ids || []).includes(p.id)).map(po => (
+                      {(pendingUsers as PendingUser[]).filter(po => (po.assigned_patch_ids || []).includes(p.id) && po.role === 'organiser').map(po => (
                         <Badge key={`pending-${po.id}`} variant="outline">{po.full_name || po.email} <span className="ml-1">(pending)</span></Badge>
                       ))}
-                      {!(assignmentsByPatch as Record<string, string[]>)[p.id]?.length && !(pendingOrganisers as PendingUser[]).some(po => (po.assigned_patch_ids || []).includes(p.id)) && (
+                      {(leadAssignmentsByPatch as Record<string, string[]>)[p.id]?.map(leadId => {
+                        const user = (organisers as ProfileUser[]).find(u => u.id === leadId)
+                        const label = user?.full_name || user?.email || leadId
+                        return (
+                          <Badge key={`lead-${leadId}`} variant="default">{label} <span className="ml-1">(lead)</span></Badge>
+                        )
+                      }) || null}
+                      {(pendingUsers as PendingUser[]).filter(po => (po.assigned_patch_ids || []).includes(p.id) && po.role === 'lead_organiser').map(po => (
+                        <Badge key={`pending-lead-${po.id}`} variant="default">{po.full_name || po.email} <span className="ml-1">(lead, pending)</span></Badge>
+                      ))}
+                      {!(assignmentsByPatch as Record<string, string[]>)[p.id]?.length && !(pendingUsers as PendingUser[]).some(po => (po.assigned_patch_ids || []).includes(p.id)) && (
                         <span className="text-sm text-muted-foreground">None</span>
                       )}
                     </div>
@@ -406,7 +449,7 @@ export default function PatchManager() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {(organisers as ProfileUser[]).map(u => {
+                        {(activeOrganisers as ProfileUser[]).map(u => {
                           const assigned = Boolean((assignmentsByPatch as Record<string, string[]>)[assignDialogPatchId!]?.includes(u.id))
                           return (
                             <TableRow key={u.id}>
@@ -418,6 +461,40 @@ export default function PatchManager() {
                                 <Checkbox
                                   checked={assigned}
                                   onCheckedChange={(v) => assignToOrganiser.mutate({ organiserId: u.id, patchId: assignDialogPatchId!, assigned: Boolean(v) })}
+                                />
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-sm font-medium mb-2">Lead organisers</div>
+                  <div className="rounded border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Lead organiser</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead className="text-right">Assigned</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(activeLeads as ProfileUser[]).map(u => {
+                          const assigned = Boolean((leadAssignmentsByPatch as Record<string, string[]>)[assignDialogPatchId!]?.includes(u.id))
+                          return (
+                            <TableRow key={u.id}>
+                              <TableCell>{u.full_name || u.email || u.id}</TableCell>
+                              <TableCell>
+                                <Badge variant={u.is_active ? "default" : "secondary"}>{u.is_active ? "Active" : "Inactive"}</Badge>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Checkbox
+                                  checked={assigned}
+                                  onCheckedChange={(v) => assignToLead.mutate({ leadId: u.id, patchId: assignDialogPatchId!, assigned: Boolean(v) })}
                                 />
                               </TableCell>
                             </TableRow>
@@ -450,17 +527,21 @@ export default function PatchManager() {
                       <TableHeader>
                         <TableRow>
                           <TableHead>Organiser</TableHead>
+                          <TableHead>Role</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead className="text-right">Planned assignment</TableHead>
                           <TableHead className="text-right">Select</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {(pendingOrganisers as PendingUser[]).map(pu => {
+                        {(pendingUsers as PendingUser[]).map(pu => {
                           const planned = Boolean((pu.assigned_patch_ids || []).includes(assignDialogPatchId!))
                           return (
                             <TableRow key={pu.id}>
                               <TableCell>{pu.full_name || pu.email}</TableCell>
+                              <TableCell>
+                                <Badge variant={pu.role === 'lead_organiser' ? 'default' : 'secondary'}>{pu.role === 'lead_organiser' ? 'Lead' : 'Organiser'}</Badge>
+                              </TableCell>
                               <TableCell>
                                 <Badge variant={pu.status === 'draft' ? 'secondary' : 'default'}>{pu.status === 'draft' ? 'Not-invited' : 'Pending'}</Badge>
                               </TableCell>
