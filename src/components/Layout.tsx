@@ -10,8 +10,8 @@ import { usePathname } from "next/navigation";
 import { supabase } from "@/integrations/supabase/client";
 import { FiltersBar } from "@/components/context/FiltersBar";
 // Fallback to generic icon from public since original assets are not present
-const cfmeuLogoLight = "/icon.svg" as unknown as string;
-const cfmeuLogoDark = "/icon.svg" as unknown as string;
+const cfmeuLogoLight = "/favicon.svg" as unknown as string;
+const cfmeuLogoDark = "/favicon.svg" as unknown as string;
 
 const navItems = [
   { path: "/projects", label: "Projects", icon: FolderOpen },
