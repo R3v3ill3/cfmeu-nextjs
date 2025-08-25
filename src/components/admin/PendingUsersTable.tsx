@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Mail, Trash2, Pencil } from "lucide-react";
 import EditPendingUserDialog from "@/components/admin/EditPendingUserDialog";
+import { format } from "date-fns";
 
 interface PendingUser {
   id: string;
@@ -138,7 +139,7 @@ export const PendingUsersTable = () => {
                       {row.status}
                     </Badge>
                   </TableCell>
-                  <TableCell>{new Date(row.created_at).toLocaleDateString()}</TableCell>
+                  <TableCell>{format(new Date(row.created_at), "dd/MM/yyyy")}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       {row.status === "draft" && (

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { DateInput } from "@/components/ui/date-input";
 
 import { JVSelector } from "@/components/projects/JVSelector";
 import { MultiEmployerPicker } from "@/components/projects/MultiEmployerPicker";
@@ -301,11 +302,11 @@ export function EditProjectDialog({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="proj_start">Proposed Start</Label>
-              <Input id="proj_start" type="date" value={start || ""} onChange={(e) => setStart(e.target.value)} />
+              <DateInput value={start || ""} onChange={setStart} />
             </div>
             <div>
               <Label htmlFor="proj_finish">Proposed Finish</Label>
-              <Input id="proj_finish" type="date" value={finish || ""} onChange={(e) => setFinish(e.target.value)} />
+              <DateInput value={finish || ""} onChange={setFinish} />
             </div>
           </div>
           <div>

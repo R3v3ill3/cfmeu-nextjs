@@ -14,6 +14,7 @@ import { getProgressIndicatorClass } from "@/utils/densityColors";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { WorkerForm } from "@/components/workers/WorkerForm";
+import { format } from "date-fns";
 
 type EmployerWithEba = {
   id: string;
@@ -234,7 +235,7 @@ export const EmployerCard = ({ employer, onClick }: EmployerCardProps) => {
                 <div className="flex items-center gap-1">
                   <Calendar className="h-3 w-3" />
                   <span className={new Date(employer.company_eba_records[0].nominal_expiry_date) < new Date() ? "text-destructive font-medium" : "text-muted-foreground"}>
-                    Expires: {new Date(employer.company_eba_records[0].nominal_expiry_date).toLocaleDateString()}
+                    Expires: {format(new Date(employer.company_eba_records[0].nominal_expiry_date), "dd/MM/yyyy")}
                   </span>
                 </div>
               </div>

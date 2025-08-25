@@ -6,7 +6,11 @@ import { supabase } from "@/integrations/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { DateInput } from "@/components/ui/date-input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import RoleGuard from "@/components/guards/RoleGuard"
+import { useToast } from "@/hooks/use-toast"
 import { useState } from "react"
 import { format } from "date-fns"
 
@@ -21,6 +25,7 @@ type Campaign = {
 
 export default function CampaignsPage() {
   const qc = useQueryClient()
+  const { toast } = useToast()
   const { data: campaigns = [], isLoading } = useQuery<Campaign[]>({
     queryKey: ["campaigns-list"],
     queryFn: async () => {
@@ -37,6 +42,13 @@ export default function CampaignsPage() {
   const [type, setType] = useState<'compliance_blitz' | 'general' | ''>('')
   const [start, setStart] = useState("")
   const [end, setEnd] = useState("")
+
+  const [editing, setEditing] = useState<Campaign | null>(null)
+  const [eName, setEName] = useState("")
+  const [eType, setEType] = useState<'compliance_blitz' | 'general' | ''>('')
+  const [eStart, setEStart] = useState("")
+  const [eEnd, setEEnd] = useState("")
+  const [eStatus, setEStatus] = useState<'planned' | 'active' | 'completed' | 'paused' | ''>('' as any)
 
   const createCampaign = useMutation({
     mutationFn: async () => {
@@ -62,6 +74,33 @@ export default function CampaignsPage() {
     }
   })
 
+  const updateCampaign = useMutation({
+    mutationFn: async () => {
+      if (!editing) return
+      const { error } = await supabase
+        .from("campaigns")
+        .update({ name: eName, type: eType, start_date: eStart, end_date: eEnd, status: eStatus })
+        .eq("id", editing.id)
+      if (error) throw error
+    },
+    onSuccess: async () => {
+      setEditing(null)
+      await qc.invalidateQueries({ queryKey: ["campaigns-list"] })
+      toast({ title: "Campaign updated" })
+    }
+  })
+
+  const deleteCampaign = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("campaigns").delete().eq("id", id)
+      if (error) throw error
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["campaigns-list"] })
+      toast({ title: "Campaign deleted" })
+    }
+  })
+
   return (
     <div className="p-6 space-y-6">
       <h1 className="text-2xl font-semibold">Campaigns</h1>
@@ -82,8 +121,8 @@ export default function CampaignsPage() {
                 <SelectItem value="general">General</SelectItem>
               </SelectContent>
             </Select>
-            <Input type="date" value={start} onChange={(e) => setStart(e.target.value)} />
-            <Input type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
+            <DateInput value={start} onChange={setStart} />
+            <DateInput value={end} onChange={setEnd} />
             <Button onClick={() => createCampaign.mutate()} disabled={createCampaign.isPending}>Create</Button>
           </div>
         </CardContent>
@@ -100,12 +139,25 @@ export default function CampaignsPage() {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle>{c.name}</CardTitle>
+                  <RoleGuard allow={["admin", "lead_organiser"]} fallback={null}>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" variant="outline" onClick={() => {
+                        setEditing(c)
+                        setEName(c.name)
+                        setEType(c.type)
+                        setEStart(c.start_date)
+                        setEEnd(c.end_date)
+                        setEStatus(c.status)
+                      }}>Edit</Button>
+                      <Button size="sm" variant="outline" onClick={() => deleteCampaign.mutate(c.id)}>Delete</Button>
+                    </div>
+                  </RoleGuard>
                 </div>
               </CardHeader>
               <CardContent>
                 <div className="text-sm text-muted-foreground">
                   <div>Type: {c.type.replace("_"," ")}</div>
-                  <div>Dates: {format(new Date(c.start_date), 'd MMM yyyy')} → {format(new Date(c.end_date), 'd MMM yyyy')}</div>
+                  <div>Dates: {format(new Date(c.start_date), 'dd/MM/yyyy')} → {format(new Date(c.end_date), 'dd/MM/yyyy')}</div>
                   <div>Status: {c.status}</div>
                 </div>
               </CardContent>
@@ -113,6 +165,43 @@ export default function CampaignsPage() {
           ))}
         </div>
       )}
+
+      <Dialog open={!!editing} onOpenChange={(o) => { if (!o) setEditing(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Campaign</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <Input placeholder="Name" value={eName} onChange={(e) => setEName(e.target.value)} />
+            <Select value={eType} onValueChange={(v: any) => setEType(v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="compliance_blitz">Compliance Blitz</SelectItem>
+                <SelectItem value="general">General</SelectItem>
+              </SelectContent>
+            </Select>
+            <DateInput value={eStart} onChange={setEStart} />
+            <DateInput value={eEnd} onChange={setEEnd} />
+            <Select value={eStatus} onValueChange={(v: any) => setEStatus(v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="planned">Planned</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="paused">Paused</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
+            <Button onClick={() => updateCampaign.mutate()} disabled={updateCampaign.isPending}>Save</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

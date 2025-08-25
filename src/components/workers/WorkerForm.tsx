@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useQuery } from "@tanstack/react-query";
 import { Switch } from "@/components/ui/switch";
+import { DateInput } from "@/components/ui/date-input";
 
 const workerSchema = z.object({
   first_name: z.string().min(1, "First name is required"),
@@ -309,7 +310,7 @@ export const WorkerForm = ({ worker, onSuccess, hideUnionSection = false }: Work
                     <FormItem>
                       <FormLabel>Date of Birth</FormLabel>
                       <FormControl>
-                        <Input type="date" {...field} />
+                        <DateInput value={field.value} onChange={field.onChange} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -560,15 +561,13 @@ export const WorkerForm = ({ worker, onSuccess, hideUnionSection = false }: Work
                         <FormItem>
                           <FormLabel>Start Date</FormLabel>
                           <FormControl>
-                            <Input 
-                              type="date" 
-                              {...field} 
-                              className={field.value === today && isUnionStartDefault ? "bg-amber-50 dark:bg-amber-900/30" : ""}
-                              onChange={(e) => {
-                                const v = e.target.value;
+                            <DateInput 
+                              value={field.value}
+                              onChange={(v) => {
                                 setIsUnionStartDefault(v === today);
                                 field.onChange(v);
                               }}
+                              className={field.value === today && isUnionStartDefault ? "bg-amber-50 dark:bg-amber-900/30" : ""}
                             />
                           </FormControl>
                           {field.value === today && isUnionStartDefault && (
@@ -586,7 +585,7 @@ export const WorkerForm = ({ worker, onSuccess, hideUnionSection = false }: Work
                         <FormItem>
                           <FormLabel>End Date (Optional)</FormLabel>
                           <FormControl>
-                            <Input type="date" {...field} />
+                            <DateInput value={field.value} onChange={field.onChange} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>

@@ -19,6 +19,7 @@ import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { getEbaCategory } from "@/components/employers/ebaHelpers"
+import { format } from "date-fns"
 
 export default function ProjectDetailPage() {
   const params = useParams()
@@ -237,7 +238,7 @@ export default function ProjectDetailPage() {
         .eq("project_id", projectId)
         .order("date", { ascending: false })
         .limit(1)
-      return (data && data[0]?.date) ? new Date(data[0].date).toLocaleDateString() : "—"
+      return (data && data[0]?.date) ? format(new Date(data[0].date), "dd/MM/yyyy") : "—"
     }
   })
 

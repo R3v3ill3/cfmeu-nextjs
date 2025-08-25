@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import Papa from "papaparse";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Upload } from "lucide-react";
+import { DateInput } from "@/components/ui/date-input";
 
 interface AssignWorkersModalProps {
   open: boolean;
@@ -390,7 +391,7 @@ export function AssignWorkersModal({
             </div>
             <div>
               <label className="text-sm font-medium">Start date</label>
-              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+              <DateInput value={startDate} onChange={setStartDate} />
             </div>
           </div>
 

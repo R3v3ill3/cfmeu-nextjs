@@ -14,6 +14,7 @@ import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { WorkerForm } from "@/components/workers/WorkerForm";
+import { format } from "date-fns";
 type EmployerWithEba = {
   id: string;
   name: string;
@@ -352,21 +353,21 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
                           {employer.company_eba_records[0].eba_lodged_fwc && (
                             <div>
                               <label className="text-sm font-medium text-muted-foreground">Lodged with FWC</label>
-                              <p>{new Date(employer.company_eba_records[0].eba_lodged_fwc).toLocaleDateString()}</p>
+                              <p>{format(new Date(employer.company_eba_records[0].eba_lodged_fwc), "dd/MM/yyyy")}</p>
                             </div>
                           )}
                           
                           {employer.company_eba_records[0].date_eba_signed && (
                             <div>
                               <label className="text-sm font-medium text-muted-foreground">EBA Signed</label>
-                              <p>{new Date(employer.company_eba_records[0].date_eba_signed).toLocaleDateString()}</p>
+                              <p>{format(new Date(employer.company_eba_records[0].date_eba_signed), "dd/MM/yyyy")}</p>
                             </div>
                           )}
                           
                           {employer.company_eba_records[0].fwc_certified_date && (
                             <div>
                               <label className="text-sm font-medium text-muted-foreground">FWC Certified</label>
-                              <p>{new Date(employer.company_eba_records[0].fwc_certified_date).toLocaleDateString()}</p>
+                              <p>{format(new Date(employer.company_eba_records[0].fwc_certified_date), "dd/MM/yyyy")}</p>
                             </div>
                           )}
                         </div>
