@@ -1,13 +1,19 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { withTimeout } from "@/lib/withTimeout";
+import { useAuth } from "@/hooks/useAuth";
 
 export const useDashboardData = () => {
+  const { session, loading } = useAuth();
+
   return useQuery({
     queryKey: ["dashboard-data"],
+    enabled: !loading && !!session,
+    retry: 1,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const errors: string[] = [];
-      const timeoutMs = 8000;
+      const timeoutMs = 4000;
 
       const workersCountP = withTimeout(
         Promise.resolve(supabase.from("workers").select("*", { count: "exact", head: true })),
