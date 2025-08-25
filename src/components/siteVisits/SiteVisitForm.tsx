@@ -291,6 +291,15 @@ export function SiteVisitForm({ open, onOpenChange, initial }: { open: boolean; 
     }
   }, [userScope])
 
+  // Auto-select organiser when the visible organiser list resolves to a single option
+  useEffect(() => {
+    if (isEditing) return
+    if (!(userScope?.role === "admin" || userScope?.role === "lead_organiser")) return
+    if (!organiserId && Array.isArray(organisers) && organisers.length === 1) {
+      setOrganiserId(((organisers as any[]) || [])[0].id)
+    }
+  }, [isEditing, userScope?.role, organiserId, organisers])
+
   // When organiser changes, ensure current project is valid; otherwise clear dependent fields
   useEffect(() => {
     if (projectId && Array.isArray(projects)) {
@@ -303,11 +312,12 @@ export function SiteVisitForm({ open, onOpenChange, initial }: { open: boolean; 
     }
   }, [organiserId, projects])
 
-  // Autofill organiser when selecting a project first
+  // Autofill organiser when selecting a project first (and re-evaluate when organisers load)
   useEffect(() => {
     const run = async () => {
+      if (isEditing) return
       if (!projectId) return
-      if (userScope?.role === "organiser") return
+      if (!(userScope?.role === "admin" || userScope?.role === "lead_organiser")) return
       try {
         const { data: projSites, error: psErr } = await (supabase as any)
           .from("job_sites")
@@ -335,15 +345,14 @@ export function SiteVisitForm({ open, onOpenChange, initial }: { open: boolean; 
           orgIds = orgIds.filter(id => allowedIds.has(id))
         }
         if (orgIds.length === 1) {
-          setOrganiserId(orgIds[0])
+          if (organiserId !== orgIds[0]) setOrganiserId(orgIds[0])
         } else if (organiserId && !orgIds.includes(organiserId)) {
           setOrganiserId(null)
         }
       } catch {}
     }
     run()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId])
+  }, [isEditing, projectId, userScope?.role, organisers, organiserId])
 
   const upsert = useMutation({
     mutationFn: async () => {
