@@ -8,7 +8,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { supabase } from "@/integrations/supabase/client";
-import { FiltersBar } from "@/components/context/FiltersBar";
+import AdminPatchSelector from "@/components/admin/AdminPatchSelector";
 // Fallback to generic icon from public since original assets are not present
 const cfmeuLogoLight = "/favicon.svg" as unknown as string;
 const cfmeuLogoDark = "/favicon.svg" as unknown as string;
@@ -157,6 +157,12 @@ const Layout = ({ children }: LayoutProps) => {
 
           {/* User menu */}
           <div className="ml-auto flex items-center gap-4">
+            {userRole === "admin" && (
+              // Admin-only patch selector next to user name
+              // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+              // @ts-ignore
+              <AdminPatchSelector />
+            )}
             <span className="text-sm text-muted-foreground">
               {user?.email}
             </span>
@@ -166,7 +172,6 @@ const Layout = ({ children }: LayoutProps) => {
             </Button>
           </div>
         </div>
-        {userRole === "admin" && <FiltersBar />}
       </header>
 
       {/* Main content */}

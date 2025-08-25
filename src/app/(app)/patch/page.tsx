@@ -11,11 +11,13 @@ import { usePatchDashboard } from "@/hooks/usePatchDashboard"
 
 export default function PatchPage() {
   const sp = useSearchParams()
-  const patch = sp.get("patch") || undefined
+  const patchParam = sp.get("patch") || ""
+  const patchIds = patchParam.split(",").map(s => s.trim()).filter(Boolean)
   const status = sp.get("status") || undefined
   const q = sp.get("q")?.toLowerCase() || ""
 
-  const { data } = usePatchDashboard(patch)
+  // For now, this dashboard still expects a single patch; feed first if present
+  const { data } = usePatchDashboard(patchIds[0])
   const kpis = data?.kpis || { members: { current: 0, goal: 0 }, dd: { current: 0, goal: 0 }, leaders: { current: 0, goal: 0 }, openAudits: 0 }
   const rows = useMemo(() => {
     const base = data?.rows || []

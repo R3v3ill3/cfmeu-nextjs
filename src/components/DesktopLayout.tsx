@@ -22,7 +22,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { LogOut, Users, Building, FolderOpen, FileCheck, Shield, BarChart3 } from "lucide-react"
-import { FiltersBar } from "@/components/context/FiltersBar"
+import AdminPatchSelector from "@/components/admin/AdminPatchSelector"
 import { supabase } from "@/integrations/supabase/client"
 
 const cfmeuLogoLight = "/favicon.svg" as unknown as string
@@ -133,9 +133,15 @@ export default function DesktopLayout({ children }: { children: React.ReactNode 
               <Image src={cfmeuLogoDark} alt="CFMEU Construction Union Logo" width={24} height={24} className="h-6 w-auto hidden dark:block" />
               <span className="font-medium truncate max-w-[40vw]">CFMEU Organiser</span>
             </div>
-            <div className="ml-auto text-sm text-muted-foreground hidden md:block truncate max-w-[40%]">{user?.email}</div>
+            <div className="ml-auto flex items-center gap-3">
+              {userRole === "admin" && (
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // @ts-ignore
+                <AdminPatchSelector />
+              )}
+              <div className="text-sm text-muted-foreground hidden md:block truncate max-w-[40%]">{user?.email}</div>
+            </div>
           </div>
-          {userRole === "admin" && <FiltersBar />}
         </header>
         <main className="flex-1 p-6 min-w-0">{children}</main>
       </SidebarInset>
