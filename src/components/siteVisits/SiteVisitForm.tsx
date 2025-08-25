@@ -49,15 +49,6 @@ export function SiteVisitForm({ open, onOpenChange, initial }: { open: boolean; 
     }
   }, [open, initial])
 
-  const { data: organisers = [] } = useQuery({
-    queryKey: ["sv-organisers"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("profiles").select("id, full_name").order("full_name")
-      if (error) throw error
-      return data || []
-    }
-  })
-
   // Determine user role and accessible patch IDs
   const { data: userScope } = useQuery({
     queryKey: ["sv-user-scope"],
@@ -79,26 +70,37 @@ export function SiteVisitForm({ open, onOpenChange, initial }: { open: boolean; 
 
       // Admins can see all projects
       if (role === "admin") {
-        return { role, patchIds: null as string[] | null }
+        return { role, userId, patchIds: null as string[] | null }
       }
 
       // Collect patch IDs based on role
       const patchIdSet = new Set<string>()
       try {
         if (role === "lead_organiser") {
-          const [direct, team] = await Promise.all([
-            (supabase as any)
-              .from("lead_organiser_patch_assignments")
-              .select("patch_id")
-              .is("effective_to", null)
-              .eq("lead_organiser_id", userId),
-            (supabase as any)
+          // Direct patches assigned to the lead
+          const { data: direct } = await (supabase as any)
+            .from("lead_organiser_patch_assignments")
+            .select("patch_id")
+            .is("effective_to", null)
+            .eq("lead_organiser_id", userId)
+          ;(((direct as any[]) || [])).forEach((r: any) => r?.patch_id && patchIdSet.add(r.patch_id))
+          // Patches from organisers managed by this lead via role_hierarchy
+          const today = new Date().toISOString().slice(0, 10)
+          const { data: links } = await (supabase as any)
+            .from("role_hierarchy")
+            .select("child_user_id")
+            .eq("parent_user_id", userId)
+            .eq("is_active", true)
+            .or(`end_date.is.null,end_date.gte.${today}`)
+          const childIds = Array.from(new Set((((links as any[]) || []).map((r: any) => r.child_user_id).filter(Boolean))))
+          if (childIds.length > 0) {
+            const { data: team } = await (supabase as any)
               .from("organiser_patch_assignments")
               .select("patch_id")
               .is("effective_to", null)
-          ])
-          ;(((direct as any)?.data as any[]) || []).forEach((r: any) => r?.patch_id && patchIdSet.add(r.patch_id))
-          ;(((team as any)?.data as any[]) || []).forEach((r: any) => r?.patch_id && patchIdSet.add(r.patch_id))
+              .in("organiser_id", childIds)
+            ;(((team as any[]) || [])).forEach((r: any) => r?.patch_id && patchIdSet.add(r.patch_id))
+          }
         } else if (role === "organiser") {
           const { data } = await (supabase as any)
             .from("organiser_patch_assignments")
@@ -109,44 +111,109 @@ export function SiteVisitForm({ open, onOpenChange, initial }: { open: boolean; 
         }
       } catch {}
 
-      return { role, patchIds: Array.from(patchIdSet) }
+      return { role, userId, patchIds: Array.from(patchIdSet) }
     }
   })
 
-  // Projects scoped to user's viewable patches
-  const { data: projects = [] } = useQuery({
-    queryKey: ["sv-projects", userScope?.role, (userScope?.patchIds || []).join(",")],
+  // Organisers available for selection (depends on userScope)
+  const { data: organisers = [] } = useQuery({
+    queryKey: ["sv-organisers", (userScope as any)?.role, (userScope as any)?.userId],
+    enabled: !!userScope?.role && userScope.role !== "organiser",
     queryFn: async () => {
-      // Admin: all projects
+      // Admin: list all organisers (role organiser only)
+      if (userScope?.role === "admin") {
+        const { data, error } = await (supabase as any)
+          .from("profiles")
+          .select("id, full_name")
+          .eq("role", "organiser")
+          .order("full_name")
+        if (error) throw error
+        return data || []
+      }
+
+      // Lead organiser: only organisers assigned to them via role_hierarchy
+      const today = new Date().toISOString().slice(0, 10)
+      const { data: links, error: lerr } = await (supabase as any)
+        .from("role_hierarchy")
+        .select("child_user_id")
+        .eq("parent_user_id", (userScope as any)?.userId)
+        .eq("is_active", true)
+        .or(`end_date.is.null,end_date.gte.${today}`)
+      if (lerr) throw lerr
+      const organiserIds = Array.from(new Set((((links as any[]) || []).map((r: any) => r.child_user_id).filter(Boolean))))
+      if (organiserIds.length === 0) return []
+      const { data, error } = await (supabase as any)
+        .from("profiles")
+        .select("id, full_name")
+        .in("id", organiserIds)
+        .order("full_name")
+      if (error) throw error
+      return data || []
+    }
+  })
+
+  // Projects scoped to user's viewable patches, with organiser filter
+  const { data: projects = [] } = useQuery({
+    queryKey: ["sv-projects", userScope?.role, (userScope?.patchIds || []).join(","), organiserId],
+    queryFn: async () => {
+      const projectsFromPatches = async (patchIdsInput: string[]) => {
+        if (!patchIdsInput || patchIdsInput.length === 0) return []
+        const { data: patchSites, error: psErr } = await (supabase as any)
+          .from("v_patch_sites_current")
+          .select("job_site_id, patch_id")
+          .in("patch_id", patchIdsInput)
+        if (psErr) throw psErr
+        const jobSiteIds = Array.from(new Set(((patchSites as any[]) || []).map((r: any) => r.job_site_id).filter(Boolean)))
+        if (jobSiteIds.length === 0) return []
+        const { data: siteRows, error: jsErr } = await (supabase as any)
+          .from("job_sites")
+          .select("id, project_id, projects(id,name)")
+          .in("id", jobSiteIds)
+        if (jsErr) throw jsErr
+        const byProject: Record<string, { id: string; name: string | null }> = {}
+        ;(((siteRows as any[]) || [])).forEach((s: any) => {
+          const p = s.projects
+          if (p?.id && !byProject[p.id]) byProject[p.id] = { id: p.id, name: p.name || p.id }
+        })
+        return Object.values(byProject).sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")))
+      }
+
+      // Admin: optionally restrict by selected organiser
       if (userScope?.role === "admin" || userScope?.patchIds === null) {
+        if (organiserId) {
+          const { data: orgPatches, error } = await (supabase as any)
+            .from("organiser_patch_assignments")
+            .select("patch_id")
+            .is("effective_to", null)
+            .eq("organiser_id", organiserId)
+          if (error) throw error
+          const patchIds = Array.from(new Set(((orgPatches as any[]) || []).map((r: any) => r.patch_id).filter(Boolean)))
+          return await projectsFromPatches(patchIds)
+        }
         const { data, error } = await supabase.from("projects").select("id,name").order("name")
         if (error) throw error
         return data || []
       }
+
+      // Lead organiser: optionally restrict by selected organiser
+      if (userScope?.role === "lead_organiser") {
+        if (organiserId) {
+          const { data: orgPatches, error } = await (supabase as any)
+            .from("organiser_patch_assignments")
+            .select("patch_id")
+            .is("effective_to", null)
+            .eq("organiser_id", organiserId)
+          if (error) throw error
+          const patchIds = Array.from(new Set(((orgPatches as any[]) || []).map((r: any) => r.patch_id).filter(Boolean)))
+          return await projectsFromPatches(patchIds)
+        }
+        const patchIds = userScope?.patchIds || []
+        return await projectsFromPatches(patchIds)
+      }
+
+      // Organiser: use their scope
       const patchIds = userScope?.patchIds || []
-      if (patchIds.length === 0) return []
-
-      // Sites in accessible patches
-      const { data: patchSites, error: psErr } = await (supabase as any)
-        .from("v_patch_sites_current")
-        .select("job_site_id, patch_id")
-        .in("patch_id", patchIds)
-      if (psErr) throw psErr
-      const jobSiteIds = Array.from(new Set(((patchSites as any[]) || []).map((r: any) => r.job_site_id).filter(Boolean)))
-      if (jobSiteIds.length === 0) return []
-
-      // Projects linked to those sites
-      const { data: siteRows, error: jsErr } = await (supabase as any)
-        .from("job_sites")
-        .select("id, project_id, projects(id,name)")
-        .in("id", jobSiteIds)
-      if (jsErr) throw jsErr
-      const byProject: Record<string, { id: string; name: string | null }> = {}
-      ;(((siteRows as any[]) || [])).forEach((s: any) => {
-        const p = s.projects
-        if (p?.id && !byProject[p.id]) byProject[p.id] = { id: p.id, name: p.name || p.id }
-      })
-      return Object.values(byProject).sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")))
+      return await projectsFromPatches(patchIds)
     }
   })
 
@@ -216,6 +283,67 @@ export function SiteVisitForm({ open, onOpenChange, initial }: { open: boolean; 
   }, [isEditing, projectId, sites, siteId])
 
   const selectedSite = useMemo(() => (sites as any[]).find((s: any) => s.id === siteId) || null, [sites, siteId])
+
+  // Set organiser ID for organiser role automatically
+  useEffect(() => {
+    if (userScope?.role === "organiser" && (userScope as any)?.userId) {
+      setOrganiserId((userScope as any).userId)
+    }
+  }, [userScope])
+
+  // When organiser changes, ensure current project is valid; otherwise clear dependent fields
+  useEffect(() => {
+    if (projectId && Array.isArray(projects)) {
+      const allowed = (projects as any[]).some((p: any) => p.id === projectId)
+      if (!allowed) {
+        setProjectId(null)
+        setSiteId(null)
+        setSelectedEmployerIds([])
+      }
+    }
+  }, [organiserId, projects])
+
+  // Autofill organiser when selecting a project first
+  useEffect(() => {
+    const run = async () => {
+      if (!projectId) return
+      if (userScope?.role === "organiser") return
+      try {
+        const { data: projSites, error: psErr } = await (supabase as any)
+          .from("job_sites")
+          .select("id")
+          .eq("project_id", projectId)
+        if (psErr) throw psErr
+        const siteIds = Array.from(new Set(((projSites as any[]) || []).map((r: any) => r.id).filter(Boolean)))
+        if (siteIds.length === 0) return
+        const { data: sitePatches, error: spErr } = await (supabase as any)
+          .from("v_patch_sites_current")
+          .select("patch_id, job_site_id")
+          .in("job_site_id", siteIds)
+        if (spErr) throw spErr
+        const patchIds = Array.from(new Set(((sitePatches as any[]) || []).map((r: any) => r.patch_id).filter(Boolean)))
+        if (patchIds.length === 0) return
+        const { data: orgRows, error: oErr } = await (supabase as any)
+          .from("organiser_patch_assignments")
+          .select("organiser_id")
+          .is("effective_to", null)
+          .in("patch_id", patchIds)
+        if (oErr) throw oErr
+        let orgIds: string[] = Array.from(new Set(((orgRows as any[]) || []).map((r: any) => r.organiser_id).filter(Boolean)))
+        if (userScope?.role === "lead_organiser") {
+          const allowedIds = new Set(((organisers as any[]) || []).map((o: any) => o.id))
+          orgIds = orgIds.filter(id => allowedIds.has(id))
+        }
+        if (orgIds.length === 1) {
+          setOrganiserId(orgIds[0])
+        } else if (organiserId && !orgIds.includes(organiserId)) {
+          setOrganiserId(null)
+        }
+      } catch {}
+    }
+    run()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId])
 
   const upsert = useMutation({
     mutationFn: async () => {
@@ -293,19 +421,21 @@ export function SiteVisitForm({ open, onOpenChange, initial }: { open: boolean; 
               <Label>Date</Label>
               <Input type="date" value={visitDate} onChange={(e) => setVisitDate(e.target.value)} />
             </div>
-            <div>
-              <Label>Organiser</Label>
-              <Select value={organiserId || undefined} onValueChange={(v: string) => setOrganiserId(v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select organiser" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(organisers as any[]).map(o => (
-                    <SelectItem key={o.id} value={o.id}>{o.full_name || o.id}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {(userScope?.role === "admin" || userScope?.role === "lead_organiser") && (
+              <div>
+                <Label>Organiser</Label>
+                <Select value={organiserId || undefined} onValueChange={(v: string) => setOrganiserId(v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select organiser" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(organisers as any[]).map(o => (
+                      <SelectItem key={o.id} value={o.id}>{o.full_name || o.id}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
