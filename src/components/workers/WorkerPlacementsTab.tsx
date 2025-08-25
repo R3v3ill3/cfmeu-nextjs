@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -298,8 +299,8 @@ export const WorkerPlacementsTab = ({ workerId, onUpdate }: WorkerPlacementsTabP
                   <div className="flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
                     <span>
-                      {format(new Date(placement.start_date), "MMM dd, yyyy")}
-                      {placement.end_date && ` - ${format(new Date(placement.end_date), "MMM dd, yyyy")}`}
+                      {format(new Date(placement.start_date), "dd/MM/yyyy")}
+                      {placement.end_date && ` - ${format(new Date(placement.end_date), "dd/MM/yyyy")}`}
                     </span>
                   </div>
                   {placement.shift && (
@@ -457,7 +458,7 @@ export const WorkerPlacementsTab = ({ workerId, onUpdate }: WorkerPlacementsTabP
                     <FormItem>
                       <FormLabel>Start Date</FormLabel>
                       <FormControl>
-                        <Input type="date" {...field} />
+                        <DateInput value={field.value} onChange={field.onChange} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -471,7 +472,7 @@ export const WorkerPlacementsTab = ({ workerId, onUpdate }: WorkerPlacementsTabP
                     <FormItem>
                       <FormLabel>End Date (Optional)</FormLabel>
                       <FormControl>
-                        <Input type="date" {...field} />
+                        <DateInput value={field.value} onChange={field.onChange} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

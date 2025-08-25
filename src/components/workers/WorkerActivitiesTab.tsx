@@ -15,6 +15,7 @@ import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Calendar, MapPin, Users, Edit, Trash2, Star } from "lucide-react";
 import { format } from "date-fns";
+import { DateInput } from "@/components/ui/date-input";
 
 const activitySchema = z.object({
   activity_type: z.enum(["meeting", "training", "action", "strike", "conversation"]),
@@ -316,7 +317,7 @@ export const WorkerActivitiesTab = ({ workerId, onUpdate }: WorkerActivitiesTabP
                   <div className="grid grid-cols-2 gap-4 text-sm mb-4">
                     <div className="flex items-center gap-2">
                       <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <span>{format(new Date(activity.date), "MMM dd, yyyy")}</span>
+                      <span>{format(new Date(activity.date), "dd/MM/yyyy")}</span>
                     </div>
                     {activity.job_sites && (
                       <div className="flex items-center gap-2">
@@ -356,7 +357,7 @@ export const WorkerActivitiesTab = ({ workerId, onUpdate }: WorkerActivitiesTabP
                         </Button>
                         {activity.rating.created_at && (
                           <span className="text-xs text-muted-foreground">
-                            Rated {format(new Date(activity.rating.created_at), "MMM dd, yyyy")}
+                            Rated {format(new Date(activity.rating.created_at), "dd/MM/yyyy")}
                           </span>
                         )}
                       </div>
@@ -450,7 +451,7 @@ export const WorkerActivitiesTab = ({ workerId, onUpdate }: WorkerActivitiesTabP
                   <FormItem>
                     <FormLabel>Date</FormLabel>
                     <FormControl>
-                      <Input type="date" {...field} />
+                      <DateInput value={field.value} onChange={field.onChange} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
