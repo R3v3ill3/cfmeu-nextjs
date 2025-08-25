@@ -27,7 +27,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
-        if (session?.user) {
+        if (session?.user && (event === 'SIGNED_IN' || event === 'USER_UPDATED')) {
           // Sync profile and apply any pending role
           setTimeout(() => {
             supabase.rpc('apply_pending_user_on_login');

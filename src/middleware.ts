@@ -26,10 +26,7 @@ export async function middleware(req: NextRequest) {
     },
   })
 
-  // Touch the session to allow refresh token rotation to set cookies server-side
-  try {
-    await supabase.auth.getSession()
-  } catch {}
+  // Avoid forcing a session fetch on every request; cookie rotation will occur via regular auth flows
 
   return res
 }
