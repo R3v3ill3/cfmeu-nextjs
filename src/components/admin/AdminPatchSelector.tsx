@@ -21,6 +21,8 @@ export default function AdminPatchSelector() {
 	const [leadOptions, setLeadOptions] = useState<LeadOption[]>([])
 	const [selectedLead, setSelectedLead] = useState<string>("")
 	const [loadingLead, setLoadingLead] = useState(false)
+	// When a lead organiser is used to select patches, we also filter the visible list
+	const [leadFilterPatchIds, setLeadFilterPatchIds] = useState<string[]>([])
 
 	const pathname = usePathname()
 	const router = useRouter()
@@ -61,9 +63,13 @@ export default function AdminPatchSelector() {
 
 	const filteredPatches = useMemo(() => {
 		const s = search.trim().toLowerCase()
-		if (!s) return allPatches
-		return allPatches.filter(p => p.name.toLowerCase().includes(s))
-	}, [allPatches, search])
+		// Start with either all patches or those restricted by a lead filter
+		const base = (leadFilterPatchIds.length > 0)
+			? allPatches.filter(p => leadFilterPatchIds.includes(p.id))
+			: allPatches
+		if (!s) return base
+		return base.filter(p => p.name.toLowerCase().includes(s))
+	}, [allPatches, search, leadFilterPatchIds])
 
 	const togglePatch = (id: string) => {
 		setSelectedPatchIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
@@ -71,6 +77,8 @@ export default function AdminPatchSelector() {
 
 	const clearAll = () => {
 		setSelectedPatchIds([])
+		setLeadFilterPatchIds([])
+		setSelectedLead("")
 	}
 
 	const applyToUrl = () => {
@@ -132,7 +140,9 @@ export default function AdminPatchSelector() {
 			// De-duplicate and retain only those that exist in patches list (defensive)
 			const allowed = new Set(allPatches.map(p => p.id))
 			const unique = Array.from(new Set(patchIds.filter(id => allowed.has(id))))
+			// Apply both: preselect and filter visible list to these patches
 			setSelectedPatchIds(unique)
+			setLeadFilterPatchIds(unique)
 		} finally {
 			setLoadingLead(false)
 		}
@@ -158,17 +168,17 @@ export default function AdminPatchSelector() {
 						<ChevronDown className="h-3 w-3" />
 					</Button>
 				</DialogTrigger>
-				<DialogContent className="max-w-xl">
+				<DialogContent className="max-w-3xl w-[min(95vw,72rem)]">
 					<DialogHeader>
 						<DialogTitle>Select patches</DialogTitle>
 					</DialogHeader>
 
 					<div className="space-y-4">
-						<div className="flex items-center gap-2">
+						<div className="flex flex-wrap items-center gap-2">
 							<Button variant="outline" size="sm" onClick={clearAll}>Display all</Button>
-							<div className="flex items-center gap-2">
+							<div className="flex flex-wrap items-center gap-2 min-w-0">
 								<Select value={selectedLead} onValueChange={setSelectedLead}>
-									<SelectTrigger className="w-64">
+									<SelectTrigger className="w-64 md:w-80 max-w-full">
 										<SelectValue placeholder="Select lead organiser (live or draft)" />
 									</SelectTrigger>
 									<SelectContent>
