@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import ContractorSiteAssignmentModal from "@/components/projects/ContractorSiteAssignmentModal"
 import StageTradeAssignmentManager from "@/components/projects/StageTradeAssignmentManager"
+import SiteContactsEditor from "@/components/projects/SiteContactsEditor"
 import { EmployerWorkerChart } from "@/components/patchwall/EmployerWorkerChart"
 import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -662,7 +663,10 @@ export default function ProjectDetailPage() {
 
         <TabsContent value="sites">
           {project && (
-            <JobSitesManager projectId={project.id} projectName={project.name} />
+            <div className="space-y-4">
+              <JobSitesManager projectId={project.id} projectName={project.name} />
+              <SiteContactsEditor projectId={project.id} siteIds={sortedSiteIds} />
+            </div>
           )}
         </TabsContent>
 

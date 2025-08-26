@@ -129,6 +129,76 @@ export type Database = {
         }
         Relationships: []
       }
+      activity_objective_targets: {
+        Row: {
+          created_at: string
+          dimension: string
+          dimension_id: string
+          id: string
+          objective_id: string
+          target_value: number
+        }
+        Insert: {
+          created_at?: string
+          dimension: string
+          dimension_id: string
+          id?: string
+          objective_id: string
+          target_value: number
+        }
+        Update: {
+          created_at?: string
+          dimension?: string
+          dimension_id?: string
+          id?: string
+          objective_id?: string
+          target_value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_objective_targets_objective_id_fkey"
+            columns: ["objective_id"]
+            isOneToOne: false
+            referencedRelation: "activity_objectives"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      activity_objectives: {
+        Row: {
+          activity_id: string
+          created_at: string
+          id: string
+          name: string
+          target_kind: string
+          target_value: number
+        }
+        Insert: {
+          activity_id: string
+          created_at?: string
+          id?: string
+          name: string
+          target_kind: string
+          target_value: number
+        }
+        Update: {
+          activity_id?: string
+          created_at?: string
+          id?: string
+          name?: string
+          target_kind?: string
+          target_value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_objectives_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "union_activities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       activity_participants: {
         Row: {
           activity_id: string
@@ -165,6 +235,41 @@ export type Database = {
         }
         Relationships: []
       }
+      activity_rating_definitions: {
+        Row: {
+          activity_id: string
+          created_at: string
+          definition: string | null
+          id: string
+          label: string
+          level: number
+        }
+        Insert: {
+          activity_id: string
+          created_at?: string
+          definition?: string | null
+          id?: string
+          label: string
+          level: number
+        }
+        Update: {
+          activity_id?: string
+          created_at?: string
+          definition?: string | null
+          id?: string
+          label?: string
+          level?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_rating_definitions_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "union_activities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       activity_templates: {
         Row: {
           category: string
@@ -197,6 +302,49 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      activity_workers: {
+        Row: {
+          activity_id: string
+          created_at: string
+          id: string
+          worker_id: string
+        }
+        Insert: {
+          activity_id: string
+          created_at?: string
+          id?: string
+          worker_id: string
+        }
+        Update: {
+          activity_id?: string
+          created_at?: string
+          id?: string
+          worker_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_workers_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "union_activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_workers_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "unallocated_workers_analysis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_workers_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "workers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       app_settings: {
         Row: {
@@ -2079,6 +2227,7 @@ export type Database = {
           estimated_project_workforce: number | null
           id: string
           project_id: string
+          stage: Database["public"]["Enums"]["trade_stage"] | null
           start_date: string | null
           trade_type: string
           updated_at: string
@@ -2091,6 +2240,7 @@ export type Database = {
           estimated_project_workforce?: number | null
           id?: string
           project_id: string
+          stage?: Database["public"]["Enums"]["trade_stage"] | null
           start_date?: string | null
           trade_type: string
           updated_at?: string
@@ -2103,6 +2253,7 @@ export type Database = {
           estimated_project_workforce?: number | null
           id?: string
           project_id?: string
+          stage?: Database["public"]["Enums"]["trade_stage"] | null
           start_date?: string | null
           trade_type?: string
           updated_at?: string
@@ -2280,40 +2431,84 @@ export type Database = {
           },
         ]
       }
+      project_trade_availability: {
+        Row: {
+          created_at: string
+          id: string
+          project_id: string
+          stage: Database["public"]["Enums"]["trade_stage"]
+          status: string
+          trade_type: Database["public"]["Enums"]["trade_type"]
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          project_id: string
+          stage: Database["public"]["Enums"]["trade_stage"]
+          status?: string
+          trade_type: Database["public"]["Enums"]["trade_type"]
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          project_id?: string
+          stage?: Database["public"]["Enums"]["trade_stage"]
+          status?: string
+          trade_type?: Database["public"]["Enums"]["trade_type"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_trade_availability_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       projects: {
         Row: {
           builder_id: string | null
           created_at: string
+          federal_funding: number
           id: string
           main_job_site_id: string | null
           name: string
+          project_type: Database["public"]["Enums"]["project_type"] | null
           proposed_finish_date: string | null
           proposed_start_date: string | null
           roe_email: string | null
+          state_funding: number
           updated_at: string
           value: number | null
         }
         Insert: {
           builder_id?: string | null
           created_at?: string
+          federal_funding?: number
           id?: string
           main_job_site_id?: string | null
           name: string
+          project_type?: Database["public"]["Enums"]["project_type"] | null
           proposed_finish_date?: string | null
           proposed_start_date?: string | null
           roe_email?: string | null
+          state_funding?: number
           updated_at?: string
           value?: number | null
         }
         Update: {
           builder_id?: string | null
           created_at?: string
+          federal_funding?: number
           id?: string
           main_job_site_id?: string | null
           name?: string
+          project_type?: Database["public"]["Enums"]["project_type"] | null
           proposed_finish_date?: string | null
           proposed_start_date?: string | null
           roe_email?: string | null
+          state_funding?: number
           updated_at?: string
           value?: number | null
         }
@@ -2710,8 +2905,11 @@ export type Database = {
       }
       union_activities: {
         Row: {
+          activity_call_to_action: string | null
           activity_type: Database["public"]["Enums"]["activity_type"]
+          activity_ui_type: string | null
           assignment_metadata: Json | null
+          campaign_id: string | null
           created_at: string | null
           custom_activity_type: string | null
           date: string
@@ -2725,8 +2923,11 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          activity_call_to_action?: string | null
           activity_type: Database["public"]["Enums"]["activity_type"]
+          activity_ui_type?: string | null
           assignment_metadata?: Json | null
+          campaign_id?: string | null
           created_at?: string | null
           custom_activity_type?: string | null
           date: string
@@ -2740,8 +2941,11 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          activity_call_to_action?: string | null
           activity_type?: Database["public"]["Enums"]["activity_type"]
+          activity_ui_type?: string | null
           assignment_metadata?: Json | null
+          campaign_id?: string | null
           created_at?: string | null
           custom_activity_type?: string | null
           date?: string
@@ -2756,10 +2960,87 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "union_activities_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "union_activities_job_site_id_fkey"
             columns: ["job_site_id"]
             isOneToOne: false
             referencedRelation: "job_sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      union_activity_scopes: {
+        Row: {
+          activity_id: string
+          created_at: string
+          employer_id: string | null
+          id: string
+          job_site_id: string | null
+          project_id: string | null
+        }
+        Insert: {
+          activity_id: string
+          created_at?: string
+          employer_id?: string | null
+          id?: string
+          job_site_id?: string | null
+          project_id?: string | null
+        }
+        Update: {
+          activity_id?: string
+          created_at?: string
+          employer_id?: string | null
+          id?: string
+          job_site_id?: string | null
+          project_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "union_activity_scopes_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "union_activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "union_activity_scopes_employer_id_fkey"
+            columns: ["employer_id"]
+            isOneToOne: false
+            referencedRelation: "employer_analytics"
+            referencedColumns: ["employer_id"]
+          },
+          {
+            foreignKeyName: "union_activity_scopes_employer_id_fkey"
+            columns: ["employer_id"]
+            isOneToOne: false
+            referencedRelation: "employers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "union_activity_scopes_employer_id_fkey"
+            columns: ["employer_id"]
+            isOneToOne: false
+            referencedRelation: "employers_with_eba"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "union_activity_scopes_job_site_id_fkey"
+            columns: ["job_site_id"]
+            isOneToOne: false
+            referencedRelation: "job_sites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "union_activity_scopes_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
         ]
@@ -5821,13 +6102,19 @@ export type Database = {
         | "contractor"
         | "trade_subcontractor"
         | "builder"
+      project_type: "government" | "private" | "mixed"
       rating_type:
         | "support_level"
         | "leadership"
         | "risk"
         | "activity_participation"
       shift_type: "day" | "night" | "split" | "weekend"
-      site_contact_role: "project_manager" | "site_manager"
+      site_contact_role:
+        | "project_manager"
+        | "site_manager"
+        | "site_delegate"
+        | "site_hsr"
+      trade_stage: "early_works" | "structure" | "finishing" | "other"
       trade_type:
         | "scaffolding"
         | "form_work"
@@ -5869,6 +6156,10 @@ export type Database = {
         | "hoist"
         | "kitchens"
         | "tiling"
+        | "piling"
+        | "excavations"
+        | "facade"
+        | "final_clean"
       training_status: "completed" | "in_progress" | "cancelled" | "no_show"
       union_membership_status:
         | "member"
@@ -6056,6 +6347,7 @@ export const Constants = {
         "trade_subcontractor",
         "builder",
       ],
+      project_type: ["government", "private", "mixed"],
       rating_type: [
         "support_level",
         "leadership",
@@ -6063,7 +6355,13 @@ export const Constants = {
         "activity_participation",
       ],
       shift_type: ["day", "night", "split", "weekend"],
-      site_contact_role: ["project_manager", "site_manager"],
+      site_contact_role: [
+        "project_manager",
+        "site_manager",
+        "site_delegate",
+        "site_hsr",
+      ],
+      trade_stage: ["early_works", "structure", "finishing", "other"],
       trade_type: [
         "scaffolding",
         "form_work",
@@ -6105,6 +6403,10 @@ export const Constants = {
         "hoist",
         "kitchens",
         "tiling",
+        "piling",
+        "excavations",
+        "facade",
+        "final_clean",
       ],
       training_status: ["completed", "in_progress", "cancelled", "no_show"],
       union_membership_status: [
