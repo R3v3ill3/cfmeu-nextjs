@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import DateInput from "@/components/ui/date-input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 // Allowed options (exact labels as provided)
 const ACTIVITY_TYPES = [
@@ -74,12 +75,14 @@ export function CampaignActivityBuilder({ campaignId, open, onOpenChange }: Camp
 		4: "",
 		5: "",
 	});
+	const [showRatingDefs, setShowRatingDefs] = useState<boolean>(false);
 
 	// Scope builder
 	const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
 	const [selectedEmployers, setSelectedEmployers] = useState<string[]>([]);
 	const [selectedSites, setSelectedSites] = useState<string[]>([]);
 	const [expandVia, setExpandVia] = useState<"project" | "employer">("project");
+	const [scopeOpen, setScopeOpen] = useState<boolean>(false);
 
 	// Universe filter hints (UI only for now)
 	const [membershipFocus, setMembershipFocus] = useState<string[]>([]);
@@ -123,14 +126,83 @@ export function CampaignActivityBuilder({ campaignId, open, onOpenChange }: Camp
 		queryFn: async () => {
 			const { data, error } = await supabase
 				.from("job_sites")
-				.select("id, name, location")
+				.select("id, name, location, project_id")
 				.order("name");
 			if (error) throw error;
 			return data || [];
 		},
 	});
 
-	// Derived workers from placements for preview (lightweight, scoped client-side)
+	// Current user id and role
+	const { data: userInfo } = useQuery({
+		queryKey: ["current-user-role"],
+		queryFn: async () => {
+			const { data: auth } = await supabase.auth.getUser();
+			const uid = (auth as any)?.user?.id as string | undefined;
+			if (!uid) return { userId: null as any, role: null as any };
+			const { data: prof } = await supabase
+				.from("profiles")
+				.select("id, role")
+				.eq("id", uid)
+				.single();
+			return { userId: uid, role: (prof as any)?.role || null } as { userId: string; role: string | null };
+		},
+	});
+
+	// Accessible project ids per role (null => all)
+	const { data: accessibleProjectIds } = useQuery({
+		queryKey: ["accessible-project-ids", (userInfo as any)?.userId, (userInfo as any)?.role],
+		enabled: !!(userInfo as any)?.userId,
+		queryFn: async () => {
+			const role = (userInfo as any)?.role;
+			const uid = (userInfo as any)?.userId as string;
+			if (!uid) return [] as string[];
+			if (role === "admin") return null as any; // null sentinel => all
+			const isLead = role === "lead_organiser";
+			const assignmentTable = isLead ? "lead_organiser_patch_assignments" : "organiser_patch_assignments";
+			const idColumn = isLead ? "lead_organiser_id" : "organiser_id";
+			const { data: assignments } = await (supabase as any)
+				.from(assignmentTable)
+				.select("patch_id")
+				.eq(idColumn, uid)
+				.is("effective_to", null);
+			const patchIds = ((assignments as any[]) || []).map((r: any) => r.patch_id);
+			if (patchIds.length === 0) return [] as string[];
+			const { data: pjs } = await (supabase as any)
+				.from("patch_job_sites")
+				.select("job_site_id")
+				.is("effective_to", null)
+				.in("patch_id", patchIds);
+			const siteIds = Array.from(new Set(((pjs as any[]) || []).map((r: any) => r.job_site_id).filter(Boolean)));
+			if (siteIds.length === 0) return [] as string[];
+			const { data: sites } = await (supabase as any)
+				.from("job_sites")
+				.select("id, project_id")
+				.in("id", siteIds);
+			const projIds = Array.from(new Set(((sites as any[]) || []).map((s: any) => s.project_id).filter(Boolean)));
+			return projIds as string[];
+		},
+	});
+
+	// Derived mappings for filtering
+	const jobSitesByProject = useMemo(() => {
+		const map: Record<string, { id: string; name: string }[]> = {};
+		(jobSites as any[]).forEach((s: any) => {
+			const pid = s.project_id || "";
+			if (!pid) return;
+			if (!map[pid]) map[pid] = [];
+			map[pid].push({ id: s.id, name: s.name });
+		});
+		return map;
+	}, [jobSites]);
+
+	const jobSiteById = useMemo(() => {
+		const map: Record<string, any> = {};
+		(jobSites as any[]).forEach((s: any) => { map[s.id] = s; });
+		return map;
+	}, [jobSites]);
+
+	// Placements to relate employers <-> projects via job sites
 	const { data: placements = [] } = useQuery({
 		queryKey: ["worker_placements-lite"],
 		queryFn: async () => {
@@ -143,6 +215,57 @@ export function CampaignActivityBuilder({ campaignId, open, onOpenChange }: Camp
 		},
 	});
 
+	const filteredProjects = useMemo(() => {
+		if (!accessibleProjectIds) return projects as any[]; // admin => all
+		const allow = new Set(accessibleProjectIds as string[]);
+		return (projects as any[]).filter((p: any) => allow.has(p.id));
+	}, [projects, accessibleProjectIds]);
+
+	// Employer filtering when building by project
+	const employersForSelectedProjects = useMemo(() => {
+		if ((selectedProjects || []).length === 0) return employers as any[];
+		const allowedSiteIds = new Set((selectedProjects || []).flatMap((pid) => (jobSitesByProject[pid] || []).map((s) => s.id)));
+		const allowedEmployerIds = new Set((placements as any[])
+			.filter((wp: any) => allowedSiteIds.has(wp.job_site_id))
+			.map((wp: any) => wp.employer_id)
+			.filter(Boolean)
+		);
+		return (employers as any[]).filter((e: any) => allowedEmployerIds.has(e.id));
+	}, [selectedProjects, employers, placements, jobSitesByProject]);
+
+	// Project filtering when building by employer
+	const projectsForSelectedEmployers = useMemo(() => {
+		if ((selectedEmployers || []).length === 0) return filteredProjects;
+		const selectedEmpSet = new Set(selectedEmployers);
+		const projectIds = new Set<string>();
+		(placements as any[]).forEach((wp: any) => {
+			if (!selectedEmpSet.has(wp.employer_id)) return;
+			const site = jobSiteById[wp.job_site_id];
+			if (site?.project_id) projectIds.add(site.project_id);
+		});
+		const allow = projectIds;
+		return (filteredProjects as any[]).filter((p: any) => allow.has(p.id));
+	}, [selectedEmployers, placements, jobSiteById, filteredProjects]);
+
+	// Auto-select single job sites per project
+	const requiresSiteChoice = useMemo(() => {
+		if ((selectedProjects || []).length === 0) return false;
+		const counts = (selectedProjects || []).map((pid) => (jobSitesByProject[pid] || []).length);
+		return counts.some((c) => c > 1);
+	}, [selectedProjects, jobSitesByProject]);
+
+	useEffect(() => {
+		if ((selectedProjects || []).length === 0) return;
+		const singles = (selectedProjects || []).map((pid) => (jobSitesByProject[pid] || []))
+			.filter((arr) => arr.length === 1)
+			.map((arr) => arr[0].id);
+		// Only auto-set when all selected projects have single sites or when none selected sites yet
+		if (singles.length > 0 && !requiresSiteChoice) {
+			setSelectedSites(Array.from(new Set(singles)));
+		}
+	}, [selectedProjects, jobSitesByProject, requiresSiteChoice]);
+
+	// Derived workers from placements for preview (lightweight, scoped client-side)
 	const previewWorkerIds = useMemo(() => {
 		const selectedEmployerSet = new Set(selectedEmployers);
 		const selectedProjectSet = new Set(selectedProjects);
@@ -186,7 +309,7 @@ export function CampaignActivityBuilder({ campaignId, open, onOpenChange }: Camp
 				5: "anti-leader",
 			};
 			const defsRows = [1,2,3,4,5].map((level) => ({
-				activity_id: act.id,
+				activity_id: (act as any).id,
 				level,
 				label: LABELS[level],
 				definition: ratingDefs[level] || null,
@@ -196,9 +319,9 @@ export function CampaignActivityBuilder({ campaignId, open, onOpenChange }: Camp
 
 			// 3) Insert scopes
 			const scopeRows: any[] = [];
-			selectedProjects.forEach((p) => scopeRows.push({ activity_id: act.id, project_id: p }));
-			selectedEmployers.forEach((e) => scopeRows.push({ activity_id: act.id, employer_id: e }));
-			selectedSites.forEach((s) => scopeRows.push({ activity_id: act.id, job_site_id: s }));
+			selectedProjects.forEach((p) => scopeRows.push({ activity_id: (act as any).id, project_id: p }));
+			selectedEmployers.forEach((e) => scopeRows.push({ activity_id: (act as any).id, employer_id: e }));
+			selectedSites.forEach((s) => scopeRows.push({ activity_id: (act as any).id, job_site_id: s }));
 			if (scopeRows.length > 0) {
 				const { error: scopeErr } = await supabase.from("union_activity_scopes").insert(scopeRows);
 				if (scopeErr) throw scopeErr;
@@ -209,7 +332,7 @@ export function CampaignActivityBuilder({ campaignId, open, onOpenChange }: Camp
 			if (uniqueWorkerIds.length > 0) {
 				const chunk = (arr: string[], size: number) => arr.reduce<string[][]>((acc, _, i) => (i % size ? acc : [...acc, arr.slice(i, i + size)]), []);
 				for (const batch of chunk(uniqueWorkerIds, 500)) {
-					const rows = batch.map((wid) => ({ activity_id: act.id, worker_id: wid }));
+					const rows = batch.map((wid) => ({ activity_id: (act as any).id, worker_id: wid }));
 					const { error: awErr } = await supabase.from("activity_workers").insert(rows);
 					if (awErr) throw awErr;
 				}
@@ -219,13 +342,13 @@ export function CampaignActivityBuilder({ campaignId, open, onOpenChange }: Camp
 					const existing = await supabase
 						.from("worker_activity_ratings")
 						.select("worker_id")
-						.eq("activity_id", act.id)
+						.eq("activity_id", (act as any).id)
 						.eq("rating_type", "activity_participation");
 					if (existing.error) throw existing.error;
-					const existingSet = new Set((existing.data || []).map((r: any) => r.worker_id));
+					const existingSet = new Set(((existing.data || []) as any[]).map((r: any) => r.worker_id));
 					const toInsert = batch.filter((wid) => !existingSet.has(wid)).map((wid) => ({
 						worker_id: wid,
-						activity_id: act.id,
+						activity_id: (act as any).id,
 						rating_type: "activity_participation",
 						rating_value: 3,
 					}));
@@ -242,7 +365,7 @@ export function CampaignActivityBuilder({ campaignId, open, onOpenChange }: Camp
 				const { data: insertedObjs, error: objErr } = await supabase
 					.from("activity_objectives")
 					.insert(objectives.map((o) => ({
-						activity_id: act.id,
+						activity_id: (act as any).id,
 						name: o.name,
 						target_kind: o.kind,
 						target_value: o.value,
@@ -251,12 +374,12 @@ export function CampaignActivityBuilder({ campaignId, open, onOpenChange }: Camp
 				if (objErr) throw objErr;
 
 				// Insert overrides
-				for (const obj of insertedObjs || []) {
-					const ov = overrides[(obj as any).id] || [];
+				for (const obj of (insertedObjs || []) as any[]) {
+					const ov = (overrides as any)[(obj as any).id] || [];
 					if (ov.length > 0) {
 						const { error: ovErr } = await supabase
 							.from("activity_objective_targets")
-							.insert(ov.map((x) => ({
+							.insert(ov.map((x: any) => ({
 								objective_id: (obj as any).id,
 								dimension: x.dimension,
 								dimension_id: x.dimension_id,
@@ -277,12 +400,13 @@ export function CampaignActivityBuilder({ campaignId, open, onOpenChange }: Camp
 			setRatingDefs({ 1: "", 2: "", 3: "", 4: "", 5: "" });
 			setSelectedProjects([]); setSelectedEmployers([]); setSelectedSites([]);
 			setObjectives([]); setOverrides({}); setMembershipFocus([]); setOccupations([]); setPrevRatings([]);
+			setShowRatingDefs(false); setScopeOpen(false);
 		},
 	});
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="max-w-3xl">
+			<DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
 				<DialogHeader>
 					<DialogTitle>Create Campaign Activity</DialogTitle>
 				</DialogHeader>
@@ -309,44 +433,108 @@ export function CampaignActivityBuilder({ campaignId, open, onOpenChange }: Camp
 					{/* Rating scale definitions */}
 					<div className="space-y-2">
 						<div className="text-sm font-medium">Activity ratings (1–5)</div>
-						{[1,2,3,4,5].map((lvl) => (
-							<div key={lvl} className="grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
-								<div className="text-sm">{lvl}: {({1:"supportive leader",2:"supporter",3:"undecided or unknown",4:"anti",5:"anti-leader"} as any)[lvl]}</div>
-								<Input placeholder="Definition (optional)" value={ratingDefs[lvl] || ""} onChange={(e) => setRatingDefs((s) => ({ ...s, [lvl]: e.target.value }))} />
+						{!showRatingDefs ? (
+							<div>
+								<Button size="sm" variant="outline" onClick={() => setShowRatingDefs(true)}>Add rating definitions</Button>
 							</div>
-						))}
+						) : (
+							<div className="space-y-2">
+								{[1,2,3,4,5].map((lvl) => (
+									<div key={lvl} className="grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
+										<div className="text-sm">{lvl}: {({1:"supportive leader",2:"supporter",3:"undecided or unknown",4:"anti",5:"anti-leader"} as any)[lvl]}</div>
+										<Input placeholder="Definition (optional)" value={ratingDefs[lvl] || ""} onChange={(e) => setRatingDefs((s) => ({ ...s, [lvl]: e.target.value }))} />
+									</div>
+								))}
+								<div className="flex justify-end">
+									<Button size="sm" onClick={() => setShowRatingDefs(false)}>Save</Button>
+								</div>
+							</div>
+						)}
 					</div>
 
 					{/* Scope */}
 					<div className="space-y-3">
-						<div className="text-sm font-medium">Scope</div>
-						<div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-							<Select value={expandVia} onValueChange={(v: any) => setExpandVia(v)}>
-								<SelectTrigger><SelectValue placeholder="Pathway" /></SelectTrigger>
-								<SelectContent>
-									<SelectItem value="project">Project-first</SelectItem>
-									<SelectItem value="employer">Employer-first</SelectItem>
-								</SelectContent>
-							</Select>
-							<Select value="" onValueChange={(v) => setSelectedProjects((s) => s.includes(v) ? s : [...s, v])}>
-								<SelectTrigger><SelectValue placeholder="Add project" /></SelectTrigger>
-								<SelectContent>
-									{projects.map((p: any) => (<SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>))}
-								</SelectContent>
-							</Select>
-							<Select value="" onValueChange={(v) => setSelectedEmployers((s) => s.includes(v) ? s : [...s, v])}>
-								<SelectTrigger><SelectValue placeholder="Add employer" /></SelectTrigger>
-								<SelectContent>
-									{employers.map((e: any) => (<SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>))}
-								</SelectContent>
-							</Select>
-							<Select value="" onValueChange={(v) => setSelectedSites((s) => s.includes(v) ? s : [...s, v])}>
-								<SelectTrigger><SelectValue placeholder="Add job site" /></SelectTrigger>
-								<SelectContent>
-									{jobSites.map((s: any) => (<SelectItem key={s.id} value={s.id}>{s.name}{s.location ? ` - ${s.location}` : ''}</SelectItem>))}
-								</SelectContent>
-							</Select>
-						</div>
+						<div className="text-sm font-medium">Setup campaign scope</div>
+						<Popover open={scopeOpen} onOpenChange={setScopeOpen}>
+							<PopoverTrigger asChild>
+								<Button variant="outline" size="sm">Setup campaign scope</Button>
+							</PopoverTrigger>
+							<PopoverContent className="w-[520px]">
+								<div className="space-y-3">
+									<div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
+										<div className="text-sm">Build by:</div>
+										<Select value={expandVia} onValueChange={(v: any) => setExpandVia(v)}>
+											<SelectTrigger><SelectValue placeholder="Pathway" /></SelectTrigger>
+											<SelectContent>
+												<SelectItem value="project">Project</SelectItem>
+												<SelectItem value="employer">Employer</SelectItem>
+											</SelectContent>
+										</Select>
+									</div>
+
+									{expandVia === "project" && (
+										<div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+											<Select value="" onValueChange={(v) => setSelectedProjects((s) => s.includes(v) ? s : [...s, v])}>
+												<SelectTrigger><SelectValue placeholder="Add project" /></SelectTrigger>
+												<SelectContent>
+													{(filteredProjects as any[]).map((p: any) => (<SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>))}
+												</SelectContent>
+											</Select>
+											<Select value="" onValueChange={(v) => setSelectedEmployers((s) => s.includes(v) ? s : [...s, v])}>
+												<SelectTrigger><SelectValue placeholder="Add employer" /></SelectTrigger>
+												<SelectContent>
+													{(employersForSelectedProjects as any[]).map((e: any) => (<SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>))}
+												</SelectContent>
+											</Select>
+											{requiresSiteChoice ? (
+												<Select value="" onValueChange={(v) => setSelectedSites((s) => s.includes(v) ? s : [...s, v])}>
+													<SelectTrigger><SelectValue placeholder="Add job site" /></SelectTrigger>
+													<SelectContent>
+														{(selectedProjects || []).flatMap((pid) => jobSitesByProject[pid] || [])
+															.map((s: any) => (<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}
+													</SelectContent>
+												</Select>
+											) : (
+												<div className="text-xs text-muted-foreground md:col-span-1">Job sites auto-selected per project</div>
+											)}
+										</div>
+									)}
+
+									{expandVia === "employer" && (
+										<div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+											<Select value="" onValueChange={(v) => setSelectedEmployers((s) => s.includes(v) ? s : [...s, v])}>
+												<SelectTrigger><SelectValue placeholder="Add employer" /></SelectTrigger>
+												<SelectContent>
+													{(employers as any[]).map((e: any) => (<SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>))}
+												</SelectContent>
+											</Select>
+											<Select value="" onValueChange={(v) => setSelectedProjects((s) => s.includes(v) ? s : [...s, v])}>
+												<SelectTrigger><SelectValue placeholder="Add project" /></SelectTrigger>
+												<SelectContent>
+													{(projectsForSelectedEmployers as any[]).map((p: any) => (<SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>))}
+												</SelectContent>
+											</Select>
+											{requiresSiteChoice ? (
+												<Select value="" onValueChange={(v) => setSelectedSites((s) => s.includes(v) ? s : [...s, v])}>
+													<SelectTrigger><SelectValue placeholder="Add job site" /></SelectTrigger>
+													<SelectContent>
+														{(selectedProjects || []).flatMap((pid) => jobSitesByProject[pid] || [])
+															.map((s: any) => (<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}
+													</SelectContent>
+												</Select>
+											) : (
+												<div className="text-xs text-muted-foreground md:col-span-1">Job sites auto-selected per project</div>
+											)}
+										</div>
+									)}
+
+									<div className="flex justify-end gap-2 pt-2">
+										<Button variant="outline" size="sm" onClick={() => setScopeOpen(false)}>Cancel</Button>
+										<Button size="sm" onClick={() => setScopeOpen(false)}>Save</Button>
+									</div>
+								</div>
+							</PopoverContent>
+						</Popover>
 						<div className="flex flex-wrap gap-2">
 							{selectedProjects.map((id) => {
 								const p = (projects as any[]).find((x) => x.id === id);
