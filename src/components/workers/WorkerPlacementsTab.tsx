@@ -14,6 +14,7 @@ import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Edit, Trash2, MapPin, Building, Calendar } from "lucide-react";
 import { format } from "date-fns";
+import DateInput from "@/components/ui/date-input";
 
 const placementSchema = z.object({
   employer_id: z.string().min(1, "Employer is required"),
@@ -298,8 +299,8 @@ export const WorkerPlacementsTab = ({ workerId, onUpdate }: WorkerPlacementsTabP
                   <div className="flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
                     <span>
-                      {format(new Date(placement.start_date), "MMM dd, yyyy")}
-                      {placement.end_date && ` - ${format(new Date(placement.end_date), "MMM dd, yyyy")}`}
+                      {format(new Date(placement.start_date), "dd/MM/yyyy")}
+                      {placement.end_date && ` - ${format(new Date(placement.end_date), "dd/MM/yyyy")}`}
                     </span>
                   </div>
                   {placement.shift && (
@@ -457,7 +458,7 @@ export const WorkerPlacementsTab = ({ workerId, onUpdate }: WorkerPlacementsTabP
                     <FormItem>
                       <FormLabel>Start Date</FormLabel>
                       <FormControl>
-                        <Input type="date" {...field} />
+                        <DateInput value={field.value || ""} onChange={field.onChange} name={field.name} onBlur={field.onBlur} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -471,7 +472,7 @@ export const WorkerPlacementsTab = ({ workerId, onUpdate }: WorkerPlacementsTabP
                     <FormItem>
                       <FormLabel>End Date (Optional)</FormLabel>
                       <FormControl>
-                        <Input type="date" {...field} />
+                        <DateInput value={field.value || ""} onChange={field.onChange} name={field.name} onBlur={field.onBlur} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

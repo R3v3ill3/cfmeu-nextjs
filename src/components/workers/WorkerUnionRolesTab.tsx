@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Plus, Edit, Trash2, Award, Calendar, MapPin } from "lucide-react";
 import { format } from "date-fns";
 import { Label } from "@/components/ui/label";
+import DateInput from "@/components/ui/date-input";
 
 const unionRoleSchema = z.object({
   name: z.enum(["site_delegate", "hsr", "shift_delegate", "company_delegate", "member", "contact"]),
@@ -525,7 +526,7 @@ export const WorkerUnionRolesTab = ({ workerId, onUpdate }: WorkerUnionRolesTabP
                     <FormItem>
                       <FormLabel>Last Payment Date</FormLabel>
                       <FormControl>
-                        <Input type="date" {...field} />
+                        <DateInput value={field.value || ""} onChange={field.onChange} name={field.name} onBlur={field.onBlur} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -624,7 +625,7 @@ export const WorkerUnionRolesTab = ({ workerId, onUpdate }: WorkerUnionRolesTabP
                     <FormItem>
                       <FormLabel>Start Date</FormLabel>
                       <FormControl>
-                        <Input type="date" {...field} />
+                        <DateInput value={field.value || ""} onChange={field.onChange} name={field.name} onBlur={field.onBlur} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -638,7 +639,7 @@ export const WorkerUnionRolesTab = ({ workerId, onUpdate }: WorkerUnionRolesTabP
                     <FormItem>
                       <FormLabel>End Date (Optional)</FormLabel>
                       <FormControl>
-                        <Input type="date" {...field} />
+                        <DateInput value={field.value || ""} onChange={field.onChange} name={field.name} onBlur={field.onBlur} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -797,8 +798,8 @@ export const WorkerUnionRolesTab = ({ workerId, onUpdate }: WorkerUnionRolesTabP
                   <div className="flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
                     <span>
-                      {format(new Date(role.start_date), "MMM dd, yyyy")}
-                      {role.end_date && ` - ${format(new Date(role.end_date), "MMM dd, yyyy")}`}
+                      {format(new Date(role.start_date), "dd/MM/yyyy")}
+                      {role.end_date && ` - ${format(new Date(role.end_date), "dd/MM/yyyy")}`}
                     </span>
                   </div>
                   {role.experience_level && (
@@ -904,7 +905,7 @@ export const WorkerUnionRolesTab = ({ workerId, onUpdate }: WorkerUnionRolesTabP
                     <FormItem>
                       <FormLabel>Start Date</FormLabel>
                       <FormControl>
-                        <Input type="date" {...field} />
+                        <DateInput value={field.value || ""} onChange={field.onChange} name={field.name} onBlur={field.onBlur} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -918,7 +919,7 @@ export const WorkerUnionRolesTab = ({ workerId, onUpdate }: WorkerUnionRolesTabP
                     <FormItem>
                       <FormLabel>End Date (Optional)</FormLabel>
                       <FormControl>
-                        <Input type="date" {...field} />
+                        <DateInput value={field.value || ""} onChange={field.onChange} name={field.name} onBlur={field.onBlur} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
