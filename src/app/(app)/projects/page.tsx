@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import CreateProjectDialog from "@/components/projects/CreateProjectDialog"
 
 type ProjectWithRoles = {
   id: string
@@ -471,6 +472,9 @@ function ProjectListCard({ p, onOpenEmployer, onOpenWorker }: { p: ProjectWithRo
             <Badge variant="secondary" className="text-[10px]">{totals?.totalWorkers} workers</Badge>
           )}
         </div>
+        <div className="flex justify-end pt-1">
+          <Button size="sm" variant="outline" onClick={() => { window.location.href = `/projects/${p.id}?tab=contractors` }}>Assign employers</Button>
+        </div>
       </CardContent>
     </Card>
 
@@ -682,7 +686,10 @@ export default function ProjectsPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-semibold">Projects</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Projects</h1>
+        <CreateProjectDialog />
+      </div>
       {(projects as any[]).length === 0 ? (
         <p className="text-sm text-muted-foreground">No projects found.</p>
       ) : (

@@ -174,7 +174,14 @@ const DATABASE_TABLES = {
       builder_id: { type: "uuid", required: false, description: "Main builder/contractor ID (must match existing employer)" },
       proposed_start_date: { type: "date", required: false, description: "Proposed project start date" },
       proposed_finish_date: { type: "date", required: false, description: "Proposed project completion date" },
-      roe_email: { type: "email", required: false, description: "Right of entry email address" }
+      roe_email: { type: "email", required: false, description: "Right of entry email address" },
+      project_type: { type: "enum", required: false, description: "Project type", options: ["government","private","mixed"] },
+      state_funding: { type: "number", required: false, description: "State funding amount (AUD)" },
+      federal_funding: { type: "number", required: false, description: "Federal funding amount (AUD)" },
+      main_job_site_address: { type: "text", required: true, description: "Main job site full address" },
+      employer_name: { type: "text", required: false, description: "Builder/Head contractor employer name (auto-match/create)" },
+      jv_status: { type: "enum", required: false, description: "JV status", options: ["yes","no","unsure"] },
+      jv_label: { type: "text", required: false, description: "JV label (if status yes)" }
     }
   },
   

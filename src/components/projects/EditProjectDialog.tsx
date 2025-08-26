@@ -37,6 +37,9 @@ export function EditProjectDialog({
   const [start, setStart] = useState(project.proposed_start_date || "");
   const [finish, setFinish] = useState(project.proposed_finish_date || "");
   const [roeEmail, setRoeEmail] = useState(project.roe_email || "");
+  const [projectType, setProjectType] = useState<string>("");
+  const [stateFunding, setStateFunding] = useState<string>("");
+  const [federalFunding, setFederalFunding] = useState<string>("");
   // Roles & JV states
   const [builderIds, setBuilderIds] = useState<string[]>([]);
   const [headContractorId, setHeadContractorId] = useState<string>("");
@@ -56,6 +59,9 @@ export function EditProjectDialog({
     setStart(project.proposed_start_date || "");
     setFinish(project.proposed_finish_date || "");
     setRoeEmail(project.roe_email || "");
+    setProjectType("");
+    setStateFunding("");
+    setFederalFunding("");
     // Reset relational states; they'll be loaded via loadRelations
     setBuilderIds([]);
     setHeadContractorId("");
@@ -201,6 +207,9 @@ export function EditProjectDialog({
         proposed_start_date: start || null,
         proposed_finish_date: finish || null,
         roe_email: roeEmail ? roeEmail.trim() : null,
+        project_type: projectType || null,
+        state_funding: stateFunding ? Number(stateFunding.replace(/[^0-9.]/g, "")) : 0,
+        federal_funding: federalFunding ? Number(federalFunding.replace(/[^0-9.]/g, "")) : 0,
         builder_id: builderIds[0] || null,
       } as const;
 
@@ -318,6 +327,29 @@ export function EditProjectDialog({
               onChange={(e) => setRoeEmail(e.target.value)}
               placeholder="rightofentry@example.com"
             />
+          </div>
+          <div>
+            <Label>Project Type</Label>
+            <Select value={projectType} onValueChange={setProjectType}>
+              <SelectTrigger className="mt-1 w-full">
+                <SelectValue placeholder="Select type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="government">Government</SelectItem>
+                <SelectItem value="private">Private</SelectItem>
+                <SelectItem value="mixed">Mixed</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="proj_state">State funding (AUD)</Label>
+              <Input id="proj_state" value={stateFunding} onChange={(e) => setStateFunding(e.target.value)} placeholder="0" />
+            </div>
+            <div>
+              <Label htmlFor="proj_fed">Federal funding (AUD)</Label>
+              <Input id="proj_fed" value={federalFunding} onChange={(e) => setFederalFunding(e.target.value)} placeholder="0" />
+            </div>
           </div>
 
           <JVSelector

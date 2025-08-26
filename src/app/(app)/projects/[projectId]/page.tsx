@@ -43,7 +43,7 @@ export default function ProjectDetailPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("projects")
-        .select("id, name, main_job_site_id, value, proposed_start_date, proposed_finish_date, roe_email")
+        .select("id, name, main_job_site_id, value, proposed_start_date, proposed_finish_date, roe_email, project_type, state_funding, federal_funding")
         .eq("id", projectId)
         .maybeSingle()
       if (error) throw error
