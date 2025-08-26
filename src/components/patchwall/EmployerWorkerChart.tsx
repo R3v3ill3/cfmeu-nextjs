@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Card } from "@/components/ui/card";
-import { Loader2, MoreVertical } from "lucide-react";
+import { MoreVertical } from "lucide-react";
 import { toast } from "sonner";
 import { WorkerDetailModal } from "@/components/workers/WorkerDetailModal";
 import { UnionRoleAssignmentModal } from "@/components/workers/UnionRoleAssignmentModal";
@@ -409,7 +409,7 @@ const roleBadge = (role: WorkerRoleLite) => (
         </div>
 
         {isLoading ? (
-          <div className="flex items-center justify-center py-10 text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading workers…</div>
+          <div className="flex items-center justify-center py-10 text-muted-foreground"><img src="/spinner.gif" alt="Loading" className="mr-2 h-4 w-4" /> Loading workers…</div>
         ) : data && data.workers.length > 0 ? (
 
           <>

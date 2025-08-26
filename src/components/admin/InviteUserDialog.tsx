@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Mail, Loader2 } from "lucide-react";
+import { Mail } from "lucide-react";
 
 interface InviteUserDialogProps {
   open: boolean;
@@ -126,7 +126,7 @@ export const InviteUserDialog = ({ open, onOpenChange, onSuccess }: InviteUserDi
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>Cancel</Button>
           <Button onClick={handleInvite} disabled={loading}>
-            {loading ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" />Sending...</>) : (<><Mail className="h-4 w-4 mr-2" />Send Invitation</>)}
+            {loading ? (<><img src="/spinner.gif" alt="Loading" className="h-4 w-4 mr-2" />Sending...</>) : (<><Mail className="h-4 w-4 mr-2" />Send Invitation</>)}
           </Button>
         </DialogFooter>
       </DialogContent>

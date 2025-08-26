@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ArrowLeft, Upload, AlertCircle, CheckCircle, Clock, Download } from 'lucide-react';
+import { ArrowLeft, Upload, AlertCircle, CheckCircle, Download } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { processEbaData, ProcessedEbaData } from '@/utils/ebaDataProcessor';
 
@@ -268,7 +268,7 @@ export function EbaImport({ csvData, onImportComplete, onBack }: EbaImportProps)
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               {progress.status === 'importing' ? (
-                <Clock className="h-5 w-5 animate-spin" />
+                <img src="/spinner.gif" alt="Loading" className="h-5 w-5" />
               ) : (
                 <CheckCircle className="h-5 w-5 text-green-500" />
               )}

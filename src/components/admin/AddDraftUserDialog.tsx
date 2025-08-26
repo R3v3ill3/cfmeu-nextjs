@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { UserPlus, Loader2 } from "lucide-react";
+import { UserPlus } from "lucide-react";
 
 interface AddDraftUserDialogProps {
   open: boolean;
@@ -150,7 +150,7 @@ export const AddDraftUserDialog = ({ open, onOpenChange, onSuccess }: AddDraftUs
           <Button onClick={handleAdd} disabled={loading}>
             {loading ? (
               <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                <img src="/spinner.gif" alt="Loading" className="h-4 w-4 mr-2" />
                 Saving...
               </>
             ) : (

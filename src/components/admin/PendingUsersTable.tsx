@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Mail, Trash2, Pencil } from "lucide-react";
+import { Mail, Trash2, Pencil } from "lucide-react";
 import EditPendingUserDialog from "@/components/admin/EditPendingUserDialog";
 import { format } from "date-fns";
 
@@ -103,7 +103,7 @@ export const PendingUsersTable = () => {
       <CardContent>
         {loading ? (
           <div className="flex items-center gap-2 text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading drafts...
+            <img src="/spinner.gif" alt="Loading" className="h-4 w-4" /> Loading drafts...
           </div>
         ) : (
           <Table>
@@ -150,7 +150,7 @@ export const PendingUsersTable = () => {
                       <Button size="sm" onClick={() => sendInvite(row)} disabled={invitingId === row.id}>
                         {invitingId === row.id ? (
                           <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Sending
+                            <img src="/spinner.gif" alt="Loading" className="h-4 w-4 mr-2" /> Sending
                           </>
                         ) : (
                           <>

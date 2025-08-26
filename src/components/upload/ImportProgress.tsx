@@ -13,7 +13,6 @@ import {
   RotateCcw, 
   Download, 
   Upload as UploadIcon,
-  Clock,
   Database
 } from "lucide-react";
 type ParsedCSV = { headers: string[]; rows: Array<Record<string, any>>; filename?: string };
@@ -259,7 +258,7 @@ const ImportProgress = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 {progress.status === 'running' && (
-                  <Clock className="h-4 w-4 animate-spin" />
+                  <img src="/spinner.gif" alt="Loading" className="h-4 w-4" />
                 )}
                 {progress.status === 'completed' && (
                   <CheckCircle className="h-4 w-4 text-green-600" />

@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import Papa from "papaparse";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Upload } from "lucide-react";
+import { Upload } from "lucide-react";
 import DateInput from "@/components/ui/date-input";
 
 interface AssignWorkersModalProps {
@@ -417,7 +417,7 @@ export function AssignWorkersModal({
                       onChange={(e) => setSearch(e.target.value)}
                       onKeyDown={(e) => e.key === "Enter" && runSearch()}
                     />
-                    <Button onClick={runSearch} disabled={searching}>{searching ? <Loader2 className="h-4 w-4 animate-spin" /> : "Search"}</Button>
+                    <Button onClick={runSearch} disabled={searching}>{searching ? <img src="/spinner.gif" alt="Loading" className="h-4 w-4" /> : "Search"}</Button>
                   </div>
                   <div className="max-h-56 overflow-auto border rounded-md p-2">
                     {loadingWorkforce ? (
@@ -495,7 +495,7 @@ export function AssignWorkersModal({
               <div className="grid gap-3">
                 <div className="flex items-center gap-3">
                   <Input type="file" accept=".csv" onChange={(e) => e.target.files && onCsvFile(e.target.files[0])} />
-                  {parsing && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {parsing && <img src="/spinner.gif" alt="Loading" className="h-4 w-4" />}
                 </div>
                 {csvRows.length > 0 && (
                   <div className="text-sm text-muted-foreground">{csvRows.length} rows ready</div>

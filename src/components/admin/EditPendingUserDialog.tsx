@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Pencil } from "lucide-react";
+import { Pencil } from "lucide-react";
 
 interface EditPendingUserDialogProps {
   open: boolean;
@@ -98,7 +98,7 @@ export default function EditPendingUserDialog({ open, onOpenChange, pendingUser,
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>Cancel</Button>
           <Button onClick={handleSave} disabled={loading || !pendingUser || pendingUser.status !== "draft"}>
-            {loading ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</>) : "Save"}
+            {loading ? (<><img src="/spinner.gif" alt="Loading" className="h-4 w-4 mr-2" />Saving...</>) : "Save"}
           </Button>
         </DialogFooter>
       </DialogContent>
