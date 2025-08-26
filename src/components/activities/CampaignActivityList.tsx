@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
+import ManageActivityUniverseDialog from "@/components/activities/ManageActivityUniverseDialog"
+import { useState } from "react";
 
 interface CampaignActivityListProps {
 	campaignId: string;
@@ -24,6 +26,8 @@ export default function CampaignActivityList({ campaignId, onCreateClick }: Camp
 		enabled: !!campaignId,
 	});
 
+	const [openFor, setOpenFor] = useState<string | null>(null as any)
+
 	return (
 		<Card>
 			<CardHeader className="flex flex-row items-center justify-between">
@@ -39,12 +43,18 @@ export default function CampaignActivityList({ campaignId, onCreateClick }: Camp
 					{(activities as any[]).map((a) => (
 						<Card key={a.id}>
 							<CardHeader className="pb-2">
-								<CardTitle className="text-base">{a.activity_ui_type || "Activity"} • {a.activity_call_to_action || "—"}</CardTitle>
+								<div className="flex items-center justify-between">
+									<CardTitle className="text-base">{a.activity_ui_type || "Activity"} • {a.activity_call_to_action || "—"}</CardTitle>
+									<Button size="sm" variant="outline" onClick={() => setOpenFor(a.id)}>Manage universe</Button>
+								</div>
 							</CardHeader>
 							<CardContent className="text-sm text-muted-foreground">
 								<div>{format(new Date(a.date), 'dd/MM/yyyy')}</div>
 								{a.topic && <div>Topic: {a.topic}</div>}
 								{a.notes && <div className="line-clamp-2">{a.notes}</div>}
+								{openFor === a.id && (
+									<ManageActivityUniverseDialog activityId={a.id} open={true} onOpenChange={(v) => !v && setOpenFor(null)} />
+								)}
 							</CardContent>
 						</Card>
 					))}
