@@ -40,8 +40,14 @@ function SiteContactsSummary({ projectId, siteIds }: { projectId: string; siteId
         const fn = `${w?.first_name || ''} ${w?.surname || ''}`.trim()
         fullNames[r.worker_id] = fn || r.worker_id
       })
-      const ds = Array.from(new Set((active || []).filter((r: any) => r.name === 'site_delegate').map((r: any) => fullNames[r.worker_id]).filter(Boolean)))
-      const hs = Array.from(new Set((active || []).filter((r: any) => r.name === 'hsr').map((r: any) => fullNames[r.worker_id]).filter(Boolean)))
+      const ds = Array.from(new Set<string>((active || [])
+        .filter((r: any) => r.name === 'site_delegate')
+        .map((r: any) => fullNames[r.worker_id] as string | undefined)
+        .filter((n: string | undefined): n is string => Boolean(n))))
+      const hs = Array.from(new Set<string>((active || [])
+        .filter((r: any) => r.name === 'hsr')
+        .map((r: any) => fullNames[r.worker_id] as string | undefined)
+        .filter((n: string | undefined): n is string => Boolean(n))))
       setDelegates(ds)
       setHsrs(hs)
     }
