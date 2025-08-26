@@ -12,6 +12,8 @@ import { format } from "date-fns"
 import DateInput from "@/components/ui/date-input"
 import RoleGuard from "@/components/guards/RoleGuard"
 import { Dialog, DialogContent, DialogFooter, DialogHeader as UIDialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import CampaignActivityList from "@/components/activities/CampaignActivityList"
+import CampaignActivityBuilder from "@/components/activities/CampaignActivityBuilder"
 
 type Campaign = {
   id: string
@@ -187,6 +189,12 @@ export default function CampaignsPage() {
                   <div>Dates: {format(new Date(c.start_date), 'dd/MM/yyyy')} → {format(new Date(c.end_date), 'dd/MM/yyyy')}</div>
                   <div>Status: {c.status}</div>
                 </div>
+                <div className="mt-4 space-y-3">
+                  {/* Campaign Activities */}
+                  {/* Lazy import to avoid circular issues */}
+                  {/* @ts-ignore */}
+                  <CampaignActivities campaignId={c.id} />
+                </div>
               </CardContent>
             </Card>
           ))}
@@ -194,5 +202,16 @@ export default function CampaignsPage() {
       )}
     </div>
   )
+}
+
+// Inline subcomponent wrapper to host list and builder
+function CampaignActivities({ campaignId }: { campaignId: string }) {
+	const [open, setOpen] = useState(false)
+	return (
+		<div className="space-y-3">
+			<CampaignActivityList campaignId={campaignId} onCreateClick={() => setOpen(true)} />
+			<CampaignActivityBuilder campaignId={campaignId} open={open} onOpenChange={setOpen} />
+		</div>
+	)
 }
 
