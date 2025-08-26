@@ -184,7 +184,7 @@ export default function CampaignsPage() {
               <CardContent>
                 <div className="text-sm text-muted-foreground">
                   <div>Type: {c.type.replace("_"," ")}</div>
-                  <div>Dates: {format(new Date(c.start_date), 'd MMM yyyy')} → {format(new Date(c.end_date), 'd MMM yyyy')}</div>
+                  <div>Dates: {format(new Date(c.start_date), 'dd/MM/yyyy')} → {format(new Date(c.end_date), 'dd/MM/yyyy')}</div>
                   <div>Status: {c.status}</div>
                 </div>
               </CardContent>
