@@ -561,7 +561,7 @@ export const WorkerForm = ({ worker, onSuccess, hideUnionSection = false }: Work
                           <FormLabel>Start Date</FormLabel>
                           <FormControl>
                             <Input 
-                              type="date" 
+                              type="date"
                               {...field} 
                               className={field.value === today && isUnionStartDefault ? "bg-amber-50 dark:bg-amber-900/30" : ""}
                               onChange={(e) => {

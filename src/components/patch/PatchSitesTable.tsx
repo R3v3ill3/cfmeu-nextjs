@@ -3,6 +3,7 @@ import { useMemo, useState } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { ArrowDownAZ, ArrowUpAZ, FileUp, List, Building2 } from "lucide-react"
+import { format } from "date-fns"
 
 export type PatchSiteRow = {
   id: string
@@ -86,7 +87,7 @@ export function PatchSitesTable({ rows, onAction }: { rows: PatchSiteRow[]; onAc
                 <span className="tabular-nums">{r.dd.current} / {r.dd.goal}</span>
               </TableCell>
               <TableCell>{r.leadersScore.toFixed(1)}</TableCell>
-              <TableCell>{r.lastVisit ? new Date(r.lastVisit).toLocaleDateString() : "—"}</TableCell>
+              <TableCell>{r.lastVisit ? format(new Date(r.lastVisit), "dd/MM/yyyy") : "—"}</TableCell>
               <TableCell className="text-right space-x-2">
                 <Button variant="outline" size="sm" onClick={() => onAction("visit-sheet", r.id)}><FileUp className="h-3 w-3 mr-1" /> Visit sheet</Button>
                 <Button variant="outline" size="sm" onClick={() => onAction("worker-list", r.id)}><List className="h-3 w-3 mr-1" /> Worker list</Button>

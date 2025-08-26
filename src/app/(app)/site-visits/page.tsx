@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button"
 import SiteVisitForm from "@/components/siteVisits/SiteVisitForm"
 import { useSearchParams } from "next/navigation"
+import { format } from "date-fns"
 
 export default function SiteVisitsPage() {
   const [open, setOpen] = useState(false)
@@ -73,7 +74,7 @@ export default function SiteVisitsPage() {
               <TableBody>
                 {(rows as any[]).map((r) => (
                   <TableRow key={r.id}>
-                    <TableCell className="whitespace-nowrap">{new Date(r.date).toLocaleDateString()}</TableCell>
+                    <TableCell className="whitespace-nowrap">{format(new Date(r.date), "dd/MM/yyyy")}</TableCell>
                     <TableCell>{r.profiles?.full_name || "—"}</TableCell>
                     <TableCell>{r.job_sites?.projects?.name || "—"}</TableCell>
                     <TableCell>
