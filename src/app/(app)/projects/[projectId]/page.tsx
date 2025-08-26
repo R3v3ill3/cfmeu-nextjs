@@ -14,10 +14,50 @@ import ContractorsSummary from "@/components/projects/ContractorsSummary"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import ContractorSiteAssignmentModal from "@/components/projects/ContractorSiteAssignmentModal"
+import StageTradeAssignmentManager from "@/components/projects/StageTradeAssignmentManager"
+import SiteContactsEditor from "@/components/projects/SiteContactsEditor"
 import { EmployerWorkerChart } from "@/components/patchwall/EmployerWorkerChart"
 import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+
+function SiteContactsSummary({ projectId, siteIds }: { projectId: string; siteIds: string[] }) {
+  const [delegates, setDelegates] = useState<string[]>([])
+  const [hsrs, setHsrs] = useState<string[]>([])
+
+  useEffect(() => {
+    const load = async () => {
+      if (!projectId || siteIds.length === 0) { setDelegates([]); setHsrs([]); return }
+      const { data } = await (supabase as any)
+        .from("union_roles")
+        .select("worker_id, name, end_date, workers(id, first_name, surname)")
+        .in("job_site_id", siteIds)
+        .in("name", ["site_delegate", "hsr"])  // company_delegate/shift_delegate intentionally excluded
+      const active = (data || []).filter((r: any) => !r.end_date || new Date(r.end_date) > new Date())
+      const fullNames: Record<string, string> = {}
+      ;(active || []).forEach((r: any) => {
+        const w = Array.isArray(r.workers) ? r.workers[0] : r.workers
+        const fn = `${w?.first_name || ''} ${w?.surname || ''}`.trim()
+        fullNames[r.worker_id] = fn || r.worker_id
+      })
+      const ds = Array.from(new Set((active || []).filter((r: any) => r.name === 'site_delegate').map((r: any) => fullNames[r.worker_id]).filter(Boolean)))
+      const hs = Array.from(new Set((active || []).filter((r: any) => r.name === 'hsr').map((r: any) => fullNames[r.worker_id]).filter(Boolean)))
+      setDelegates(ds)
+      setHsrs(hs)
+    }
+    load()
+  }, [projectId, siteIds])
+
+  return (
+    <div className="space-y-1">
+      <div className="font-medium">Site Delegate{delegates.length === 1 ? '' : 's'}</div>
+      <div className="text-muted-foreground truncate">{delegates.slice(0, 3).join(', ') || '—'}</div>
+      <div className="font-medium mt-2">Site HSR{hsrs.length === 1 ? '' : 's'}</div>
+      <div className="text-muted-foreground truncate">{hsrs.slice(0, 3).join(', ') || '—'}</div>
+    </div>
+  )
+}
+
 import { getEbaCategory } from "@/components/employers/ebaHelpers"
 import { format } from "date-fns"
 
@@ -43,7 +83,7 @@ export default function ProjectDetailPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("projects")
-        .select("id, name, main_job_site_id, value, proposed_start_date, proposed_finish_date, roe_email")
+        .select("id, name, main_job_site_id, value, proposed_start_date, proposed_finish_date, roe_email, project_type, state_funding, federal_funding")
         .eq("id", projectId)
         .maybeSingle()
       if (error) throw error
@@ -541,6 +581,7 @@ export default function ProjectDetailPage() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                <SiteContactsSummary projectId={projectId} siteIds={sortedSiteIds} />
                 <div className="space-y-1">
                   <button type="button" className="font-medium text-left text-primary hover:underline" onClick={() => setTab("sites")}>
                     Sites
@@ -622,7 +663,10 @@ export default function ProjectDetailPage() {
 
         <TabsContent value="sites">
           {project && (
-            <JobSitesManager projectId={project.id} projectName={project.name} />
+            <div className="space-y-4">
+              <JobSitesManager projectId={project.id} projectName={project.name} />
+              <SiteContactsEditor projectId={project.id} siteIds={sortedSiteIds} />
+            </div>
           )}
         </TabsContent>
 
@@ -680,6 +724,9 @@ export default function ProjectDetailPage() {
               />
             </CardContent>
           </Card>
+          <div className="mt-4">
+            <StageTradeAssignmentManager projectId={projectId} />
+          </div>
         </TabsContent>
 
         <TabsContent value="wallcharts">
