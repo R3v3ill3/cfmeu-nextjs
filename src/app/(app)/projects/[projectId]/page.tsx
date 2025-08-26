@@ -14,6 +14,7 @@ import ContractorsSummary from "@/components/projects/ContractorsSummary"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import ContractorSiteAssignmentModal from "@/components/projects/ContractorSiteAssignmentModal"
+import StageTradeAssignmentManager from "@/components/projects/StageTradeAssignmentManager"
 import { EmployerWorkerChart } from "@/components/patchwall/EmployerWorkerChart"
 import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -680,6 +681,9 @@ export default function ProjectDetailPage() {
               />
             </CardContent>
           </Card>
+          <div className="mt-4">
+            <StageTradeAssignmentManager projectId={projectId} />
+          </div>
         </TabsContent>
 
         <TabsContent value="wallcharts">

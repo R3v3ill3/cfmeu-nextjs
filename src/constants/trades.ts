@@ -20,6 +20,7 @@ export const TRADE_OPTIONS: TradeOption[] = [
   { value: 'bricklaying', label: 'Bricklaying' },
   { value: 'traffic_control', label: 'Traffic Control' },
   { value: 'labour_hire', label: 'Labour Hire' },
+  { value: 'carpentry', label: 'Carpentry' },
   { value: 'windows', label: 'Windows / Facade' },
   { value: 'facade', label: 'Facade' },
   { value: 'painting', label: 'Painting' },
