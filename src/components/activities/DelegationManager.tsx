@@ -20,6 +20,7 @@ import {
   History
 } from "lucide-react";
 import type { WorkerAssignment } from "./WorkerAssignmentTabs";
+import { format } from "date-fns";
 
 type AssignedWorker = {
   workerId: string;
@@ -307,7 +308,7 @@ export function DelegationManager({
                           </div>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <History className="h-3 w-3" />
-                            Last "1" rating: {new Date(delegate.lastActivityDate).toLocaleDateString()}
+                            Last "1" rating: {format(new Date(delegate.lastActivityDate), "dd/MM/yyyy")}
                             {carryForwardCount > 0 && (
                               <Badge variant="secondary" className="text-xs">
                                 {carryForwardCount} to carry forward

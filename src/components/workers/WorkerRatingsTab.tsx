@@ -267,7 +267,7 @@ export const WorkerRatingsTab = ({ workerId, onUpdate }: WorkerRatingsTabProps) 
                 </CardHeader>
                 <CardContent>
                   <div className="text-sm text-muted-foreground mb-2">
-                    Rated on {format(new Date(rating.created_at), "MMM dd, yyyy")}
+                    Rated on {format(new Date(rating.created_at), "dd/MM/yyyy")}
                   </div>
                   {rating.notes && (
                     <div className="p-3 bg-muted rounded-md">

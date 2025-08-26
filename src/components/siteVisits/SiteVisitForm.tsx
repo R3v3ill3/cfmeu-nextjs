@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { toast } from "sonner"
 import { Checkbox } from "@/components/ui/checkbox"
+import DateInput from "@/components/ui/date-input"
 
 type SiteVisit = {
   id?: string
@@ -428,7 +429,7 @@ export function SiteVisitForm({ open, onOpenChange, initial }: { open: boolean; 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label>Date</Label>
-              <Input type="date" value={visitDate} onChange={(e) => setVisitDate(e.target.value)} />
+              <DateInput value={visitDate} onChange={(e) => setVisitDate(e.target.value)} />
             </div>
             {(userScope?.role === "admin" || userScope?.role === "lead_organiser") && (
               <div>
