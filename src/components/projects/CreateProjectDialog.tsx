@@ -149,7 +149,13 @@ export default function CreateProjectDialog() {
           </div>
           <div>
             <Label>Builder (optional)</Label>
-            <SingleEmployerDialogPicker value={builderId} onChange={setBuilderId} />
+            <SingleEmployerDialogPicker
+              label="Builder"
+              selectedId={builderId}
+              onChange={(id: string) => setBuilderId(id)}
+              prioritizedTag="builder"
+              triggerText="Select"
+            />
           </div>
           <JVSelector status={jvStatus} label={jvLabel} onChangeStatus={setJvStatus} onChangeLabel={setJvLabel} />
           <div className="flex justify-end gap-2 pt-2">
