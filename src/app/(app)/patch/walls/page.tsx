@@ -78,7 +78,7 @@ export default function WallsPage() {
                   <SelectValue placeholder="All sites" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All sites</SelectItem>
+                  <SelectItem value="all">All sites</SelectItem>
                   {(sites as any[]).map((s) => (
                     <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                   ))}

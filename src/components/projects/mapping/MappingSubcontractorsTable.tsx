@@ -172,14 +172,14 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
   };
 
   const ebaSelect = (row: Row) => (
-    <Select value={row.eba === null ? "" : row.eba ? "yes" : "no"} onValueChange={(v) => setEba(row, v === "" ? null : v === "yes") }>
+    <Select value={row.eba === null ? "unknown" : row.eba ? "yes" : "no"} onValueChange={(v) => setEba(row, v === "unknown" ? null : v === "yes") }>
       <SelectTrigger>
         <SelectValue placeholder="—" />
       </SelectTrigger>
       <SelectContent>
         <SelectItem value="yes">Yes</SelectItem>
         <SelectItem value="no">No</SelectItem>
-        <SelectItem value="">Unknown</SelectItem>
+        <SelectItem value="unknown">Unknown</SelectItem>
       </SelectContent>
     </Select>
   );
