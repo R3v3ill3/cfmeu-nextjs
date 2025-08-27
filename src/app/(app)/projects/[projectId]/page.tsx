@@ -691,7 +691,22 @@ export default function ProjectDetailPage() {
                   >
                     Close Mapping Sheets
                   </Button>
-                  <Button variant="outline" onClick={() => { try { window.open(`/projects/${project.id}/print`, "_blank"); } catch {} }}>Print</Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      try {
+                        const url = `/projects/${project.id}/print?print=1`
+                        const newWin = window.open(url, "_blank")
+                        if (!newWin) {
+                          window.location.href = url
+                        }
+                      } catch {
+                        try { window.location.href = `/projects/${project.id}/print?print=1` } catch {}
+                      }
+                    }}
+                  >
+                    Print
+                  </Button>
                 </div>
               </div>
               <div className="grid gap-6">
