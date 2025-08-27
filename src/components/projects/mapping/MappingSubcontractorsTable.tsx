@@ -239,22 +239,29 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
   );
 
   const companyCell = (row: Row) => (
-    <div className="flex items-center gap-2">
-      <SingleEmployerDialogPicker
-        label=""
-        selectedId={row.employer_id || ""}
-        onChange={(id: string) => {
-          if (!id) {
-            setEmployer(row.key, "", "");
-            return;
-          }
-          supabase.from("employers").select("id,name").eq("id", id).maybeSingle().then(({ data }) => {
-            const name = (data as any)?.name || id;
-            setEmployer(row.key, id, name);
-          });
-        }}
-        triggerText={row.employer_id ? "Change" : "Select"}
-      />
+    <div className="flex items-center justify-between gap-2">
+      <div className="font-medium text-base truncate">
+        {row.employer_name || <span className="text-muted-foreground">—</span>}
+      </div>
+      <div className="shrink-0">
+        <SingleEmployerDialogPicker
+          label=""
+          hideLabel
+          compactTrigger
+          selectedId={row.employer_id || ""}
+          onChange={(id: string) => {
+            if (!id) {
+              setEmployer(row.key, "", "");
+              return;
+            }
+            supabase.from("employers").select("id,name").eq("id", id).maybeSingle().then(({ data }) => {
+              const name = (data as any)?.name || id;
+              setEmployer(row.key, id, name);
+            });
+          }}
+          triggerText={row.employer_id ? "+ Change" : "+ Select"}
+        />
+      </div>
     </div>
   );
 
