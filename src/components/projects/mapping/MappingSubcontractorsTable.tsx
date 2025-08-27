@@ -4,10 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SingleEmployerDialogPicker } from "@/components/projects/SingleEmployerDialogPicker";
 import { toast } from "sonner";
 import { TRADE_OPTIONS } from "@/constants/trades";
+import { ManageTradeCompanyDialog } from "@/components/projects/mapping/ManageTradeCompanyDialog";
+import { AddEmployerToTradeDialog } from "@/components/projects/mapping/AddEmployerToTradeDialog";
 
 type Stage = "early_works" | "structure" | "finishing" | "other";
 
@@ -60,6 +61,11 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
   const [allowedTradeValues, setAllowedTradeValues] = useState<Set<string>>(new Set());
   const [labelByTrade, setLabelByTrade] = useState<Record<string, string>>({});
   const [stageByTrade, setStageByTrade] = useState<Record<string, Stage>>({});
+  const [manageOpen, setManageOpen] = useState(false);
+  const [manageMode, setManageMode] = useState<"existing" | "empty">("empty");
+  const [activeRow, setActiveRow] = useState<Row | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [addDefaults, setAddDefaults] = useState<{ stage: Stage; trade_value: string; trade_label: string; action: "replace" | "add_new" }>({ stage: "other", trade_value: "", trade_label: "", action: "replace" });
 
   useEffect(() => {
     const load = async () => {
@@ -250,28 +256,36 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
     setOtherRows(others);
   };
 
-  const changeStage = async (row: Row, newStage: Stage) => {
-    // Update locally first
-    let list = [...rows, ...otherRows].map((r) => (r.key === row.key ? { ...r, stage: newStage } : r));
-    // Persist if mapped
-    try {
-      if (row.id) {
-        const { error } = await (supabase as any).from("project_contractor_trades").update({ stage: newStage }).eq("id", row.id);
-        if (error) throw error;
-      }
-    } catch (e: any) {
-      toast.error(e?.message || "Failed to update stage");
+  const setEmployerWithOptionalStage = async (key: string, employerId: string, employerName: string, maybeStage?: Stage) => {
+    let list = [...rows, ...otherRows];
+    const idx = list.findIndex((x) => x.key === key);
+    if (idx < 0) return;
+    const current = list[idx];
+    if (!employerId) {
+      // Delegate to base clearing logic
+      return await setEmployer(key, "", "");
     }
+    const updated: Row = { ...current, employer_id: employerId, employer_name: employerName, stage: maybeStage || current.stage };
+    list[idx] = updated;
+    await upsertRow(updated);
+    try {
+      const { data: e } = await supabase.from("employers").select("enterprise_agreement_status").eq("id", employerId).maybeSingle();
+      list[idx] = { ...updated, eba: ((e as any)?.enterprise_agreement_status ?? null) as boolean | null };
+    } catch {}
     const std = list.filter((r) => allowedTradeValues.has(r.trade_value) && r.stage !== "other");
     const others = list.filter((r) => r.stage === "other" || !allowedTradeValues.has(r.trade_value));
     setRows(std);
     setOtherRows(others);
   };
 
+  // Stage selection is now handled within AddEmployerToTradeDialog when adding/replacing
+
   const addOther = () => {
-    const value = `other_${Date.now()}`;
-    const key = `other|${value}`;
-    setOtherRows([ ...otherRows, { key, isSkeleton: false, stage: "other", trade_value: value, trade_label: "Other", employer_id: null, employer_name: null, eba: null } ]);
+    const trade_value = `other_${Date.now()}`;
+    const trade_label = "Other";
+    setActiveRow(null);
+    setAddDefaults({ stage: "other", trade_value, trade_label, action: "add_new" });
+    setAddOpen(true);
   };
 
   const ebaCell = (row: Row) => {
@@ -294,52 +308,20 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
         {row.employer_name || <span className="text-muted-foreground">—</span>}
       </div>
       <div className="shrink-0">
-        <SingleEmployerDialogPicker
-          label=""
-          hideLabel
-          compactTrigger
-          selectedId={row.employer_id || ""}
-          onChange={(id: string) => {
-            if (!id) { setEmployer(row.key, "", ""); return; }
-            supabase.from("employers").select("id,name,enterprise_agreement_status").eq("id", id).maybeSingle().then(({ data }) => {
-              const name = (data as any)?.name || id;
-              setEmployer(row.key, id, name);
-            });
-          }}
-          triggerText={row.employer_id ? "+ Change" : "+ Select"}
-        />
+        <Button size="sm" variant="outline" onClick={() => { setActiveRow(row); setManageMode(row.employer_id ? "existing" : "empty"); setManageOpen(true); }}>
+          Manage
+        </Button>
       </div>
     </div>
   );
 
   const addAdditionalRow = (row: Row) => {
-    const newRow: Row = {
-      key: `${row.stage}|${row.trade_value}|extra|${Date.now()}`,
-      isSkeleton: false,
-      stage: row.stage,
-      trade_value: row.trade_value,
-      trade_label: row.trade_label,
-      employer_id: null,
-      employer_name: null,
-      eba: null,
-    };
-    const list = [...rows, newRow];
-    setRows(list);
+    setActiveRow(row);
+    setAddDefaults({ stage: row.stage, trade_value: row.trade_value, trade_label: row.trade_label, action: "add_new" });
+    setAddOpen(true);
   };
 
-  const stageSelect = (row: Row) => (
-    <Select value={row.stage} onValueChange={(v) => changeStage(row, v as Stage)}>
-      <SelectTrigger className="h-8 w-40">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="early_works">Early works</SelectItem>
-        <SelectItem value="structure">Structure</SelectItem>
-        <SelectItem value="finishing">Finishing</SelectItem>
-        <SelectItem value="other">Other</SelectItem>
-      </SelectContent>
-    </Select>
-  );
+  // Stage selector removed from inline table rows
 
   const renderSection = (title: string, list: Row[]) => (
     <>
@@ -349,7 +331,6 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
           <TableCell className={"w-56 " + (r.employer_id ? "bg-muted/20" : "")}>
             <div className="flex items-center justify-between gap-2">
               <div>{r.trade_label}</div>
-              {stageSelect(r)}
             </div>
           </TableCell>
           <TableCell>
@@ -395,6 +376,74 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
       <div className="flex justify-end mt-2">
         <Button size="sm" variant="outline" onClick={addOther}>Add Other</Button>
       </div>
+
+      {/* Manage dialog */}
+      <ManageTradeCompanyDialog
+        open={manageOpen}
+        onOpenChange={setManageOpen}
+        mode={manageMode}
+        onRemove={activeRow && activeRow.employer_id ? () => {
+          if (!activeRow) return;
+          setEmployer(activeRow.key, "", "");
+        } : undefined}
+        onChange={activeRow ? () => {
+          setAddDefaults({ stage: activeRow.stage, trade_value: activeRow.trade_value, trade_label: activeRow.trade_label, action: "replace" });
+          setManageOpen(false);
+          setAddOpen(true);
+        } : undefined}
+        onAdd={() => {
+          if (activeRow) {
+            setAddDefaults({ stage: activeRow.stage, trade_value: activeRow.trade_value, trade_label: activeRow.trade_label, action: activeRow.employer_id ? "add_new" : "replace" });
+          }
+          setManageOpen(false);
+          setAddOpen(true);
+        }}
+      />
+
+      {/* Add/Replace dialog */}
+      <AddEmployerToTradeDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        defaultStage={addDefaults.stage}
+        defaultTradeValue={addDefaults.trade_value}
+        defaultTradeLabel={addDefaults.trade_label}
+        onSubmit={({ stage, employerId, employerName }) => {
+          if (addDefaults.action === "replace" && activeRow) {
+            // Replace on existing row (or fill empty skeleton). Allow stage to update.
+            setEmployerWithOptionalStage(activeRow.key, employerId, employerName, stage);
+          } else if (addDefaults.action === "add_new") {
+            // Create a new row and persist
+            const newRow: Row = {
+              key: `${stage}|${addDefaults.trade_value}|extra|${Date.now()}`,
+              isSkeleton: false,
+              stage,
+              trade_value: addDefaults.trade_value,
+              trade_label: addDefaults.trade_label || labelByTrade[addDefaults.trade_value] || startCase(addDefaults.trade_value),
+              employer_id: employerId,
+              employer_name: employerName,
+              eba: null,
+            };
+            // Update local rows and persist
+            const list = [...rows, newRow, ...otherRows];
+            const std = list.filter((r) => allowedTradeValues.has(r.trade_value) && r.stage !== "other");
+            const others = list.filter((r) => r.stage === "other" || !allowedTradeValues.has(r.trade_value));
+            setRows(std);
+            setOtherRows(others);
+            upsertRow(newRow).then(async () => {
+              try {
+                const { data: e } = await supabase.from("employers").select("enterprise_agreement_status").eq("id", employerId).maybeSingle();
+                newRow.eba = ((e as any)?.enterprise_agreement_status ?? null) as boolean | null;
+                // trigger state update
+                const merged = [...rows, ...otherRows];
+                const std2 = merged.filter((r) => allowedTradeValues.has(r.trade_value) && r.stage !== "other");
+                const others2 = merged.filter((r) => r.stage === "other" || !allowedTradeValues.has(r.trade_value));
+                setRows(std2);
+                setOtherRows(others2);
+              } catch {}
+            });
+          }
+        }}
+      />
     </div>
   );
 }

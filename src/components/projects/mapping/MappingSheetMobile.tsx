@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import DateInput from "@/components/ui/date-input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { MappingSiteContactsTable } from "@/components/projects/mapping/MappingSiteContactsTable"
+import { useProjectOrganisers } from "@/hooks/useProjectOrganisers"
 
 type ProjectRow = {
   id: string;
@@ -26,9 +27,9 @@ export function MappingSheetMobile({ projectId }: { projectId: string }) {
   const [project, setProject] = useState<ProjectRow | null>(null)
   const [address, setAddress] = useState<string>("")
   const [builderName, setBuilderName] = useState<string>("—")
-  const [organisers, setOrganisers] = useState<string>("—")
   const [saving, setSaving] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const organisers = useProjectOrganisers(projectId).label
 
   useEffect(() => {
     const load = async () => {
@@ -52,23 +53,7 @@ export function MappingSheetMobile({ projectId }: { projectId: string }) {
         setBuilderName("—")
       }
 
-      const { data: sites } = await (supabase as any).from("job_sites").select("id").eq("project_id", projectId)
-      const siteIds = ((sites as any[]) || []).map((s: any) => s.id)
-      if (siteIds.length > 0) {
-        const { data: pjs } = await (supabase as any).from("patch_job_sites").select("patch_id").in("job_site_id", siteIds)
-        const patchIds = Array.from(new Set(((pjs as any[]) || []).map((r: any) => r.patch_id)))
-        if (patchIds.length > 0) {
-          const { data: orgs } = await (supabase as any)
-            .from("organiser_patch_assignments")
-            .select("profiles:organiser_id(full_name)")
-            .is("effective_to", null)
-            .in("patch_id", patchIds)
-          const names = Array.from(new Set(((orgs as any[]) || []).map((r: any) => {
-            const p = Array.isArray(r.profiles) ? r.profiles[0] : r.profiles; return p?.full_name as string | undefined
-          }).filter(Boolean)))
-          setOrganisers(names.join(", ") || "—")
-        }
-      }
+      // organiser label now provided by hook
     }
     load()
   }, [projectId])
@@ -192,7 +177,7 @@ export function MappingSheetMobile({ projectId }: { projectId: string }) {
           <div className="grid grid-cols-1 gap-3">
             <div>
               <label className="text-xs font-medium">Builder</label>
-              <div className="mt-1 p-2 border rounded bg-muted/20">{builderName}</div>
+              <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={builderName} readOnly disabled />
             </div>
             <div>
               <label className="text-xs font-medium">Preferred email for ROE</label>
