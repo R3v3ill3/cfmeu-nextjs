@@ -224,7 +224,7 @@ export const EbaAssignmentModal = ({ isOpen, onClose, employer }: EbaAssignmentM
               </div>
 
               {isLoading ? (
-                <div className="text-center py-8">Loading existing EBAs...</div>
+                <div className="text-center py-8 flex items-center justify-center gap-2"><img src="/spinner.gif" alt="Loading" className="h-4 w-4" /> Loading existing EBAs...</div>
               ) : (
                 <div className="grid gap-3 max-h-96 overflow-y-auto">
                   {filteredEbas.length === 0 ? (

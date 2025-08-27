@@ -89,7 +89,7 @@ export function DeleteProjectDialog({
           <div className="rounded-md border p-3">
             <div className="font-medium mb-2">What will be deleted</div>
             {isLoading ? (
-              <div className="text-sm text-muted-foreground">Loading impact...</div>
+              <div className="text-sm text-muted-foreground flex items-center gap-2"><img src="/spinner.gif" alt="Loading" className="h-4 w-4" /> Loading impact...</div>
             ) : impact ? (
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div className="flex items-center justify-between">
