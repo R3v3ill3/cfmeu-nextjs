@@ -47,6 +47,7 @@ type Row = {
   employer_name: string | null;
   eba: boolean | null;
   id?: string; // project_contractor_trades row id if exists
+  isSkeleton?: boolean; // true for the base scaffold row per trade
 };
 
 function startCase(s: string): string {
@@ -120,32 +121,54 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
         .select("id, employer_id, stage, trade_type, employers(name, enterprise_agreement_status)")
         .eq("project_id", projectId);
 
-      // Start with a scaffold of all enum trades
-      const byKey = new Map<string, Row>();
+      // Build arrays instead of a single row per trade to support multiples
+      const scaffold: Row[] = [];
       enums.forEach((t) => {
         const st = stageMap[t] || "other";
         const label = labelsMap[t] || startCase(t);
-        const key = `${st}|${t}`;
-        byKey.set(key, { key, stage: st, trade_value: t, trade_label: label, employer_id: null, employer_name: null, eba: null });
+        const key = `${st}|${t}|base`;
+        scaffold.push({ key, isSkeleton: true, stage: st, trade_value: t, trade_label: label, employer_id: null, employer_name: null, eba: null });
       });
 
-      // Overlay existing project assignments
+      const stdRows: Row[] = [...scaffold];
+      const unknownOrOther: Row[] = [];
+
       (data || []).forEach((r: any) => {
         const t = String(r.trade_type);
-        const displayStage: Stage = stageMap[t] || (r.stage as Stage) || "other";
-        const key = `${displayStage}|${t}`;
-        const base = byKey.get(key);
+        const persistedStage: Stage = (r.stage as Stage) || (stageMap[t] as Stage) || "other";
         const eba = r.employers?.enterprise_agreement_status ?? null;
-        if (base) {
-          base.id = r.id as string;
-          base.employer_id = r.employer_id as string;
-          base.employer_name = r.employers?.name || r.employer_id;
-          base.eba = eba;
+
+        if (allowedSet.has(t) && persistedStage !== "other") {
+          // Try to fill an empty skeleton row first; otherwise add a new row
+          const firstIndex = stdRows.findIndex((row) => row.trade_value === t && row.isSkeleton && row.employer_id === null);
+          if (firstIndex >= 0) {
+            stdRows[firstIndex] = {
+              ...stdRows[firstIndex],
+              id: r.id as string,
+              stage: persistedStage,
+              employer_id: r.employer_id as string,
+              employer_name: r.employers?.name || r.employer_id,
+              eba,
+            };
+          } else {
+            stdRows.push({
+              key: `${persistedStage}|${t}|${r.id}`,
+              isSkeleton: false,
+              stage: persistedStage,
+              trade_value: t,
+              trade_label: labelsMap[t] || t,
+              id: r.id as string,
+              employer_id: r.employer_id as string,
+              employer_name: r.employers?.name || r.employer_id,
+              eba,
+            });
+          }
         } else {
-          // Unknown trade or stage combo; add to others
-          byKey.set(key, {
-            key,
-            stage: displayStage,
+          // Unknown trade or stage other
+          unknownOrOther.push({
+            key: `${persistedStage}|${t}|${r.id}`,
+            isSkeleton: false,
+            stage: persistedStage,
             trade_value: t,
             trade_label: labelsMap[t] || t,
             id: r.id as string,
@@ -156,11 +179,8 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
         }
       });
 
-      const merged = Array.from(byKey.values());
-      const std = merged.filter((r) => allowedSet.has(r.trade_value) && r.stage !== "other");
-      const others = merged.filter((r) => r.stage === "other" || !allowedSet.has(r.trade_value));
-      setRows(std);
-      setOtherRows(others);
+      setRows(stdRows);
+      setOtherRows(unknownOrOther);
     };
     load();
   }, [projectId]);
@@ -191,52 +211,82 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
     }
   };
 
-  const setEmployer = (key: string, employerId: string, employerName: string) => {
-    const list = [...rows, ...otherRows];
+  const setEmployer = async (key: string, employerId: string, employerName: string) => {
+    let list = [...rows, ...otherRows];
     const idx = list.findIndex((x) => x.key === key);
-    const row = { ...list[idx], employer_id: employerId, employer_name: employerName } as Row;
-    list[idx] = row;
+    if (idx < 0) return;
+    const current = list[idx];
+
+    if (!employerId) {
+      // Clearing company: delete mapping if persisted and row is not a pure skeleton; otherwise clear fields only
+      try {
+        if (current.id) {
+          await (supabase as any).from("project_contractor_trades").delete().eq("id", current.id);
+        }
+      } catch (e: any) {
+        toast.error(e?.message || "Failed to remove contractor mapping");
+      }
+
+      if (current.isSkeleton) {
+        list[idx] = { ...current, id: undefined, employer_id: null, employer_name: null, eba: null };
+      } else {
+        list.splice(idx, 1);
+      }
+    } else {
+      // Selecting or changing company: persist
+      const updated: Row = { ...current, employer_id: employerId, employer_name: employerName };
+      list[idx] = updated;
+      await upsertRow(updated);
+      // After upsert, try to fetch EBA status
+      try {
+        const { data: e } = await supabase.from("employers").select("enterprise_agreement_status").eq("id", employerId).maybeSingle();
+        list[idx] = { ...updated, eba: ((e as any)?.enterprise_agreement_status ?? null) as boolean | null };
+      } catch {}
+    }
+
     const std = list.filter((r) => allowedTradeValues.has(r.trade_value) && r.stage !== "other");
     const others = list.filter((r) => r.stage === "other" || !allowedTradeValues.has(r.trade_value));
     setRows(std);
     setOtherRows(others);
-    upsertRow(row);
   };
 
-  const setEba = async (row: Row, val: boolean | null) => {
+  const changeStage = async (row: Row, newStage: Stage) => {
+    // Update locally first
+    let list = [...rows, ...otherRows].map((r) => (r.key === row.key ? { ...r, stage: newStage } : r));
+    // Persist if mapped
     try {
-      const eid = row.employer_id;
-      if (!eid) return;
-      const { error } = await supabase.from("employers").update({ enterprise_agreement_status: val }).eq("id", eid);
-      if (error) throw error;
-      const list = [...rows, ...otherRows].map((r) => (r.key === row.key ? { ...r, eba: val } : r));
-      const std = list.filter((r) => allowedTradeValues.has(r.trade_value) && r.stage !== "other");
-      const others = list.filter((r) => r.stage === "other" || !allowedTradeValues.has(r.trade_value));
-      setRows(std);
-      setOtherRows(others);
+      if (row.id) {
+        const { error } = await (supabase as any).from("project_contractor_trades").update({ stage: newStage }).eq("id", row.id);
+        if (error) throw error;
+      }
     } catch (e: any) {
-      toast.error(e?.message || "Failed to update EBA status");
+      toast.error(e?.message || "Failed to update stage");
     }
+    const std = list.filter((r) => allowedTradeValues.has(r.trade_value) && r.stage !== "other");
+    const others = list.filter((r) => r.stage === "other" || !allowedTradeValues.has(r.trade_value));
+    setRows(std);
+    setOtherRows(others);
   };
 
   const addOther = () => {
     const value = `other_${Date.now()}`;
     const key = `other|${value}`;
-    setOtherRows([ ...otherRows, { key, stage: "other", trade_value: value, trade_label: "Other", employer_id: null, employer_name: null, eba: null } ]);
+    setOtherRows([ ...otherRows, { key, isSkeleton: false, stage: "other", trade_value: value, trade_label: "Other", employer_id: null, employer_name: null, eba: null } ]);
   };
 
-  const ebaSelect = (row: Row) => (
-    <Select value={row.eba === null ? "unknown" : row.eba ? "yes" : "no"} onValueChange={(v) => setEba(row, v === "unknown" ? null : v === "yes") }>
-      <SelectTrigger>
-        <SelectValue placeholder="—" />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="yes">Yes</SelectItem>
-        <SelectItem value="no">No</SelectItem>
-        <SelectItem value="unknown">Unknown</SelectItem>
-      </SelectContent>
-    </Select>
-  );
+  const ebaCell = (row: Row) => {
+    if (!row.employer_id) return <span className="text-muted-foreground">—</span>;
+    const text = row.eba === null ? "Unknown" : row.eba ? "Yes" : "No";
+    return (
+      <button
+        className="underline text-left"
+        onClick={() => { try { window.location.href = `/employers/${row.employer_id}` } catch {} }}
+        title="Open employer to edit EBA status"
+      >
+        {text}
+      </button>
+    );
+  };
 
   const companyCell = (row: Row) => (
     <div className="flex items-center justify-between gap-2">
@@ -250,11 +300,8 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
           compactTrigger
           selectedId={row.employer_id || ""}
           onChange={(id: string) => {
-            if (!id) {
-              setEmployer(row.key, "", "");
-              return;
-            }
-            supabase.from("employers").select("id,name").eq("id", id).maybeSingle().then(({ data }) => {
+            if (!id) { setEmployer(row.key, "", ""); return; }
+            supabase.from("employers").select("id,name,enterprise_agreement_status").eq("id", id).maybeSingle().then(({ data }) => {
               const name = (data as any)?.name || id;
               setEmployer(row.key, id, name);
             });
@@ -265,14 +312,55 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
     </div>
   );
 
+  const addAdditionalRow = (row: Row) => {
+    const newRow: Row = {
+      key: `${row.stage}|${row.trade_value}|extra|${Date.now()}`,
+      isSkeleton: false,
+      stage: row.stage,
+      trade_value: row.trade_value,
+      trade_label: row.trade_label,
+      employer_id: null,
+      employer_name: null,
+      eba: null,
+    };
+    const list = [...rows, newRow];
+    setRows(list);
+  };
+
+  const stageSelect = (row: Row) => (
+    <Select value={row.stage} onValueChange={(v) => changeStage(row, v as Stage)}>
+      <SelectTrigger className="h-8 w-40">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="early_works">Early works</SelectItem>
+        <SelectItem value="structure">Structure</SelectItem>
+        <SelectItem value="finishing">Finishing</SelectItem>
+        <SelectItem value="other">Other</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+
   const renderSection = (title: string, list: Row[]) => (
     <>
       <tr><td colSpan={3} className="font-semibold pt-3">{title}</td></tr>
       {list.map((r) => (
         <TableRow key={r.key}>
-          <TableCell className={"w-56 " + (r.employer_id ? "bg-muted/20" : "")}>{r.trade_label}</TableCell>
-          <TableCell>{companyCell(r)}</TableCell>
-          <TableCell className="w-40">{ebaSelect(r)}</TableCell>
+          <TableCell className={"w-56 " + (r.employer_id ? "bg-muted/20" : "")}>
+            <div className="flex items-center justify-between gap-2">
+              <div>{r.trade_label}</div>
+              {stageSelect(r)}
+            </div>
+          </TableCell>
+          <TableCell>
+            <div className="flex items-center justify-between gap-2">
+              {companyCell(r)}
+              {r.employer_id ? (
+                <Button size="xs" variant="outline" onClick={() => addAdditionalRow(r)}>Add</Button>
+              ) : null}
+            </div>
+          </TableCell>
+          <TableCell className="w-40">{ebaCell(r)}</TableCell>
         </TableRow>
       ))}
     </>
