@@ -12,6 +12,14 @@
   /* Hide interactive chrome */
   button, input, select, textarea, [role="button"], .shadcn-button { display: none !important; }
 
+  /* Force black on white for print */
+  html, body, #__next, main, section, div, table, th, td, span, p, h1, h2, h3, h4, h5, h6 {
+    color: #000 !important;
+    background: #fff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
   /* High-contrast borders */
   .print-border { border: 1px solid #000 !important; }
   .print-table { border-collapse: collapse !important; width: 100% !important; }

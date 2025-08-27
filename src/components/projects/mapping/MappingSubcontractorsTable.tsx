@@ -6,43 +6,36 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SingleEmployerDialogPicker } from "@/components/projects/SingleEmployerDialogPicker";
-import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { TRADE_OPTIONS } from "@/constants/trades";
 
 type Stage = "early_works" | "structure" | "finishing" | "other";
 
-const TRADES: Record<Stage, Array<{ value: string; label: string }>> = {
-  early_works: [
-    { value: "demolition", label: "Demo" },
-    { value: "piling", label: "Piling" },
-    { value: "excavations", label: "Excavations" },
-    { value: "scaffolding", label: "Scaffold" },
-    { value: "cleaning", label: "Cleaners" },
-    { value: "traffic_control", label: "Traffic Control" },
-    { value: "labour_hire", label: "Labour Hire" },
-  ],
-  structure: [
-    { value: "steel_fixing", label: "Steel fixer" },
-    { value: "tower_crane", label: "Tower Crane" },
-    { value: "concreting", label: "Concreters" },
-    { value: "post_tensioning", label: "Stressor" },
-    { value: "form_work", label: "Formwork" },
-    { value: "steel_fixing_dup", label: "Steel Fixers" },
-    { value: "bricklaying", label: "Bricklayer" },
-    { value: "structural_steel", label: "Structural Steel" },
-  ],
-  finishing: [
-    { value: "facade", label: "Facade" },
-    { value: "carpentry", label: "Carpenter" },
-    { value: "plastering", label: "Plasterer" },
-    { value: "painting", label: "Painters" },
-    { value: "tiling", label: "Tiling" },
-    { value: "kitchens", label: "Kitchens" },
-    { value: "flooring", label: "Flooring" },
-    { value: "landscaping", label: "Landscaping" },
-    { value: "final_clean", label: "Final Clean" },
-  ],
-  other: [],
+// Fallback stage for known trades when no historical data exists
+const FALLBACK_STAGE_BY_TRADE: Record<string, Stage> = {
+  demolition: "early_works",
+  piling: "early_works",
+  excavations: "early_works",
+  scaffolding: "early_works",
+  cleaning: "early_works",
+  traffic_control: "early_works",
+  labour_hire: "early_works",
+  steel_fixing: "structure",
+  tower_crane: "structure",
+  concreting: "structure",
+  post_tensioning: "structure",
+  form_work: "structure",
+  bricklaying: "structure",
+  structural_steel: "structure",
+  facade: "finishing",
+  carpentry: "finishing",
+  plastering: "finishing",
+  painting: "finishing",
+  tiling: "finishing",
+  kitchens: "finishing",
+  flooring: "finishing",
+  landscaping: "finishing",
+  final_clean: "finishing",
 };
 
 type Row = {
@@ -56,31 +49,91 @@ type Row = {
   id?: string; // project_contractor_trades row id if exists
 };
 
-function scaffoldRows(): Row[] {
-  const rows: Row[] = [];
-  (Object.keys(TRADES) as Stage[]).forEach((st) => {
-    TRADES[st].forEach((t) => {
-      rows.push({ key: `${st}|${t.value}`, stage: st, trade_value: t.value, trade_label: t.label, employer_id: null, employer_name: null, eba: null });
-    });
-  });
-  return rows;
+function startCase(s: string): string {
+  return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export function MappingSubcontractorsTable({ projectId }: { projectId: string }) {
-  const [rows, setRows] = useState<Row[]>(scaffoldRows());
+  const [rows, setRows] = useState<Row[]>([]);
   const [otherRows, setOtherRows] = useState<Row[]>([]);
+  const [allowedTradeValues, setAllowedTradeValues] = useState<Set<string>>(new Set());
+  const [labelByTrade, setLabelByTrade] = useState<Record<string, string>>({});
+  const [stageByTrade, setStageByTrade] = useState<Record<string, Stage>>({});
 
   useEffect(() => {
     const load = async () => {
+      // 1) Load enum values via RPC and build labels
+      const { data: enumVals } = await (supabase as any).rpc("get_trade_type_enum");
+      const enums: string[] = (enumVals ?? []).map((v: any) => String(v));
+      const allowedSet = new Set(enums);
+      const labelsMap: Record<string, string> = {};
+      const tradeOptionsMap: Record<string, string> = {};
+      TRADE_OPTIONS.forEach((t) => { tradeOptionsMap[t.value] = t.label; });
+      enums.forEach((v) => { labelsMap[v] = tradeOptionsMap[v] || startCase(v); });
+      setAllowedTradeValues(allowedSet);
+      setLabelByTrade(labelsMap);
+
+      // 2) Build stage-by-trade from existing assignments on this project (project and sites)
+      const { data: pct } = await (supabase as any)
+        .from("project_contractor_trades")
+        .select("stage, trade_type")
+        .eq("project_id", projectId);
+
+      const { data: sites } = await (supabase as any)
+        .from("job_sites")
+        .select("id")
+        .eq("project_id", projectId);
+      const siteIds = ((sites as any[]) || []).map((s: any) => s.id);
+      let sct: any[] = [];
+      if (siteIds.length > 0) {
+        const res = await (supabase as any)
+          .from("site_contractor_trades")
+          .select("stage, trade_type")
+          .in("job_site_id", siteIds);
+        sct = (res.data as any[]) || [];
+      }
+
+      const counts: Record<string, Record<Stage, number>> = {};
+      const bump = (t: string, st?: string | null) => {
+        const stage = (st as Stage) || null;
+        const map = counts[t] || { early_works: 0, structure: 0, finishing: 0, other: 0 };
+        if (stage && ["early_works","structure","finishing","other"].includes(stage)) {
+          map[stage as Stage] += 1;
+        }
+        counts[t] = map;
+      };
+      (pct || []).forEach((r: any) => bump(String(r.trade_type), r.stage));
+      (sct || []).forEach((r: any) => bump(String(r.trade_type), r.stage));
+
+      const stageMap: Record<string, Stage> = {};
+      enums.forEach((t) => {
+        const c = counts[t] || { early_works: 0, structure: 0, finishing: 0, other: 0 };
+        const sorted = (Object.keys(c) as Stage[]).sort((a, b) => c[b] - c[a]);
+        const top = sorted[0];
+        stageMap[t] = (c[top] > 0 ? top : (FALLBACK_STAGE_BY_TRADE[t] ?? "other"));
+      });
+      setStageByTrade(stageMap);
+
+      // 3) Now load full project rows with employer data
       const { data } = await (supabase as any)
         .from("project_contractor_trades")
         .select("id, employer_id, stage, trade_type, employers(name, enterprise_agreement_status)")
         .eq("project_id", projectId);
+
+      // Start with a scaffold of all enum trades
       const byKey = new Map<string, Row>();
-      scaffoldRows().forEach((r) => byKey.set(r.key, { ...r }));
+      enums.forEach((t) => {
+        const st = stageMap[t] || "other";
+        const label = labelsMap[t] || startCase(t);
+        const key = `${st}|${t}`;
+        byKey.set(key, { key, stage: st, trade_value: t, trade_label: label, employer_id: null, employer_name: null, eba: null });
+      });
+
+      // Overlay existing project assignments
       (data || []).forEach((r: any) => {
-        const st = (r.stage as Stage) || ("other" as Stage);
-        const key = `${st}|${String(r.trade_type)}`;
+        const t = String(r.trade_type);
+        const displayStage: Stage = stageMap[t] || (r.stage as Stage) || "other";
+        const key = `${displayStage}|${t}`;
         const base = byKey.get(key);
         const eba = r.employers?.enterprise_agreement_status ?? null;
         if (base) {
@@ -89,12 +142,12 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
           base.employer_name = r.employers?.name || r.employer_id;
           base.eba = eba;
         } else {
-          // Treat as other/custom trade
+          // Unknown trade or stage combo; add to others
           byKey.set(key, {
             key,
-            stage: st,
-            trade_value: String(r.trade_type),
-            trade_label: String(r.trade_type),
+            stage: displayStage,
+            trade_value: t,
+            trade_label: labelsMap[t] || t,
             id: r.id as string,
             employer_id: r.employer_id as string,
             employer_name: r.employers?.name || r.employer_id,
@@ -102,9 +155,10 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
           });
         }
       });
+
       const merged = Array.from(byKey.values());
-      const std = merged.filter((r) => TRADES[r.stage]?.some((t) => t.value === r.trade_value));
-      const others = merged.filter((r) => !(TRADES[r.stage]?.some((t) => t.value === r.trade_value)) || r.stage === "other");
+      const std = merged.filter((r) => allowedSet.has(r.trade_value) && r.stage !== "other");
+      const others = merged.filter((r) => r.stage === "other" || !allowedSet.has(r.trade_value));
       setRows(std);
       setOtherRows(others);
     };
@@ -142,8 +196,8 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
     const idx = list.findIndex((x) => x.key === key);
     const row = { ...list[idx], employer_id: employerId, employer_name: employerName } as Row;
     list[idx] = row;
-    const std = list.filter((r) => TRADES[r.stage]?.some((t) => t.value === r.trade_value));
-    const others = list.filter((r) => !(TRADES[r.stage]?.some((t) => t.value === r.trade_value)) || r.stage === "other");
+    const std = list.filter((r) => allowedTradeValues.has(r.trade_value) && r.stage !== "other");
+    const others = list.filter((r) => r.stage === "other" || !allowedTradeValues.has(r.trade_value));
     setRows(std);
     setOtherRows(others);
     upsertRow(row);
@@ -156,8 +210,8 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
       const { error } = await supabase.from("employers").update({ enterprise_agreement_status: val }).eq("id", eid);
       if (error) throw error;
       const list = [...rows, ...otherRows].map((r) => (r.key === row.key ? { ...r, eba: val } : r));
-      const std = list.filter((r) => TRADES[r.stage]?.some((t) => t.value === r.trade_value));
-      const others = list.filter((r) => !(TRADES[r.stage]?.some((t) => t.value === r.trade_value)) || r.stage === "other");
+      const std = list.filter((r) => allowedTradeValues.has(r.trade_value) && r.stage !== "other");
+      const others = list.filter((r) => r.stage === "other" || !allowedTradeValues.has(r.trade_value));
       setRows(std);
       setOtherRows(others);
     } catch (e: any) {
@@ -186,12 +240,14 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
 
   const companyCell = (row: Row) => (
     <div className="flex items-center gap-2">
-      <span className="flex-1 truncate">{row.employer_name || "—"}</span>
       <SingleEmployerDialogPicker
-        label="Company"
+        label=""
         selectedId={row.employer_id || ""}
         onChange={(id: string) => {
-          // fetch name
+          if (!id) {
+            setEmployer(row.key, "", "");
+            return;
+          }
           supabase.from("employers").select("id,name").eq("id", id).maybeSingle().then(({ data }) => {
             const name = (data as any)?.name || id;
             setEmployer(row.key, id, name);
@@ -204,10 +260,9 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
 
   const renderSection = (title: string, list: Row[]) => (
     <>
-      <tr><td colSpan={4} className="font-semibold pt-3">{title}</td></tr>
+      <tr><td colSpan={3} className="font-semibold pt-3">{title}</td></tr>
       {list.map((r) => (
         <TableRow key={r.key}>
-          <TableCell className="w-40 capitalize">{r.stage === "other" ? "Other" : r.stage.replace("_", " ")}</TableCell>
           <TableCell className="w-56">{r.trade_label}</TableCell>
           <TableCell>{companyCell(r)}</TableCell>
           <TableCell className="w-40">{ebaSelect(r)}</TableCell>
@@ -229,7 +284,6 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
         <Table className="print-table print-border">
           <TableHeader>
             <TableRow>
-              <TableHead className="w-40">Stage</TableHead>
               <TableHead className="w-56">Trade</TableHead>
               <TableHead>Company</TableHead>
               <TableHead className="w-40">EBA (Y/N)</TableHead>
