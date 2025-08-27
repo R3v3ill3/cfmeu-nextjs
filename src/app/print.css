@@ -1,0 +1,30 @@
+/* Global print styles for CFMEU Mapping Sheets */
+
+@page {
+  size: A4 portrait;
+  margin: 12mm;
+}
+
+@media print {
+  .no-print { display: none !important; }
+  .print-only { display: block !important; }
+
+  /* Hide interactive chrome */
+  button, input, select, textarea, [role="button"], .shadcn-button { display: none !important; }
+
+  /* High-contrast borders */
+  .print-border { border: 1px solid #000 !important; }
+  .print-table { border-collapse: collapse !important; width: 100% !important; }
+  .print-table th, .print-table td { border: 1px solid #000 !important; padding: 4px 6px !important; }
+
+  /* Ensure rows don't split */
+  tr { break-inside: avoid; }
+
+  /* Page break after first sheet */
+  .break-after-page { page-break-after: always; break-after: page; }
+}
+
+@media screen {
+  .print-only { display: none; }
+}
+

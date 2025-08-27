@@ -405,9 +405,12 @@ function ProjectListCard({ p, onOpenEmployer, onOpenWorker }: { p: ProjectWithRo
     <Card className="transition-colors hover:bg-accent/40">
       <CardHeader className="p-4 pb-2">
         <CardTitle className="text-base font-medium truncate">
-          <Link href={`/projects/${p.id}`} className="hover:underline inline-block rounded border border-dashed border-transparent hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 px-1">
-            {p.name}
-          </Link>
+          <div className="flex items-center justify-between gap-2">
+            <Link href={`/projects/${p.id}`} className="hover:underline inline-block rounded border border-dashed border-transparent hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 px-1">
+              {p.name}
+            </Link>
+            <Link href={`/projects/${p.id}?tab=mappingsheets`} className="text-xs text-primary hover:underline whitespace-nowrap">Mapping Sheets</Link>
+          </div>
         </CardTitle>
         <div className="mt-1 flex items-center gap-2 text-sm">
           {primary && (

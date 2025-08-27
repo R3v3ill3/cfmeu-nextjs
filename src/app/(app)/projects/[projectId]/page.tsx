@@ -578,6 +578,7 @@ export default function ProjectDetailPage() {
           {/* Sites tab trigger hidden; accessible via Overview 'Sites' link */}
           <TabsTrigger value="contractors">Contractors</TabsTrigger>
           <TabsTrigger value="wallcharts">Wallcharts</TabsTrigger>
+          <TabsTrigger value="mappingsheets">Mapping Sheets</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
@@ -665,6 +666,31 @@ export default function ProjectDetailPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="mappingsheets">
+          {project && (
+            <div className="space-y-4">
+              <div className="no-print flex items-center justify-between">
+                <div className="text-sm text-muted-foreground">Printable CFMEU mapping sheets</div>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => { try { window.open(`/projects/${project.id}/print`, "_blank"); } catch {} }}>Print</Button>
+                </div>
+              </div>
+              <div className="grid gap-6">
+                {(() => {
+                  const Comp = require("@/components/projects/mapping/MappingSheetPage1").MappingSheetPage1;
+                  return <Comp projectId={project.id} />
+                })()}
+                <div className="print-border p-4">
+                  {(() => {
+                    const Comp2 = require("@/components/projects/mapping/MappingSubcontractorsTable").MappingSubcontractorsTable;
+                    return <Comp2 projectId={project.id} />
+                  })()}
+                </div>
+              </div>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="sites">
