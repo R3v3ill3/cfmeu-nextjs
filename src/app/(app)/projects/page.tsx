@@ -400,9 +400,20 @@ function ProjectListCard({ p, onOpenEmployer, onOpenWorker }: { p: ProjectWithRo
     setEstOpen(true)
   }
 
+  // Prepare organiser display with fallback to draft labels (cosmetic only)
+  const organiserNames: string[] = (patchOrganisers as any[]) || []
+  const fallbackOrganiserNames: string[] = ((projectPatches as any[]) || [])
+    .map((pp: any) => (patchOptionLabels as Record<string, string>)[pp.id])
+    .filter(Boolean) as string[]
+  const organiserDisplay: string = organiserNames.length > 0
+    ? organiserNames.slice(0, 2).join(', ') + (organiserNames.length > 2 ? '…' : '')
+    : (fallbackOrganiserNames.length > 0
+        ? Array.from(new Set(fallbackOrganiserNames)).slice(0, 2).join(', ') + (fallbackOrganiserNames.length > 2 ? '…' : '')
+        : '—')
+
   return (
     <div>
-    <Card className="transition-colors hover:bg-accent/40">
+    <Card className="transition-colors hover:bg-accent/40 h-full flex flex-col">
       <CardHeader className="p-4 pb-2">
         <CardTitle className="text-base font-medium truncate">
           <div className="flex items-center justify-between gap-2">
@@ -428,25 +439,21 @@ function ProjectListCard({ p, onOpenEmployer, onOpenWorker }: { p: ProjectWithRo
           )}
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          {(projectPatches as any[]).length > 0 ? (
-            <>
-              <span>
-                Patch: {(projectPatches as any[])[0]?.name}{(projectPatches as any[]).length > 1 ? ` +${(projectPatches as any[]).length - 1}` : ''}
-              </span>
-              <span className="text-muted-foreground">·</span>
-              <span>
-                Organiser{(patchOrganisers as any[]).length === 1 ? '' : 's'}: {(patchOrganisers as any[]).slice(0, 2).join(', ')}{(patchOrganisers as any[]).length > 2 ? '…' : ''}
-              </span>
-            </>
-          ) : (
-            <span>No patch assigned</span>
-          )}
+          <span>
+            Patch: {(projectPatches as any[]).length > 0
+              ? `${(projectPatches as any[])[0]?.name}${(projectPatches as any[]).length > 1 ? ` +${(projectPatches as any[]).length - 1}` : ''}`
+              : '—'}
+          </span>
+          <span className="text-muted-foreground">·</span>
+          <span>
+            Organisers: {organiserDisplay}
+          </span>
           {(projectPatches as any[]).length === 0 && (
-            <Button size="sm" variant="outline" className="h-6 px-2 ml-auto" onClick={() => setPatchAssignOpen(true)}>Assign patch</Button>
+            <Button size="sm" variant="outline" className="h-6 px-2 ml-auto hidden" onClick={() => setPatchAssignOpen(true)}>Assign patch</Button>
           )}
         </div>
       </CardHeader>
-      <CardContent className="px-4 pb-4 pt-0 space-y-2">
+      <CardContent className="px-4 pb-4 pt-0 space-y-2 flex-1 flex flex-col">
         <div className="space-y-2">
           <CompactStatBar
             label="Members vs Est. Workers"
@@ -460,9 +467,9 @@ function ProjectListCard({ p, onOpenEmployer, onOpenWorker }: { p: ProjectWithRo
             onClick={() => { window.location.href = `/projects/${p.id}?tab=contractors` }}
           />
         </div>
-        <div className="pt-1 text-xs text-muted-foreground flex items-center justify-between">
+        <div className="pt-1 text-xs text-muted-foreground flex items-center justify-between min-w-0">
           {delegate?.name ? (
-            <div className="truncate">
+            <div className="truncate min-w-0">
               <span className="mr-1">Site delegate:</span>
               <button type="button" className="text-primary hover:underline truncate rounded border border-dashed border-transparent hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 px-1" onClick={() => onOpenWorker(delegate.workerId)} title={delegate.name}>
                 {delegate.name}
@@ -475,8 +482,9 @@ function ProjectListCard({ p, onOpenEmployer, onOpenWorker }: { p: ProjectWithRo
             <Badge variant="secondary" className="text-[10px]">{totals?.totalWorkers} workers</Badge>
           )}
         </div>
-        <div className="flex justify-end pt-1">
-          <Button size="sm" variant="outline" onClick={() => { window.location.href = `/projects/${p.id}?tab=contractors` }}>Assign employers</Button>
+        <div className="pt-2 mt-auto">
+          <Button className="w-full" size="sm" onClick={() => { window.location.href = `/projects/${p.id}` }}>Open project</Button>
+          <Button size="sm" variant="outline" className="hidden" onClick={() => { window.location.href = `/projects/${p.id}?tab=contractors` }}>Assign employers</Button>
         </div>
       </CardContent>
     </Card>
