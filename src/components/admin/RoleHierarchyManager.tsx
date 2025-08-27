@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Link as LinkIcon, Trash2 } from "lucide-react";
+import { Link as LinkIcon, Trash2 } from "lucide-react";
 
 interface RoleHierarchyManagerProps {
   users: Array<{ id: string; full_name: string; email: string; role: string }>;
@@ -307,7 +307,7 @@ export const RoleHierarchyManager = ({ users }: RoleHierarchyManagerProps) => {
           </div>
           <div className="flex items-end">
             <Button onClick={addLink} disabled={loading} className="w-full">
-              {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <LinkIcon className="h-4 w-4 mr-2" />}
+              {loading ? <img src="/spinner.gif" alt="Loading" className="h-4 w-4 mr-2" /> : <LinkIcon className="h-4 w-4 mr-2" />}
               Link
             </Button>
           </div>
@@ -370,7 +370,7 @@ export const RoleHierarchyManager = ({ users }: RoleHierarchyManagerProps) => {
             </div>
             <div className="flex items-end">
               <Button onClick={addDraftLink} disabled={loading} className="w-full">
-                {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <LinkIcon className="h-4 w-4 mr-2" />}
+                {loading ? <img src="/spinner.gif" alt="Loading" className="h-4 w-4 mr-2" /> : <LinkIcon className="h-4 w-4 mr-2" />}
                 Link draft
               </Button>
             </div>
@@ -446,7 +446,7 @@ export const RoleHierarchyManager = ({ users }: RoleHierarchyManagerProps) => {
             </div>
             <div className="flex items-end">
               <Button onClick={addDraftLeadLink} disabled={loading} className="w-full">
-                {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <LinkIcon className="h-4 w-4 mr-2" />}
+                {loading ? <img src="/spinner.gif" alt="Loading" className="h-4 w-4 mr-2" /> : <LinkIcon className="h-4 w-4 mr-2" />}
                 Link draft lead
               </Button>
             </div>
