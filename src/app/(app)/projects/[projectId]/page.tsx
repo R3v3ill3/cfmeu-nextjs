@@ -20,6 +20,7 @@ import { EmployerWorkerChart } from "@/components/patchwall/EmployerWorkerChart"
 import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { usePatchOrganiserLabels } from "@/hooks/usePatchOrganiserLabels"
 
 function SiteContactsSummary({ projectId, siteIds }: { projectId: string; siteIds: string[] }) {
   const [delegates, setDelegates] = useState<string[]>([])
@@ -144,26 +145,7 @@ export default function ProjectDetailPage() {
 
   const patchIds = useMemo(() => (projectPatches as any[]).map((pp: any) => pp.id), [projectPatches])
 
-  const { data: patchOrganisers = [] } = useQuery({
-    queryKey: ["project-patch-organisers", projectId, patchIds],
-    enabled: !!projectId && patchIds.length > 0,
-    staleTime: 30000,
-    refetchOnWindowFocus: false,
-    queryFn: async () => {
-      const { data } = await (supabase as any)
-        .from("organiser_patch_assignments")
-        .select("organiser_id, effective_to, profiles:organiser_id(full_name)")
-        .is("effective_to", null)
-        .in("patch_id", patchIds)
-      const names = new Map<string, string>()
-      ;((data as any[]) || []).forEach((r: any) => {
-        const prof = Array.isArray(r.profiles) ? r.profiles[0] : r.profiles
-        const n = prof?.full_name as string | undefined
-        if (n && r.organiser_id) names.set(r.organiser_id, n)
-      })
-      return Array.from(names.values())
-    }
-  })
+  const { mergedList: patchOrganisers = [] } = usePatchOrganiserLabels(patchIds)
 
   const { data: contractorSummary = [] } = useQuery({
     queryKey: ["project-contractor-employers", projectId, sortedSiteIds],
