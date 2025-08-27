@@ -420,7 +420,22 @@ function ProjectListCard({ p, onOpenEmployer, onOpenWorker }: { p: ProjectWithRo
             <Link href={`/projects/${p.id}`} className="hover:underline inline-block rounded border border-dashed border-transparent hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 px-1">
               {p.name}
             </Link>
-            <Link href={`/projects/${p.id}?tab=mappingsheets`} className="text-xs text-primary hover:underline whitespace-nowrap">Mapping Sheets</Link>
+            <button
+              type="button"
+              className="text-xs text-primary hover:underline whitespace-nowrap"
+              onClick={() => {
+                try {
+                  const ua = navigator.userAgent.toLowerCase()
+                  const isMobile = /iphone|ipad|ipod|android/.test(ua)
+                  const href = isMobile ? `/projects/${p.id}/mappingsheets-mobile` : `/projects/${p.id}?tab=mappingsheets`
+                  window.location.href = href
+                } catch {
+                  window.location.href = `/projects/${p.id}?tab=mappingsheets`
+                }
+              }}
+            >
+              Mapping Sheets
+            </button>
           </div>
         </CardTitle>
         <div className="mt-1 flex items-center gap-2 text-sm">

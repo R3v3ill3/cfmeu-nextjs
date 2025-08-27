@@ -24,12 +24,16 @@ export function SingleEmployerDialogPicker({
   onChange,
   prioritizedTag,
   triggerText = "Add",
+  hideLabel = false,
+  compactTrigger = false,
 }: {
   label: string;
   selectedId: string;
   onChange: (id: string) => void;
   prioritizedTag?: RoleTag;
   triggerText?: string;
+  hideLabel?: boolean;
+  compactTrigger?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [employers, setEmployers] = useState<Employer[]>([]);
@@ -101,7 +105,7 @@ export function SingleEmployerDialogPicker({
 
   return (
     <div className="space-y-2">
-      <Label>{label}</Label>
+      {!hideLabel && <Label>{label}</Label>}
       <div className="flex flex-wrap items-center gap-2">
         {selectedEmployer ? (
           <Badge variant="secondary" className="flex items-center gap-1">
@@ -113,7 +117,7 @@ export function SingleEmployerDialogPicker({
         ) : null}
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button size="sm" variant="outline">
+            <Button size={compactTrigger ? "xs" as any : "sm"} variant="outline">
               <Plus className="h-4 w-4 mr-1" />
               {triggerText}
             </Button>
