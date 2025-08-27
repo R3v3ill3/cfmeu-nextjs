@@ -28,6 +28,7 @@ export function MappingSheetPage1({ projectId }: { projectId: string }) {
   const [project, setProject] = useState<ProjectRow | null>(null);
   const [address, setAddress] = useState<string>("");
   const [builderName, setBuilderName] = useState<string>("—");
+  const [builderHasEba, setBuilderHasEba] = useState<boolean | null>(null);
   const [organisers, setOrganisers] = useState<string>("—");
   const [saving, setSaving] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -47,10 +48,17 @@ export function MappingSheetPage1({ projectId }: { projectId: string }) {
     }
     const builderId = (data as any)?.builder_id as string | null;
     if (builderId) {
-      const { data: b } = await supabase.from("employers").select("name").eq("id", builderId).maybeSingle();
+      const { data: b } = await supabase
+        .from("employers")
+        .select("name, enterprise_agreement_status")
+        .eq("id", builderId)
+        .maybeSingle();
       setBuilderName(((b as any)?.name as string) || builderId);
+      const status = (b as any)?.enterprise_agreement_status as string | null | undefined;
+      setBuilderHasEba(status ? status !== "no_eba" : null);
     } else {
       setBuilderName("—");
+      setBuilderHasEba(null);
     }
 
     // Organisers via patches for this project
@@ -122,7 +130,7 @@ export function MappingSheetPage1({ projectId }: { projectId: string }) {
           <Image src="/cfmeu-logo.png" alt="CFMEU" width={120} height={40} className="object-contain" />
           <div>
             <div className="text-xl font-black tracking-tight">Mapping Sheets</div>
-            <div className="text-xs text-muted-foreground leading-snug">Construction Forestry & Maritime Employees Union</div>
+            <div className="text-xs text-muted-foreground leading-snug">Organiser: {organisers || "—"}</div>
           </div>
         </div>
         <div className="text-right text-xs">
@@ -130,13 +138,46 @@ export function MappingSheetPage1({ projectId }: { projectId: string }) {
           <div className="text-muted-foreground">Rev {new Date().getFullYear()}</div>
         </div>
       </div>
-      <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="text-sm font-semibold">Organiser</label>
-          <div className="mt-1 p-2 border rounded bg-muted/20 print-border">{organisers || "—"}</div>
+      <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-3">
+        {/* Project Name - top line */}
+        <div className="md:col-span-2">
+          <label className="text-sm font-semibold">Project Name</label>
+          <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={project?.name || ""} onChange={(e) => scheduleUpdate({ name: e.target.value })} placeholder="" />
         </div>
-        <div>
-          <label className="text-sm font-semibold">Government or Private</label>
+
+        {/* Address - second line */}
+        <div className="md:col-span-2">
+          <label className="text-sm font-semibold">Address</label>
+          <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={address} onChange={(e) => saveAddress(e.target.value)} placeholder="" />
+        </div>
+
+        {/* Builder */}
+        <div className="md:col-span-2">
+          <label className="text-sm font-semibold">Builder</label>
+          <div className="mt-1 p-2 border rounded bg-muted/20 print-border">{builderName}</div>
+        </div>
+
+        {/* Proposed dates side by side */}
+        <div className="grid grid-cols-2 gap-3 md:col-span-2">
+          <div>
+            <label className="text-sm font-semibold">Proposed start date</label>
+            <DateInput className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={project?.proposed_start_date || ""} onChange={(e) => scheduleUpdate({ proposed_start_date: e.target.value })} />
+          </div>
+          <div>
+            <label className="text-sm font-semibold">Proposed finish date</label>
+            <DateInput className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={project?.proposed_finish_date || ""} onChange={(e) => scheduleUpdate({ proposed_finish_date: e.target.value })} />
+          </div>
+        </div>
+
+        {/* Project Value */}
+        <div className="md:col-span-2">
+          <label className="text-sm font-semibold">Project Value (AUD)</label>
+          <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={project ? String(project.value ?? "") : ""} onChange={(e) => scheduleUpdate({ value: e.target.value ? Number(e.target.value) : null })} placeholder="" />
+        </div>
+
+        {/* Funding Type */}
+        <div className="md:col-span-2">
+          <label className="text-sm font-semibold">Funding Type</label>
           <Select value={project?.project_type || ""} onValueChange={(v) => scheduleUpdate({ project_type: v })}>
             <SelectTrigger>
               <SelectValue placeholder="Select" />
@@ -149,50 +190,35 @@ export function MappingSheetPage1({ projectId }: { projectId: string }) {
           </Select>
         </div>
 
-        <div>
-          <label className="text-sm font-semibold">Project Name</label>
-          <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={project?.name || ""} onChange={(e) => scheduleUpdate({ name: e.target.value })} placeholder="" />
-        </div>
-        <div>
-          <label className="text-sm font-semibold">State Funding (AUD)</label>
-          <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={String(project?.state_funding ?? 0)} onChange={(e) => scheduleUpdate({ state_funding: Number(e.target.value.replace(/[^0-9.]/g, "")) })} />
-        </div>
-
-        <div>
-          <label className="text-sm font-semibold">Project Value (AUD)</label>
-          <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={project ? String(project.value ?? "") : ""} onChange={(e) => scheduleUpdate({ value: e.target.value ? Number(e.target.value) : null })} placeholder="" />
-        </div>
-        <div>
-          <label className="text-sm font-semibold">Federal Funding (AUD)</label>
-          <Input value={String(project?.federal_funding ?? 0)} onChange={(e) => scheduleUpdate({ federal_funding: Number(e.target.value.replace(/[^0-9.]/g, "")) })} />
+        {/* State and Federal funding side by side */}
+        <div className="grid grid-cols-2 gap-3 md:col-span-2">
+          <div>
+            <label className="text-sm font-semibold">State Funding (AUD)</label>
+            <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={String(project?.state_funding ?? 0)} onChange={(e) => scheduleUpdate({ state_funding: Number(e.target.value.replace(/[^0-9.]/g, "")) })} />
+          </div>
+          <div>
+            <label className="text-sm font-semibold">Federal Funding (AUD)</label>
+            <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={String(project?.federal_funding ?? 0)} onChange={(e) => scheduleUpdate({ federal_funding: Number(e.target.value.replace(/[^0-9.]/g, "")) })} />
+          </div>
         </div>
 
+        {/* EBA with CFMEU (simplified display) */
+        }
         <div className="md:col-span-2">
-          <label className="text-sm font-semibold">Address</label>
-          <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={address} onChange={(e) => saveAddress(e.target.value)} placeholder="" />
-        </div>
-
-        <div>
-          <label className="text-sm font-semibold">Builder</label>
-          <div className="mt-1 p-2 border rounded bg-muted/20 print-border">{builderName}</div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-sm font-semibold">Proposed start date</label>
-            <DateInput className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={project?.proposed_start_date || ""} onChange={(e) => scheduleUpdate({ proposed_start_date: e.target.value })} />
-          </div>
-          <div>
-            <label className="text-sm font-semibold">Proposed finish date</label>
-            <DateInput className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={project?.proposed_finish_date || ""} onChange={(e) => scheduleUpdate({ proposed_finish_date: e.target.value })} />
-          </div>
-        </div>
-
-        <div>
           <label className="text-sm font-semibold">EBA with CFMEU</label>
-          <div className="mt-1 p-2 border rounded bg-muted/20 print-border">{builderName === "—" ? "—" : "See employer record"}</div>
+          <div className="mt-1 p-2 border rounded bg-muted/20 print-border">{
+            builderName === "—" ? "—" : (builderHasEba === null ? "—" : (builderHasEba ? "Yes" : "No"))
+          }</div>
         </div>
 
-        <div>
+        {/* Organiser (kept for screen, hidden on print) */}
+        <div className="no-print md:col-span-2">
+          <label className="text-sm font-semibold">Organiser</label>
+          <div className="mt-1 p-2 border rounded bg-muted/20 print-border">{organisers || "—"}</div>
+        </div>
+
+        {/* Preferred email for ROE (kept for screen, hidden on print) */}
+        <div className="no-print md:col-span-2">
           <label className="text-sm font-semibold">Preferred email for ROE</label>
           <Input type="email" className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={project?.roe_email || ""} onChange={(e) => scheduleUpdate({ roe_email: e.target.value })} placeholder="" />
         </div>
