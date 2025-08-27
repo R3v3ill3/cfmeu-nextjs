@@ -356,7 +356,7 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
             <div className="flex items-center justify-between gap-2">
               {companyCell(r)}
               {r.employer_id ? (
-                <Button size="xs" variant="outline" onClick={() => addAdditionalRow(r)}>Add</Button>
+                <Button size="sm" variant="outline" onClick={() => addAdditionalRow(r)}>Add</Button>
               ) : null}
             </div>
           </TableCell>
