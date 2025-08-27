@@ -270,7 +270,7 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
       <tr><td colSpan={3} className="font-semibold pt-3">{title}</td></tr>
       {list.map((r) => (
         <TableRow key={r.key}>
-          <TableCell className="w-56">{r.trade_label}</TableCell>
+          <TableCell className={"w-56 " + (r.employer_id ? "bg-muted/20" : "")}>{r.trade_label}</TableCell>
           <TableCell>{companyCell(r)}</TableCell>
           <TableCell className="w-40">{ebaSelect(r)}</TableCell>
         </TableRow>
