@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useMemo, useState, useEffect } from "react"
-import { useParams, useSearchParams } from "next/navigation"
+import { useParams, useSearchParams, useRouter, usePathname } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -70,6 +70,8 @@ import { format } from "date-fns"
 export default function ProjectDetailPage() {
   const params = useParams()
   const sp = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
   const projectId = params?.projectId as string
   const [tab, setTab] = useState(sp.get("tab") || "overview")
   const [showAssign, setShowAssign] = useState(false)
@@ -566,6 +568,7 @@ export default function ProjectDetailPage() {
         <h1 className="text-2xl font-semibold">{project?.name || "Project"}</h1>
         {project && (
           <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => { try { router.push('/projects') } catch {} }}>Close</Button>
             <EditProjectDialog project={project} />
             <DeleteProjectDialog projectId={project.id} projectName={project.name} />
           </div>
@@ -674,6 +677,20 @@ export default function ProjectDetailPage() {
               <div className="no-print flex items-center justify-between">
                 <div className="text-sm text-muted-foreground">Printable CFMEU mapping sheets</div>
                 <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      try {
+                        setTab('overview')
+                        const params = new URLSearchParams(sp.toString())
+                        params.delete('tab')
+                        const qs = params.toString()
+                        router.replace(qs ? `${pathname}?${qs}` : pathname)
+                      } catch {}
+                    }}
+                  >
+                    Close Mapping Sheets
+                  </Button>
                   <Button variant="outline" onClick={() => { try { window.open(`/projects/${project.id}/print`, "_blank"); } catch {} }}>Print</Button>
                 </div>
               </div>
