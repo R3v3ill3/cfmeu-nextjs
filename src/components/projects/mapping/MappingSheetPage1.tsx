@@ -9,6 +9,7 @@ import DateInput from "@/components/ui/date-input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { MappingSiteContactsTable } from "./MappingSiteContactsTable";
+import { useProjectOrganisers } from "@/hooks/useProjectOrganisers";
 
 type ProjectRow = {
   id: string;
@@ -29,9 +30,9 @@ export function MappingSheetPage1({ projectId }: { projectId: string }) {
   const [address, setAddress] = useState<string>("");
   const [builderName, setBuilderName] = useState<string>("—");
   const [builderHasEba, setBuilderHasEba] = useState<boolean | null>(null);
-  const [organisers, setOrganisers] = useState<string>("—");
   const [saving, setSaving] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const organisers = useProjectOrganisers(projectId).label;
 
   const load = async () => {
     const { data } = await supabase
@@ -59,25 +60,6 @@ export function MappingSheetPage1({ projectId }: { projectId: string }) {
     } else {
       setBuilderName("—");
       setBuilderHasEba(null);
-    }
-
-    // Organisers via patches for this project
-    const { data: sites } = await (supabase as any).from("job_sites").select("id").eq("project_id", projectId);
-    const siteIds = ((sites as any[]) || []).map((s: any) => s.id);
-    if (siteIds.length > 0) {
-      const { data: pjs } = await (supabase as any).from("patch_job_sites").select("patch_id").in("job_site_id", siteIds);
-      const patchIds = Array.from(new Set(((pjs as any[]) || []).map((r: any) => r.patch_id)));
-      if (patchIds.length > 0) {
-        const { data: orgs } = await (supabase as any)
-          .from("organiser_patch_assignments")
-          .select("profiles:organiser_id(full_name)")
-          .is("effective_to", null)
-          .in("patch_id", patchIds);
-        const names = Array.from(new Set(((orgs as any[]) || []).map((r: any) => {
-          const p = Array.isArray(r.profiles) ? r.profiles[0] : r.profiles; return p?.full_name as string | undefined;
-        }).filter(Boolean)));
-        setOrganisers(names.join(", ") || "—");
-      }
     }
   };
 
@@ -151,10 +133,10 @@ export function MappingSheetPage1({ projectId }: { projectId: string }) {
           <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={address} onChange={(e) => saveAddress(e.target.value)} placeholder="" />
         </div>
 
-        {/* Builder */}
+        {/* Builder (read-only, styled like underlined input) */}
         <div className="md:col-span-2">
           <label className="text-sm font-semibold">Builder</label>
-          <div className="mt-1 p-2 border rounded bg-muted/20 print-border">{builderName}</div>
+          <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={builderName} readOnly disabled />
         </div>
 
         {/* Proposed dates side by side */}
@@ -175,19 +157,27 @@ export function MappingSheetPage1({ projectId }: { projectId: string }) {
           <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={project ? String(project.value ?? "") : ""} onChange={(e) => scheduleUpdate({ value: e.target.value ? Number(e.target.value) : null })} placeholder="" />
         </div>
 
-        {/* Funding Type */}
-        <div className="md:col-span-2">
-          <label className="text-sm font-semibold">Funding Type</label>
-          <Select value={project?.project_type || ""} onValueChange={(v) => scheduleUpdate({ project_type: v })}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="government">Government</SelectItem>
-              <SelectItem value="private">Private</SelectItem>
-              <SelectItem value="mixed">Mixed</SelectItem>
-            </SelectContent>
-          </Select>
+        {/* Funding Type + EBA side-by-side */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:col-span-2">
+          <div>
+            <label className="text-sm font-semibold">Funding Type</label>
+            <Select value={project?.project_type || ""} onValueChange={(v) => scheduleUpdate({ project_type: v })}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="government">Government</SelectItem>
+                <SelectItem value="private">Private</SelectItem>
+                <SelectItem value="mixed">Mixed</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="text-sm font-semibold">EBA with CFMEU</label>
+            <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={
+              builderName === "—" ? "—" : (builderHasEba === null ? "—" : (builderHasEba ? "Yes" : "No"))
+            } readOnly disabled />
+          </div>
         </div>
 
         {/* State and Federal funding side by side */}
@@ -202,14 +192,7 @@ export function MappingSheetPage1({ projectId }: { projectId: string }) {
           </div>
         </div>
 
-        {/* EBA with CFMEU (simplified display) */
-        }
-        <div className="md:col-span-2">
-          <label className="text-sm font-semibold">EBA with CFMEU</label>
-          <div className="mt-1 p-2 border rounded bg-muted/20 print-border">{
-            builderName === "—" ? "—" : (builderHasEba === null ? "—" : (builderHasEba ? "Yes" : "No"))
-          }</div>
-        </div>
+        {/* EBA (moved beside Funding Type above) */}
 
         {/* Organiser (kept for screen, hidden on print) */}
         <div className="no-print md:col-span-2">
