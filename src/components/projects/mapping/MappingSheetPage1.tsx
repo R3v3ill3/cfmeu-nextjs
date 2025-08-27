@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
+import Image from "next/image";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import DateInput from "@/components/ui/date-input";
 import { Button } from "@/components/ui/button";
@@ -115,7 +116,20 @@ export function MappingSheetPage1({ projectId }: { projectId: string }) {
 
   return (
     <div className="print-border p-4">
-      <div className="text-center text-2xl font-black tracking-tight">Mapping Sheets</div>
+      {/* Paper-style header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Image src="/cfmeu logo.png" alt="CFMEU" width={120} height={40} className="object-contain" />
+          <div>
+            <div className="text-xl font-black tracking-tight">Mapping Sheets</div>
+            <div className="text-xs text-muted-foreground leading-snug">Construction Forestry & Maritime Employees Union</div>
+          </div>
+        </div>
+        <div className="text-right text-xs">
+          <div>Form MS-01</div>
+          <div className="text-muted-foreground">Rev {new Date().getFullYear()}</div>
+        </div>
+      </div>
       <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label className="text-sm font-semibold">Organiser</label>
@@ -137,16 +151,16 @@ export function MappingSheetPage1({ projectId }: { projectId: string }) {
 
         <div>
           <label className="text-sm font-semibold">Project Name</label>
-          <Input value={project?.name || ""} onChange={(e) => scheduleUpdate({ name: e.target.value })} placeholder="Project name" />
+          <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={project?.name || ""} onChange={(e) => scheduleUpdate({ name: e.target.value })} placeholder="" />
         </div>
         <div>
           <label className="text-sm font-semibold">State Funding (AUD)</label>
-          <Input value={String(project?.state_funding ?? 0)} onChange={(e) => scheduleUpdate({ state_funding: Number(e.target.value.replace(/[^0-9.]/g, "")) })} />
+          <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={String(project?.state_funding ?? 0)} onChange={(e) => scheduleUpdate({ state_funding: Number(e.target.value.replace(/[^0-9.]/g, "")) })} />
         </div>
 
         <div>
           <label className="text-sm font-semibold">Project Value (AUD)</label>
-          <Input value={project ? String(project.value ?? "") : ""} onChange={(e) => scheduleUpdate({ value: e.target.value ? Number(e.target.value) : null })} placeholder="0" />
+          <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={project ? String(project.value ?? "") : ""} onChange={(e) => scheduleUpdate({ value: e.target.value ? Number(e.target.value) : null })} placeholder="" />
         </div>
         <div>
           <label className="text-sm font-semibold">Federal Funding (AUD)</label>
@@ -155,7 +169,7 @@ export function MappingSheetPage1({ projectId }: { projectId: string }) {
 
         <div className="md:col-span-2">
           <label className="text-sm font-semibold">Address</label>
-          <Input value={address} onChange={(e) => saveAddress(e.target.value)} placeholder="Full address" />
+          <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={address} onChange={(e) => saveAddress(e.target.value)} placeholder="" />
         </div>
 
         <div>
@@ -165,11 +179,11 @@ export function MappingSheetPage1({ projectId }: { projectId: string }) {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-sm font-semibold">Proposed start date</label>
-            <DateInput value={project?.proposed_start_date || ""} onChange={(e) => scheduleUpdate({ proposed_start_date: e.target.value })} />
+            <DateInput className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={project?.proposed_start_date || ""} onChange={(e) => scheduleUpdate({ proposed_start_date: e.target.value })} />
           </div>
           <div>
             <label className="text-sm font-semibold">Proposed finish date</label>
-            <DateInput value={project?.proposed_finish_date || ""} onChange={(e) => scheduleUpdate({ proposed_finish_date: e.target.value })} />
+            <DateInput className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={project?.proposed_finish_date || ""} onChange={(e) => scheduleUpdate({ proposed_finish_date: e.target.value })} />
           </div>
         </div>
 
@@ -180,7 +194,7 @@ export function MappingSheetPage1({ projectId }: { projectId: string }) {
 
         <div>
           <label className="text-sm font-semibold">Preferred email for ROE</label>
-          <Input type="email" value={project?.roe_email || ""} onChange={(e) => scheduleUpdate({ roe_email: e.target.value })} placeholder="rightofentry@example.com" />
+          <Input type="email" className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={project?.roe_email || ""} onChange={(e) => scheduleUpdate({ roe_email: e.target.value })} placeholder="" />
         </div>
       </div>
 
