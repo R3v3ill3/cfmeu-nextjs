@@ -119,7 +119,7 @@ export function MappingSheetPage1({ projectId }: { projectId: string }) {
       {/* Paper-style header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Image src="/cfmeu logo.png" alt="CFMEU" width={120} height={40} className="object-contain" />
+          <Image src="/cfmeu-logo.png" alt="CFMEU" width={120} height={40} className="object-contain" />
           <div>
             <div className="text-xl font-black tracking-tight">Mapping Sheets</div>
             <div className="text-xs text-muted-foreground leading-snug">Construction Forestry & Maritime Employees Union</div>
