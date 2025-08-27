@@ -714,6 +714,10 @@ export default function ProjectDetailPage() {
                   const Comp = require("@/components/projects/mapping/MappingSheetPage1").MappingSheetPage1;
                   return <Comp projectId={project.id} />
                 })()}
+                {(() => {
+                  const Subs = require("@/components/projects/mapping/MappingSubcontractorsTable").MappingSubcontractorsTable;
+                  return <Subs projectId={project.id} />
+                })()}
               </div>
             </div>
           )}
