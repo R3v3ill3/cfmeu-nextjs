@@ -127,7 +127,7 @@ export default function CampaignsPage() {
       </Card>
 
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <p className="text-sm text-muted-foreground flex items-center gap-2"><img src="/spinner.gif" alt="Loading" className="h-4 w-4" /> Loading…</p>
       ) : campaigns.length === 0 ? (
         <p className="text-sm text-muted-foreground">No campaigns yet.</p>
       ) : (

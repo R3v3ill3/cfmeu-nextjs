@@ -679,7 +679,7 @@ export default function ProjectsPage() {
     return (
       <div className="p-6">
         <h1 className="text-2xl font-semibold mb-4">Projects</h1>
-        <p className="text-sm text-muted-foreground">Loading projects…</p>
+        <p className="text-sm text-muted-foreground flex items-center gap-2"><img src="/spinner.gif" alt="Loading" className="h-4 w-4" /> Loading projects…</p>
       </div>
     )
   }

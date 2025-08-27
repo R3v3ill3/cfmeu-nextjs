@@ -149,7 +149,7 @@ export function AddEmployerToJobSiteModal({
           <div>
             <Label>Job Site</Label>
             <div className="p-2 border rounded bg-muted text-sm">
-              {jobSite?.name || "Loading..."}
+              {jobSite?.name ? jobSite.name : (<span className="inline-flex items-center gap-2"><img src="/spinner.gif" alt="Loading" className="h-4 w-4" /> Loading...</span>)}
             </div>
           </div>
 

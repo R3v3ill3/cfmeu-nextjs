@@ -267,7 +267,7 @@ export default function PatchManager() {
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">{isLoading ? "Loading…" : `${(patches as any[]).length} patches`}</div>
+          <div className="text-sm text-muted-foreground">{isLoading ? (<span className="inline-flex items-center gap-2"><img src="/spinner.gif" alt="Loading" className="h-4 w-4" /> Loading…</span>) : `${(patches as any[]).length} patches`}</div>
           <div className="flex items-center gap-2">
             <Button
               variant="destructive"

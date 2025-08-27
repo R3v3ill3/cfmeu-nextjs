@@ -139,7 +139,7 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
             <div className="flex items-center gap-3">
               <Building className="h-6 w-6" />
               <div>
-                <DialogTitle className="text-xl">{employer?.name || "Loading..."}</DialogTitle>
+                <DialogTitle className="text-xl">{employer?.name || (<span className="inline-flex items-center gap-2"><img src="/spinner.gif" alt="Loading" className="h-4 w-4" /> Loading...</span>)}</DialogTitle>
                 {employer?.abn && (
                   <p className="text-sm text-muted-foreground">ABN: {employer.abn}</p>
                 )}
@@ -154,7 +154,7 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
         </DialogHeader>
 
         {isLoading ? (
-          <div className="p-8 text-center">Loading employer details...</div>
+          <div className="p-8 text-center flex items-center justify-center gap-2"><img src="/spinner.gif" alt="Loading" className="h-4 w-4" /> Loading employer details...</div>
         ) : employer ? (
           isEditing ? (
             <div className="space-y-6">
@@ -412,7 +412,7 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
               <TabsContent value="sites" className="space-y-4">
                 {isFetchingSites ? (
                   <Card>
-                    <CardContent className="py-6 text-center text-sm text-muted-foreground">Loading worksites…</CardContent>
+                    <CardContent className="py-6 text-center text-sm text-muted-foreground flex items-center justify-center gap-2"><img src="/spinner.gif" alt="Loading" className="h-4 w-4" /> Loading worksites…</CardContent>
                   </Card>
                 ) : employerSites.length > 0 ? (
                   <Card>
