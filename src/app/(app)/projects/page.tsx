@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import CreateProjectDialog from "@/components/projects/CreateProjectDialog"
+import { usePatchOrganiserLabels } from "@/hooks/usePatchOrganiserLabels"
 
 type ProjectWithRoles = {
   id: string
@@ -286,26 +287,7 @@ function ProjectListCard({ p, onOpenEmployer, onOpenWorker }: { p: ProjectWithRo
 
   const patchIds = useMemo(() => (projectPatches as any[]).map((pp: any) => pp.id), [projectPatches])
 
-  const { data: patchOrganisers = [] } = useQuery({
-    queryKey: ["project-patch-organisers", p.id, patchIds],
-    enabled: patchIds.length > 0,
-    staleTime: 30000,
-    refetchOnWindowFocus: false,
-    queryFn: async () => {
-      const { data } = await (supabase as any)
-        .from("organiser_patch_assignments")
-        .select("organiser_id, effective_to, profiles:organiser_id(full_name)")
-        .is("effective_to", null)
-        .in("patch_id", patchIds)
-      const names = new Map<string, string>()
-      ;((data as any[]) || []).forEach((r: any) => {
-        const prof = Array.isArray(r.profiles) ? r.profiles[0] : r.profiles
-        const n = prof?.full_name as string | undefined
-        if (n && r.organiser_id) names.set(r.organiser_id, n)
-      })
-      return Array.from(names.values())
-    }
-  })
+  const { mergedList: mergedOrganiserNames } = usePatchOrganiserLabels(patchIds)
 
   const { data: allPatches = [] } = useQuery({
     queryKey: ["patches-options"],
@@ -400,16 +382,11 @@ function ProjectListCard({ p, onOpenEmployer, onOpenWorker }: { p: ProjectWithRo
     setEstOpen(true)
   }
 
-  // Prepare organiser display with fallback to draft labels (cosmetic only)
-  const organiserNames: string[] = (patchOrganisers as any[]) || []
-  const fallbackOrganiserNames: string[] = ((projectPatches as any[]) || [])
-    .map((pp: any) => (patchOptionLabels as Record<string, string>)[pp.id])
-    .filter(Boolean) as string[]
+  // Prepare organiser display using merged list (live + draft)
+  const organiserNames: string[] = mergedOrganiserNames || []
   const organiserDisplay: string = organiserNames.length > 0
     ? organiserNames.slice(0, 2).join(', ') + (organiserNames.length > 2 ? '…' : '')
-    : (fallbackOrganiserNames.length > 0
-        ? Array.from(new Set(fallbackOrganiserNames)).slice(0, 2).join(', ') + (fallbackOrganiserNames.length > 2 ? '…' : '')
-        : '—')
+    : '—'
 
   return (
     <div>
