@@ -21,6 +21,7 @@ import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { usePatchOrganiserLabels } from "@/hooks/usePatchOrganiserLabels"
+import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
 
 function SiteContactsSummary({ projectId, siteIds }: { projectId: string; siteIds: string[] }) {
   const [delegates, setDelegates] = useState<string[]>([])
@@ -92,7 +93,7 @@ export default function ProjectDetailPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("projects")
-        .select("id, name, main_job_site_id, value, proposed_start_date, proposed_finish_date, roe_email, project_type, state_funding, federal_funding")
+        .select("id, name, main_job_site_id, value, tier, proposed_start_date, proposed_finish_date, roe_email, project_type, state_funding, federal_funding")
         .eq("id", projectId)
         .maybeSingle()
       if (error) throw error
@@ -546,8 +547,19 @@ export default function ProjectDetailPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">{project?.name || "Project"}</h1>
+      {/* Project Header */}
+      <div className="flex items-start justify-between">
+        <div className="space-y-2">
+          <h1 className="text-3xl font-bold">{project?.name}</h1>
+          <div className="flex items-center gap-3">
+            <ProjectTierBadge tier={project?.tier} size="lg" />
+            {project?.value && (
+              <span className="text-lg text-muted-foreground">
+                ${(project.value / 1000000).toFixed(1)}M
+              </span>
+            )}
+          </div>
+        </div>
         {project && (
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => { try { router.push('/projects') } catch {} }}>Close</Button>

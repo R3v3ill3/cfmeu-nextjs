@@ -10,6 +10,8 @@ import { toast } from "sonner";
 import { JVSelector } from "@/components/projects/JVSelector";
 import { SingleEmployerDialogPicker } from "@/components/projects/SingleEmployerDialogPicker";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
+import { calculateProjectTier } from "@/components/projects/types"
 
 export default function CreateProjectDialog() {
   const [open, setOpen] = useState(false);
@@ -27,6 +29,13 @@ export default function CreateProjectDialog() {
   const [jvLabel, setJvLabel] = useState<string>("");
 
   const canSubmit = useMemo(() => name.trim() && address.trim(), [name, address]);
+
+  // Calculate tier based on value
+  const calculatedTier = useMemo(() => {
+    if (!value) return null
+    const numValue = Number(value)
+    return calculateProjectTier(numValue)
+  }, [value])
 
   const qc = useQueryClient();
 
@@ -91,43 +100,58 @@ export default function CreateProjectDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>New Project</Button>
+        <Button size="xl" className="font-medium">New Project</Button>
       </DialogTrigger>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Create Project</DialogTitle>
+          <DialogTitle className="text-xl font-semibold text-gray-900">Create Project</DialogTitle>
         </DialogHeader>
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div>
-            <Label htmlFor="cp_name">Project Name</Label>
-            <Input id="cp_name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" />
+            <Label htmlFor="cp_name" className="text-sm font-medium text-gray-700">Project Name</Label>
+            <Input id="cp_name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" className="h-12 px-4 py-3 text-gray-900 bg-white border-gray-300 focus:border-blue-500 focus:ring-blue-500" />
           </div>
           <div>
-            <Label htmlFor="cp_addr">Main Job Site Address</Label>
-            <Input id="cp_addr" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Full address" />
+            <Label htmlFor="cp_addr" className="text-sm font-medium text-gray-700">Main Job Site Address</Label>
+            <Input id="cp_addr" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Full address" className="h-12 px-4 py-3 text-gray-900 bg-white border-gray-300 focus:border-blue-500 focus:ring-blue-500" />
           </div>
-          <div>
-            <Label htmlFor="cp_value">Project Value (AUD)</Label>
-            <Input id="cp_value" type="number" value={value} onChange={(e) => setValue(e.target.value)} placeholder="e.g., 5000000" />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <Label>Proposed Start</Label>
-              <DateInput value={start} onChange={(e) => setStart(e.target.value)} />
+          {/* Project Value with Tier Preview */}
+          <div className="space-y-2">
+            <Label htmlFor="value">Project Value (AUD)</Label>
+            <div className="flex items-center gap-3">
+              <Input
+                id="value"
+                type="number"
+                placeholder="Enter project value"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+              />
+              {calculatedTier && (
+                <ProjectTierBadge tier={calculatedTier} size="sm" />
+              )}
             </div>
-            <div>
-              <Label>Proposed Finish</Label>
-              <DateInput value={finish} onChange={(e) => setFinish(e.target.value)} />
+                         <p className="text-sm text-muted-foreground">
+               Tier 1: $500M+ | Tier 2: $100M-$500M | Tier 3: &lt;$100M
+             </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label className="text-sm font-medium text-gray-700">Proposed Start</Label>
+                <DateInput value={start} onChange={(e) => setStart(e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-sm font-medium text-gray-700">Proposed Finish</Label>
+                <DateInput value={finish} onChange={(e) => setFinish(e.target.value)} />
+              </div>
             </div>
+          <div>
+            <Label htmlFor="cp_roe" className="text-sm font-medium text-gray-700">ROE Email</Label>
+            <Input id="cp_roe" type="email" value={roeEmail} onChange={(e) => setRoeEmail(e.target.value)} placeholder="rightofentry@example.com" className="h-12 px-4 py-3 text-gray-900 bg-white border-gray-300 focus:border-blue-500 focus:ring-blue-500" />
           </div>
           <div>
-            <Label htmlFor="cp_roe">ROE Email</Label>
-            <Input id="cp_roe" type="email" value={roeEmail} onChange={(e) => setRoeEmail(e.target.value)} placeholder="rightofentry@example.com" />
-          </div>
-          <div>
-            <Label>Project Type</Label>
+            <Label className="text-sm font-medium text-gray-700">Project Type</Label>
             <Select value={projectType} onValueChange={setProjectType}>
-              <SelectTrigger>
+              <SelectTrigger className="h-12 px-4 py-3 text-gray-900 bg-white border-gray-300 focus:border-blue-500 focus:ring-blue-500">
                 <SelectValue placeholder="Select type" />
               </SelectTrigger>
               <SelectContent>
@@ -137,18 +161,18 @@ export default function CreateProjectDialog() {
               </SelectContent>
             </Select>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <Label htmlFor="cp_state">State funding (AUD)</Label>
-              <Input id="cp_state" value={stateFunding} onChange={(e) => setStateFunding(e.target.value)} placeholder="0" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="cp_state" className="text-sm font-medium text-gray-700">State funding (AUD)</Label>
+                <Input id="cp_state" value={stateFunding} onChange={(e) => setStateFunding(e.target.value)} placeholder="0" className="h-12 px-4 py-3 text-gray-900 bg-white border-gray-300 focus:border-blue-500 focus:ring-blue-500" />
+              </div>
+              <div>
+                <Label htmlFor="cp_fed" className="text-sm font-medium text-gray-700">Federal funding (AUD)</Label>
+                <Input id="cp_fed" value={federalFunding} onChange={(e) => setFederalFunding(e.target.value)} placeholder="0" className="h-12 px-4 py-3 text-gray-900 bg-white border-gray-300 focus:border-blue-500 focus:ring-blue-500" />
+              </div>
             </div>
-            <div>
-              <Label htmlFor="cp_fed">Federal funding (AUD)</Label>
-              <Input id="cp_fed" value={federalFunding} onChange={(e) => setFederalFunding(e.target.value)} placeholder="0" />
-            </div>
-          </div>
           <div>
-            <Label>Builder (optional)</Label>
+            <Label className="text-sm font-medium text-gray-700">Builder (optional)</Label>
             <SingleEmployerDialogPicker
               label="Builder"
               selectedId={builderId}
@@ -158,9 +182,9 @@ export default function CreateProjectDialog() {
             />
           </div>
           <JVSelector status={jvStatus} label={jvLabel} onChangeStatus={setJvStatus} onChangeLabel={setJvLabel} />
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button disabled={!canSubmit || createMutation.isPending} onClick={() => createMutation.mutate()}>Create</Button>
+          <div className="flex justify-end gap-4 pt-6">
+            <Button variant="outline" onClick={() => setOpen(false)} size="xl" className="font-medium">Cancel</Button>
+            <Button disabled={!canSubmit || createMutation.isPending} onClick={() => createMutation.mutate()} size="xl" className="font-medium">Create</Button>
           </div>
         </div>
       </DialogContent>

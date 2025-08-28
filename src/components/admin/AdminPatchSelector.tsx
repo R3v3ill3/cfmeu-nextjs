@@ -161,24 +161,24 @@ export default function AdminPatchSelector() {
 		<div className="flex items-center gap-2">
 			<Dialog open={open} onOpenChange={setOpen}>
 				<DialogTrigger asChild>
-					<Button variant="outline" size="sm" className="inline-flex items-center gap-2">
+					<Button variant="outline" size="xl" className="inline-flex items-center gap-2 bg-white text-gray-900 border-gray-300 hover:bg-gray-50 font-medium">
 						<Users className="h-4 w-4" />
 						<span>Patches:</span>
 						<Badge variant="secondary">{selectedSummary}</Badge>
 						<ChevronDown className="h-3 w-3" />
 					</Button>
 				</DialogTrigger>
-				<DialogContent className="max-w-3xl w-[min(95vw,72rem)]">
+				<DialogContent className="max-w-3xl w-[min(95vw,72rem)] bg-white text-gray-900">
 					<DialogHeader>
-						<DialogTitle>Select patches</DialogTitle>
+						<DialogTitle className="text-xl font-semibold text-gray-900">Select patches</DialogTitle>
 					</DialogHeader>
 
 					<div className="space-y-4">
-						<div className="flex flex-wrap items-center gap-2">
-							<Button variant="outline" size="sm" onClick={clearAll}>Display all</Button>
-							<div className="flex flex-wrap items-center gap-2 min-w-0">
+						<div className="flex flex-wrap items-center gap-4">
+							<Button variant="outline" size="xl" onClick={clearAll} className="font-medium">Display all</Button>
+							<div className="flex flex-wrap items-center gap-4 min-w-0">
 								<Select value={selectedLead} onValueChange={setSelectedLead}>
-									<SelectTrigger className="w-64 md:w-80 max-w-full">
+									<SelectTrigger className="w-64 md:w-80 max-w-full h-12 px-4 py-3 text-gray-900 bg-white border-gray-300 focus:border-blue-500 focus:ring-blue-500">
 										<SelectValue placeholder="Select lead organiser (live or draft)" />
 									</SelectTrigger>
 									<SelectContent>
@@ -187,44 +187,44 @@ export default function AdminPatchSelector() {
 										))}
 									</SelectContent>
 								</Select>
-								<Button size="sm" onClick={selectByLeadOrganiser} disabled={!selectedLead || loadingLead}>{loadingLead ? "Selecting…" : "Select all from lead's organisers"}</Button>
+								<Button size="xl" onClick={selectByLeadOrganiser} disabled={!selectedLead || loadingLead} className="font-medium">{loadingLead ? "Selecting…" : "Select all from lead's organisers"}</Button>
 							</div>
 						</div>
 
 						<div className="relative">
-							<Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-							<Input placeholder="Search patches…" className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
+							<Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+							<Input placeholder="Search patches…" className="pl-9 h-12 px-4 py-3 text-gray-900 bg-white border-gray-300 focus:border-blue-500 focus:ring-blue-500" value={search} onChange={(e) => setSearch(e.target.value)} />
 						</div>
 
-						<div className="max-h-72 overflow-auto rounded border p-2 space-y-1">
+						<div className="max-h-72 overflow-auto rounded border border-gray-300 p-3 space-y-1 bg-gray-50">
 							{filteredPatches.map(p => {
 								const checked = selectedPatchIds.includes(p.id)
 								return (
-									<button key={p.id} onClick={() => togglePatch(p.id)} className={`w-full text-left px-3 py-2 rounded hover:bg-accent transition ${checked ? "bg-accent" : ""}`}>
+									<button key={p.id} onClick={() => togglePatch(p.id)} className={`w-full text-left px-3 py-2.5 rounded hover:bg-gray-200 transition ${checked ? "bg-blue-100 border border-blue-300" : ""}`}>
 										<span className="inline-flex items-center gap-2">
-											<span className={`inline-flex items-center justify-center h-4 w-4 rounded border ${checked ? 'bg-primary text-primary-foreground' : 'bg-background'}`}>
+											<span className={`inline-flex items-center justify-center h-4 w-4 rounded border ${checked ? 'bg-blue-600 text-white' : 'bg-white border-gray-400'}`}>
 												{checked ? <Check className="h-3 w-3" /> : null}
 											</span>
-											<span>{p.name}</span>
+											<span className={checked ? "text-blue-900 font-medium" : "text-gray-700"}>{p.name}</span>
 										</span>
 									</button>
 								)
 							})}
 							{filteredPatches.length === 0 && (
-								<div className="text-sm text-muted-foreground p-2">No patches match your search.</div>
+								<div className="text-sm text-gray-500 p-2">No patches match your search.</div>
 							)}
 						</div>
 
-						<div className="flex items-center justify-between pt-2">
+						<div className="flex items-center justify-between pt-3">
 							<div className="flex flex-wrap gap-2">
 								{selectedPatchIds.map(id => {
 									const name = allPatches.find(p => p.id === id)?.name || id
 									return (
-										<Badge key={id} variant="secondary">{name}</Badge>
+										<Badge key={id} variant="secondary" className="bg-blue-100 text-blue-800 border-blue-300">{name}</Badge>
 									)
 								})}
 							</div>
-							<Button onClick={applyToUrl}>Apply</Button>
+							<Button onClick={applyToUrl} size="xl" className="font-medium">Apply</Button>
 						</div>
 					</div>
 				</DialogContent>

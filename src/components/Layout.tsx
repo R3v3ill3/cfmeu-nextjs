@@ -48,10 +48,12 @@ const Layout = ({ children }: LayoutProps) => {
 
   const getVisibleNavItems = () => {
     const items = [...navItems];
+    
     // Insert organiser-focused workspace
     if (userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") {
       items.splice(1, 0, { path: "/patch", label: "Patch", icon: Users });
     }
+    
     // Show site visits for organizers and above
     if (userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") {
       // Site visits already in navItems, just filter it for these roles
@@ -62,12 +64,22 @@ const Layout = ({ children }: LayoutProps) => {
         items.splice(siteVisitsIndex, 1);
       }
     }
-    if (userRole === "admin") {
-      items.push({ path: "/admin", label: "Administration", icon: Shield });
+    
+    // Add Data Upload based on role
+    if (userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") {
+      items.push({ path: "/upload", label: "Data Upload", icon: Upload });
     }
+    
+    // Add campaigns for organisers and above
     if (userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") {
       items.push({ path: "/campaigns", label: "Campaigns", icon: BarChart3 });
     }
+    
+    // Add admin for admins only
+    if (userRole === "admin") {
+      items.push({ path: "/admin", label: "Administration", icon: Shield });
+    }
+    
     return items;
   };
 

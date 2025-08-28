@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "sonner";
+import { calculateProjectTier } from "@/components/projects/types"
 
 export type ProjectImportResults = {
   successful: number;
@@ -35,7 +36,25 @@ export default function ProjectImport({ csvData, onImportComplete, onBack }: Pro
       const federal_funding = row.federal_funding != null && row.federal_funding !== "" ? Number(String(row.federal_funding).replace(/[^0-9.]/g, "")) : 0;
       const jv_status = row.jv_status || null;
       const jv_label = row.jv_label || null;
-      return { name, address, employerName, value, proposed_start_date, proposed_finish_date, roe_email, project_type, state_funding, federal_funding, jv_status, jv_label };
+      
+      // Calculate tier for preview
+      const tier = calculateProjectTier(value);
+      
+      return { 
+        name, 
+        address, 
+        employerName, 
+        value, 
+        tier,
+        proposed_start_date, 
+        proposed_finish_date, 
+        roe_email, 
+        project_type, 
+        state_funding, 
+        federal_funding, 
+        jv_status, 
+        jv_label 
+      };
     });
   }, [csvData]);
 

@@ -8,11 +8,13 @@ import DateInput from "@/components/ui/date-input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { MappingSiteContactsTable } from "@/components/projects/mapping/MappingSiteContactsTable"
 import { useProjectOrganisers } from "@/hooks/useProjectOrganisers"
+import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
 
 type ProjectRow = {
   id: string;
   name: string;
   value: number | null;
+  tier: string | null;
   proposed_start_date: string | null;
   proposed_finish_date: string | null;
   roe_email: string | null;
@@ -35,7 +37,7 @@ export function MappingSheetMobile({ projectId }: { projectId: string }) {
     const load = async () => {
       const { data } = await supabase
         .from("projects")
-        .select("id, name, value, proposed_start_date, proposed_finish_date, roe_email, project_type, state_funding, federal_funding, builder_id, main_job_site_id")
+        .select("id, name, value, tier, proposed_start_date, proposed_finish_date, roe_email, project_type, state_funding, federal_funding, builder_id, main_job_site_id")
         .eq("id", projectId)
         .maybeSingle()
       if (data) setProject(data as any)
@@ -92,11 +94,24 @@ export function MappingSheetMobile({ projectId }: { projectId: string }) {
   }
 
   return (
-    <Accordion type="single" collapsible defaultValue="section-1" className="w-full">
+    <Accordion type="single" collapsible className="w-full">
       <AccordionItem value="section-1">
-        <AccordionTrigger>Project details</AccordionTrigger>
+        <AccordionTrigger>Project Details</AccordionTrigger>
         <AccordionContent>
-          <div className="grid grid-cols-1 gap-3">
+          <div className="space-y-4">
+            {/* Project Header with Tier */}
+            <div className="border-b border-gray-200 pb-3">
+              <h3 className="text-lg font-semibold mb-2">{project?.name}</h3>
+              <div className="flex items-center gap-2">
+                <ProjectTierBadge tier={project?.tier} size="sm" />
+                {project?.value && (
+                  <span className="text-sm text-muted-foreground">
+                    ${(project.value / 1000000).toFixed(1)}M
+                  </span>
+                )}
+              </div>
+            </div>
+            
             <div>
               <label className="text-xs font-medium">Project Name</label>
               <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={project?.name || ""} onChange={(e) => scheduleUpdate({ name: e.target.value })} />

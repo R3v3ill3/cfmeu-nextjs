@@ -10,11 +10,14 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { MappingSiteContactsTable } from "./MappingSiteContactsTable";
 import { useProjectOrganisers } from "@/hooks/useProjectOrganisers";
+import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
+import { useQuery } from "@tanstack/react-query";
 
 type ProjectRow = {
   id: string;
   name: string;
   value: number | null;
+  tier: string | null;
   proposed_start_date: string | null;
   proposed_finish_date: string | null;
   roe_email: string | null;
@@ -34,36 +37,45 @@ export function MappingSheetPage1({ projectId }: { projectId: string }) {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const organisers = useProjectOrganisers(projectId).label;
 
-  const load = async () => {
-    const { data } = await supabase
-      .from("projects")
-      .select("id, name, value, proposed_start_date, proposed_finish_date, roe_email, project_type, state_funding, federal_funding, builder_id, main_job_site_id")
-      .eq("id", projectId)
-      .maybeSingle();
-    if (data) setProject(data as any);
-
-    const siteId = (data as any)?.main_job_site_id as string | null;
-    if (siteId) {
-      const { data: site } = await (supabase as any).from("job_sites").select("full_address, location").eq("id", siteId).maybeSingle();
-      setAddress((site as any)?.full_address || (site as any)?.location || "");
-    }
-    const builderId = (data as any)?.builder_id as string | null;
-    if (builderId) {
-      const { data: b } = await supabase
-        .from("employers")
-        .select("name, enterprise_agreement_status")
-        .eq("id", builderId)
+  const { data: projectData } = useQuery({
+    queryKey: ["project-mapping", projectId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("projects")
+        .select("id, name, value, tier, proposed_start_date, proposed_finish_date, roe_email, project_type, state_funding, federal_funding, builder_id, main_job_site_id")
+        .eq("id", projectId)
         .maybeSingle();
-      setBuilderName(((b as any)?.name as string) || builderId);
-      const status = (b as any)?.enterprise_agreement_status as string | null | undefined;
-      setBuilderHasEba(status ? status !== "no_eba" : null);
-    } else {
-      setBuilderName("—");
-      setBuilderHasEba(null);
+      return data;
     }
-  };
+  });
 
-  useEffect(() => { load(); }, [projectId]);
+  useEffect(() => {
+    if (projectData) setProject(projectData as any);
+
+    const loadRelatedData = async () => {
+      const siteId = (projectData as any)?.main_job_site_id as string | null;
+      if (siteId) {
+        const { data: site } = await (supabase as any).from("job_sites").select("full_address, location").eq("id", siteId).maybeSingle();
+        setAddress((site as any)?.full_address || (site as any)?.location || "");
+      }
+      const builderId = (projectData as any)?.builder_id as string | null;
+      if (builderId) {
+        const { data: b } = await supabase
+          .from("employers")
+          .select("name, enterprise_agreement_status")
+          .eq("id", builderId)
+          .maybeSingle();
+        setBuilderName(((b as any)?.name as string) || builderId);
+        const status = (b as any)?.enterprise_agreement_status as string | null;
+        setBuilderHasEba(status ? status !== "no_eba" : null);
+      } else {
+        setBuilderName("—");
+        setBuilderHasEba(null);
+      }
+    };
+
+    loadRelatedData();
+  }, [projectData]);
 
   const scheduleUpdate = (patch: Partial<ProjectRow>) => {
     setProject((prev) => prev ? { ...prev, ...patch } : prev);
@@ -120,6 +132,19 @@ export function MappingSheetPage1({ projectId }: { projectId: string }) {
           <div className="text-muted-foreground">Rev {new Date().getFullYear()}</div>
         </div>
       </div>
+      {/* Project Header with Tier */}
+      <div className="border-b border-gray-200 pb-4 mb-4">
+        <h2 className="text-2xl font-bold mb-2">{project?.name}</h2>
+        <div className="flex items-center gap-3">
+          <ProjectTierBadge tier={project?.tier} size="md" />
+          {project?.value && (
+            <span className="text-lg text-muted-foreground">
+              ${(project.value / 1000000).toFixed(1)}M
+            </span>
+          )}
+        </div>
+      </div>
+
       <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-3">
         {/* Project Name - top line */}
         <div className="md:col-span-2">

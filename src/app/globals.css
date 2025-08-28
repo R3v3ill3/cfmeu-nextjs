@@ -31,8 +31,58 @@
   }
 }
 
+/* Desktop-specific design system overrides */
+@media (min-width: 1024px) {
+  :root {
+    /* Enhanced desktop color palette with better contrast */
+    --desktop-background: #ffffff;
+    --desktop-foreground: #0f172a;
+    --desktop-card-background: #ffffff;
+    --desktop-border: #d1d5db;
+    --desktop-accent: #f9fafb;
+    --desktop-primary: #0f172a;
+    --desktop-primary-foreground: #ffffff;
+    --desktop-secondary: #374151;
+    --desktop-muted: #6b7280;
+    --desktop-accent-foreground: #374151;
+    
+    /* Enhanced spacing for desktop */
+    --desktop-spacing-xs: 0.5rem;
+    --desktop-spacing-sm: 0.75rem;
+    --desktop-spacing-md: 1rem;
+    --desktop-spacing-lg: 1.5rem;
+    --desktop-spacing-xl: 2rem;
+    --desktop-spacing-2xl: 3rem;
+    
+    /* Typography scale for desktop */
+    --desktop-text-xs: 0.75rem;
+    --desktop-text-sm: 0.875rem;
+    --desktop-text-base: 1rem;
+    --desktop-text-lg: 1.125rem;
+    --desktop-text-xl: 1.25rem;
+    --desktop-text-2xl: 1.5rem;
+    --desktop-text-3xl: 1.875rem;
+    
+    /* Enhanced shadow system for better depth */
+    --desktop-shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+    --desktop-shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --desktop-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    --desktop-shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  }
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Desktop-specific body styles */
+@media (min-width: 1024px) {
+  body {
+    background: var(--desktop-background);
+    color: var(--desktop-foreground);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.6;
+  }
 }

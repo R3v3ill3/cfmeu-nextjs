@@ -17,11 +17,15 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import CreateProjectDialog from "@/components/projects/CreateProjectDialog"
 import { usePatchOrganiserLabels } from "@/hooks/usePatchOrganiserLabels"
+import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
+import { PROJECT_TIER_LABELS, ProjectTier } from "@/components/projects/types"
 
 type ProjectWithRoles = {
   id: string
   name: string
   main_job_site_id: string | null
+  value: number | null
+  tier: string | null
   project_employer_roles?: Array<{
     role: string
     employer_id: string
@@ -622,6 +626,7 @@ export default function ProjectsPage() {
   const q = (sp.get("q") || "").toLowerCase()
   const patchParam = sp.get("patch") || ""
   const patchIds = patchParam.split(",").map(s => s.trim()).filter(Boolean)
+  const [tierFilter, setTierFilter] = useState<ProjectTier | 'all'>('all')
 
   const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null)
   const [isEmployerOpen, setIsEmployerOpen] = useState(false)
@@ -651,7 +656,7 @@ export default function ProjectsPage() {
   })
 
   const { data: projects = [], isLoading } = useQuery<ProjectWithRoles[]>({
-    queryKey: ["projects-list", patchIds, patchProjectIds],
+    queryKey: ["projects-list", patchIds, patchProjectIds, tierFilter],
     staleTime: 30000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
@@ -661,6 +666,8 @@ export default function ProjectsPage() {
           id,
           name,
           main_job_site_id,
+          value,
+          tier,
           project_employer_roles!left(
             role,
             employer_id,
@@ -668,10 +675,17 @@ export default function ProjectsPage() {
           )
         `)
         .order("created_at", { ascending: false })
+      
+      // Apply tier filter
+      if (tierFilter !== "all") {
+        qy = qy.eq('tier', tierFilter)
+      }
+      
       if (patchIds.length > 0) {
         if ((patchProjectIds as string[]).length === 0) return []
         qy = qy.in('id', patchProjectIds as string[])
       }
+      
       const { data, error } = await qy
       if (error) throw error
       return (data as any) || []
@@ -693,6 +707,25 @@ export default function ProjectsPage() {
         <h1 className="text-2xl font-semibold">Projects</h1>
         <CreateProjectDialog />
       </div>
+      {/* Add tier filter */}
+      <div className="flex items-center gap-4">
+        <Select value={tierFilter} onValueChange={(value) => setTierFilter(value as ProjectTier | 'all')}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Filter by tier" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Tiers</SelectItem>
+            {Object.entries(PROJECT_TIER_LABELS).map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        
+        {/* ... existing filters ... */}
+      </div>
+
       {(projects as any[]).length === 0 ? (
         <p className="text-sm text-muted-foreground">No projects found.</p>
       ) : (

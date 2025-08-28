@@ -13,6 +13,8 @@ import { JVSelector } from "@/components/projects/JVSelector";
 import { MultiEmployerPicker } from "@/components/projects/MultiEmployerPicker";
 import { SingleEmployerDialogPicker } from "@/components/projects/SingleEmployerDialogPicker";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
+import { calculateProjectTier } from "@/components/projects/types"
 
 type EditableProject = {
   id: string;
@@ -275,6 +277,13 @@ export function EditProjectDialog({
 
   const isDisabled = useMemo(() => !name.trim() || updateMutation.isPending || loadingRelations, [name, updateMutation.isPending, loadingRelations]);
 
+  // Calculate tier based on current value
+  const calculatedTier = useMemo(() => {
+    if (!value) return null
+    const numValue = parseFloat(value)
+    return calculateProjectTier(numValue)
+  }, [value])
+
   return (
     <Dialog
       open={open}
@@ -289,7 +298,7 @@ export function EditProjectDialog({
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">{triggerText}</Button>
       </DialogTrigger>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Edit Project</DialogTitle>
         </DialogHeader>
@@ -298,15 +307,24 @@ export function EditProjectDialog({
             <Label htmlFor="proj_name">Project Name</Label>
             <Input id="proj_name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" />
           </div>
-          <div>
-            <Label htmlFor="proj_value">Project Value (AUD)</Label>
-            <Input
-              id="proj_value"
-              type="number"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              placeholder="e.g., 5000000"
-            />
+          {/* Project Value with Tier Preview */}
+          <div className="space-y-2">
+            <Label htmlFor="value">Project Value (AUD)</Label>
+            <div className="flex items-center gap-3">
+              <Input
+                id="value"
+                type="number"
+                placeholder="Enter project value"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+              />
+              {calculatedTier && (
+                <ProjectTierBadge tier={calculatedTier} size="sm" />
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Tier 1: $500M+ | Tier 2: $100M-$500M | Tier 3: &lt;$100M
+            </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>

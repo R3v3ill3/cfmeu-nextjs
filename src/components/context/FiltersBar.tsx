@@ -1,11 +1,12 @@
 "use client"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
+import { PROJECT_TIER_LABELS, ProjectTier } from "@/components/projects/types"
 
 type FiltersBarProps = {
   patchOptions?: { value: string; label: string }[]
@@ -20,6 +21,7 @@ export function FiltersBar({ patchOptions, statusOptions }: FiltersBarProps) {
   const patch = params.get("patch") || ""
   const status = params.get("status") || ""
   const q = params.get("q") || ""
+  const [tierFilter, setTierFilter] = useState<ProjectTier | 'all'>('all')
 
   const segments = useMemo(() => pathname.split("/").filter(Boolean), [pathname])
 
@@ -161,6 +163,20 @@ export function FiltersBar({ patchOptions, statusOptions }: FiltersBarProps) {
         <div className="min-w-[220px] flex-1">
           <Input placeholder="Search…" value={q} onChange={(e) => setParam("q", e.target.value)} />
         </div>
+        {/* Tier Filter */}
+        <Select value={tierFilter} onValueChange={(value) => setTierFilter(value as ProjectTier | 'all')}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="Tier" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Tiers</SelectItem>
+            {Object.entries(PROJECT_TIER_LABELS).map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
     </div>
   )
