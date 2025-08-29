@@ -2,10 +2,11 @@
 import FileUpload from "@/components/upload/FileUpload"
 import ColumnMapper from "@/components/upload/ColumnMapper"
 import PatchImport from "@/components/upload/PatchImport"
+import GeoJSONPatchUpload from "@/components/upload/GeoJSONPatchUpload"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Separator } from "@/components/ui/separator"
-import { Plus } from "lucide-react"
+import { Plus, MapPin } from "lucide-react"
 import { AddDraftUserDialog } from "@/components/admin/AddDraftUserDialog"
 import { useMemo, useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
@@ -38,6 +39,7 @@ export default function PatchManager() {
   const [draftDialogOpen, setDraftDialogOpen] = useState(false)
   const [selectedDraftIds, setSelectedDraftIds] = useState<Set<string>>(new Set())
   const [selectedPatchIds, setSelectedPatchIds] = useState<Set<string>>(new Set())
+  const [geojsonUploadOpen, setGeojsonUploadOpen] = useState(false)
 
   const { data: patches = [], isLoading } = useQuery({
     queryKey: ["admin-patches"],
@@ -277,6 +279,10 @@ export default function PatchManager() {
               Delete selected
             </Button>
             <Button variant="outline" onClick={() => setImportOpen(true)}>Import CSV</Button>
+            <Button variant="outline" onClick={() => setGeojsonUploadOpen(true)}>
+              <MapPin className="mr-2 h-4 w-4" />
+              Upload GeoJSON
+            </Button>
             <Button onClick={() => setCreateOpen(true)}>Create Patch</Button>
           </div>
         </div>
@@ -577,6 +583,20 @@ export default function PatchManager() {
         </Dialog>
 
         <AddDraftUserDialog open={draftDialogOpen} onOpenChange={(o) => { setDraftDialogOpen(o); if (!o) refetchPending() }} onSuccess={() => { refetchPending() }} />
+
+        {/* GeoJSON Upload Dialog */}
+        <Dialog open={geojsonUploadOpen} onOpenChange={setGeojsonUploadOpen}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <GeoJSONPatchUpload
+              onUploadComplete={() => {
+                setGeojsonUploadOpen(false);
+                queryClient.invalidateQueries(['admin-patches']);
+                toast({ title: "GeoJSON patches imported successfully" });
+              }}
+              onBack={() => setGeojsonUploadOpen(false)}
+            />
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   )
