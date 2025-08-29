@@ -136,7 +136,7 @@ export function MappingSheetPage1({ projectId }: { projectId: string }) {
       <div className="border-b border-gray-200 pb-4 mb-4">
         <h2 className="text-2xl font-bold mb-2">{project?.name}</h2>
         <div className="flex items-center gap-3">
-          <ProjectTierBadge tier={project?.tier} size="md" />
+          <ProjectTierBadge tier={project?.tier || null} size="md" />
           {project?.value && (
             <span className="text-lg text-muted-foreground">
               ${(project.value / 1000000).toFixed(1)}M

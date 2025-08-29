@@ -590,7 +590,7 @@ export default function PatchManager() {
             <GeoJSONPatchUpload
               onUploadComplete={() => {
                 setGeojsonUploadOpen(false);
-                queryClient.invalidateQueries(['admin-patches']);
+                qc.invalidateQueries({ queryKey: ["admin-patches"] });
                 toast({ title: "GeoJSON patches imported successfully" });
               }}
               onBack={() => setGeojsonUploadOpen(false)}

@@ -552,7 +552,7 @@ export default function ProjectDetailPage() {
         <div className="space-y-2">
           <h1 className="text-3xl font-bold">{project?.name}</h1>
           <div className="flex items-center gap-3">
-            <ProjectTierBadge tier={project?.tier} size="lg" />
+                            <ProjectTierBadge tier={project?.tier || null} size="lg" />
             {project?.value && (
               <span className="text-lg text-muted-foreground">
                 ${(project.value / 1000000).toFixed(1)}M

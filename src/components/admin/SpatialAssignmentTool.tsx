@@ -60,8 +60,8 @@ export default function SpatialAssignmentTool() {
       if (error) throw error;
       
       return (data || []).map(site => ({
-        id: site.projects.id,
-        name: site.projects.name,
+        id: (site.projects as any)?.id || site.project_id,
+        name: (site.projects as any)?.name || 'Unknown Project',
         address: site.full_address || site.location,
         latitude: site.latitude,
         longitude: site.longitude,
@@ -168,8 +168,8 @@ export default function SpatialAssignmentTool() {
       });
       
       // Refresh data
-      queryClient.invalidateQueries(['unassigned-projects']);
-      queryClient.invalidateQueries(['patch-assignment-stats']);
+      queryClient.invalidateQueries({ queryKey: ['unassigned-projects'] });
+      queryClient.invalidateQueries({ queryKey: ['patch-assignment-stats'] });
       refetchProjects();
     },
     onError: (error) => {

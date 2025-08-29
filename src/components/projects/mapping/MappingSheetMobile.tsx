@@ -103,7 +103,7 @@ export function MappingSheetMobile({ projectId }: { projectId: string }) {
             <div className="border-b border-gray-200 pb-3">
               <h3 className="text-lg font-semibold mb-2">{project?.name}</h3>
               <div className="flex items-center gap-2">
-                <ProjectTierBadge tier={project?.tier} size="sm" />
+                <ProjectTierBadge tier={project?.tier || null} size="sm" />
                 {project?.value && (
                   <span className="text-sm text-muted-foreground">
                     ${(project.value / 1000000).toFixed(1)}M
