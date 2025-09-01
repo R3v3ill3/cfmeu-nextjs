@@ -3,8 +3,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { calculateProjectTier } from "@/components/projects/types"
+import { geocodeAddress } from "@/utils/geocoding"
 
 export type ProjectImportResults = {
   successful: number;
@@ -21,6 +23,8 @@ type ProjectImportProps = {
 
 export default function ProjectImport({ csvData, onImportComplete, onBack }: ProjectImportProps) {
   const [isImporting, setIsImporting] = useState(false);
+  const [geocodingProgress, setGeocodingProgress] = useState(0);
+  const [currentStep, setCurrentStep] = useState<"geocoding" | "importing" | null>(null);
 
   const previewRows = useMemo(() => {
     return (csvData || []).map((row) => {
@@ -67,6 +71,39 @@ export default function ProjectImport({ csvData, onImportComplete, onBack }: Pro
     const results: ProjectImportResults = { successful: 0, failed: 0, errors: [], newEmployers: 0 };
 
     try {
+      // Step 1: Geocode all addresses
+      setCurrentStep("geocoding");
+      setGeocodingProgress(0);
+      
+      const addressesToGeocode = previewRows.map(row => row.address).filter(Boolean);
+      const geocodedResults: Array<{ address: string; coords: { lat: number; lng: number } | null }> = [];
+      
+      for (let i = 0; i < addressesToGeocode.length; i++) {
+        const address = addressesToGeocode[i];
+        const geocodeResult = await geocodeAddress(address);
+        
+        geocodedResults.push({
+          address,
+          coords: geocodeResult ? { lat: geocodeResult.latitude, lng: geocodeResult.longitude } : null
+        });
+        
+        setGeocodingProgress(Math.round(((i + 1) / addressesToGeocode.length) * 100));
+        
+        // Small delay to avoid hitting API rate limits
+        if (i < addressesToGeocode.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+      
+      // Create a lookup map for coordinates
+      const coordsLookup = new Map<string, { lat: number; lng: number } | null>();
+      geocodedResults.forEach(result => {
+        coordsLookup.set(result.address, result.coords);
+      });
+
+      // Step 2: Import projects with coordinates
+      setCurrentStep("importing");
+      
       for (const row of previewRows) {
         try {
           if (!row.name || !row.address) throw new Error("Missing required name or address");
@@ -119,10 +156,25 @@ export default function ProjectImport({ csvData, onImportComplete, onBack }: Pro
           if (projErr) throw projErr;
           const projectId = proj!.id as string;
 
-          // 2) Create main job site with address and set pointer
+          // 2) Create main job site with address and coordinates
+          const coords = coordsLookup.get(row.address);
+          const sitePayload: any = {
+            project_id: projectId,
+            name: row.name,
+            is_main_site: true,
+            location: row.address,
+            full_address: row.address
+          };
+          
+          // Add coordinates if geocoding was successful
+          if (coords) {
+            sitePayload.latitude = coords.lat;
+            sitePayload.longitude = coords.lng;
+          }
+          
           const { data: site, error: siteErr } = await supabase
             .from("job_sites")
-            .insert({ project_id: projectId, name: row.name, is_main_site: true, location: row.address, full_address: row.address })
+            .insert(sitePayload)
             .select("id")
             .single();
           if (siteErr) throw siteErr;
@@ -157,7 +209,7 @@ export default function ProjectImport({ csvData, onImportComplete, onBack }: Pro
       if (results.failed > 0) {
         toast.error(`Import completed with errors. ${results.successful} succeeded, ${results.failed} failed.`);
       } else {
-        toast.success(`Imported ${results.successful} projects`);
+        toast.success(`Imported ${results.successful} projects with patch matching enabled`);
       }
 
       onImportComplete(results);
@@ -165,6 +217,8 @@ export default function ProjectImport({ csvData, onImportComplete, onBack }: Pro
       toast.error(e?.message || 'Import failed');
     } finally {
       setIsImporting(false);
+      setCurrentStep(null);
+      setGeocodingProgress(0);
     }
   };
 
@@ -185,11 +239,26 @@ export default function ProjectImport({ csvData, onImportComplete, onBack }: Pro
   return (
     <Card>
       <CardContent className="space-y-4 pt-4">
-        <div className="text-sm text-muted-foreground">Ready to import {previewRows.length} projects.</div>
+        <div className="text-sm text-muted-foreground">
+          Ready to import {previewRows.length} projects with automatic patch matching.
+        </div>
+        
+        {currentStep === "geocoding" && (
+          <div className="space-y-2">
+            <div className="text-sm font-medium">Geocoding addresses for patch matching...</div>
+            <Progress value={geocodingProgress} className="w-full" />
+            <div className="text-xs text-muted-foreground">{geocodingProgress}% complete</div>
+          </div>
+        )}
+        
+        {currentStep === "importing" && (
+          <div className="text-sm font-medium">Creating projects and job sites...</div>
+        )}
+        
         <div className="flex gap-2">
           <Button variant="outline" onClick={onBack} disabled={isImporting}>Back</Button>
           <Button onClick={handleImport} disabled={isImporting || previewRows.length === 0}>
-            {isImporting ? 'Importing…' : 'Import Projects'}
+            {isImporting ? (currentStep === "geocoding" ? 'Geocoding addresses…' : 'Importing projects…') : 'Import Projects'}
           </Button>
         </div>
       </CardContent>

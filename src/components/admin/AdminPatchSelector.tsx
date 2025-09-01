@@ -41,6 +41,9 @@ export default function AdminPatchSelector() {
 			const { data } = await (supabase as any)
 				.from("patches")
 				.select("id, name")
+				.eq("type", "geo")
+				.eq("status", "active")
+				.not("geom", "is", null)
 				.order("name")
 			setAllPatches(((data as any[]) || []).map(r => ({ id: r.id, name: r.name || r.id })))
 		}

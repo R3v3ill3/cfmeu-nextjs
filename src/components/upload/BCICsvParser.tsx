@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -27,6 +27,9 @@ const BCI_CSV_HEADERS = [
   'Project Town / Suburb',
   'Project Province / State',
   'Post Code',
+  // Optional but supported for geolocation
+  'Latitude',
+  'Longitude',
   'Project Country',
   'Role on Project',
   'Company Name',
@@ -64,6 +67,8 @@ interface BCICsvRow {
   projectTown: string;
   projectState: string;
   postCode: string;
+  latitude?: string;
+  longitude?: string;
   projectCountry: string;
   roleOnProject: string;
   companyName: string;
@@ -82,15 +87,23 @@ interface BCICsvRow {
   contactRemark: string;
 }
 
+type BCIImportMode = 'projects-and-employers' | 'projects-only' | 'employers-to-existing';
+
 interface BCICsvParserProps {
   onDataParsed: (data: BCICsvRow[]) => void;
   onError: (error: string) => void;
+  onModeChange?: (mode: BCIImportMode) => void;
 }
 
-export default function BCICsvParser({ onDataParsed, onError }: BCICsvParserProps) {
+export default function BCICsvParser({ onDataParsed, onError, onModeChange }: BCICsvParserProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [sampleData, setSampleData] = useState<BCICsvRow[]>([]);
+  const [mode, setMode] = useState<BCIImportMode>('projects-and-employers');
+
+  useEffect(() => {
+    if (onModeChange) onModeChange(mode);
+  }, [mode, onModeChange]);
 
   // Parse CSV file
   const parseCSV = useCallback((file: File) => {
@@ -101,6 +114,7 @@ export default function BCICsvParser({ onDataParsed, onError }: BCICsvParserProp
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
+      transformHeader: (h) => (h || '').replace(/\uFEFF/g, '').trim(),
       complete: (results) => {
         try {
           const parsedData = validateAndTransformData(results.data as any[]);
@@ -131,49 +145,68 @@ export default function BCICsvParser({ onDataParsed, onError }: BCICsvParserProp
     }
 
     const firstRow = rawData[0];
-    const missingHeaders = BCI_CSV_HEADERS.filter(header => !(header in firstRow));
 
-    if (missingHeaders.length > 0) {
-      errors.push(`Missing required columns: ${missingHeaders.join(', ')}`);
-    }
+    // Helper to resolve duplicate/variant headers (e.g., "Project ID", "Project ID_1", "Project ID (2)")
+    const resolveKey = (row: Record<string, any>, base: string, extraAliases: string[] = []): string | null => {
+      const candidates = [base, ...extraAliases];
+      const keys = Object.keys(row || {});
+      for (const cand of candidates) {
+        // Exact match first
+        const exact = keys.find(k => k.trim().toLowerCase() === cand.trim().toLowerCase());
+        if (exact) return exact;
+        // Variant match: cand, cand_1, cand-1, cand (1)
+        const escaped = cand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const re = new RegExp(`^${escaped}(?:[ _-]?\\d+| \\((?:\\d+)\\))?$`, 'i');
+        const variant = keys.find(k => re.test(k.trim()));
+        if (variant) return variant;
+      }
+      return null;
+    };
 
     // Transform each row
     rawData.forEach((row, index) => {
       try {
+        const get = (r: any, base: string, aliases: string[] = []): string => {
+          const key = resolveKey(r, base, aliases);
+          return String(key ? r[key] : '').trim();
+        };
+
         const transformedRow: BCICsvRow = {
-          projectId: String(row['Project ID'] || '').trim(),
-          projectType: String(row['Project Type'] || '').trim(),
-          projectName: String(row['Project Name'] || '').trim(),
-          projectStage: String(row['Project Stage'] || '').trim(),
-          projectStatus: String(row['Project Status'] || '').trim(),
-          localValue: String(row['Local Value'] || '').trim(),
-          developmentType: String(row['Development Type'] || '').trim(),
-          floorArea: String(row['Floor Area (square meters)'] || '').trim(),
-          siteArea: String(row['Site Area (hectares)'] || '').trim(),
-          storeys: String(row['Storeys'] || '').trim(),
-          lastUpdate: String(row['Last Update'] || '').trim(),
-          constructionStartDate: String(row['Construction Start Date (Original format)'] || '').trim(),
-          constructionEndDate: String(row['Construction End Date (Original format)'] || '').trim(),
-          projectAddress: String(row['Project Address'] || '').trim(),
-          projectTown: String(row['Project Town / Suburb'] || '').trim(),
-          projectState: String(row['Project Province / State'] || '').trim(),
-          postCode: String(row['Post Code'] || '').trim(),
-          projectCountry: String(row['Project Country'] || '').trim(),
-          roleOnProject: String(row['Role on Project'] || '').trim(),
-          companyName: String(row['Company Name'] || '').trim(),
-          companyStreet: String(row['Company Street Name'] || '').trim(),
-          companyTown: String(row['Company Town / Suburb'] || '').trim(),
-          companyState: String(row['Company State / Province'] || '').trim(),
-          companyPostcode: String(row['Company Post Code'] || '').trim(),
-          companyCountry: String(row['Company Country'] || '').trim(),
-          companyPhone: String(row['Company Phone'] || '').trim(),
-          companyEmail: String(row['Company Email'] || '').trim(),
-          contactFirstName: String(row['Contact First Name'] || '').trim(),
-          contactSurname: String(row['Contact Surname'] || '').trim(),
-          contactPosition: String(row['Contact Position'] || '').trim(),
-          contactLandline: String(row['Contact Landline'] || '').trim(),
-          contactEmail: String(row['Contact Email'] || '').trim(),
-          contactRemark: String(row['Contact Remark'] || '').trim()
+          projectId: get(row, 'Project ID', ['PID', 'ProjectID']),
+          projectType: get(row, 'Project Type'),
+          projectName: get(row, 'Project Name'),
+          projectStage: get(row, 'Project Stage'),
+          projectStatus: get(row, 'Project Status'),
+          localValue: get(row, 'Local Value', ['Value', 'LocalValue']),
+          developmentType: get(row, 'Development Type'),
+          floorArea: get(row, 'Floor Area (square meters)', ['Floor Area']),
+          siteArea: get(row, 'Site Area (hectares)', ['Site Area']),
+          storeys: get(row, 'Storeys', ['Stories']),
+          lastUpdate: get(row, 'Last Update', ['Updated', 'LastUpdated']),
+          constructionStartDate: get(row, 'Construction Start Date (Original format)', ['Construction Start Date']),
+          constructionEndDate: get(row, 'Construction End Date (Original format)', ['Construction End Date']),
+          projectAddress: get(row, 'Project Address', ['Address']),
+          projectTown: get(row, 'Project Town / Suburb', ['Town', 'Suburb', 'Project Town']),
+          projectState: get(row, 'Project Province / State', ['State', 'Province']),
+          postCode: get(row, 'Post Code', ['Postcode', 'Postal Code']),
+          latitude: get(row, 'Latitude', ['Lat']),
+          longitude: get(row, 'Longitude', ['Long', 'Lng']),
+          projectCountry: get(row, 'Project Country', ['Country']),
+          roleOnProject: get(row, 'Role on Project', ['Role']),
+          companyName: get(row, 'Company Name', ['Company']),
+          companyStreet: get(row, 'Company Street Name', ['Company Street']),
+          companyTown: get(row, 'Company Town / Suburb', ['Company Town', 'Company Suburb']),
+          companyState: get(row, 'Company State / Province', ['Company State', 'Company Province']),
+          companyPostcode: get(row, 'Company Post Code', ['Company Postcode']),
+          companyCountry: get(row, 'Company Country'),
+          companyPhone: get(row, 'Company Phone', ['Phone']),
+          companyEmail: get(row, 'Company Email', ['Email']),
+          contactFirstName: get(row, 'Contact First Name', ['First Name']),
+          contactSurname: get(row, 'Contact Surname', ['Last Name', 'Surname']),
+          contactPosition: get(row, 'Contact Position', ['Position', 'Role']),
+          contactLandline: get(row, 'Contact Landline', ['Landline']),
+          contactEmail: get(row, 'Contact Email'),
+          contactRemark: get(row, 'Contact Remark', ['Remark', 'Notes'])
         };
 
         // Validate required fields
@@ -182,17 +215,9 @@ export default function BCICsvParser({ onDataParsed, onError }: BCICsvParserProp
           // Skip rows without a project ID since we cannot group/import them
           return;
         }
+        // In projects-only files, many company fields will be empty – that's fine
         if (!transformedRow.projectName) {
-          // Warning only; allow user to fix later
           errors.push(`Row ${index + 1}: Missing Project Name`);
-        }
-        if (!transformedRow.companyName) {
-          // Warning only; matching UI will handle missing companies
-          errors.push(`Row ${index + 1}: Missing Company Name`);
-        }
-        if (!transformedRow.roleOnProject) {
-          // Warning only
-          errors.push(`Row ${index + 1}: Missing Role on Project`);
         }
 
         transformedData.push(transformedRow);
@@ -240,6 +265,31 @@ export default function BCICsvParser({ onDataParsed, onError }: BCICsvParserProp
           Upload a BCI project CSV file to import construction projects
         </p>
       </div>
+
+      {/* Mode selector */}
+      <Card className="variant:desktop">
+        <CardHeader className="variant:desktop-compact">
+          <CardTitle className="variant:desktop">Import Mode</CardTitle>
+          <CardDescription className="variant:desktop">
+            Choose what to import from the CSV
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="variant:desktop-compact">
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant={mode === 'projects-and-employers' ? 'default' : 'outline'} onClick={() => setMode('projects-and-employers')}>Projects + Employers</Button>
+            <Button size="sm" variant={mode === 'projects-only' ? 'default' : 'outline'} onClick={() => setMode('projects-only')}>Projects only</Button>
+            <Button size="sm" variant={mode === 'employers-to-existing' ? 'default' : 'outline'} onClick={() => setMode('employers-to-existing')}>Employers → existing projects</Button>
+          </div>
+          <div className="mt-3 text-xs text-gray-600">
+            {mode === 'projects-only' && (
+              <div>Required fields: <strong>Project ID</strong>, <strong>Project Name</strong> (you can fill in later), <strong>Address</strong>, and optionally <strong>Latitude</strong>/<strong>Longitude</strong>.</div>
+            )}
+            {mode === 'employers-to-existing' && (
+              <div>Requires a <strong>Project ID</strong> column to match employers to existing projects in the database.</div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* File Upload */}
       <Card className="variant:desktop">
@@ -370,6 +420,7 @@ export default function BCICsvParser({ onDataParsed, onError }: BCICsvParserProp
                   <li>Company names and roles are required for each row</li>
                   <li>Dates can be in various formats (will be automatically parsed)</li>
                   <li>Non-construction companies (consultants, engineers) will be automatically filtered out</li>
+                  <li>Latitude/Longitude are optional but recommended for precise project location</li>
                 </ul>
               </div>
             </div>

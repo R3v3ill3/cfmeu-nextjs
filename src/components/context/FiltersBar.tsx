@@ -64,6 +64,9 @@ export function FiltersBar({ patchOptions, statusOptions }: FiltersBarProps) {
           const { data } = await (supabase as any)
             .from("patches")
             .select("id, name")
+            .eq("type", "geo")
+            .eq("status", "active")
+            .not("geom", "is", null)
             .order("name")
           patchRows = (data as any[]) || []
         } else if (role === "lead_organiser") {
@@ -71,12 +74,12 @@ export function FiltersBar({ patchOptions, statusOptions }: FiltersBarProps) {
           const [direct, team] = await Promise.all([
             (supabase as any)
               .from("lead_organiser_patch_assignments")
-              .select("patches:patch_id(id,name)")
+              .select("patches:patch_id(id,name,type,status,geom)")
               .is("effective_to", null)
               .eq("lead_organiser_id", userId),
             (supabase as any)
               .from("organiser_patch_assignments")
-              .select("patches:patch_id(id,name)")
+              .select("patches:patch_id(id,name,type,status,geom)")
               .is("effective_to", null)
           ])
           const list: any[] = []
@@ -85,14 +88,18 @@ export function FiltersBar({ patchOptions, statusOptions }: FiltersBarProps) {
           ;(((team as any)?.data as any[]) || []).forEach(pushRow)
           // De-dupe by id
           const seen = new Set<string>()
-          patchRows = list.filter((p) => (p?.id && !seen.has(p.id) && seen.add(p.id)))
+          patchRows = list
+            .filter((p: any) => p && p.id && p.type === "geo" && p.status === "active" && p.geom)
+            .filter((p: any) => (p?.id && !seen.has(p.id) && seen.add(p.id)))
         } else if (role === "organiser") {
           const { data } = await (supabase as any)
             .from("organiser_patch_assignments")
-            .select("patches:patch_id(id,name)")
+            .select("patches:patch_id(id,name,type,status,geom)")
             .is("effective_to", null)
             .eq("organiser_id", userId)
-          patchRows = ((data as any[]) || []).map((r: any) => r.patches).filter(Boolean)
+          patchRows = ((data as any[]) || [])
+            .map((r: any) => r.patches)
+            .filter((p: any) => p && p.type === "geo" && p.status === "active" && p.geom)
         }
 
         // If we have rows, return them as options

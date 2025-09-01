@@ -293,6 +293,54 @@ export function getTradeTypeCategories(): Record<string, TradeType[]> {
 }
 
 /**
+ * Infer trade type directly from CSV Role text using a richer synonym set.
+ * Prefer this over company name when CSV Role is present.
+ */
+export function inferTradeTypeFromCsvRole(csvRole: string): TradeType | null {
+  if (!csvRole) return null;
+  const role = csvRole.toLowerCase();
+  const has = (p: string | RegExp) => (typeof p === 'string' ? role.includes(p) : p.test(role));
+
+  // Specific before general
+  if (has('post tension')) return 'post_tensioning';
+  if (has('steel fix')) return 'steel_fixing';
+  if (has('formwork') || has('form work')) return 'form_work';
+  if (has('earthwork') || has('earth moving') || has('earthmoving')) return 'earthworks';
+  if (has('excavat')) return 'excavations';
+  if (has('piling')) return 'piling';
+  if (has('traffic control')) return 'traffic_control';
+  if (has('traffic')) return 'traffic_management';
+  if (has('waste')) return 'waste_management';
+  if (has('plant') || has('equipment') || has('hire')) return 'plant_and_equipment';
+  if (has('crane')) return 'crane_and_rigging';
+  if (has('elect')) return 'electrical';
+  if (has('plumb')) return 'plumbing';
+  if (has('mechanical') || has('hvac')) return 'mechanical_services';
+  if (has('fire')) return 'fire_protection';
+  if (has('security') || has('alarm') || has('cctv')) return 'security_systems';
+  if (has('scaffold')) return 'scaffolding';
+  if (has('roof')) return 'roofing';
+  if (has('paint')) return 'painting';
+  if (has('carpent') || has('joinery')) return 'carpentry';
+  if (has('glaz') || has('window') || has('facade') || has('cladding')) return 'facade';
+  if (has('floor') || has('tiling')) return 'flooring';
+  if (has('tile')) return 'tiling';
+  if (has('waterproof')) return 'waterproofing';
+  if (has('plaster')) return 'plastering';
+  if (has('edge protection')) return 'edge_protection';
+  if (has('hoist') || has('mast climber')) return 'hoist';
+  if (has('kitchen') || has('cabinet')) return 'kitchens';
+  if (has('demolit')) return 'demolition';
+  if (has('clean') && (has('final') || has('end'))) return 'final_clean';
+  if (has('clean')) return 'cleaning';
+  if (has('labour') || has('labor') || has('hire') || has('recruitment')) return 'labour_hire';
+  if (has('concrete')) return 'concrete';
+  if (has('steel') || has('structural')) return 'structural_steel';
+
+  return null;
+}
+
+/**
  * Check if a company name suggests a specific trade type with confidence
  * @param companyName - The company name to analyze
  * @param tradeType - The trade type to check for

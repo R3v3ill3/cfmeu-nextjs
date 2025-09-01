@@ -12,7 +12,9 @@ import { useToast } from '@/hooks/use-toast';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 interface UnassignedProject {
-  id: string;
+  id: string; // project id (legacy field used in UI)
+  site_id: string; // job site id for precise updates
+  project_id: string; // explicit project id
   name: string;
   address: string;
   latitude: number | null;
@@ -61,6 +63,8 @@ export default function SpatialAssignmentTool() {
       
       return (data || []).map(site => ({
         id: (site.projects as any)?.id || site.project_id,
+        site_id: site.id,
+        project_id: site.project_id,
         name: (site.projects as any)?.name || 'Unknown Project',
         address: site.full_address || site.location,
         latitude: site.latitude,
@@ -139,14 +143,26 @@ export default function SpatialAssignmentTool() {
           if (error) throw error;
 
           if (patches && patches.length > 0) {
-            // Assign to the first matching patch
+            const targetPatchId = patches[0].id as string
+            // Assign this specific site (not all sites of the project)
             const { error: updateError } = await supabase
               .from('job_sites')
-              .update({ patch_id: patches[0].id })
-              .eq('project_id', project.id)
+              .update({ patch_id: targetPatchId })
+              .eq('id', project.site_id)
               .is('patch_id', null);
 
             if (updateError) throw updateError;
+
+            // Also upsert into patch_job_sites for downstream UIs
+            try {
+              await (supabase as any)
+                .from('patch_job_sites')
+                .insert({ patch_id: targetPatchId, job_site_id: project.site_id })
+            } catch (e: any) {
+              const msg = String(e?.message || '')
+              if (!msg.toLowerCase().includes('duplicate')) throw e
+            }
+
             assigned++;
           }
           

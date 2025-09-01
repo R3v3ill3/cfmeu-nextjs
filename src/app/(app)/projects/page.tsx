@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"
+import { useSearchParams, usePathname, useRouter } from "next/navigation"
 // Progress replaced by custom gradient bar
 import { Badge } from "@/components/ui/badge"
 import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal"
@@ -16,10 +16,13 @@ import { Button } from "@/components/ui/button"
 import AddressLookupDialog from "@/components/AddressLookupDialog"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { ArrowUp, ArrowDown, LayoutGrid, List as ListIcon } from "lucide-react"
 import CreateProjectDialog from "@/components/projects/CreateProjectDialog"
 import { usePatchOrganiserLabels } from "@/hooks/usePatchOrganiserLabels"
 import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
 import { PROJECT_TIER_LABELS, ProjectTier } from "@/components/projects/types"
+import { ProjectTable } from "@/components/projects/ProjectTable"
 
 type ProjectWithRoles = {
   id: string
@@ -372,12 +375,18 @@ function ProjectListCard({ p, summary, onOpenEmployer }: { p: ProjectWithRoles; 
 }
 
 export default function ProjectsPage() {
+  const router = useRouter()
+  const pathname = usePathname()
   const sp = useSearchParams()
   const [lookupOpen, setLookupOpen] = useState(false)
   const q = (sp.get("q") || "").toLowerCase()
   const patchParam = sp.get("patch") || ""
   const patchIds = patchParam.split(",").map(s => s.trim()).filter(Boolean)
-  const [tierFilter, setTierFilter] = useState<ProjectTier | 'all'>('all')
+  const tierFilter = (sp.get("tier") || "all") as ProjectTier | 'all'
+  const sort = sp.get("sort") || "name"
+  const dir = sp.get("dir") || "asc"
+  const view = sp.get("view") || "card"
+  const workersFilter = sp.get("workers") || "all" // all, zero, nonzero
   const page = Math.max(1, parseInt(sp.get('page') || '1', 10) || 1)
   const PAGE_SIZE = 24
 
@@ -385,6 +394,21 @@ export default function ProjectsPage() {
   const [isEmployerOpen, setIsEmployerOpen] = useState(false)
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null)
   const [isWorkerOpen, setIsWorkerOpen] = useState(false)
+
+  const setParam = (key: string, value?: string) => {
+    const params = new URLSearchParams(sp.toString())
+    if (!value || value === "all" || value === "") {
+      params.delete(key)
+    } else {
+      params.set(key, value)
+    }
+    // Reset page when changing filters
+    if (key !== 'page') {
+      params.delete('page')
+    }
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname)
+  }
 
   // If a patch is selected, compute project ids that have at least one site linked to these patches
   const { data: patchProjectIds = [], isFetching: fetchingPatchProjects } = useQuery<string[]>({
@@ -408,14 +432,11 @@ export default function ProjectsPage() {
     }
   })
 
-  const { data: projectsData, isLoading } = useQuery<{ projects: ProjectWithRoles[]; summaries: Record<string, ProjectSummary>; hasNext: boolean }>({
-    queryKey: ["projects-list+summary", patchIds, patchProjectIds, tierFilter, page],
+  const { data: projectsData, isLoading } = useQuery<{ projects: ProjectWithRoles[]; summaries: Record<string, ProjectSummary> }>({
+    queryKey: ["projects-list+summary", patchIds, patchProjectIds, tierFilter, q],
     staleTime: 30000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      const from = (page - 1) * PAGE_SIZE
-      const to = from + PAGE_SIZE // inclusive, fetch one extra for hasNext
-
       let qy: any = supabase
         .from("projects")
         .select(`
@@ -430,26 +451,45 @@ export default function ProjectsPage() {
             employers(name)
           )
         `)
-        .order("created_at", { ascending: false })
-        .range(from, to)
+
+      // Apply search filter
+      if (q) {
+        qy = qy.ilike('name', `%${q}%`)
+      }
 
       if (tierFilter !== "all") {
         qy = qy.eq('tier', tierFilter)
       }
 
       if (patchIds.length > 0) {
-        if ((patchProjectIds as string[]).length === 0) return { projects: [], summaries: {}, hasNext: false }
+        if ((patchProjectIds as string[]).length === 0) return { projects: [], summaries: {} }
         qy = qy.in('id', patchProjectIds as string[])
+      }
+
+      // For database-sortable fields, apply sorting here
+      const ascending = dir === "asc"
+      const needsClientSorting = ["workers", "members", "delegates", "eba_coverage"].includes(sort)
+      
+      if (!needsClientSorting) {
+        if (sort === "name") {
+          qy = qy.order("name", { ascending })
+        } else if (sort === "value") {
+          qy = qy.order("value", { ascending, nullsFirst: false })
+        } else if (sort === "tier") {
+          qy = qy.order("tier", { ascending, nullsFirst: false })
+        } else {
+          qy = qy.order("created_at", { ascending: false }) // default
+        }
       }
 
       const { data, error } = await qy
       if (error) throw error
-      const list = (data as any[]) || []
-      const hasNext = list.length > PAGE_SIZE
-      const pageProjects = hasNext ? list.slice(0, PAGE_SIZE) : list
-      const ids = pageProjects.map((p: any) => p.id)
+      const allProjects = (data as any[]) || []
+      
+      // Get summaries for all projects
       let summaries: Record<string, ProjectSummary> = {}
-      if (ids.length > 0) {
+      if (allProjects.length > 0) {
+        const ids = allProjects.map((p: any) => p.id)
         const { data: sumRows } = await (supabase as any)
           .from('project_dashboard_summary')
           .select('*')
@@ -459,13 +499,70 @@ export default function ProjectsPage() {
           return acc
         }, {} as Record<string, ProjectSummary>)
       }
-      return { projects: pageProjects as ProjectWithRoles[], summaries, hasNext }
+      
+      return { projects: allProjects as ProjectWithRoles[], summaries }
     }
   })
 
-  const projects = projectsData?.projects || []
+  const allProjects = projectsData?.projects || []
   const summaries = projectsData?.summaries || {}
-  const hasNext = !!projectsData?.hasNext
+  
+  // Apply client-side filtering and sorting
+  const filteredAndSortedProjects = useMemo(() => {
+    let filtered = allProjects.slice()
+    
+    // Apply workers filter
+    if (workersFilter !== "all") {
+      filtered = filtered.filter((p: any) => {
+        const summary = summaries[p.id]
+        const workerCount = summary?.total_workers || 0
+        return workersFilter === "zero" ? workerCount === 0 : workerCount > 0
+      })
+    }
+    
+    // Apply client-side sorting for summary-based fields
+    const needsClientSorting = ["workers", "members", "delegates", "eba_coverage"].includes(sort)
+    if (needsClientSorting) {
+      const ascending = dir === "asc"
+      filtered.sort((a: any, b: any) => {
+        const summaryA = summaries[a.id]
+        const summaryB = summaries[b.id]
+        
+        let valueA = 0
+        let valueB = 0
+        
+        if (sort === "workers") {
+          valueA = summaryA?.total_workers || 0
+          valueB = summaryB?.total_workers || 0
+        } else if (sort === "members") {
+          valueA = summaryA?.total_members || 0
+          valueB = summaryB?.total_members || 0
+        } else if (sort === "delegates") {
+          valueA = summaryA?.delegate_name ? 1 : 0
+          valueB = summaryB?.delegate_name ? 1 : 0
+        } else if (sort === "eba_coverage") {
+          const ebaA = summaryA?.eba_active_employer_count || 0
+          const engagedA = summaryA?.engaged_employer_count || 0
+          const ebaB = summaryB?.eba_active_employer_count || 0
+          const engagedB = summaryB?.engaged_employer_count || 0
+          valueA = engagedA > 0 ? (ebaA / engagedA) * 100 : 0
+          valueB = engagedB > 0 ? (ebaB / engagedB) * 100 : 0
+        }
+        
+        return ascending ? valueA - valueB : valueB - valueA
+      })
+    }
+    
+    return filtered
+  }, [allProjects, summaries, workersFilter, sort, dir])
+  
+  // Apply pagination
+  const totalProjects = filteredAndSortedProjects.length
+  const from = (page - 1) * PAGE_SIZE
+  const to = from + PAGE_SIZE
+  const projects = filteredAndSortedProjects.slice(from, to)
+  const hasNext = to < totalProjects
+  const hasPrev = page > 1
 
   if (isLoading) {
     return (
@@ -477,64 +574,119 @@ export default function ProjectsPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Projects</h1>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setLookupOpen(true)}>Address Lookup</Button>
-          <CreateProjectDialog />
+    <div className="p-6 space-y-4">
+      <h1 className="text-2xl font-semibold">Projects</h1>
+      <div className="sticky top-0 z-30 -mx-6 px-6 py-3 bg-background/40 backdrop-blur supports-[backdrop-filter]:bg-background/30 border-b">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="min-w-[240px] flex-1">
+            <Input placeholder="Search projects…" value={sp.get("q") || ""} onChange={(e) => setParam("q", e.target.value)} />
+          </div>
+          <div className="w-48">
+            <div className="text-xs text-muted-foreground mb-1">Tier</div>
+            <Select value={tierFilter} onValueChange={(value) => setParam("tier", value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Filter by tier" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Tiers</SelectItem>
+                {Object.entries(PROJECT_TIER_LABELS).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="w-40">
+            <div className="text-xs text-muted-foreground mb-1">Workers</div>
+            <Select value={workersFilter} onValueChange={(value) => setParam("workers", value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Filter by workers" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Projects</SelectItem>
+                <SelectItem value="nonzero">Has Workers</SelectItem>
+                <SelectItem value="zero">No Workers</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="w-48">
+            <div className="text-xs text-muted-foreground mb-1">Sort by</div>
+            <Select value={sort} onValueChange={(v) => setParam("sort", v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Sort by" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="name">Name</SelectItem>
+                <SelectItem value="value">Project Value</SelectItem>
+                <SelectItem value="tier">Tier</SelectItem>
+                <SelectItem value="workers">Worker Count</SelectItem>
+                <SelectItem value="members">Member Count</SelectItem>
+                <SelectItem value="delegates">Has Delegate</SelectItem>
+                <SelectItem value="eba_coverage">EBA Coverage</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Order</span>
+            <ToggleGroup type="single" variant="outline" size="sm" value={dir} onValueChange={(v) => v && setParam("dir", v)}>
+              <ToggleGroupItem value="asc" aria-label="Ascending"><ArrowUp className="h-4 w-4" /></ToggleGroupItem>
+              <ToggleGroupItem value="desc" aria-label="Descending"><ArrowDown className="h-4 w-4" /></ToggleGroupItem>
+            </ToggleGroup>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setLookupOpen(true)}>Address Lookup</Button>
+            <CreateProjectDialog />
+          </div>
+          <ToggleGroup type="single" variant="outline" size="sm" value={view} onValueChange={(v) => v && setParam("view", v)}>
+            <ToggleGroupItem value="card" aria-label="Card view" className="gap-1"><LayoutGrid className="h-4 w-4" /> Card</ToggleGroupItem>
+            <ToggleGroupItem value="list" aria-label="List view" className="gap-1"><ListIcon className="h-4 w-4" /> List</ToggleGroupItem>
+          </ToggleGroup>
         </div>
       </div>
-      {/* Add tier filter */}
-      <div className="flex items-center gap-4">
-        <Select value={tierFilter} onValueChange={(value) => setTierFilter(value as ProjectTier | 'all')}>
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Filter by tier" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Tiers</SelectItem>
-            {Object.entries(PROJECT_TIER_LABELS).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        
-        {/* ... existing filters ... */}
-      </div>
-
-      {(projects as any[]).length === 0 ? (
+      {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
+      {(projects as any[]).length === 0 && !isLoading ? (
         <p className="text-sm text-muted-foreground">No projects found.</p>
+      ) : view === 'list' ? (
+        <div className="rounded-md border overflow-x-auto">
+          <ProjectTable
+            rows={projects as any[]}
+            summaries={summaries}
+            onRowClick={(id) => {
+              window.location.href = `/projects/${id}`
+            }}
+            onOpenEmployer={(id) => {
+              setSelectedEmployerId(id)
+              setIsEmployerOpen(true)
+            }}
+          />
+        </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {(projects as any[])
-            .filter((p: any) => (q ? String(p.name || "").toLowerCase().includes(q) : true))
-            .map((p: any) => (
-              <ProjectListCard
-                key={p.id}
-                p={p}
-                summary={summaries[p.id]}
-                onOpenEmployer={(id) => { setSelectedEmployerId(id); setIsEmployerOpen(true) }}
-              />
-            ))}
+          {(projects as any[]).map((p: any) => (
+            <ProjectListCard
+              key={p.id}
+              p={p}
+              summary={summaries[p.id]}
+              onOpenEmployer={(id) => { setSelectedEmployerId(id); setIsEmployerOpen(true) }}
+            />
+          ))}
         </div>
       )}
 
-      <div className="flex items-center justify-end gap-2">
-        <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => {
-          const params = new URLSearchParams(window.location.search)
-          const prev = Math.max(1, page - 1)
-          params.set('page', String(prev))
-          window.location.search = params.toString()
-        }}>Previous</Button>
-        <span className="text-xs text-muted-foreground">Page {page}</span>
-        <Button variant="outline" size="sm" disabled={!hasNext} onClick={() => {
-          const params = new URLSearchParams(window.location.search)
-          const next = page + 1
-          params.set('page', String(next))
-          window.location.search = params.toString()
-        }}>Next</Button>
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-muted-foreground">
+          Showing {from + 1}-{Math.min(to, totalProjects)} of {totalProjects} projects
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" disabled={!hasPrev} onClick={() => setParam('page', String(page - 1))}>
+            Previous
+          </Button>
+          <span className="text-xs text-muted-foreground">Page {page} of {Math.ceil(totalProjects / PAGE_SIZE)}</span>
+          <Button variant="outline" size="sm" disabled={!hasNext} onClick={() => setParam('page', String(page + 1))}>
+            Next
+          </Button>
+        </div>
       </div>
 
       <EmployerDetailModal

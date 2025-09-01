@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { CheckCircle, AlertCircle, Info, Loader2, Users, Building2, Wrench, MapPin, Search, Plus } from 'lucide-react';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
-import { inferTradeTypeFromCompanyName, getTradeTypeLabel, TradeType, getTradeTypeCategories } from '@/utils/bciTradeTypeInference';
+import { inferTradeTypeFromCompanyName, inferTradeTypeFromCsvRole, getTradeTypeLabel, TradeType, getTradeTypeCategories } from '@/utils/bciTradeTypeInference';
 import { findBestEmployerMatch, normalizeCompanyName } from '@/utils/workerDataProcessor';
 
 // Enhanced types for BCI CSV data
@@ -97,12 +97,15 @@ interface BCIProjectData {
   companies: CompanyClassification[];
 }
 
+type BCIImportMode = 'projects-and-employers' | 'projects-only' | 'employers-to-existing';
+
 interface BCIProjectImportProps {
   csvData: BCICsvRow[];
   onImportComplete: () => void;
+  mode?: BCIImportMode;
 }
 
-export default function BCIProjectImport({ csvData, onImportComplete }: BCIProjectImportProps) {
+export default function BCIProjectImport({ csvData, onImportComplete, mode = 'projects-and-employers' }: BCIProjectImportProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentStep, setCurrentStep] = useState<'preview' | 'employer_matching' | 'trade_type_confirmation' | 'importing' | 'complete'>('preview');
   const [processedData, setProcessedData] = useState<BCIProjectData[]>([]);
@@ -182,6 +185,14 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
     }
   }, [processCSVData]);
 
+  // Auto-run for projects-only mode once data is ready
+  useEffect(() => {
+    if (mode === 'projects-only' && processedData && processedData.length > 0 && currentStep === 'preview' && !isProcessing) {
+      // Kick off import automatically for smoother UX
+      startImport();
+    }
+  }, [mode, processedData, currentStep, isProcessing]);
+
   // Enhanced company classification - prefer CSV Role, then fallback to name
   const classifyCompany = (csvRole: string, companyName: string): CompanyClassification => {
     const role = (csvRole || '').toLowerCase().trim();
@@ -213,8 +224,8 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
       };
     }
     
-    // Head contractor mapping from CSV role (e.g., Project Manager, Head Contractor)
-    if (role.includes('project manager') || role.includes('head contractor') || role.includes('principal contractor')) {
+    // Head contractor mapping from CSV role (e.g., Project Manager, Project Coordinator, Head Contractor)
+    if (role.includes('project manager') || role.includes('project coordinator') || role.includes('head contractor') || role.includes('principal contractor')) {
       return { 
         companyName, 
         csvRole, 
@@ -237,24 +248,9 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
       };
     }
     
-    // Subcontractors (use role keywords to prefill trade)
+    // Subcontractors (prefer CSV Role to infer trade)
     if (role.includes('subcontractor') || role.includes('sub-contractor') || role.includes('sub contractor')) {
-      let prefillTrade: TradeType | undefined = undefined;
-      if (role.includes('roof')) prefillTrade = 'roofing';
-      else if (role.includes('plant')) prefillTrade = 'plant_and_equipment';
-      else if (role.includes('scaffold')) prefillTrade = 'scaffolding';
-      else if (role.includes('elect')) prefillTrade = 'electrical';
-      else if (role.includes('plumb')) prefillTrade = 'plumbing';
-      else if (role.includes('paint')) prefillTrade = 'painting';
-      else if (role.includes('carpent') || role.includes('joinery')) prefillTrade = 'carpentry';
-      else if (role.includes('floor') || role.includes('tile')) prefillTrade = 'flooring';
-      else if (role.includes('glaz') || role.includes('window')) prefillTrade = 'glazing';
-      else if (role.includes('waterproof')) prefillTrade = 'waterproofing';
-      else if (role.includes('plaster')) prefillTrade = 'plastering';
-      else if (role.includes('steel')) prefillTrade = 'structural_steel';
-      else if (role.includes('concrete')) prefillTrade = 'concrete';
-      else if (role.includes('traffic')) prefillTrade = 'traffic_management';
-      else if (role.includes('waste')) prefillTrade = 'waste_management';
+      const prefillTrade = inferTradeTypeFromCsvRole(csvRole) ?? undefined;
 
       return { 
         companyName, 
@@ -421,9 +417,10 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
         .map(t => t.trim().toLowerCase())
         .filter(t => t.length >= 3 && !stopwords.has(t))
         .slice(0, 8);
+      const firstToken = tokens[0];
       const orParts = [
         `name.ilike.%${companyName}%`,
-        `name.ilike.${companyName}%`,
+        ...(firstToken ? [`name.ilike.${firstToken}%`] : []),
         ...tokens.map(t => `name.ilike.%${t}%`)
       ];
       const orQuery = orParts.join(',');
@@ -435,11 +432,16 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
       if (fuzzyError) throw fuzzyError;
       
       if (fuzzyMatches && fuzzyMatches.length > 0) {
-        // Sort by relevance (exact substring matches first)
+        // Sort by relevance (starts-with first token > exact substring > shorter names)
         const sortedMatches = fuzzyMatches.sort((a, b) => {
           const aName = a.name.toLowerCase();
           const bName = b.name.toLowerCase();
           const companyNameLower = companyName.toLowerCase();
+          const ft = firstToken || '';
+          const aStarts = ft ? aName.startsWith(ft) : false;
+          const bStarts = ft ? bName.startsWith(ft) : false;
+          if (aStarts && !bStarts) return -1;
+          if (!aStarts && bStarts) return 1;
           
           const aExact = aName.includes(companyNameLower) || companyNameLower.includes(aName);
           const bExact = bName.includes(companyNameLower) || companyNameLower.includes(bName);
@@ -516,6 +518,12 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
   // Start the enhanced import process
   const startImport = async () => {
     setIsProcessing(true);
+    // For projects-only, skip employer matching flow
+    if (mode === 'projects-only') {
+      setCurrentStep('importing');
+      await importProjectsOnly();
+      return;
+    }
     setCurrentStep('employer_matching');
     
     try {
@@ -588,9 +596,80 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
     }
   };
 
+  // Import only projects (no employers)
+  const importProjectsOnly = async () => {
+    const results = {
+      success: 0,
+      errors: [] as string[],
+      projectsCreated: [] as string[],
+      employersCreated: 0,
+      employersMatched: 0
+    };
+
+    for (const project of processedData) {
+      try {
+        const supabase = getSupabaseBrowserClient();
+        // Check if project exists
+        const { data: existing } = await supabase
+          .from('projects')
+          .select('id')
+          .eq('bci_project_id', project.projectId)
+          .maybeSingle();
+        if (existing) {
+          continue;
+        }
+        const { data: newProject, error: projectError } = await supabase
+          .from('projects')
+          .insert({
+            name: project.projectName || `Project ${project.projectId}`,
+            bci_project_id: project.projectId,
+            value: project.localValue,
+            proposed_start_date: project.constructionStartDate,
+            proposed_finish_date: project.constructionEndDate,
+            project_stage: project.projectStage,
+            project_status: project.projectStatus,
+            last_update_date: project.lastUpdateDate
+          })
+          .select('id')
+          .single();
+        if (projectError) throw projectError;
+
+        const { data: site, error: siteError } = await supabase
+          .from('job_sites')
+          .insert({
+            name: project.projectName,
+            location: `${project.projectAddress}, ${project.projectTown}, ${project.projectState} ${project.postCode}`,
+            full_address: `${project.projectAddress}, ${project.projectTown}, ${project.projectState} ${project.postCode}`,
+            project_id: newProject.id,
+            is_main_site: true,
+            latitude: project.latitude,
+            longitude: project.longitude
+          })
+          .select('id')
+          .single();
+        if (siteError) throw siteError;
+        await supabase.from('projects').update({ main_job_site_id: site.id }).eq('id', newProject.id);
+        results.success++;
+        results.projectsCreated.push(project.projectName);
+      } catch (e) {
+        console.error('Import (projects-only) error', e);
+        results.errors.push(e instanceof Error ? e.message : 'Unknown error');
+      }
+    }
+    setImportResults(results);
+    setCurrentStep('complete');
+    setIsProcessing(false);
+  };
+
   // Move to trade type confirmation step
   const confirmEmployerMatches = () => {
     console.log('confirmEmployerMatches called, current state:', employerMatches);
+    // Employers-only path: skip trade type step (no subcontractor trade linking on this path)
+    if (mode === 'employers-to-existing') {
+      setCurrentStep('importing');
+      performEmployersToExistingImport();
+      return;
+    }
     setCurrentStep('trade_type_confirmation');
     // Scroll to top of the page
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -744,6 +823,64 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
     setIsProcessing(false);
   };
 
+  // Employers to existing projects only, matching by BCI Project ID
+  const performEmployersToExistingImport = async () => {
+    const results = {
+      success: 0,
+      errors: [] as string[],
+      projectsCreated: [] as string[],
+      employersCreated: 0,
+      employersMatched: 0
+    };
+
+    for (const project of processedData) {
+      try {
+        const supabase = getSupabaseBrowserClient();
+        const { data: existingProject } = await supabase
+          .from('projects')
+          .select('id')
+          .eq('bci_project_id', project.projectId)
+          .maybeSingle();
+        if (!existingProject) {
+          results.errors.push(`No existing project found for BCI ID ${project.projectId}`);
+          continue;
+        }
+
+        for (const company of project.companies) {
+          if (!company.shouldImport || company.userExcluded) continue;
+          const matchKey = `${project.projectId}-${company.companyName}-${company.csvRole}`;
+          const matchResult = employerMatches[matchKey];
+          let employerId = company.employerId || matchResult?.matchedEmployerId;
+          if (!employerId && matchResult?.action === 'create_new') {
+            const csvRow = csvData.find(r => r.projectId === project.projectId && r.companyName === company.companyName);
+            if (csvRow) {
+              employerId = await createEmployer(csvRow);
+              results.employersCreated++;
+            }
+          }
+          if (!employerId) continue;
+
+          // Link employer to project: builder/head_contractor/subcontractor with inferred trade
+          if (company.ourRole === 'builder') {
+            await supabase.from('projects').update({ builder_id: employerId }).eq('id', existingProject.id);
+          } else if (company.ourRole === 'head_contractor') {
+            await supabase.from('project_employer_roles').insert({ project_id: existingProject.id, employer_id: employerId, role: 'head_contractor' });
+          } else if (company.ourRole === 'subcontractor') {
+            await supabase.from('project_contractor_trades').insert({ project_id: existingProject.id, employer_id: employerId, trade_type: company.tradeType || 'general_construction' });
+          }
+          results.employersMatched++;
+        }
+        results.success++;
+      } catch (e) {
+        console.error('Employers-to-existing import error', e);
+        results.errors.push(e instanceof Error ? e.message : 'Unknown error');
+      }
+    }
+    setImportResults(results);
+    setCurrentStep('complete');
+    setIsProcessing(false);
+  };
+
   // Update employer match action
   const updateEmployerMatch = (
     matchKey: string,
@@ -874,6 +1011,24 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
     );
     
     if (csvRow) {
+      // Persist to pending_employers table
+      (async () => {
+        try {
+          const supabase = getSupabaseBrowserClient();
+          await supabase
+            .from('pending_employers')
+            .insert({
+              company_name: company.companyName,
+              csv_role: company.csvRole,
+              source: 'bci',
+              raw: csvRow
+            });
+        } catch (e) {
+          // Non-fatal; fall back to in-memory list only
+          console.warn('Failed to persist pending employer; keeping in-memory only');
+        }
+      })();
+
       setEmployersToAdd(prev => [...prev, {
         companyName: company.companyName,
         csvRole: company.csvRole,
@@ -1574,6 +1729,11 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
         <Info className="h-4 w-4" />
         <span>Preview of {csvData.length} CSV rows processed into {processedData.length} unique projects</span>
       </div>
+      {processedData.length === 0 && (
+        <div className="p-3 border border-red-200 bg-red-50 text-sm text-red-800 rounded">
+          No projects detected from the CSV. Ensure a "Project ID" column exists. If your file has duplicate header names, they may be auto-renamed by your spreadsheet/exporter; the parser now handles common variants.
+        </div>
+      )}
       {/* Missing project names editor */}
       {processedData.filter(p => !p.projectName || String(p.projectName).trim() === '').length > 0 && (
         <div className="space-y-3 p-3 border border-yellow-200 rounded bg-yellow-50">
@@ -1628,7 +1788,7 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
       <div className="text-center">
         <Button 
           onClick={startImport} 
-          disabled={isProcessing || processedData.filter(p => !p.projectName || String(p.projectName).trim() === '').length > 0}
+          disabled={isProcessing || (mode !== 'projects-only' && processedData.filter(p => !p.projectName || String(p.projectName).trim() === '').length > 0)}
           className="px-8"
         >
           {isProcessing ? (
@@ -1637,7 +1797,7 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
               Processing...
             </>
           ) : (
-            'Start Employer Matching'
+            mode === 'projects-only' ? 'Create Projects' : (mode === 'employers-to-existing' ? 'Start Employer Matching' : 'Start Employer Matching')
           )}
         </Button>
         {processedData.filter(p => !p.projectName || String(p.projectName).trim() === '').length > 0 && (
@@ -1739,7 +1899,7 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
   if (isProcessing && currentStep === 'importing') {
     return (
       <div className="text-center space-y-4">
-        <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+        <img src="/spinner.gif" alt="Loading" className="w-8 h-8 mx-auto" />
         <h2 className="text-xl font-semibold">Importing Projects...</h2>
         <p className="text-gray-600">Please wait while we create projects and link employers</p>
       </div>

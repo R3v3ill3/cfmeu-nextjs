@@ -33,6 +33,7 @@ export default function UploadPage() {
   const [csv, setCsv] = useState<ParsedCSV | null>(null)
   const [mappedRows, setMappedRows] = useState<Record<string, any>[]>([])
   const [bciData, setBciData] = useState<any[]>([])
+  const [bciMode, setBciMode] = useState<'projects-and-employers' | 'projects-only' | 'employers-to-existing'>('projects-and-employers')
 
   // Get user role on component mount
   useEffect(() => {
@@ -194,6 +195,7 @@ export default function UploadPage() {
                   <BCICsvParser 
                     onDataParsed={onBciDataParsed}
                     onError={(error) => console.error('BCI Parse Error:', error)}
+                    onModeChange={(m) => setBciMode(m)}
                   />
                 </TabsContent>
               )}
@@ -255,6 +257,7 @@ export default function UploadPage() {
             {importType === "bci-projects" && bciData.length > 0 && (
               <BCIProjectImport
                 csvData={bciData}
+                mode={bciMode}
                 onImportComplete={() => setStep("choose")}
               />
             )}

@@ -12,11 +12,12 @@ import { SingleEmployerDialogPicker } from "@/components/projects/SingleEmployer
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
 import { calculateProjectTier } from "@/components/projects/types"
+import { GoogleAddressInput, GoogleAddress } from "@/components/projects/GoogleAddressInput"
 
 export default function CreateProjectDialog() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  const [address, setAddress] = useState("");
+  const [addressData, setAddressData] = useState<GoogleAddress | null>(null);
   const [value, setValue] = useState("");
   const [start, setStart] = useState("");
   const [finish, setFinish] = useState("");
@@ -28,7 +29,7 @@ export default function CreateProjectDialog() {
   const [jvStatus, setJvStatus] = useState<"yes" | "no" | "unsure">("no");
   const [jvLabel, setJvLabel] = useState<string>("");
 
-  const canSubmit = useMemo(() => name.trim() && address.trim(), [name, address]);
+  const canSubmit = useMemo(() => name.trim() && addressData?.formatted, [name, addressData]);
 
   // Calculate tier based on value
   const calculatedTier = useMemo(() => {
@@ -60,10 +61,24 @@ export default function CreateProjectDialog() {
       if (projErr) throw projErr;
       const projectId = (proj as any).id as string;
 
-      // create main job site with address
+      // create main job site with address and coordinates
+      const sitePayload: any = {
+        project_id: projectId,
+        name: name.trim(),
+        is_main_site: true,
+        location: addressData?.formatted || "",
+        full_address: addressData?.formatted || ""
+      }
+      
+      // Add coordinates if available for patch matching
+      if (addressData?.lat && addressData?.lng) {
+        sitePayload.latitude = addressData.lat
+        sitePayload.longitude = addressData.lng
+      }
+      
       const { data: site, error: siteErr } = await supabase
         .from("job_sites")
-        .insert({ project_id: projectId, name: name.trim(), is_main_site: true, location: address, full_address: address })
+        .insert(sitePayload)
         .select("id")
         .single();
       if (siteErr) throw siteErr;
@@ -113,7 +128,11 @@ export default function CreateProjectDialog() {
           </div>
           <div>
             <Label htmlFor="cp_addr" className="text-sm font-medium text-gray-700">Main Job Site Address</Label>
-            <Input id="cp_addr" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Full address" className="h-12 px-4 py-3 text-gray-900 bg-white border-gray-300 focus:border-blue-500 focus:ring-blue-500" />
+            <GoogleAddressInput
+              value={addressData?.formatted || ""}
+              onChange={setAddressData}
+              placeholder="Start typing an address..."
+            />
           </div>
           {/* Project Value with Tier Preview */}
           <div className="space-y-2">
