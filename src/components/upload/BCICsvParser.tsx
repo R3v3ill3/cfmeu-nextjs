@@ -104,11 +104,9 @@ export default function BCICsvParser({ onDataParsed, onError }: BCICsvParserProp
       complete: (results) => {
         try {
           const parsedData = validateAndTransformData(results.data as any[]);
-          
-          if (validationErrors.length === 0) {
-            setSampleData(parsedData.slice(0, 5)); // Show first 5 rows as sample
-            onDataParsed(parsedData);
-          }
+          // Always preview and pass parsed data through; warnings are shown in the UI
+          setSampleData(parsedData.slice(0, 5)); // Show first 5 rows as sample
+          onDataParsed(parsedData);
         } catch (error) {
           onError(error instanceof Error ? error.message : 'Failed to parse CSV');
         } finally {
@@ -181,14 +179,19 @@ export default function BCICsvParser({ onDataParsed, onError }: BCICsvParserProp
         // Validate required fields
         if (!transformedRow.projectId) {
           errors.push(`Row ${index + 1}: Missing Project ID`);
+          // Skip rows without a project ID since we cannot group/import them
+          return;
         }
         if (!transformedRow.projectName) {
+          // Warning only; allow user to fix later
           errors.push(`Row ${index + 1}: Missing Project Name`);
         }
         if (!transformedRow.companyName) {
+          // Warning only; matching UI will handle missing companies
           errors.push(`Row ${index + 1}: Missing Company Name`);
         }
         if (!transformedRow.roleOnProject) {
+          // Warning only
           errors.push(`Row ${index + 1}: Missing Role on Project`);
         }
 
@@ -199,11 +202,7 @@ export default function BCICsvParser({ onDataParsed, onError }: BCICsvParserProp
     });
 
     setValidationErrors(errors);
-    
-    if (errors.length > 0) {
-      throw new Error(`Validation failed with ${errors.length} errors`);
-    }
-
+    // Do not throw; return what we could parse and show warnings in UI
     return transformedData;
   };
 
@@ -283,16 +282,16 @@ export default function BCICsvParser({ onDataParsed, onError }: BCICsvParserProp
 
       {/* Validation Errors */}
       {validationErrors.length > 0 && (
-        <Alert className="border-red-200 bg-red-50">
-          <AlertCircle className="h-4 w-4 text-red-600" />
-          <AlertDescription className="text-red-800">
-            <div className="font-medium mb-2">CSV validation failed:</div>
+        <Alert className="border-yellow-200 bg-yellow-50">
+          <AlertCircle className="h-4 w-4 text-yellow-600" />
+          <AlertDescription className="text-yellow-800">
+            <div className="font-medium mb-2">CSV validation warnings:</div>
             <ul className="list-disc list-inside space-y-1 text-sm">
               {validationErrors.slice(0, 10).map((error, index) => (
                 <li key={index}>{error}</li>
               ))}
               {validationErrors.length > 10 && (
-                <li>... and {validationErrors.length - 10} more errors</li>
+                <li>... and {validationErrors.length - 10} more warnings</li>
               )}
             </ul>
           </AlertDescription>

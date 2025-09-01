@@ -1,0 +1,335 @@
+'use client';
+
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Loader2, MapPin, ZoomIn, ZoomOut, AlertCircle } from 'lucide-react';
+
+interface GoogleMapProps {
+  center?: { lat: number; lng: number };
+  zoom?: number;
+  patches?: Array<{
+    id: string;
+    name: string;
+    geom: string;
+    color?: string;
+  }>;
+  height?: string;
+  showControls?: boolean;
+  onPatchClick?: (patchId: string) => void;
+}
+
+declare global {
+  interface Window {
+    google?: any;
+    initMap?: () => void;
+  }
+}
+
+export function GoogleMap({
+  center = { lat: -25.2744, lng: 133.7751 }, // Default to Australia center
+  zoom = 5,
+  patches = [],
+  height = '400px',
+  showControls = true,
+  onPatchClick
+}: GoogleMapProps) {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const [map, setMap] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [currentZoom, setCurrentZoom] = useState(zoom);
+  const [mapError, setMapError] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string>('');
+  const [mapReady, setMapReady] = useState(false);
+
+  // Load Google Maps script
+  useEffect(() => {
+    if (window.google?.maps?.Map) {
+      setMapReady(true);
+      return;
+    }
+
+    // Define the global initMap function before loading the script
+    window.initMap = () => {
+      console.log('Google Maps script loaded successfully');
+      setMapReady(true);
+      setDebugInfo('Script loaded, initializing map...');
+    };
+
+    // Check if script is already loading
+    if (document.querySelector('script[src*="maps.googleapis.com"]')) {
+      console.log('Google Maps script already loading...');
+      setDebugInfo('Script already loading...');
+      return;
+    }
+
+    // Load Google Maps script
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=geometry&callback=initMap&loading=async`;
+    script.async = true;
+    script.defer = true;
+    script.onerror = () => {
+      setMapError('Failed to load Google Maps script');
+      setDebugInfo('Script loading failed');
+    };
+    
+    document.head.appendChild(script);
+    setDebugInfo('Script loading started...');
+
+    // Cleanup function
+    return () => {
+      if (window.initMap) {
+        delete window.initMap;
+      }
+    };
+  }, []);
+
+  // Initialize map
+  useEffect(() => {
+    if (!mapRef.current || !window.google?.maps?.Map || isLoading) return;
+
+    try {
+      // Ensure all required Google Maps objects are available
+      if (!window.google.maps.MapTypeId) {
+        setMapError('Google Maps not fully loaded');
+        return;
+      }
+
+      const newMap = new window.google.maps.Map(mapRef.current, {
+        center,
+        zoom,
+        mapTypeId: window.google.maps.MapTypeId.ROADMAP,
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: false,
+        styles: [
+          {
+            featureType: 'administrative',
+            elementType: 'geometry',
+            stylers: [{ visibility: 'simplified' }]
+          },
+          {
+            featureType: 'landscape',
+            elementType: 'geometry',
+            stylers: [{ visibility: 'simplified' }]
+          }
+        ]
+      });
+
+      setMap(newMap);
+      setCurrentZoom(zoom);
+    } catch (error) {
+      setMapError('Failed to initialize map');
+      console.error('Map initialization error:', error);
+    }
+  }, [center, zoom, isLoading]);
+
+  // Draw patches on map
+  useEffect(() => {
+    if (!map || !patches.length || !window.google?.maps?.Polygon || !window.google?.maps?.LatLngBounds) return;
+
+    try {
+      // Clear existing overlays
+      if (map._patchOverlays) {
+        map._patchOverlays.forEach((overlay: any) => {
+          overlay.setMap(null);
+        });
+      }
+      map._patchOverlays = [];
+
+      patches.forEach((patch) => {
+        try {
+          // Add defensive check for patch.geom
+          if (!patch.geom || typeof patch.geom !== 'string') {
+            console.warn(`Patch ${patch.name} has no valid geometry:`, patch.geom);
+            return;
+          }
+
+          // Extract coordinates from PostGIS format: SRID=4326;POLYGON((...))
+          const match = patch.geom.match(/POLYGON\(\(([^)]+)\)\)/);
+          if (!match) {
+            console.warn(`Patch ${patch.name} has invalid geometry format:`, patch.geom);
+            return;
+          }
+
+          const coordinates = match[1]
+            .split(',')
+            .map(coord => coord.trim().split(' '))
+            .map(([lng, lat]) => ({ lat: parseFloat(lat), lng: parseFloat(lng) }));
+
+          if (coordinates.length < 3) {
+            console.warn(`Patch ${patch.name} has insufficient coordinates:`, coordinates);
+            return;
+          }
+
+          // Create polygon overlay
+          const polygon = new window.google.maps.Polygon({
+            paths: coordinates,
+            strokeColor: patch.color || '#FF0000',
+            strokeOpacity: 0.8,
+            strokeWeight: 2,
+            fillColor: patch.color || '#FF0000',
+            fillOpacity: 0.35,
+            map: map,
+            title: patch.name
+          });
+
+          // Add click listener
+          if (onPatchClick) {
+            polygon.addListener('click', () => {
+              onPatchClick(patch.id);
+            });
+          }
+
+          // Add to overlays array
+          map._patchOverlays.push(polygon);
+
+          // Fit bounds to show all patches
+          const bounds = new window.google.maps.LatLngBounds();
+          coordinates.forEach((coord: any) => bounds.extend(coord));
+          map.fitBounds(bounds);
+
+        } catch (error) {
+          console.error(`Error drawing patch ${patch.name}:`, error, 'Patch data:', patch);
+        }
+      });
+    } catch (error) {
+      console.error('Error setting up patches on map:', error);
+    }
+  }, [map, patches, onPatchClick]);
+
+  const handleZoomIn = () => {
+    if (map && window.google?.maps?.Map) {
+      try {
+        const newZoom = Math.min(currentZoom + 1, 20);
+        map.setZoom(newZoom);
+        setCurrentZoom(newZoom);
+      } catch (error) {
+        console.error('Error zooming in:', error);
+      }
+    }
+  };
+
+  const handleZoomOut = () => {
+    if (map && window.google?.maps?.Map) {
+      try {
+        const newZoom = Math.max(currentZoom - 1, 1);
+        map.setZoom(newZoom);
+        setCurrentZoom(newZoom);
+      } catch (error) {
+        console.error('Error zooming out:', error);
+      }
+    }
+  };
+
+  if (mapError) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-center">
+          <AlertCircle className="h-8 w-8 text-red-500 mx-auto mb-2" />
+          <p className="text-red-600">{mapError}</p>
+          {debugInfo && (
+            <div className="mt-2 p-2 bg-gray-100 rounded text-xs text-gray-600">
+              <strong>Debug:</strong> {debugInfo}
+            </div>
+          )}
+          <div className="mt-3 space-y-2">
+            <Button 
+              variant="outline" 
+              onClick={() => window.location.reload()} 
+              className="mr-2"
+            >
+              Retry
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setMapError(null);
+                setDebugInfo('');
+                setIsLoading(true);
+                // Force reload of Google Maps
+                const scripts = document.querySelectorAll('script[src*="maps.googleapis.com"]');
+                scripts.forEach(script => script.remove());
+                if (window.google) {
+                  delete window.google;
+                }
+                if (window.initMap) {
+                  delete window.initMap;
+                }
+                // This will trigger the useEffect to reload
+                setIsLoading(false);
+                setIsLoading(true);
+              }}
+            >
+              Reload Maps
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2">
+          <MapPin className="h-5 w-5" />
+          Patch Map
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        <div className="relative">
+          {isLoading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-100 z-10">
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span>Loading map...</span>
+              </div>
+            </div>
+          )}
+          
+          <div 
+            ref={mapRef} 
+            style={{ height, width: '100%' }}
+            className="rounded-b-lg"
+          />
+          
+          {showControls && map && (
+            <div className="absolute top-4 right-4 flex flex-col gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={handleZoomIn}
+                className="h-8 w-8 p-0"
+              >
+                <ZoomIn className="h-4 w-4" />
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={handleZoomOut}
+                className="h-8 w-8 p-0"
+              >
+                <ZoomOut className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+        </div>
+        
+        {/* Debug Panel */}
+        {debugInfo && (
+          <div className="p-3 bg-gray-50 border-t">
+            <div className="text-xs text-gray-600">
+              <strong>Debug Info:</strong> {debugInfo}
+            </div>
+            <div className="text-xs text-gray-500 mt-1">
+              Map Ready: {mapReady ? 'Yes' : 'No'} | 
+              Loading: {isLoading ? 'Yes' : 'No'} | 
+              Map Instance: {map ? 'Yes' : 'No'}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}

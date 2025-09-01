@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +12,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { CheckCircle, AlertCircle, Info, Loader2, Users, Building2, Wrench, MapPin, Search, Plus } from 'lucide-react';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { inferTradeTypeFromCompanyName, getTradeTypeLabel, TradeType, getTradeTypeCategories } from '@/utils/bciTradeTypeInference';
+import { findBestEmployerMatch, normalizeCompanyName } from '@/utils/workerDataProcessor';
 
 // Enhanced types for BCI CSV data
 interface BCICsvRow {
@@ -113,6 +114,7 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
     employersCreated: number;
     employersMatched: number;
   }>({ success: 0, errors: [], projectsCreated: [], employersCreated: 0, employersMatched: 0 });
+  const [allEmployers, setAllEmployers] = useState<Array<{ id: string; name: string }>>([]);
   
   // Loading states for employer matching
   const [isLoadingMatches, setIsLoadingMatches] = useState(false);
@@ -142,7 +144,7 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
       if (!projectMap.has(row.projectId)) {
         projectMap.set(row.projectId, {
           projectId: row.projectId,
-          projectName: row.projectName,
+          projectName: row.projectName && String(row.projectName).trim() !== '' ? row.projectName : `Project ${row.projectId}`,
           localValue: parseFloat(row.localValue.replace(/[^0-9.-]+/g, '')) || 0,
           constructionStartDate: parseDate(row.constructionStartDate),
           constructionEndDate: parseDate(row.constructionEndDate),
@@ -170,10 +172,31 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
     return Array.from(projectMap.values());
   }, [csvData]);
 
-  // Enhanced company classification
+  // Initialize processed projects for preview/editing
+  useEffect(() => {
+    try {
+      const processed = processCSVData();
+      setProcessedData(processed);
+    } catch (e) {
+      // noop
+    }
+  }, [processCSVData]);
+
+  // Enhanced company classification - prefer CSV Role, then fallback to name
   const classifyCompany = (csvRole: string, companyName: string): CompanyClassification => {
-    const role = csvRole.toLowerCase();
-    const name = companyName.toLowerCase();
+    const role = (csvRole || '').toLowerCase().trim();
+    const name = (companyName || '').toLowerCase().trim();
+    // Skip if company name is missing
+    if (!companyName || companyName.trim() === '') {
+      return {
+        companyName,
+        csvRole,
+        ourRole: 'skip',
+        shouldImport: false,
+        userConfirmed: false,
+        userExcluded: false
+      };
+    }
     
     // Skip non-construction companies
     if (role.includes('design') || role.includes('engineer') || 
@@ -190,8 +213,20 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
       };
     }
     
-    // Classify construction companies
-    if (role === 'contractor' || role === 'builder' || role === 'principal contractor') {
+    // Head contractor mapping from CSV role (e.g., Project Manager, Head Contractor)
+    if (role.includes('project manager') || role.includes('head contractor') || role.includes('principal contractor')) {
+      return { 
+        companyName, 
+        csvRole, 
+        ourRole: 'head_contractor', 
+        shouldImport: true,
+        userConfirmed: false,
+        userExcluded: false
+      };
+    }
+
+    // Builder
+    if (role.includes('builder')) {
       return { 
         companyName, 
         csvRole, 
@@ -202,26 +237,58 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
       };
     }
     
-    if (role === 'head contractor' || role === 'main contractor') {
+    // Subcontractors (use role keywords to prefill trade)
+    if (role.includes('subcontractor') || role.includes('sub-contractor') || role.includes('sub contractor')) {
+      let prefillTrade: TradeType | undefined = undefined;
+      if (role.includes('roof')) prefillTrade = 'roofing';
+      else if (role.includes('plant')) prefillTrade = 'plant_and_equipment';
+      else if (role.includes('scaffold')) prefillTrade = 'scaffolding';
+      else if (role.includes('elect')) prefillTrade = 'electrical';
+      else if (role.includes('plumb')) prefillTrade = 'plumbing';
+      else if (role.includes('paint')) prefillTrade = 'painting';
+      else if (role.includes('carpent') || role.includes('joinery')) prefillTrade = 'carpentry';
+      else if (role.includes('floor') || role.includes('tile')) prefillTrade = 'flooring';
+      else if (role.includes('glaz') || role.includes('window')) prefillTrade = 'glazing';
+      else if (role.includes('waterproof')) prefillTrade = 'waterproofing';
+      else if (role.includes('plaster')) prefillTrade = 'plastering';
+      else if (role.includes('steel')) prefillTrade = 'structural_steel';
+      else if (role.includes('concrete')) prefillTrade = 'concrete';
+      else if (role.includes('traffic')) prefillTrade = 'traffic_management';
+      else if (role.includes('waste')) prefillTrade = 'waste_management';
+
       return { 
         companyName, 
         csvRole, 
-        ourRole: 'head_contractor', 
+        ourRole: 'subcontractor', 
         shouldImport: true,
+        tradeType: prefillTrade ?? inferTradeTypeFromCompanyName(companyName),
         userConfirmed: false,
         userExcluded: false
       };
     }
     
-    // Everything else is a subcontractor
-    return { 
-      companyName, 
-      csvRole, 
-      ourRole: 'subcontractor', 
+    // Fallback rules
+    if (role.includes('contractor')) {
+      return {
+        companyName,
+        csvRole,
+        ourRole: 'subcontractor',
+        shouldImport: true,
+        tradeType: inferTradeTypeFromCompanyName(companyName),
+        userConfirmed: false,
+        userExcluded: false,
+      };
+    }
+
+    // Default: treat as subcontractor with name-based trade inference
+    return {
+      companyName,
+      csvRole,
+      ourRole: 'subcontractor',
       shouldImport: true,
       tradeType: inferTradeTypeFromCompanyName(companyName),
       userConfirmed: false,
-      userExcluded: false
+      userExcluded: false,
     };
   };
 
@@ -271,9 +338,55 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
   };
 
   // Enhanced employer matching with better logic
-  const matchEmployer = async (companyName: string, csvRole: string): Promise<EmployerMatchResult> => {
+  const matchEmployer = async (
+    companyName: string,
+    csvRole: string,
+    preloadedEmployers?: Array<{ id: string; name: string }>
+  ): Promise<EmployerMatchResult> => {
     try {
       const supabase = getSupabaseBrowserClient();
+      // 0a. Alias lookup by normalized alias first
+      try {
+        const normalized = normalizeCompanyName(companyName);
+        const { data: aliasHit } = await supabase
+          .from('employer_aliases')
+          .select('employer_id, employer:employer_id ( id, name )')
+          .eq('alias_normalized', normalized)
+          .maybeSingle();
+        if (aliasHit && aliasHit.employer) {
+          return {
+            companyName,
+            csvRole,
+            matchedEmployerId: (aliasHit as any).employer.id,
+            matchedEmployerName: (aliasHit as any).employer.name,
+            confidence: 'exact',
+            suggestedMatches: [],
+            action: 'confirm_match',
+            userConfirmed: true,
+            tradeTypeConfirmed: false
+          };
+        }
+      } catch (e) {
+        // no-op; continue to normal matching
+      }
+      // 0. Try in-memory fuzzy match first if we have employers loaded
+      const employersList = preloadedEmployers && preloadedEmployers.length > 0 ? preloadedEmployers : allEmployers;
+      if (employersList && employersList.length > 0) {
+        const best = findBestEmployerMatch(companyName, employersList as any);
+        if (best) {
+          return {
+            companyName,
+            csvRole,
+            matchedEmployerId: (best as any).id,
+            matchedEmployerName: (best as any).name,
+            confidence: (best as any).confidence === 'exact' ? 'exact' : 'fuzzy',
+            suggestedMatches: [],
+            action: 'confirm_match',
+            userConfirmed: false,
+            tradeTypeConfirmed: false
+          };
+        }
+      }
       
       // 1. Try exact case-insensitive match
       const { data: exactMatches, error: exactError } = await supabase
@@ -301,11 +414,23 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
         };
       }
       
-      // 2. Try fuzzy matching with better logic
+      // 2. Try fuzzy matching with broader word-level matching (exclude common legal suffixes)
+      const stopwords = new Set(['pty','ltd','ptyltd','proprietary','limited','pl','co']);
+      const tokens = String(companyName)
+        .split(/[^A-Za-z0-9]+/)
+        .map(t => t.trim().toLowerCase())
+        .filter(t => t.length >= 3 && !stopwords.has(t))
+        .slice(0, 8);
+      const orParts = [
+        `name.ilike.%${companyName}%`,
+        `name.ilike.${companyName}%`,
+        ...tokens.map(t => `name.ilike.%${t}%`)
+      ];
+      const orQuery = orParts.join(',');
       const { data: fuzzyMatches, error: fuzzyError } = await supabase
         .from('employers')
         .select('id, name, address_line_1, suburb, state')
-        .or(`name.ilike.%${companyName}%,name.ilike.${companyName}%`);
+        .or(orQuery);
       
       if (fuzzyError) throw fuzzyError;
       
@@ -328,7 +453,7 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
         return {
           companyName,
           csvRole,
-          suggestedMatches: sortedMatches.slice(0, 5).map((m: any) => ({
+          suggestedMatches: sortedMatches.slice(0, 10).map((m: any) => ({
             id: m.id,
             name: m.name,
             address: `${m.address_line_1 || ''} ${m.suburb || ''} ${m.state || ''}`.trim()
@@ -397,6 +522,17 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
       // Process CSV data
       const processed = processCSVData();
       setProcessedData(processed);
+      // Load all employers once for in-memory fuzzy matching
+      let preloaded: Array<{ id: string; name: string }> = [];
+      try {
+        const supabase = getSupabaseBrowserClient();
+        const { data } = await supabase.from('employers').select('id, name');
+        preloaded = (data || []).map((e: any) => ({ id: e.id, name: e.name }));
+        setAllEmployers(preloaded);
+      } catch (e) {
+        // Non-fatal; we'll fall back to ilike search
+        console.warn('Failed to preload employers for fuzzy match');
+      }
       
       // Calculate total companies to process
       const total = processed.reduce((sum, project) => 
@@ -409,13 +545,19 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
       // Match employers for each company with progress tracking
       const matches: Record<string, EmployerMatchResult> = {};
       let processedCount = 0;
+      // Use the preloaded list captured above to avoid state race
+      const employerListLocal: Array<{ id: string; name: string }> = preloaded.length > 0 ? preloaded : (allEmployers || []);
       
               for (const project of processed) {
           for (const company of project.companies) {
             if (company.shouldImport) {
-              const matchResult = await matchEmployer(company.companyName, company.csvRole);
+              const matchResult = await matchEmployer(company.companyName, company.csvRole, employerListLocal);
               const matchKey = `${project.projectId}-${company.companyName}-${company.csvRole}`;
-              matches[matchKey] = matchResult;
+              // Auto-confirm exact matches so they count as finalized and appear in confirmed list
+              matches[matchKey] = {
+                ...matchResult,
+                userConfirmed: matchResult.confidence === 'exact' ? true : matchResult.userConfirmed,
+              } as EmployerMatchResult;
               
               if (matchResult.confidence === 'exact') {
                 company.employerId = matchResult.matchedEmployerId;
@@ -603,7 +745,15 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
   };
 
   // Update employer match action
-  const updateEmployerMatch = (matchKey: string, action: 'confirm_match' | 'search_manual' | 'create_new' | 'add_to_list' | 'skip', employerId?: string) => {
+  const updateEmployerMatch = (
+    matchKey: string,
+    action: 'confirm_match' | 'search_manual' | 'create_new' | 'add_to_list' | 'skip',
+    employerId?: string,
+    employerName?: string
+  ) => {
+    const isProcessedAction = (a: 'confirm_match' | 'search_manual' | 'create_new' | 'add_to_list' | 'skip') => (
+      a === 'confirm_match' || a === 'create_new' || a === 'add_to_list' || a === 'skip'
+    );
     setEmployerMatches(prev => {
       const updated = {
         ...prev,
@@ -611,11 +761,109 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
           ...prev[matchKey],
           action,
           matchedEmployerId: employerId,
-          userConfirmed: true
+          matchedEmployerName: employerName || prev[matchKey]?.matchedEmployerName,
+          // If a user confirms a match, reflect that as an exact confidence for clarity in UI
+          confidence: action === 'confirm_match' ? 'exact' : prev[matchKey]?.confidence,
+          // Only mark as confirmed for processed actions; manual search selection shouldn't hide the card
+          userConfirmed: isProcessedAction(action)
         }
       };
       return updated;
     });
+    // If a match is confirmed from manual selection, persist to processedData and propagate to same-named companies across projects
+    if (action === 'confirm_match' && employerId) {
+      // Find the selected company name from the matchKey
+      let selectedCompanyName: string | null = null;
+      for (const project of processedData) {
+        for (const company of project.companies) {
+          const mk = `${project.projectId}-${company.companyName}-${company.csvRole}`;
+          if (mk === matchKey) {
+            selectedCompanyName = company.companyName;
+            break;
+          }
+        }
+        if (selectedCompanyName) break;
+      }
+      // Normalize helper
+      const norm = (s: string) => normalizeCompanyName(s);
+      const selectedNorm = selectedCompanyName ? norm(selectedCompanyName) : null;
+
+      if (selectedNorm) {
+        // Update companies across all projects
+        setProcessedData(prev => prev.map(project => {
+          const companies = project.companies.map(company => {
+            if (norm(company.companyName) === selectedNorm) {
+              return { ...company, employerId } as any;
+            }
+            return company;
+          });
+          return { ...project, companies };
+        }));
+
+        // Update employerMatches for all corresponding keys
+        setEmployerMatches(prev => {
+          const updated = { ...prev } as Record<string, EmployerMatchResult>;
+          for (const project of processedData) {
+            for (const company of project.companies) {
+              if (!company.shouldImport) continue;
+              if (norm(company.companyName) !== selectedNorm) continue;
+              const k = `${project.projectId}-${company.companyName}-${company.csvRole}`;
+              const existing = updated[k] || {
+                companyName: company.companyName,
+                csvRole: company.csvRole,
+                suggestedMatches: [],
+                confidence: 'exact',
+                action: 'confirm_match',
+                userConfirmed: true,
+                tradeTypeConfirmed: false,
+              } as EmployerMatchResult;
+              updated[k] = {
+                ...existing,
+                matchedEmployerId: employerId,
+                matchedEmployerName: employerName || existing.matchedEmployerName,
+                confidence: 'exact',
+                action: 'confirm_match',
+                userConfirmed: true,
+              };
+            }
+          }
+          return updated;
+        });
+      } else {
+        // Fallback: only set for the current key
+        setProcessedData(prev => prev.map(project => {
+          const companies = project.companies.map(company => {
+            const mk = `${project.projectId}-${company.companyName}-${company.csvRole}`;
+            if (mk === matchKey) {
+              return { ...company, employerId } as any;
+            }
+            return company;
+          });
+          return { ...project, companies };
+        }));
+      }
+    }
+    // Persist alias mapping when a manual selection confirms a match
+    if (action === 'confirm_match' && employerId) {
+      const [projectId, companyName, csvRole] = matchKey.split('-');
+      const normalized = normalizeCompanyName(companyName);
+      (async () => {
+        try {
+          const supabase = getSupabaseBrowserClient();
+          // Upsert alias by normalized value
+          await supabase
+            .from('employer_aliases')
+            .upsert({
+              alias: companyName,
+              alias_normalized: normalized,
+              employer_id: employerId
+            }, { onConflict: 'alias_normalized' });
+        } catch (e) {
+          // silent failure; alias persistence is best-effort
+          console.warn('Failed to save employer alias');
+        }
+      })();
+    }
   };
 
   // Add employer to import list for later
@@ -720,6 +968,30 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
       );
     }
     
+    // Compute totals/resolution with robust checks (includes Add-to-List and persisted employerId)
+    const addToListKeys = new Set<string>((employersToAdd || []).map(e => e.matchKey));
+    const totals = (() => {
+      let total = 0;
+      let resolved = 0;
+      for (const project of processedData) {
+        for (const company of project.companies) {
+          if (!company.shouldImport) continue;
+          total++;
+          const matchKey = `${project.projectId}-${company.companyName}-${company.csvRole}`;
+          const match = employerMatches[matchKey];
+          const finalAction = match && match.userConfirmed && (
+            match.action === 'confirm_match' ||
+            match.action === 'create_new' ||
+            match.action === 'add_to_list' ||
+            match.action === 'skip'
+          );
+          const isResolved = addToListKeys.has(matchKey) || finalAction || !!(match && match.matchedEmployerId) || !!(company as any).employerId;
+          if (isResolved) resolved++;
+        }
+      }
+      return { total, resolved };
+    })();
+
     return (
     <div className="space-y-6">
       <div className="text-center">
@@ -729,6 +1001,9 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
           {Object.keys(employerMatches).length} matches loaded • 
           {processedData.flatMap(p => p.companies).filter(c => c.shouldImport && c.ourRole === 'subcontractor').length} need trade type confirmation
         </p>
+        {totals.total - totals.resolved > 0 && (
+          <p className="text-xs text-amber-700 mt-1">{totals.total - totals.resolved} company(ies) remaining to review</p>
+        )}
       </div>
       
       {/* Summary of matching results */}
@@ -769,6 +1044,36 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
         </CardContent>
       </Card>
       
+      {/* Confirmed Matches */}
+      {Object.values(employerMatches).some(m => m.action === 'confirm_match' && m.userConfirmed) && (
+        <Card className="variant:desktop border-green-200">
+          <CardHeader>
+            <CardTitle className="text-green-800">Confirmed Matches</CardTitle>
+            <CardDescription>
+              {Object.values(employerMatches).filter(m => m.action === 'confirm_match' && m.matchedEmployerId).length} confirmed
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {Object.entries(employerMatches)
+                .filter(([_, m]) => m.action === 'confirm_match' && m.matchedEmployerId)
+                .slice(0, 10)
+                .map(([key, m]) => (
+                  <div key={key} className="flex items-center justify-between p-2 bg-green-50 rounded border border-green-200">
+                    <div className="text-sm text-green-900">
+                      <strong>{m.companyName}</strong>
+                    </div>
+                    <Badge variant="default">{m.matchedEmployerName || 'Confirmed'}</Badge>
+                  </div>
+                ))}
+              {Object.values(employerMatches).filter(m => m.action === 'confirm_match' && m.matchedEmployerId).length > 10 && (
+                <div className="text-xs text-green-700">… and more</div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Employers to be added later */}
       {employersToAdd.length > 0 && (
         <Card className="variant:desktop border-blue-200">
@@ -820,6 +1125,18 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
               const match = employerMatches[matchKey];
               
               if (!match) return null;
+              // Hide card when a final decision is made or a match is assigned
+              const finalized = (
+                !!match.matchedEmployerId ||
+                !!(company as any).employerId ||
+                (match.userConfirmed && (
+                  match.action === 'confirm_match' ||
+                  match.action === 'create_new' ||
+                  match.action === 'add_to_list' ||
+                  match.action === 'skip'
+                ))
+              );
+              if (finalized) return null;
               
               return (
                 <div key={`${matchKey}-${index}`} className="border rounded-lg p-4 space-y-3">
@@ -829,6 +1146,9 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
                       <p className="text-sm text-gray-600">
                         Role: {company.csvRole} → {company.ourRole}
                       </p>
+                      {match.matchedEmployerId && (
+                        <p className="text-xs text-green-700 mt-1">Selected: {match.matchedEmployerName || match.matchedEmployerId}</p>
+                      )}
                     </div>
                     <Badge variant={match.confidence === 'exact' ? 'default' : match.confidence === 'fuzzy' ? 'secondary' : 'destructive'}>
                       {match.confidence === 'exact' ? 'Exact Match' : match.confidence === 'fuzzy' ? 'Fuzzy Match' : 'No Match'}
@@ -847,7 +1167,7 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
                             : 'bg-green-600 text-white hover:bg-green-700'
                         }`}
                         onClick={() => {
-                          updateEmployerMatch(matchKey, 'confirm_match', match.matchedEmployerId);
+                          updateEmployerMatch(matchKey, 'confirm_match', match.matchedEmployerId, match.matchedEmployerName);
                         }}
                       >
                         {match.userConfirmed ? '✓ Confirmed' : 'Confirm Match'}
@@ -874,20 +1194,23 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
                                   : 'border-gray-300 text-gray-700 hover:bg-gray-50'
                               }`}
                               onClick={() => {
-                                updateEmployerMatch(matchKey, 'confirm_match', suggestion.id);
+                                updateEmployerMatch(matchKey, 'confirm_match', suggestion.id, suggestion.name);
                               }}
                             >
                               {match.userConfirmed && match.matchedEmployerId === suggestion.id ? '✓ Selected' : 'Select This'}
                             </button>
                           </div>
                         ))}
+                        {match.suggestedMatches.length === 0 && (
+                          <div className="text-xs text-gray-600">No suggestions available. Try manual search.</div>
+                        )}
                       </div>
                       
-                                              {/* Action buttons for fuzzy matches */}
+                      {/* Action buttons for fuzzy matches */}
                       <div className="flex gap-2 mt-3 pt-3 border-t border-yellow-200">
                         <button 
                           className={`px-3 py-1.5 text-sm border rounded transition-colors ${
-                            match.userConfirmed && match.action === 'search_manual'
+                            match.action === 'search_manual'
                               ? 'border-blue-500 bg-blue-50 text-blue-700' 
                               : 'border-gray-300 text-gray-700 hover:bg-gray-50'
                           }`}
@@ -898,7 +1221,7 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
                             updateEmployerMatch(matchKey, 'search_manual');
                           }}
                         >
-                          {match.userConfirmed && match.action === 'search_manual' ? '✓ Manual Search Selected' : 'Search Manually'}
+                          {match.action === 'search_manual' ? '✓ Manual Search Selected' : 'Search Manually'}
                         </button>
                         
                         <button 
@@ -935,7 +1258,22 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
                       <p className="text-sm text-red-800">
                         <strong>No matches found.</strong> Choose an action for this company.
                       </p>
-                      <div className="flex gap-2 mt-2">
+                      <div className="flex gap-2 mt-2 flex-wrap">
+                        <button 
+                          className={`px-3 py-1.5 text-sm border rounded transition-colors ${
+                            match.action === 'search_manual'
+                              ? 'border-blue-500 bg-blue-50 text-blue-700' 
+                              : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                          }`}
+                          onClick={() => {
+                            setSearchingForCompany(company.companyName);
+                            setCurrentSearchMatchKey(matchKey);
+                            setShowManualSearch(true);
+                            updateEmployerMatch(matchKey, 'search_manual');
+                          }}
+                        >
+                          {match.action === 'search_manual' ? '✓ Manual Search Selected' : 'Search For Employer Match'}
+                        </button>
                         <button 
                           className={`px-3 py-1.5 text-sm border rounded transition-colors ${
                             match.userConfirmed && match.action === 'create_new'
@@ -987,10 +1325,10 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
       <div className="flex justify-center">
         <Button 
           onClick={confirmEmployerMatches}
-          disabled={Object.values(employerMatches).length === 0}
+          disabled={totals.resolved < totals.total}
           className="px-8"
         >
-          Continue to Trade Type Assignment ({Object.values(employerMatches).filter(m => m.userConfirmed).length}/{Object.values(employerMatches).length} confirmed)
+          Continue to Trade Type Assignment ({totals.resolved}/{totals.total} resolved)
         </Button>
       </div>
       
@@ -1028,9 +1366,10 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
               <Button 
                 variant="outline"
                 onClick={() => {
+                  // Close dialog and restore the parent card to show manual search as selected
                   setShowManualSearch(false);
                   setSearchResults([]);
-                  setSearchingForCompany('');
+                  // Do not clear searchingForCompany so the parent chip still shows selection context
                   setCurrentSearchMatchKey('');
                 }}
               >
@@ -1051,7 +1390,7 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
                           size="sm"
                           onClick={() => {
                             if (currentSearchMatchKey) {
-                              updateEmployerMatch(currentSearchMatchKey, 'confirm_match', result.id);
+                              updateEmployerMatch(currentSearchMatchKey, 'confirm_match', result.id, result.name);
                               setShowManualSearch(false);
                               setSearchResults([]);
                               setSearchingForCompany('');
@@ -1067,11 +1406,58 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
             )}
             
             {searchResults.length === 0 && !isSearching && searchingForCompany && (
-              <div className="text-center py-4 text-gray-500">
-                <p>No employers found matching "{searchingForCompany}"</p>
-                <p className="text-sm mt-2">
-                  You can close this dialog and choose "Add to Import List" or "Skip" from the main interface.
-                </p>
+              <div className="space-y-3 py-4 text-center">
+                <p className="text-gray-700">No employers found matching "{searchingForCompany}"</p>
+                <div className="flex flex-wrap gap-2 justify-center">
+                  <Button
+                    onClick={() => {
+                      if (!currentSearchMatchKey) return;
+                      // Mark as create new
+                      updateEmployerMatch(currentSearchMatchKey, 'create_new');
+                      setShowManualSearch(false);
+                    }}
+                  >
+                    Create New Employer
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      if (!currentSearchMatchKey) return;
+                      // Re-run search (user might adjust query)
+                      performManualSearch(searchingForCompany);
+                    }}
+                  >
+                    Search Again
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (!currentSearchMatchKey) return;
+                      // Add to list for later import
+                      const [projId, compName, csvRole] = currentSearchMatchKey.split('-');
+                      const project = processedData.find(p => p.projectId === projId);
+                      const company = project?.companies.find(c => c.companyName === compName && c.csvRole === csvRole);
+                      if (project && company) {
+                        addEmployerToList(currentSearchMatchKey, company as any, project.projectId);
+                        // Also finalize the card immediately
+                        updateEmployerMatch(currentSearchMatchKey, 'add_to_list');
+                      }
+                      setShowManualSearch(false);
+                    }}
+                  >
+                    Add to Import List
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      if (!currentSearchMatchKey) return;
+                      skipCompany(currentSearchMatchKey);
+                      setShowManualSearch(false);
+                    }}
+                  >
+                    Skip
+                  </Button>
+                </div>
               </div>
             )}
           </div>
@@ -1188,6 +1574,27 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
         <Info className="h-4 w-4" />
         <span>Preview of {csvData.length} CSV rows processed into {processedData.length} unique projects</span>
       </div>
+      {/* Missing project names editor */}
+      {processedData.filter(p => !p.projectName || String(p.projectName).trim() === '').length > 0 && (
+        <div className="space-y-3 p-3 border border-yellow-200 rounded bg-yellow-50">
+          <div className="text-sm text-yellow-800">
+            Some projects are missing a name. Please enter names before continuing.
+          </div>
+          {processedData.filter(p => !p.projectName || String(p.projectName).trim() === '').map((project) => (
+            <div key={project.projectId} className="flex items-center gap-3">
+              <div className="text-sm text-gray-700 min-w-[160px]">Project ID: {project.projectId}</div>
+              <Input
+                placeholder="Enter project name"
+                value={project.projectName || ''}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setProcessedData(prev => prev.map(p => p.projectId === project.projectId ? { ...p, projectName: value } : p));
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      )}
       
       {processedData.slice(0, 3).map((project, index) => (
         <Card key={index} className="variant:desktop">
@@ -1221,7 +1628,7 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
       <div className="text-center">
         <Button 
           onClick={startImport} 
-          disabled={isProcessing}
+          disabled={isProcessing || processedData.filter(p => !p.projectName || String(p.projectName).trim() === '').length > 0}
           className="px-8"
         >
           {isProcessing ? (
@@ -1233,6 +1640,11 @@ export default function BCIProjectImport({ csvData, onImportComplete }: BCIProje
             'Start Employer Matching'
           )}
         </Button>
+        {processedData.filter(p => !p.projectName || String(p.projectName).trim() === '').length > 0 && (
+          <div className="mt-2 text-xs text-yellow-700">
+            {processedData.filter(p => !p.projectName || String(p.projectName).trim() === '').length} project(s) need a name
+          </div>
+        )}
       </div>
     </div>
   );

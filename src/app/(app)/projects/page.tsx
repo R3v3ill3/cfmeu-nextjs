@@ -13,6 +13,7 @@ import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal"
 import { WorkerDetailModal } from "@/components/workers/WorkerDetailModal"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import AddressLookupDialog from "@/components/AddressLookupDialog"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import CreateProjectDialog from "@/components/projects/CreateProjectDialog"
@@ -31,6 +32,17 @@ type ProjectWithRoles = {
     employer_id: string
     employers?: { name: string | null } | null
   }>
+}
+
+type ProjectSummary = {
+  project_id: string
+  total_workers: number
+  total_members: number
+  engaged_employer_count: number
+  eba_active_employer_count: number
+  estimated_total: number
+  delegate_name: string | null
+  first_patch_name: string | null
 }
 
 function useProjectStats(projectId: string) {
@@ -255,88 +267,7 @@ function EbaPercentBar({ active, total, onClick }: { active: number; total: numb
   )
 }
 
-function ProjectListCard({ p, onOpenEmployer, onOpenWorker }: { p: ProjectWithRoles; onOpenEmployer: (id: string) => void; onOpenWorker: (id: string) => void }) {
-  const { sites, totals, contractorAndEst, ebaActive, delegate } = useProjectStats(p.id)
-  const queryClient = useQueryClient()
-  const siteIds = useMemo(() => (sites as any[]).map((s: any) => String(s.id)), [sites])
-
-  const [estOpen, setEstOpen] = useState(false)
-  const [estRows, setEstRows] = useState<Array<{ employerId: string; employerName: string; assigned: number; estimated: number; value: string }>>([])
-  const [saving, setSaving] = useState(false)
-
-  // Patch and organiser display + assignment
-  const [patchAssignOpen, setPatchAssignOpen] = useState(false)
-  const [selectedPatchId, setSelectedPatchId] = useState<string>("")
-
-  const { data: projectPatches = [] } = useQuery({
-    queryKey: ["project-patches", p.id, siteIds],
-    enabled: siteIds.length > 0,
-    staleTime: 30000,
-    refetchOnWindowFocus: false,
-    queryFn: async () => {
-      const { data } = await (supabase as any)
-        .from("patch_job_sites")
-        .select("patch_id, patches:patch_id(id,name)")
-        .in("job_site_id", siteIds)
-      const list = ((data as any[]) || [])
-      // Deduplicate by patch_id
-      const byId = new Map<string, { id: string; name: string }>()
-      list.forEach((r: any) => {
-        const patch = Array.isArray(r.patches) ? r.patches[0] : r.patches
-        if (patch?.id) byId.set(patch.id, { id: patch.id, name: patch.name })
-      })
-      return Array.from(byId.values())
-    }
-  })
-
-  const patchIds = useMemo(() => (projectPatches as any[]).map((pp: any) => pp.id), [projectPatches])
-
-  const { mergedList: mergedOrganiserNames } = usePatchOrganiserLabels(patchIds)
-
-  const { data: allPatches = [] } = useQuery({
-    queryKey: ["patches-options"],
-    staleTime: 300000,
-    refetchOnWindowFocus: false,
-    queryFn: async () => {
-      const { data } = await (supabase as any)
-        .from("patches")
-        .select("id,name")
-        .order("name")
-      return (data as any[]) || []
-    }
-  })
-
-  // For each patch option, load organiser and draft organiser labels
-  const { data: patchOptionLabels = {} } = useQuery({
-    queryKey: ["patches-option-labels"],
-    staleTime: 300000,
-    refetchOnWindowFocus: false,
-    queryFn: async () => {
-      const labels = new Map<string, string>()
-      const { data: orgs } = await (supabase as any)
-        .from("organiser_patch_assignments")
-        .select("patch_id, organiser_id, profiles:organiser_id(full_name)")
-        .is("effective_to", null)
-      ;((orgs as any[]) || []).forEach((r: any) => {
-        const pid = r.patch_id as string
-        const prof = Array.isArray(r.profiles) ? r.profiles[0] : r.profiles
-        const name = (prof?.full_name as string) || r.organiser_id
-        if (!labels.has(pid)) labels.set(pid, name)
-      })
-      const { data: pending } = await (supabase as any)
-        .from("pending_users")
-        .select("id,full_name,assigned_patch_ids,status,role")
-        .in("status", ["draft", "invited"]) 
-      ;((pending as any[]) || []).forEach((pu: any) => {
-        const name = (pu.full_name as string) || (pu.email as string) || pu.id
-        ;(pu.assigned_patch_ids || []).forEach((pid: string) => {
-          if (!labels.has(pid)) labels.set(pid, `${name}${pu.role === 'lead_organiser' ? ' (lead)' : ''}`)
-        })
-      })
-      return Object.fromEntries(labels.entries()) as Record<string, string>
-    }
-  })
-
+function ProjectListCard({ p, summary, onOpenEmployer }: { p: ProjectWithRoles; summary?: ProjectSummary; onOpenEmployer: (id: string) => void }) {
   const builderNames = useMemo(() => {
     const builders = (p.project_employer_roles || []).filter((r) => r.role === 'builder')
     return builders.map((r) => ({ id: r.employer_id, name: r.employers?.name || r.employer_id }))
@@ -347,53 +278,18 @@ function ProjectListCard({ p, onOpenEmployer, onOpenWorker }: { p: ProjectWithRo
     return hc ? { id: hc.employer_id, name: hc.employers?.name || hc.employer_id } : null
   }, [p.project_employer_roles])
 
-  // Prefer first builder as "project manager" analogue; show head contractor too if different
   const primary = builderNames[0] || head
   const secondary = head && primary && head.id !== primary.id ? head : null
 
-  const handleMembersClick = async () => {
-    const assignedByEmployer = totals?.assignedByEmployer || {}
-    const estByEmployer = contractorAndEst?.estByEmployer || {}
-    const needing: Array<{ employerId: string; assigned: number; estimated: number }> = []
-    Object.entries(assignedByEmployer).forEach(([eid, assigned]) => {
-      const est = estByEmployer[eid] || 0
-      if ((est === 0 || assigned > est) && assigned > 0) {
-        needing.push({ employerId: eid, assigned, estimated: est })
-      }
-    })
-    if (needing.length === 0) {
-      const siteId = p.main_job_site_id
-      const href = siteId ? `/patch/walls?projectId=${p.id}&siteId=${siteId}` : `/patch/walls?projectId=${p.id}`
-      window.location.href = href
-      return
-    }
-
-    // Load employer names for display
-    try {
-      const ids = needing.map(n => n.employerId)
-      const { data } = await supabase.from('employers').select('id, name').in('id', ids)
-      const nameMap = new Map<string, string>((data || []).map((r: any) => [r.id as string, r.name as string]))
-      setEstRows(needing.map(n => ({
-        employerId: n.employerId,
-        employerName: nameMap.get(n.employerId) || n.employerId,
-        assigned: n.assigned,
-        estimated: n.estimated,
-        value: String(n.assigned),
-      })))
-    } catch {
-      setEstRows(needing.map(n => ({ employerId: n.employerId, employerName: n.employerId, assigned: n.assigned, estimated: n.estimated, value: String(n.assigned) })))
-    }
-    setEstOpen(true)
-  }
-
-  // Prepare organiser display using merged list (live + draft)
-  const organiserNames: string[] = mergedOrganiserNames || []
-  const organiserDisplay: string = organiserNames.length > 0
-    ? organiserNames.slice(0, 2).join(', ') + (organiserNames.length > 2 ? '…' : '')
-    : '—'
+  const members = summary?.total_members || 0
+  const estimated = summary?.estimated_total || 0
+  const ebaActive = summary?.eba_active_employer_count || 0
+  const engaged = summary?.engaged_employer_count || 0
+  const delegateName = summary?.delegate_name || null
+  const patchName = summary?.first_patch_name || '—'
+  const totalWorkers = summary?.total_workers || 0
 
   return (
-    <div>
     <Card className="transition-colors hover:bg-accent/40 h-full flex flex-col">
       <CardHeader className="p-4 pb-2">
         <CardTitle className="text-base font-medium truncate">
@@ -436,197 +332,54 @@ function ProjectListCard({ p, onOpenEmployer, onOpenWorker }: { p: ProjectWithRo
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span>
-            Patch: {(projectPatches as any[]).length > 0
-              ? `${(projectPatches as any[])[0]?.name}${(projectPatches as any[]).length > 1 ? ` +${(projectPatches as any[]).length - 1}` : ''}`
-              : '—'}
+            Patch: {patchName}
           </span>
-          <span className="text-muted-foreground">·</span>
-          <span>
-            Organisers: {organiserDisplay}
-          </span>
-          {(projectPatches as any[]).length === 0 && (
-            <Button size="sm" variant="outline" className="h-6 px-2 ml-auto hidden" onClick={() => setPatchAssignOpen(true)}>Assign patch</Button>
-          )}
         </div>
       </CardHeader>
       <CardContent className="px-4 pb-4 pt-0 space-y-2 flex-1 flex flex-col">
         <div className="space-y-2">
           <CompactStatBar
             label="Members vs Est. Workers"
-            value={totals?.totalMembers || 0}
-            of={contractorAndEst?.estimatedTotal || 0}
-            onClick={handleMembersClick}
+            value={members}
+            of={estimated}
+            onClick={() => { window.location.href = `/projects/${p.id}?tab=contractors` }}
           />
           <EbaPercentBar
-            active={ebaActive?.activeCount || 0}
-            total={ebaActive?.total || (contractorAndEst?.employerIds.length || 0)}
+            active={ebaActive}
+            total={engaged}
             onClick={() => { window.location.href = `/projects/${p.id}?tab=contractors` }}
           />
         </div>
         <div className="pt-1 text-xs text-muted-foreground flex items-center justify-between min-w-0">
-          {delegate?.name ? (
+          {delegateName ? (
             <div className="truncate min-w-0">
               <span className="mr-1">Site delegate:</span>
-              <button type="button" className="text-primary hover:underline truncate rounded border border-dashed border-transparent hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 px-1" onClick={() => onOpenWorker(delegate.workerId)} title={delegate.name}>
-                {delegate.name}
-              </button>
+              <span title={delegateName}>{delegateName}</span>
             </div>
           ) : (
             <span className="truncate">Site delegate: —</span>
           )}
-          {(totals?.totalWorkers || 0) > 0 && (
-            <Badge variant="secondary" className="text-[10px]">{totals?.totalWorkers} workers</Badge>
+          {totalWorkers > 0 && (
+            <Badge variant="secondary" className="text-[10px]">{totalWorkers} workers</Badge>
           )}
         </div>
         <div className="pt-2 mt-auto">
           <Button className="w-full" size="sm" onClick={() => { window.location.href = `/projects/${p.id}` }}>Open project</Button>
-          <Button size="sm" variant="outline" className="hidden" onClick={() => { window.location.href = `/projects/${p.id}?tab=contractors` }}>Assign employers</Button>
         </div>
       </CardContent>
     </Card>
-
-    {/* Assign Patch Dialog */}
-    <Dialog open={patchAssignOpen} onOpenChange={(v: boolean) => setPatchAssignOpen(v)}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Assign a patch to this project</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3">
-          {siteIds.length === 0 && (
-            <div className="text-sm text-amber-600">Create at least one job site to link a patch.</div>
-          )}
-          <div>
-            <label className="text-sm font-medium">Patch</label>
-            <Select value={selectedPatchId} onValueChange={(v: string) => setSelectedPatchId(v)}>
-              <SelectTrigger className="mt-1 w-full">
-                <SelectValue placeholder="Select a patch" />
-              </SelectTrigger>
-              <SelectContent>
-                {(allPatches as any[]).map((pt: any) => {
-                  const left = (patchOptionLabels as Record<string, string>)[pt.id]
-                  return (
-                    <SelectItem key={pt.id} value={pt.id}>
-                      <span className="inline-flex items-center gap-2">
-                        <span className="text-muted-foreground w-40 text-left truncate">{left || '—'}</span>
-                        <span className="text-foreground">{pt.name}</span>
-                      </span>
-                    </SelectItem>
-                  )
-                })}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setPatchAssignOpen(false)}>Cancel</Button>
-            <Button disabled={!selectedPatchId || siteIds.length === 0} onClick={async () => {
-              try {
-                // Link selected patch to all current project sites
-                for (const sid of siteIds) {
-                  try {
-                    await (supabase as any).rpc('upsert_patch_site', { p_patch: selectedPatchId, p_site: sid })
-                  } catch (e) {
-                    // fallback: direct insert if RPC unavailable
-                    await (supabase as any).from('patch_job_sites').insert({ patch_id: selectedPatchId, job_site_id: sid })
-                  }
-                }
-                queryClient.invalidateQueries({ queryKey: ["project-patches", p.id] })
-                queryClient.invalidateQueries({ queryKey: ["project-patch-organisers", p.id] })
-                setPatchAssignOpen(false)
-                setSelectedPatchId("")
-              } catch {}
-            }}>Save</Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-
-    <Dialog open={estOpen} onOpenChange={(v: boolean) => setEstOpen(v)}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Estimated workers on this project</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">Assigned workers exceed the current estimate or no estimate exists. Update the estimated workers for these employers. Values are prefilled with currently assigned workers.</p>
-          <div className="space-y-2 max-h-80 overflow-auto pr-1">
-            {estRows.map((row, idx) => (
-              <div key={row.employerId} className="grid grid-cols-5 items-center gap-2 border rounded p-2">
-                <div className="col-span-3 truncate" title={row.employerName}>{row.employerName}</div>
-                <div className="text-xs text-muted-foreground text-right">Assigned: {row.assigned}</div>
-                <Input
-                  type="number"
-                  min={0}
-                  value={row.value}
-                  onChange={(e) => {
-                    const v = e.target.value
-                    setEstRows(prev => prev.map((r, i) => i === idx ? { ...r, value: v } : r))
-                  }}
-                />
-              </div>
-            ))}
-            {estRows.length === 0 && (
-              <div className="text-sm text-muted-foreground">Nothing to update.</div>
-            )}
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setEstOpen(false)}>Cancel</Button>
-            <Button disabled={saving || estRows.length === 0} onClick={async () => {
-              try {
-                setSaving(true)
-                // Save each employer's estimate
-                for (const row of estRows) {
-                  const est = Number(row.value)
-                  if (!Number.isFinite(est) || est < 0) continue
-                  const { data: existingPct, error: existingErr } = await (supabase as any)
-                    .from('project_contractor_trades')
-                    .select('id, trade_type')
-                    .eq('project_id', p.id)
-                    .eq('employer_id', row.employerId)
-                  if (existingErr) continue
-                  if (!existingPct || existingPct.length === 0) {
-                    // Insert a single estimate row to represent employer-level estimate
-                    const trade: string = 'labour_hire'
-                    await (supabase as any)
-                      .from('project_contractor_trades')
-                      .insert([{ project_id: p.id, employer_id: row.employerId, trade_type: trade, eba_signatory: 'not_specified', estimated_project_workforce: est }])
-                  } else {
-                    // Zero-out all rows, then set a single row to the employer-level estimate to avoid double counting
-                    await (supabase as any)
-                      .from('project_contractor_trades')
-                      .update({ estimated_project_workforce: 0 })
-                      .eq('project_id', p.id)
-                      .eq('employer_id', row.employerId)
-
-                    const firstId = (existingPct as any[])[0]?.id
-                    if (firstId) {
-                      await (supabase as any)
-                        .from('project_contractor_trades')
-                        .update({ estimated_project_workforce: est })
-                        .eq('id', firstId)
-                    }
-                  }
-                }
-                // Refresh stats for this project card
-                queryClient.invalidateQueries({ queryKey: ["project-contractors-estimate", p.id, siteIds] })
-                queryClient.invalidateQueries({ queryKey: ["project-worker-totals", p.id, siteIds] })
-              } finally {
-                setSaving(false)
-                setEstOpen(false)
-              }
-            }}>{saving ? 'Saving…' : 'Confirm and Save'}</Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-    </div>
   )
 }
 
 export default function ProjectsPage() {
   const sp = useSearchParams()
+  const [lookupOpen, setLookupOpen] = useState(false)
   const q = (sp.get("q") || "").toLowerCase()
   const patchParam = sp.get("patch") || ""
   const patchIds = patchParam.split(",").map(s => s.trim()).filter(Boolean)
   const [tierFilter, setTierFilter] = useState<ProjectTier | 'all'>('all')
+  const page = Math.max(1, parseInt(sp.get('page') || '1', 10) || 1)
+  const PAGE_SIZE = 24
 
   const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null)
   const [isEmployerOpen, setIsEmployerOpen] = useState(false)
@@ -655,11 +408,14 @@ export default function ProjectsPage() {
     }
   })
 
-  const { data: projects = [], isLoading } = useQuery<ProjectWithRoles[]>({
-    queryKey: ["projects-list", patchIds, patchProjectIds, tierFilter],
+  const { data: projectsData, isLoading } = useQuery<{ projects: ProjectWithRoles[]; summaries: Record<string, ProjectSummary>; hasNext: boolean }>({
+    queryKey: ["projects-list+summary", patchIds, patchProjectIds, tierFilter, page],
     staleTime: 30000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
+      const from = (page - 1) * PAGE_SIZE
+      const to = from + PAGE_SIZE // inclusive, fetch one extra for hasNext
+
       let qy: any = supabase
         .from("projects")
         .select(`
@@ -675,22 +431,41 @@ export default function ProjectsPage() {
           )
         `)
         .order("created_at", { ascending: false })
-      
-      // Apply tier filter
+        .range(from, to)
+
       if (tierFilter !== "all") {
         qy = qy.eq('tier', tierFilter)
       }
-      
+
       if (patchIds.length > 0) {
-        if ((patchProjectIds as string[]).length === 0) return []
+        if ((patchProjectIds as string[]).length === 0) return { projects: [], summaries: {}, hasNext: false }
         qy = qy.in('id', patchProjectIds as string[])
       }
-      
+
       const { data, error } = await qy
       if (error) throw error
-      return (data as any) || []
+      const list = (data as any[]) || []
+      const hasNext = list.length > PAGE_SIZE
+      const pageProjects = hasNext ? list.slice(0, PAGE_SIZE) : list
+      const ids = pageProjects.map((p: any) => p.id)
+      let summaries: Record<string, ProjectSummary> = {}
+      if (ids.length > 0) {
+        const { data: sumRows } = await (supabase as any)
+          .from('project_dashboard_summary')
+          .select('*')
+          .in('project_id', ids)
+        summaries = ((sumRows as any[]) || []).reduce((acc, r: any) => {
+          acc[r.project_id as string] = r as ProjectSummary
+          return acc
+        }, {} as Record<string, ProjectSummary>)
+      }
+      return { projects: pageProjects as ProjectWithRoles[], summaries, hasNext }
     }
   })
+
+  const projects = projectsData?.projects || []
+  const summaries = projectsData?.summaries || {}
+  const hasNext = !!projectsData?.hasNext
 
   if (isLoading) {
     return (
@@ -705,7 +480,10 @@ export default function ProjectsPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Projects</h1>
-        <CreateProjectDialog />
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setLookupOpen(true)}>Address Lookup</Button>
+          <CreateProjectDialog />
+        </div>
       </div>
       {/* Add tier filter */}
       <div className="flex items-center gap-4">
@@ -736,12 +514,28 @@ export default function ProjectsPage() {
               <ProjectListCard
                 key={p.id}
                 p={p}
+                summary={summaries[p.id]}
                 onOpenEmployer={(id) => { setSelectedEmployerId(id); setIsEmployerOpen(true) }}
-                onOpenWorker={(id) => { setSelectedWorkerId(id); setIsWorkerOpen(true) }}
               />
             ))}
         </div>
       )}
+
+      <div className="flex items-center justify-end gap-2">
+        <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => {
+          const params = new URLSearchParams(window.location.search)
+          const prev = Math.max(1, page - 1)
+          params.set('page', String(prev))
+          window.location.search = params.toString()
+        }}>Previous</Button>
+        <span className="text-xs text-muted-foreground">Page {page}</span>
+        <Button variant="outline" size="sm" disabled={!hasNext} onClick={() => {
+          const params = new URLSearchParams(window.location.search)
+          const next = page + 1
+          params.set('page', String(next))
+          window.location.search = params.toString()
+        }}>Next</Button>
+      </div>
 
       <EmployerDetailModal
         employerId={selectedEmployerId}
@@ -754,6 +548,8 @@ export default function ProjectsPage() {
         isOpen={isWorkerOpen}
         onClose={() => setIsWorkerOpen(false)}
       />
+
+      <AddressLookupDialog open={lookupOpen} onOpenChange={setLookupOpen} />
     </div>
   )
 }

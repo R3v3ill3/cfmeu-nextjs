@@ -6,7 +6,7 @@ import GeoJSONPatchUpload from "@/components/upload/GeoJSONPatchUpload"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Separator } from "@/components/ui/separator"
-import { Plus, MapPin } from "lucide-react"
+import { Plus, MapPin, Globe } from "lucide-react"
 import { AddDraftUserDialog } from "@/components/admin/AddDraftUserDialog"
 import { useMemo, useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
@@ -17,6 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
+import { PatchMapViewer } from "./PatchMapViewer"
 
 type Patch = { id: string; name: string; status: string | null }
 type ProfileUser = { id: string; full_name: string | null; email: string | null; role: string | null; is_active: boolean | null }
@@ -40,6 +41,7 @@ export default function PatchManager() {
   const [selectedDraftIds, setSelectedDraftIds] = useState<Set<string>>(new Set())
   const [selectedPatchIds, setSelectedPatchIds] = useState<Set<string>>(new Set())
   const [geojsonUploadOpen, setGeojsonUploadOpen] = useState(false)
+  const [mapViewerOpen, setMapViewerOpen] = useState(false)
 
   const { data: patches = [], isLoading } = useQuery({
     queryKey: ["admin-patches"],
@@ -282,6 +284,10 @@ export default function PatchManager() {
             <Button variant="outline" onClick={() => setGeojsonUploadOpen(true)}>
               <MapPin className="mr-2 h-4 w-4" />
               Upload GeoJSON
+            </Button>
+            <Button variant="outline" onClick={() => setMapViewerOpen(true)}>
+              <Globe className="mr-2 h-4 w-4" />
+              View Patch Maps
             </Button>
             <Button onClick={() => setCreateOpen(true)}>Create Patch</Button>
           </div>
@@ -597,6 +603,12 @@ export default function PatchManager() {
             />
           </DialogContent>
         </Dialog>
+
+        {/* Patch Map Viewer Dialog */}
+        <PatchMapViewer
+          open={mapViewerOpen}
+          onOpenChange={setMapViewerOpen}
+        />
       </CardContent>
     </Card>
   )

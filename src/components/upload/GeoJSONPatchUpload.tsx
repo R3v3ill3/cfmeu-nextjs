@@ -11,34 +11,17 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { CheckCircle, AlertCircle, Info, Loader2, MapPin, Upload, FileText } from 'lucide-react';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-
-interface GeoJSONFeature {
-  type: 'Feature';
-  geometry: {
-    type: string;
-    coordinates: number[][][];
-  };
-  properties: {
-    fid: number;
-    patch_id: string;
-    patch_name: string;
-    coordinator: string;
-  };
-}
+import { useQuery } from '@tanstack/react-query';
+import { 
+  parsePatchesWithFuzzyMatching, 
+  ParsedPatch, 
+  GeoJSONFeature 
+} from '@/utils/patchMatchingUtils';
+import PatchMatchingDialog from './PatchMatchingDialog';
 
 interface GeoJSONFile {
   type: 'FeatureCollection';
   features: GeoJSONFeature[];
-}
-
-interface ParsedPatch {
-  fid: number;
-  patch_id: string;
-  patch_name: string;
-  coordinator: string;
-  geometry: string; // WKT format for PostGIS
-  status: 'new' | 'existing' | 'updated';
-  existing_patch_id?: string;
 }
 
 interface GeoJSONPatchUploadProps {
@@ -51,8 +34,25 @@ export default function GeoJSONPatchUpload({ onUploadComplete, onBack }: GeoJSON
   const [parsedData, setParsedData] = useState<GeoJSONFile | null>(null);
   const [parsedPatches, setParsedPatches] = useState<ParsedPatch[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadStep, setUploadStep] = useState<'upload' | 'review' | 'import'>('upload');
+  const [uploadStep, setUploadStep] = useState<'upload' | 'review' | 'matching' | 'import' | 'complete'>('upload');
+  const [importResults, setImportResults] = useState<{created: number, updated: number, errors: number} | null>(null);
   const { toast } = useToast();
+
+  // Get existing patches for matching
+  const { data: existingPatches = [] } = useQuery({
+    queryKey: ['existing-patches'],
+    queryFn: async () => {
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase
+        .from('patches')
+        .select('id, name, code, type')
+        .eq('type', 'geo')
+        .eq('status', 'active');
+
+      if (error) throw error;
+      return data || [];
+    }
+  });
 
   // Parse GeoJSON file
   const handleFileUpload = useCallback(async (selectedFile: File) => {
@@ -67,7 +67,6 @@ export default function GeoJSONPatchUpload({ onUploadComplete, onBack }: GeoJSON
       // Validate features
       const validFeatures = data.features.filter(feature => {
         return feature.geometry?.type === 'Polygon' && 
-               feature.properties?.patch_id && 
                feature.properties?.patch_name;
       });
 
@@ -78,10 +77,19 @@ export default function GeoJSONPatchUpload({ onUploadComplete, onBack }: GeoJSON
       setFile(selectedFile);
       setParsedData(data);
       
-      // Parse patches and check for existing ones
-      const patches = await parsePatches(validFeatures);
+      // Parse patches with fuzzy matching
+      const patches = parsePatchesWithFuzzyMatching(validFeatures, existingPatches);
+      
       setParsedPatches(patches);
-      setUploadStep('review');
+      
+      // Check if we need manual matching
+      const needsManualMatching = patches.some(p => p.status === 'manual_match');
+      
+      if (needsManualMatching) {
+        setUploadStep('matching');
+      } else {
+        setUploadStep('review');
+      }
       
     } catch (error) {
       toast({
@@ -90,51 +98,27 @@ export default function GeoJSONPatchUpload({ onUploadComplete, onBack }: GeoJSON
         variant: "destructive"
       });
     }
-  }, [toast]);
+  }, [toast, existingPatches]);
 
-  // Parse patches and check for existing ones
-  const parsePatches = async (features: GeoJSONFeature[]): Promise<ParsedPatch[]> => {
-    const supabase = getSupabaseBrowserClient();
-    
-    // Get existing patches
-    const { data: existingPatches } = await supabase
-      .from('patches')
-      .select('id, name, type')
-      .eq('type', 'geo');
-
-    const patches: ParsedPatch[] = [];
-    
-    for (const feature of features) {
-      const { fid, patch_id, patch_name, coordinator } = feature.properties;
-      
-      // Convert coordinates to WKT format for PostGIS
-      const wkt = convertToWKT(feature.geometry);
-      
-      // Check if patch already exists by name (since we don't have patch_id field in DB)
-      const existing = existingPatches?.find(p => p.name === patch_name);
-      
-      patches.push({
-        fid,
-        patch_id,
-        patch_name,
-        coordinator,
-        geometry: wkt,
-        status: existing ? 'existing' : 'new',
-        existing_patch_id: existing?.id
-      });
-    }
-    
-    return patches;
+  // Handle manual matching confirmation
+  const handleMatchingConfirm = (confirmedPatches: ParsedPatch[]) => {
+    setParsedPatches(confirmedPatches);
+    setUploadStep('review');
   };
 
-  // Convert GeoJSON coordinates to WKT format
-  const convertToWKT = (geometry: any): string => {
-    if (geometry.type === 'Polygon') {
-      const coords = geometry.coordinates[0]; // Outer ring
-      const points = coords.map((coord: number[]) => `${coord[0]} ${coord[1]}`).join(', ');
-      return `POLYGON((${points}))`;
-    }
-    throw new Error(`Unsupported geometry type: ${geometry.type}`);
+  const handleMatchingCancel = () => {
+    setUploadStep('upload');
+    setFile(null);
+    setParsedData(null);
+    setParsedPatches([]);
+  };
+
+  const handleReset = () => {
+    setUploadStep('upload');
+    setFile(null);
+    setParsedData(null);
+    setParsedPatches([]);
+    setImportResults(null);
   };
 
   // Import patches to database
@@ -151,43 +135,77 @@ export default function GeoJSONPatchUpload({ onUploadComplete, onBack }: GeoJSON
         try {
           if (patch.status === 'new') {
             // Create new patch
+            const insertData = {
+              name: patch.patch_name,
+              type: 'geo',
+              geom: `SRID=4326;${patch.geometry}`,
+              status: 'active'
+            };
+            
+            console.log(`Inserting patch ${patch.patch_name}:`, insertData);
+            
             const { error } = await supabase
               .from('patches')
-              .insert({
-                name: patch.patch_name,
-                type: 'geo',
-                geom: `SRID=4326;${patch.geometry}`,
-                status: 'active'
-              });
+              .insert(insertData);
             
             if (error) throw error;
             created++;
             
-          } else if (patch.status === 'existing' && patch.existing_patch_id) {
+          } else if (patch.status === 'existing' && patch.existing_patch_ids && patch.existing_patch_ids.length > 0) {
             // Update existing patch geometry
+            const updateData = {
+              geom: `SRID=4326;${patch.geometry}`
+            };
+            
+            console.log(`Updating patch ${patch.patch_name} (${patch.existing_patch_ids[0]}):`, updateData);
+            
             const { error } = await supabase
               .from('patches')
-              .update({
-                geom: `SRID=4326;${patch.geometry}`
-              })
-              .eq('id', patch.existing_patch_id);
+              .update(updateData)
+              .eq('id', patch.existing_patch_ids[0]);
+            
+            if (error) throw error;
+            updated++;
+            
+          } else if (patch.status === 'manual_match' && patch.existing_patch_ids && patch.existing_patch_ids.length > 0) {
+            // Update existing patch geometry for manual match
+            const updateData = {
+              geom: `SRID=4326;${patch.geometry}`
+            };
+            
+            console.log(`Updating manual match patch ${patch.patch_name} (${patch.existing_patch_ids[0]}):`, updateData);
+            
+            const { error } = await supabase
+              .from('patches')
+              .update(updateData)
+              .eq('id', patch.existing_patch_ids[0]);
             
             if (error) throw error;
             updated++;
           }
           
         } catch (error) {
-          console.error(`Error processing patch ${patch.patch_id}:`, error);
+          console.error(`Error processing patch ${patch.patch_name}:`, error);
+          if (error && typeof error === 'object' && 'message' in error) {
+            console.error(`Error details:`, error.message);
+            if ('details' in error) console.error(`Error details:`, error.details);
+            if ('hint' in error) console.error(`Error hint:`, error.hint);
+          }
           errors++;
         }
       }
 
+      setImportResults({ created, updated, errors });
+      setUploadStep('complete');
+      
+      // Show toast notification
       toast({
         title: "Import completed",
         description: `Created: ${created}, Updated: ${updated}, Errors: ${errors}`,
         variant: errors > 0 ? "destructive" : "default"
       });
-
+      
+      // Call onUploadComplete if no errors
       if (errors === 0) {
         onUploadComplete();
       }
@@ -209,10 +227,28 @@ export default function GeoJSONPatchUpload({ onUploadComplete, onBack }: GeoJSON
     
     const newPatches = parsedPatches.filter(p => p.status === 'new').length;
     const existingPatches = parsedPatches.filter(p => p.status === 'existing').length;
+    const manualMatches = parsedPatches.filter(p => p.status === 'manual_match').length;
     const uniquePatchIds = new Set(parsedPatches.map(p => p.patch_id)).size;
     
-    return { newPatches, existingPatches, uniquePatchIds, totalFeatures: parsedPatches.length };
+    return { 
+      newPatches, 
+      existingPatches, 
+      manualMatches,
+      uniquePatchIds, 
+      totalFeatures: parsedPatches.length 
+    };
   }, [parsedPatches]);
+
+  if (uploadStep === 'matching') {
+    return (
+      <PatchMatchingDialog
+        patches={parsedPatches}
+        existingPatches={existingPatches}
+        onConfirm={handleMatchingConfirm}
+        onCancel={handleMatchingCancel}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -233,7 +269,7 @@ export default function GeoJSONPatchUpload({ onUploadComplete, onBack }: GeoJSON
           <CardHeader>
             <CardTitle>Upload GeoJSON File</CardTitle>
             <CardDescription>
-              Select a GeoJSON file containing patch boundaries. Expected properties: fid, patch_id, patch_name, coordinator
+              Select a GeoJSON file containing patch boundaries. Expected properties: fid, patch_name, coordinator
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -276,7 +312,7 @@ export default function GeoJSONPatchUpload({ onUploadComplete, onBack }: GeoJSON
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               <div className="text-center p-3 bg-blue-50 rounded-lg">
                 <div className="text-2xl font-bold text-blue-600">{summary.totalFeatures}</div>
                 <div className="text-sm text-blue-600">Total Features</div>
@@ -285,13 +321,17 @@ export default function GeoJSONPatchUpload({ onUploadComplete, onBack }: GeoJSON
                 <div className="text-2xl font-bold text-green-600">{summary.uniquePatchIds}</div>
                 <div className="text-sm text-green-600">Unique Patches</div>
               </div>
+              <div className="text-center p-3 bg-green-100 rounded-lg">
+                <div className="text-2xl font-bold text-green-700">{summary.existingPatches}</div>
+                <div className="text-sm text-green-700">Exact Matches</div>
+              </div>
+              <div className="text-center p-3 bg-blue-100 rounded-lg">
+                <div className="text-2xl font-bold text-blue-700">{summary.manualMatches}</div>
+                <div className="text-sm text-blue-700">Manual Matches</div>
+              </div>
               <div className="text-center p-3 bg-yellow-50 rounded-lg">
                 <div className="text-2xl font-bold text-yellow-600">{summary.newPatches}</div>
                 <div className="text-sm text-yellow-600">New Patches</div>
-              </div>
-              <div className="text-center p-3 bg-purple-50 rounded-lg">
-                <div className="text-2xl font-bold text-purple-600">{summary.existingPatches}</div>
-                <div className="text-sm text-purple-600">Existing Patches</div>
               </div>
             </div>
 
@@ -301,11 +341,21 @@ export default function GeoJSONPatchUpload({ onUploadComplete, onBack }: GeoJSON
                 {parsedPatches.map((patch, index) => (
                   <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
                     <div className="flex items-center space-x-3">
-                      <Badge variant={patch.status === 'new' ? 'default' : 'secondary'}>
-                        {patch.status === 'new' ? 'New' : 'Update'}
+                      <Badge variant={
+                        patch.status === 'new' ? 'default' : 
+                        patch.status === 'existing' ? 'secondary' :
+                        'outline'
+                      }>
+                        {patch.status === 'new' ? 'New' : 
+                         patch.status === 'existing' ? 'Update' : 'Manual'}
                       </Badge>
                       <span className="font-mono text-sm">{patch.patch_id}</span>
                       <span>{patch.patch_name}</span>
+                      {patch.match_confidence && (
+                        <span className="text-xs text-gray-500">
+                          ({Math.round((patch.match_similarity || 0) * 100)}% match)
+                        </span>
+                      )}
                     </div>
                     <span className="text-sm text-gray-500">FID: {patch.fid}</span>
                   </div>
@@ -329,6 +379,50 @@ export default function GeoJSONPatchUpload({ onUploadComplete, onBack }: GeoJSON
                     Import Patches
                   </>
                 )}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {uploadStep === 'complete' && importResults && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Import Results</CardTitle>
+            <CardDescription>
+              Summary of patches imported or updated.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-3 gap-4">
+              <div className="text-center p-3 bg-green-50 rounded-lg">
+                <div className="text-2xl font-bold text-green-600">{importResults.created}</div>
+                <div className="text-sm text-green-600">New Patches Created</div>
+              </div>
+              <div className="text-center p-3 bg-blue-50 rounded-lg">
+                <div className="text-2xl font-bold text-blue-600">{importResults.updated}</div>
+                <div className="text-sm text-blue-600">Patches Updated</div>
+              </div>
+              <div className="text-center p-3 bg-red-50 rounded-lg">
+                <div className="text-2xl font-bold text-red-600">{importResults.errors}</div>
+                <div className="text-sm text-red-600">Import Errors</div>
+              </div>
+            </div>
+            {importResults.errors > 0 && (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Some patches failed to import. Please check the console for details and try again.
+                </AlertDescription>
+              </Alert>
+            )}
+            
+            <div className="flex justify-end space-x-3">
+              <Button variant="outline" onClick={handleReset}>
+                Upload Another File
+              </Button>
+              <Button onClick={onUploadComplete}>
+                Done
               </Button>
             </div>
           </CardContent>

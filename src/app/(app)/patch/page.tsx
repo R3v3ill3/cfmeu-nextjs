@@ -2,15 +2,18 @@
 export const dynamic = 'force-dynamic'
 
 import RoleGuard from "@/components/guards/RoleGuard"
-import { PatchKPICards, PatchSitesTable } from "@/components/patch"
+import { PatchKPICards, PatchSitesTable, PatchMap } from "@/components/patch"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { usePatchDashboard } from "@/hooks/usePatchDashboard"
+import AddressLookupDialog from "@/components/AddressLookupDialog"
+import { Button } from "@/components/ui/button"
 
 export default function PatchPage() {
   const sp = useSearchParams()
+  const [lookupOpen, setLookupOpen] = useState(false)
   const patchParam = sp.get("patch") || ""
   const patchIds = patchParam.split(",").map(s => s.trim()).filter(Boolean)
   const status = sp.get("status") || undefined
@@ -50,7 +53,10 @@ export default function PatchPage() {
       <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold">Patch dashboard</h1>
-          <Link href="/patch/walls" className="text-primary hover:underline">Open Walls</Link>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setLookupOpen(true)}>Address Lookup</Button>
+            <Link href="/patch/walls" className="text-primary hover:underline">Open Walls</Link>
+          </div>
         </div>
         <PatchKPICards data={{
           members: { label: "Members", ...kpis.members },
@@ -58,6 +64,12 @@ export default function PatchPage() {
           leaders: { label: "Delegates/HSR", ...kpis.leaders },
           openAudits: kpis.openAudits,
         }} />
+        
+        {/* Show patch map if a specific patch is selected */}
+        {patchIds.length === 1 && (
+          <PatchMap patchId={patchIds[0]} height="400px" />
+        )}
+        
         <Card>
           <CardHeader>
             <CardTitle>Sites in patch</CardTitle>
@@ -67,6 +79,7 @@ export default function PatchPage() {
           </CardContent>
         </Card>
       </div>
+      <AddressLookupDialog open={lookupOpen} onOpenChange={setLookupOpen} />
     </RoleGuard>
   )
 }

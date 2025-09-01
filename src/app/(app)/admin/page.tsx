@@ -15,17 +15,22 @@ import { RoleHierarchyManager } from "@/components/admin/RoleHierarchyManager"
 import { OrganiserScopeManager } from "@/components/admin/OrganiserScopeManager"
 import PatchManager from "@/components/admin/PatchManager"
 import SpatialAssignmentTool from "@/components/admin/SpatialAssignmentTool"
+import AddressLookupDialog from "@/components/AddressLookupDialog"
 
 export default function AdminPage() {
   const [open, setOpen] = useState(false)
   const [addDraftOpen, setAddDraftOpen] = useState(false)
+  const [lookupOpen, setLookupOpen] = useState(false)
 
   return (
     <RoleGuard allow={["admin"]}>
       <div className="p-6 space-y-4">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold">Administration</h1>
-          <Button onClick={() => setOpen(true)}>Invite User</Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setLookupOpen(true)}>Address Lookup</Button>
+            <Button onClick={() => setOpen(true)}>Invite User</Button>
+          </div>
         </div>
         <Tabs defaultValue="users">
           <TabsList>
@@ -60,6 +65,7 @@ export default function AdminPage() {
           </TabsContent>
         </Tabs>
         <InviteUserDialog open={open} onOpenChange={setOpen} onSuccess={() => {}} />
+        <AddressLookupDialog open={lookupOpen} onOpenChange={setLookupOpen} />
         <AddDraftUserDialog open={addDraftOpen} onOpenChange={setAddDraftOpen} onSuccess={() => {}} />
       </div>
     </RoleGuard>

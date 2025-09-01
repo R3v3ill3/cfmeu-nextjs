@@ -1,0 +1,236 @@
+'use client';
+
+import React, { useState } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { MapPin, Eye, EyeOff } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { GoogleMap } from '@/components/ui/GoogleMap';
+
+interface PatchMapViewerProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+interface Patch {
+  id: string;
+  name: string;
+  code: string;
+  type: string;
+  status: string;
+  geom: string;
+}
+
+export function PatchMapViewer({ open, onOpenChange }: PatchMapViewerProps) {
+  const [selectedPatchId, setSelectedPatchId] = useState<string | null>(null);
+  const [visiblePatches, setVisiblePatches] = useState<Set<string>>(new Set());
+
+  // Fetch all patches with geometry
+  const { data: patches = [], isLoading } = useQuery({
+    queryKey: ['admin-patch-map-data'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .rpc('get_patches_with_geometry_text');
+
+      if (error) throw error;
+      return (data || []) as Patch[];
+    },
+    enabled: open
+  });
+
+  // Generate colors for different patch types
+  const getPatchColor = (type: string, status: string) => {
+    if (status !== 'active') return '#808080'; // Gray for inactive
+    
+    switch (type) {
+      case 'geo': return '#FF0000'; // Red for geo patches
+      case 'trade': return '#00FF00'; // Green for trade patches
+      case 'sub-sector': return '#0000FF'; // Blue for sub-sector patches
+      default: return '#FFA500'; // Orange for other types
+    }
+  };
+
+  // Prepare patches for map display
+  const mapPatches = patches
+    .filter(patch => visiblePatches.has(patch.id) || visiblePatches.size === 0)
+    .map(patch => ({
+      ...patch,
+      color: getPatchColor(patch.type, patch.status)
+    }));
+
+  const handlePatchClick = (patchId: string) => {
+    setSelectedPatchId(patchId);
+  };
+
+  const togglePatchVisibility = (patchId: string) => {
+    setVisiblePatches(prev => {
+      const next = new Set(prev);
+      if (next.has(patchId)) {
+        next.delete(patchId);
+      } else {
+        next.add(patchId);
+      }
+      return next;
+    });
+  };
+
+  const showAllPatches = () => {
+    setVisiblePatches(new Set(patches.map(p => p.id)));
+  };
+
+  const hideAllPatches = () => {
+    setVisiblePatches(new Set());
+  };
+
+  const selectedPatch = patches.find(p => p.id === selectedPatchId);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-7xl max-h-[90vh] overflow-hidden">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <MapPin className="h-5 w-5" />
+            Patch Map Viewer
+          </DialogTitle>
+        </DialogHeader>
+        
+        <div className="flex gap-4 h-[80vh]">
+          {/* Map */}
+          <div className="flex-1">
+            <GoogleMap
+              patches={mapPatches}
+              height="100%"
+              showControls={true}
+              onPatchClick={handlePatchClick}
+            />
+          </div>
+
+          {/* Sidebar */}
+          <div className="w-80 space-y-4 overflow-y-auto">
+            {/* Controls */}
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <Button size="sm" onClick={showAllPatches} variant="outline">
+                  <Eye className="h-4 w-4 mr-1" />
+                  Show All
+                </Button>
+                <Button size="sm" onClick={hideAllPatches} variant="outline">
+                  <EyeOff className="h-4 w-4 mr-1" />
+                  Hide All
+                </Button>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {patches.length} total patches • {mapPatches.length} visible
+              </p>
+            </div>
+
+            {/* Patch List */}
+            <div className="space-y-2">
+              <h3 className="font-medium text-sm">Patches</h3>
+              <div className="space-y-1 max-h-96 overflow-y-auto">
+                {patches.map(patch => (
+                  <div
+                    key={patch.id}
+                    className={`p-2 rounded border cursor-pointer transition-colors ${
+                      visiblePatches.has(patch.id) || visiblePatches.size === 0
+                        ? 'border-gray-300 bg-white'
+                        : 'border-gray-200 bg-gray-50'
+                    } ${
+                      selectedPatchId === patch.id ? 'ring-2 ring-blue-500' : ''
+                    }`}
+                    onClick={() => {
+                      setSelectedPatchId(patch.id);
+                      if (!visiblePatches.has(patch.id) && visiblePatches.size > 0) {
+                        setVisiblePatches(prev => new Set([...prev, patch.id]));
+                      }
+                    }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm truncate">{patch.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {patch.code} • {patch.type}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Badge variant={patch.status === 'active' ? 'default' : 'secondary'}>
+                          {patch.status}
+                        </Badge>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            togglePatchVisibility(patch.id);
+                          }}
+                        >
+                          {visiblePatches.has(patch.id) || visiblePatches.size === 0 ? (
+                            <Eye className="h-3 w-3" />
+                          ) : (
+                            <EyeOff className="h-3 w-3" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Selected Patch Details */}
+            {selectedPatch && (
+              <div className="border rounded-lg p-3 bg-gray-50">
+                <h4 className="font-medium text-sm mb-2">Selected Patch</h4>
+                <div className="space-y-1 text-sm">
+                  <div><span className="font-medium">Name:</span> {selectedPatch.name}</div>
+                  <div><span className="font-medium">Code:</span> {selectedPatch.code}</div>
+                  <div><span className="font-medium">Type:</span> {selectedPatch.type}</div>
+                  <div><span className="font-medium">Status:</span> {selectedPatch.status}</div>
+                  <div className="pt-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => window.open(`/patch?patch=${selectedPatch.id}`, '_blank')}
+                    >
+                      View Patch Details
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Legend */}
+            <div className="border rounded-lg p-3">
+              <h4 className="font-medium text-sm mb-2">Legend</h4>
+              <div className="space-y-1 text-xs">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-red-500 rounded"></div>
+                  <span>Geo Patches</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-green-500 rounded"></div>
+                  <span>Trade Patches</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-blue-500 rounded"></div>
+                  <span>Sub-sector Patches</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-orange-500 rounded"></div>
+                  <span>Other Types</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-gray-500 rounded"></div>
+                  <span>Inactive Patches</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
