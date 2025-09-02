@@ -169,11 +169,10 @@ export default function GeoJSONPatchUpload({ onUploadComplete, onBack }: GeoJSON
           const wktGeometries = geometries.map(g => convertToWKT(g));
 
           const { error: rpcError } = await supabase.rpc(
-            'apply_geometries_to_patch_wkt',
+            'set_patch_geometries_from_wkt',
             {
               p_patch_id: newPatchId,
               p_geometries_wkt: wktGeometries,
-              p_overwrite: true,
             }
           );
 
@@ -190,13 +189,11 @@ export default function GeoJSONPatchUpload({ onUploadComplete, onBack }: GeoJSON
       for (const [patchId, geometries] of existingPatchGeometryMap.entries()) {
         try {
           const wktGeometries = geometries.map(g => convertToWKT(g));
-          console.log('DEBUG: Sending to apply_geometries_to_patch_wkt', { patchId, wktGeometries });
           const { error } = await supabase.rpc(
-            'apply_geometries_to_patch_wkt',
+            'set_patch_geometries_from_wkt',
             {
               p_patch_id: patchId,
               p_geometries_wkt: wktGeometries,
-              p_overwrite: true,
             }
           );
 
