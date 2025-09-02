@@ -17,6 +17,7 @@ const navItems = [
   { path: "/projects", label: "Projects", icon: FolderOpen },
   { path: "/employers", label: "Employers", icon: Building },
   { path: "/workers", label: "Workers", icon: Users },
+  { path: "/map", label: "Map", icon: MapPin },
   { path: "/site-visits", label: "Site Visits", icon: FileCheck },
 ];
 
