@@ -76,8 +76,24 @@ export function inferTradeTypeFromCompanyName(companyName: string): TradeType {
     return 'plumbing';
   }
   
-  // Concrete companies
-  if (name.includes('concrete') || name.includes('formwork') || name.includes('concreting')) {
+  // Concrete and formwork companies
+  if (
+    name.includes('concrete') ||
+    name.includes('concreting') ||
+    name.includes('formwork') ||
+    name.includes('form work') ||
+    name.includes('formworker') ||
+    name.includes('form worker')
+  ) {
+    // Prioritise explicit formwork indicators
+    if (
+      name.includes('formwork') ||
+      name.includes('form work') ||
+      name.includes('formworker') ||
+      name.includes('form worker')
+    ) {
+      return 'form_work';
+    }
     if (name.includes('post') && name.includes('tension')) return 'post_tensioning';
     if (name.includes('steel') && name.includes('fix')) return 'steel_fixing';
     return 'concrete';
@@ -304,7 +320,7 @@ export function inferTradeTypeFromCsvRole(csvRole: string): TradeType | null {
   // Specific before general
   if (has('post tension')) return 'post_tensioning';
   if (has('steel fix')) return 'steel_fixing';
-  if (has('formwork') || has('form work')) return 'form_work';
+  if (has('formwork') || has('form work') || has('form worker')) return 'form_work';
   if (has('earthwork') || has('earth moving') || has('earthmoving')) return 'earthworks';
   if (has('excavat')) return 'excavations';
   if (has('piling')) return 'piling';

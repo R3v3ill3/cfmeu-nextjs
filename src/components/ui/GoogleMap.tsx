@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, MapPin, ZoomIn, ZoomOut, AlertCircle } from 'lucide-react';
+import { MapPin, ZoomIn, ZoomOut, AlertCircle } from 'lucide-react';
 import { GoogleMap as RGMMap, Polygon as RGMPolygon, MarkerF as RGMMarker, useJsApiLoader } from '@react-google-maps/api';
 
 interface GoogleMapProps {
@@ -185,7 +185,7 @@ export function GoogleMap({
           {(!isLoaded || !map) && (
             <div className="absolute inset-0 flex items-center justify-center bg-gray-100 z-10">
               <div className="text-center">
-                <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
+                <img src="/spinner.gif" alt="Loading" className="h-8 w-8 mx-auto mb-2" />
                 <div className="text-sm text-gray-600">Loading map...</div>
                 {debugInfo && (
                   <div className="text-xs text-gray-500 mt-1">{debugInfo}</div>

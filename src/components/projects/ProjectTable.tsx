@@ -124,11 +124,9 @@ export function ProjectTable({
                 <span className="text-sm">{patchName}</span>
               </TableCell>
               <TableCell className="text-right">
-                {engaged > 0 ? (
-                  <Badge variant="outline" className="text-xs">{engaged}</Badge>
-                ) : (
-                  <span className="text-muted-foreground">0</span>
-                )}
+                <Badge variant="outline" className="text-xs border-gray-800 text-black bg-white">
+                  {engaged}
+                </Badge>
               </TableCell>
               <TableCell className="text-right">
                 {totalWorkers > 0 ? (

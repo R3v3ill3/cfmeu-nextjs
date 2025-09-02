@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle, AlertCircle, Info, Loader2, Users, Building2, Wrench, MapPin, Search, Plus } from 'lucide-react';
+import { CheckCircle, AlertCircle, Info, Users, Building2, Wrench, MapPin, Search, Plus } from 'lucide-react';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { inferTradeTypeFromCompanyName, inferTradeTypeFromCsvRole, getTradeTypeLabel, TradeType, getTradeTypeCategories } from '@/utils/bciTradeTypeInference';
 import { findBestEmployerMatch, normalizeCompanyName } from '@/utils/workerDataProcessor';
@@ -72,6 +72,7 @@ interface EmployerMatchResult {
   matchedEmployerId?: string;
   matchedEmployerName?: string;
   confidence: 'exact' | 'fuzzy' | 'none';
+  numericConfidence?: number;
   suggestedMatches: Array<{id: string, name: string, address: string}>;
   action: 'confirm_match' | 'search_manual' | 'create_new' | 'add_to_list' | 'skip';
   userConfirmed: boolean;
@@ -236,8 +237,13 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
       };
     }
 
-    // Builder
-    if (role.includes('builder')) {
+    // Builder - include Owner/Developer synonyms as Builder
+    if (
+      role.includes('builder') ||
+      role.includes('owner') ||
+      role.includes('developer') ||
+      role.includes('principal') && role.includes('client')
+    ) {
       return { 
         companyName, 
         csvRole, 
@@ -263,14 +269,15 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
       };
     }
     
-    // Fallback rules
+    // Fallback rules (contractors) - prioritise CSV role inference for trade type
     if (role.includes('contractor')) {
+      const csvTrade = inferTradeTypeFromCsvRole(csvRole);
       return {
         companyName,
         csvRole,
         ourRole: 'subcontractor',
         shouldImport: true,
-        tradeType: inferTradeTypeFromCompanyName(companyName),
+        tradeType: csvTrade ?? inferTradeTypeFromCompanyName(companyName),
         userConfirmed: false,
         userExcluded: false,
       };
@@ -356,6 +363,7 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
             matchedEmployerId: (aliasHit as any).employer.id,
             matchedEmployerName: (aliasHit as any).employer.name,
             confidence: 'exact',
+            numericConfidence: 1.0,
             suggestedMatches: [],
             action: 'confirm_match',
             userConfirmed: true,
@@ -370,12 +378,17 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
       if (employersList && employersList.length > 0) {
         const best = findBestEmployerMatch(companyName, employersList as any);
         if (best) {
+          const distance = (best as any).distance;
+          const similarity = typeof distance === 'number' ? Math.max(0, Math.min(1, 1 - distance)) : undefined;
+          const level = (best as any).confidence;
+          const approxScore = level === 'exact' ? 1 : level === 'high' ? 0.9 : level === 'medium' ? 0.8 : 0.7;
           return {
             companyName,
             csvRole,
             matchedEmployerId: (best as any).id,
             matchedEmployerName: (best as any).name,
             confidence: (best as any).confidence === 'exact' ? 'exact' : 'fuzzy',
+            numericConfidence: (best as any).confidence === 'exact' ? 1.0 : (similarity ?? approxScore),
             suggestedMatches: [],
             action: 'confirm_match',
             userConfirmed: false,
@@ -399,6 +412,7 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
           matchedEmployerId: exactMatches[0].id,
           matchedEmployerName: exactMatches[0].name,
           confidence: 'exact',
+          numericConfidence: 1.0,
           suggestedMatches: exactMatches.map((m: any) => ({
             id: m.id,
             name: m.name,
@@ -481,6 +495,7 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
             address: `${m.address_line_1 || ''} ${m.suburb || ''} ${m.state || ''}`.trim()
           })),
           confidence: 'fuzzy',
+          numericConfidence: 0.6,
           action: 'search_manual',
           userConfirmed: false,
           tradeTypeConfirmed: false
@@ -492,6 +507,7 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
         companyName,
         csvRole,
         confidence: 'none',
+        numericConfidence: 0,
         suggestedMatches: [],
         action: 'create_new',
         userConfirmed: false,
@@ -503,6 +519,7 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
         companyName,
         csvRole,
         confidence: 'none',
+        numericConfidence: 0,
         suggestedMatches: [],
         action: 'create_new',
         userConfirmed: false,
@@ -1496,40 +1513,52 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {project.companies.filter(c => c.shouldImport).map((company, index) => {
-              const matchKey = `${project.projectId}-${company.companyName}-${company.csvRole}`;
-              const match = employerMatches[matchKey];
-              
-              if (!match) return null;
-              // Hide card when a final decision is made or a match is assigned
-              const finalized = (
-                !!match.matchedEmployerId ||
-                !!(company as any).employerId ||
-                (match.userConfirmed && (
-                  match.action === 'confirm_match' ||
-                  match.action === 'create_new' ||
-                  match.action === 'add_to_list' ||
-                  match.action === 'skip'
-                ))
-              );
-              if (finalized) return null;
-              
-              return (
-                <div key={`${matchKey}-${index}`} className="border rounded-lg p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-medium">{company.companyName}</h4>
-                      <p className="text-sm text-gray-600">
-                        Role: {company.csvRole} → {company.ourRole}
-                      </p>
-                      {match.matchedEmployerId && (
-                        <p className="text-xs text-green-700 mt-1">Selected: {match.matchedEmployerName || match.matchedEmployerId}</p>
-                      )}
+            {project.companies
+              .filter(c => c.shouldImport)
+              .map(company => ({
+                company,
+                matchKey: `${project.projectId}-${company.companyName}-${company.csvRole}`,
+                match: employerMatches[`${project.projectId}-${company.companyName}-${company.csvRole}`]
+              }))
+              .sort((a, b) => {
+                const aScore = a.match?.numericConfidence ?? (a.match?.confidence === 'exact' ? 1 : a.match?.confidence === 'fuzzy' ? 0.6 : 0);
+                const bScore = b.match?.numericConfidence ?? (b.match?.confidence === 'exact' ? 1 : b.match?.confidence === 'fuzzy' ? 0.6 : 0);
+                return aScore - bScore; // ascending: lowest confidence first
+              })
+              .map(({ company, matchKey }, index) => {
+                const match = employerMatches[matchKey];
+                if (!match) return null;
+                // Hide card when a final decision is made or a match is assigned
+                const finalized = (
+                  !!match.matchedEmployerId ||
+                  !!(company as any).employerId ||
+                  (match.userConfirmed && (
+                    match.action === 'confirm_match' ||
+                    match.action === 'create_new' ||
+                    match.action === 'add_to_list' ||
+                    match.action === 'skip'
+                  ))
+                );
+                if (finalized) return null;
+                return (
+                  <div key={`${matchKey}-${index}`} className="border rounded-lg p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-medium">{company.companyName}</h4>
+                        <p className="text-sm text-gray-600">
+                          Role: {company.csvRole} → {company.ourRole}
+                        </p>
+                        {match.matchedEmployerId && (
+                          <p className="text-xs text-green-700 mt-1">Selected: {match.matchedEmployerName || match.matchedEmployerId}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={match.confidence === 'exact' ? 'default' : match.confidence === 'fuzzy' ? 'secondary' : 'destructive'}>
+                          {match.confidence === 'exact' ? 'Exact Match' : match.confidence === 'fuzzy' ? 'Fuzzy Match' : 'No Match'}
+                        </Badge>
+                        <span className="text-xs text-gray-500">{Math.round(((match.numericConfidence ?? (match.confidence === 'exact' ? 1 : match.confidence === 'fuzzy' ? 0.6 : 0)) * 100))}%</span>
+                      </div>
                     </div>
-                    <Badge variant={match.confidence === 'exact' ? 'default' : match.confidence === 'fuzzy' ? 'secondary' : 'destructive'}>
-                      {match.confidence === 'exact' ? 'Exact Match' : match.confidence === 'fuzzy' ? 'Fuzzy Match' : 'No Match'}
-                    </Badge>
-                  </div>
                   
                   {match.confidence === 'exact' && (
                     <div className="bg-green-50 p-3 rounded border border-green-200">
@@ -1889,6 +1918,31 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
                     </Badge>
                   </div>
                   
+                  {/* Allow role override here */}
+                  <div className="space-y-2">
+                    <Label htmlFor={`role-${matchKey}`}>Role:</Label>
+                    <Select
+                      value={company.ourRole}
+                      onValueChange={(value) => {
+                        const newRole = value as 'builder' | 'head_contractor' | 'subcontractor' | 'skip';
+                        setProcessedData(prev => prev.map(p => p.projectId === project.projectId ? {
+                          ...p,
+                          companies: p.companies.map(c => c.companyName === company.companyName && c.csvRole === company.csvRole ? { ...c, ourRole: newRole } : c)
+                        } : p));
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="builder">Builder</SelectItem>
+                        <SelectItem value="head_contractor">Head Contractor</SelectItem>
+                        <SelectItem value="subcontractor">Subcontractor</SelectItem>
+                        <SelectItem value="skip">Skip</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
                   {company.ourRole === 'subcontractor' && (
                     <div className="space-y-2">
                       <Label htmlFor={`trade-${matchKey}`}>Trade Type:</Label>

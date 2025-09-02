@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle, AlertCircle, Info, Loader2, MapPin, Users, Building2 } from 'lucide-react';
+import { CheckCircle, AlertCircle, Info, MapPin, Users, Building2 } from 'lucide-react';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -298,7 +298,7 @@ export default function SpatialAssignmentTool() {
           >
             {isAssigning ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <img src="/spinner.gif" alt="Loading" className="mr-2 h-4 w-4" />
                 Assigning Projects...
               </>
             ) : (

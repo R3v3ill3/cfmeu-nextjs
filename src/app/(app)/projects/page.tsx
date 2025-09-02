@@ -358,7 +358,7 @@ function ProjectListCard({ p, summary, onOpenEmployer }: { p: ProjectWithRoles; 
         {/* Employer Count Display */}
         <div className="flex items-center justify-between text-xs">
           <span className="text-muted-foreground">Linked Employers:</span>
-          <Badge variant="outline" className="text-xs">
+          <Badge variant="outline" className="text-xs border-gray-800 text-black bg-white">
             {engaged} {engaged === 1 ? 'employer' : 'employers'}
           </Badge>
         </div>
@@ -601,6 +601,7 @@ export default function ProjectsPage() {
       <div className="sticky top-0 z-30 -mx-6 px-6 py-3 bg-background/40 backdrop-blur supports-[backdrop-filter]:bg-background/30 border-b">
         <div className="flex flex-wrap items-center gap-3">
           <div className="min-w-[240px] flex-1">
+            <div className="text-xs text-muted-foreground mb-1">Search</div>
             <Input placeholder="Search projects…" value={sp.get("q") || ""} onChange={(e) => setParam("q", e.target.value)} />
           </div>
           <div className="w-48">

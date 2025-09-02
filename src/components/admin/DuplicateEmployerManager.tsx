@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle, AlertCircle, Info, Loader2, Building2, Search, Merge, Eye, EyeOff, AlertTriangle, Users, Trash2 } from 'lucide-react';
+import { CheckCircle, AlertCircle, Info, Building2, Search, Merge, Eye, EyeOff, AlertTriangle, Users, Trash2 } from 'lucide-react';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -557,7 +557,7 @@ export default function DuplicateEmployerManager() {
   if (isLoading) {
     return (
       <div className="text-center space-y-4">
-        <Loader2 className="w-8 h-8 mx-auto animate-spin" />
+        <img src="/spinner.gif" alt="Loading" className="w-8 h-8 mx-auto" />
         <h2 className="text-xl font-semibold">Loading Employer Database...</h2>
         <p className="text-gray-600">Analyzing employers for potential duplicates</p>
       </div>
@@ -579,7 +579,7 @@ export default function DuplicateEmployerManager() {
           >
             {isScanning ? (
               <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                <img src="/spinner.gif" alt="Loading" className="w-4 h-4 mr-2" />
                 Scanning...
               </>
             ) : (
@@ -893,7 +893,7 @@ export default function DuplicateEmployerManager() {
                 >
                   {isMerging ? (
                     <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      <img src="/spinner.gif" alt="Loading" className="w-4 h-4 mr-2" />
                       Merging...
                     </>
                   ) : (

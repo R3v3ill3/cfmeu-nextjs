@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle, AlertCircle, Info, Loader2, Building2, Trash2, Eye, EyeOff, Wrench, AlertTriangle, Search, FileText, ExternalLink } from 'lucide-react';
+import { CheckCircle, AlertCircle, Info, Building2, Trash2, Eye, EyeOff, Wrench, AlertTriangle, Search, FileText, ExternalLink } from 'lucide-react';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { getTradeTypeLabel, TradeType, getTradeTypeCategories } from '@/utils/bciTradeTypeInference';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -748,7 +748,7 @@ export default function PendingEmployersImport() {
   if (isLoading) {
     return (
       <div className="text-center space-y-4">
-        <Loader2 className="w-8 h-8 mx-auto animate-spin" />
+        <img src="/spinner.gif" alt="Loading" className="w-8 h-8 mx-auto" />
         <h2 className="text-xl font-semibold">Loading Pending Employers...</h2>
         <p className="text-gray-600">Fetching employers queued for import</p>
       </div>
@@ -758,7 +758,7 @@ export default function PendingEmployersImport() {
   if (isDetectingDuplicates) {
     return (
       <div className="text-center space-y-4">
-        <Loader2 className="w-8 h-8 mx-auto animate-spin" />
+        <img src="/spinner.gif" alt="Loading" className="w-8 h-8 mx-auto" />
         <h2 className="text-xl font-semibold">Detecting Duplicates...</h2>
         <p className="text-gray-600">Checking for existing employers in database</p>
       </div>
@@ -847,7 +847,7 @@ export default function PendingEmployersImport() {
             >
               {isEbaSearching ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  <img src="/spinner.gif" alt="Loading" className="w-4 h-4 mr-2" />
                   Searching EBAs...
                 </>
               ) : (
@@ -996,6 +996,34 @@ export default function PendingEmployersImport() {
                             <Eye className="h-4 w-4" />
                           )}
                         </Button>
+                        {/* Allow overriding the inferred role */}
+                        <Select
+                          value={employer.our_role || 'subcontractor'}
+                          onValueChange={async (value) => {
+                            const supabase = getSupabaseBrowserClient();
+                            const newRole = value as 'builder' | 'head_contractor' | 'subcontractor';
+                            // Update local state first
+                            setPendingEmployers(prev => prev.map(e => e.id === employer.id ? { ...e, our_role: newRole } : e));
+                            // Persist change so import uses it
+                            try {
+                              await supabase
+                                .from('pending_employers')
+                                .update({ our_role: newRole })
+                                .eq('id', employer.id);
+                            } catch (e) {
+                              // non-fatal
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="w-[160px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="builder">Builder</SelectItem>
+                            <SelectItem value="head_contractor">Head Contractor</SelectItem>
+                            <SelectItem value="subcontractor">Subcontractor</SelectItem>
+                          </SelectContent>
+                        </Select>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -1061,7 +1089,7 @@ export default function PendingEmployersImport() {
             >
               {isImporting ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  <img src="/spinner.gif" alt="Loading" className="w-4 h-4 mr-2" />
                   Importing...
                 </>
               ) : (
@@ -1128,7 +1156,7 @@ export default function PendingEmployersImport() {
                    >
                      {isEbaSearching ? (
                        <>
-                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                         <img src="/spinner.gif" alt="Loading" className="h-4 w-4 mr-2" />
                          Searching...
                        </>
                      ) : (
@@ -1152,7 +1180,7 @@ export default function PendingEmployersImport() {
                          <CardContent>
                            {searchState.isSearching && (
                              <div className="flex items-center gap-2">
-                               <Loader2 className="h-4 w-4 animate-spin" />
+                               <img src="/spinner.gif" alt="Loading" className="h-4 w-4" />
                                <span className="text-sm">Searching FWC database...</span>
                              </div>
                            )}

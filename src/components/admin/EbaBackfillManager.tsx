@@ -13,7 +13,7 @@ import {
   CheckCircle, 
   AlertCircle, 
   Info, 
-  Loader2, 
+ 
   Building2, 
   Search, 
   ExternalLink, 
@@ -329,7 +329,7 @@ export function EbaBackfillManager() {
   if (isLoading) {
     return (
       <div className="text-center space-y-4">
-        <Loader2 className="w-8 h-8 mx-auto animate-spin" />
+        <img src="/spinner.gif" alt="Loading" className="w-8 h-8 mx-auto" />
         <h2 className="text-xl font-semibold">Loading Employers...</h2>
         <p className="text-gray-600">Finding employers without EBA records</p>
       </div>
@@ -483,7 +483,7 @@ export function EbaBackfillManager() {
                             disabled={searchState?.isSearching}
                           >
                             {searchState?.isSearching ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <img src="/spinner.gif" alt="Loading" className="h-4 w-4" />
                             ) : (
                               <Search className="h-4 w-4" />
                             )}
@@ -568,7 +568,7 @@ export function EbaBackfillManager() {
             >
               {isProcessingBatch ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  <img src="/spinner.gif" alt="Loading" className="w-4 h-4 mr-2" />
                   Searching EBAs...
                 </>
               ) : (

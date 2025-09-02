@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle, AlertCircle, Info, Loader2, MapPin, Upload, FileText } from 'lucide-react';
+import { CheckCircle, AlertCircle, Info, MapPin, Upload, FileText } from 'lucide-react';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
@@ -381,7 +381,7 @@ export default function GeoJSONPatchUpload({ onUploadComplete, onBack }: GeoJSON
               <Button onClick={handleImport} disabled={isUploading}>
                 {isUploading ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <img src="/spinner.gif" alt="Loading" className="mr-2 h-4 w-4" />
                     Importing...
                   </>
                 ) : (
