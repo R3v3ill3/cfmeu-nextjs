@@ -16,6 +16,7 @@ import { ArrowLeft } from "lucide-react"
 import ProjectImport from "@/components/upload/ProjectImport"
 import BCICsvParser from "@/components/upload/BCICsvParser"
 import BCIProjectImport from "@/components/upload/BCIProjectImport"
+import PendingEmployersImport from "@/components/upload/PendingEmployersImport"
 import { useAuth } from "@/hooks/useAuth"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 
@@ -60,7 +61,7 @@ export default function UploadPage() {
     if (userRole === "organiser") {
       return ["workers"]
     } else if (userRole === "lead_organiser" || userRole === "admin") {
-      return ["workers", "contractors", "eba", "patches", "projects", "bci-projects"]
+      return ["workers", "contractors", "eba", "patches", "projects", "bci-projects", "employers"]
     }
     
     return []
@@ -197,6 +198,12 @@ export default function UploadPage() {
                     onError={(error) => console.error('BCI Parse Error:', error)}
                     onModeChange={(m) => setBciMode(m)}
                   />
+                </TabsContent>
+              )}
+              
+              {availableTypes.includes("employers") && (
+                <TabsContent value="employers">
+                  <PendingEmployersImport />
                 </TabsContent>
               )}
             </Tabs>

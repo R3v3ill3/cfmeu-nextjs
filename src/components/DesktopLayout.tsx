@@ -21,7 +21,7 @@ import {
   SidebarSeparator,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
-import { LogOut, Users, Building, FolderOpen, FileCheck, Shield, BarChart3, Settings, Home, Upload } from "lucide-react"
+import { LogOut, Users, Building, FolderOpen, FileCheck, Shield, BarChart3, Settings, Home, Upload, MapPin } from "lucide-react"
 import AdminPatchSelector from "@/components/admin/AdminPatchSelector"
 import { supabase } from "@/integrations/supabase/client"
 import { desktopDesignSystem } from "@/lib/desktop-design-system"
@@ -36,6 +36,7 @@ const baseNavItems: NavItem[] = [
   { path: "/projects", label: "Projects", icon: FolderOpen, description: "Manage construction projects" },
   { path: "/employers", label: "Employers", icon: Building, description: "Employer information and mapping" },
   { path: "/workers", label: "Workers", icon: Users, description: "Worker database and membership" },
+  { path: "/map", label: "Map", icon: MapPin, description: "Interactive patch and job site maps" },
   { path: "/site-visits", label: "Site Visits", icon: FileCheck, description: "Site visit records and reports" },
 ]
 

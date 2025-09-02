@@ -48,6 +48,7 @@ export function ProjectTable({
           <TableHead>Primary Contractor</TableHead>
           <TableHead>Tier</TableHead>
           <TableHead>Patch</TableHead>
+          <TableHead className="text-right">Employers</TableHead>
           <TableHead className="text-right">Workers</TableHead>
           <TableHead className="text-right">Members</TableHead>
           <TableHead>Delegate</TableHead>
@@ -121,6 +122,13 @@ export function ProjectTable({
               </TableCell>
               <TableCell>
                 <span className="text-sm">{patchName}</span>
+              </TableCell>
+              <TableCell className="text-right">
+                {engaged > 0 ? (
+                  <Badge variant="outline" className="text-xs">{engaged}</Badge>
+                ) : (
+                  <span className="text-muted-foreground">0</span>
+                )}
               </TableCell>
               <TableCell className="text-right">
                 {totalWorkers > 0 ? (

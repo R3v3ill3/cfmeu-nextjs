@@ -66,7 +66,7 @@ export default function GeoJSONPatchUpload({ onUploadComplete, onBack }: GeoJSON
 
       // Validate features
       const validFeatures = data.features.filter(feature => {
-        return feature.geometry?.type === 'Polygon' && 
+        return (feature.geometry?.type === 'Polygon' || feature.geometry?.type === 'MultiPolygon') &&
                feature.properties?.patch_name;
       });
 
@@ -131,69 +131,82 @@ export default function GeoJSONPatchUpload({ onUploadComplete, onBack }: GeoJSON
       let updated = 0;
       let errors = 0;
 
-      for (const patch of parsedPatches) {
+      // Group features for existing patches
+      const existingPatchGeometryMap = new Map<string, any[]>();
+      // Group features for new patches by name
+      const newPatchGeometryMap = new Map<string, any[]>();
+
+      for (const parsedPatch of parsedPatches) {
+        if (parsedPatch.status === 'new') {
+          const patchName = parsedPatch.patch_name;
+          if (!newPatchGeometryMap.has(patchName)) {
+            newPatchGeometryMap.set(patchName, []);
+          }
+          newPatchGeometryMap.get(patchName)!.push(parsedPatch.original_geometry);
+        } else if (parsedPatch.existing_patch_ids && parsedPatch.existing_patch_ids.length > 0) {
+          for (const patchId of parsedPatch.existing_patch_ids) {
+            if (!existingPatchGeometryMap.has(patchId)) {
+              existingPatchGeometryMap.set(patchId, []);
+            }
+            existingPatchGeometryMap.get(patchId)!.push(parsedPatch.original_geometry);
+          }
+        }
+      }
+
+      // 1. Create new patches with aggregated geometries
+      for (const [patchName, geometries] of newPatchGeometryMap.entries()) {
         try {
-          if (patch.status === 'new') {
-            // Create new patch
-            const insertData = {
-              name: patch.patch_name,
-              type: 'geo',
-              geom: `SRID=4326;${patch.geometry}`,
-              status: 'active'
-            };
-            
-            console.log(`Inserting patch ${patch.patch_name}:`, insertData);
-            
-            const { error } = await supabase
-              .from('patches')
-              .insert(insertData);
-            
-            if (error) throw error;
-            created++;
-            
-          } else if (patch.status === 'existing' && patch.existing_patch_ids && patch.existing_patch_ids.length > 0) {
-            // Update existing patch geometry
-            const updateData = {
-              geom: `SRID=4326;${patch.geometry}`
-            };
-            
-            console.log(`Updating patch ${patch.patch_name} (${patch.existing_patch_ids[0]}):`, updateData);
-            
-            const { error } = await supabase
-              .from('patches')
-              .update(updateData)
-              .eq('id', patch.existing_patch_ids[0]);
-            
-            if (error) throw error;
-            updated++;
-            
-          } else if (patch.status === 'manual_match' && patch.existing_patch_ids && patch.existing_patch_ids.length > 0) {
-            // Update existing patch geometry for manual match
-            const updateData = {
-              geom: `SRID=4326;${patch.geometry}`
-            };
-            
-            console.log(`Updating manual match patch ${patch.patch_name} (${patch.existing_patch_ids[0]}):`, updateData);
-            
-            const { error } = await supabase
-              .from('patches')
-              .update(updateData)
-              .eq('id', patch.existing_patch_ids[0]);
-            
-            if (error) throw error;
-            updated++;
-          }
+          const { data: newPatch, error: insertError } = await supabase
+            .from('patches')
+            .insert({ name: patchName, type: 'geo', status: 'active' })
+            .select('id')
+            .single();
+
+          if (insertError) throw insertError;
           
+          const newPatchId = newPatch.id;
+
+          const geometryCollection = {
+            type: "GeometryCollection",
+            geometries: geometries
+          };
+
+          const { error: rpcError } = await supabase.rpc('apply_feature_geometries_to_patch', {
+            p_patch_id: newPatchId,
+            p_geometry_collection_geojson: geometryCollection,
+            p_overwrite: true
+          });
+
+          if (rpcError) throw rpcError;
+
+          created++;
         } catch (error) {
-          console.error(`Error processing patch ${patch.patch_name}:`, error);
-          if (error && typeof error === 'object' && 'message' in error) {
-            console.error(`Error details:`, error.message);
-            if ('details' in error) console.error(`Error details:`, error.details);
-            if ('hint' in error) console.error(`Error hint:`, error.hint);
-          }
+          console.error(`Error creating new patch ${patchName}:`, error);
           errors++;
         }
       }
+      
+      // 2. Update existing patches with aggregated geometries
+      for (const [patchId, geometries] of existingPatchGeometryMap.entries()) {
+        try {
+          const geometryCollection = {
+            type: "GeometryCollection",
+            geometries: geometries
+          };
+          const { error } = await supabase.rpc('apply_feature_geometries_to_patch', {
+            p_patch_id: patchId,
+            p_geometry_collection_geojson: geometryCollection,
+            p_overwrite: true
+          });
+
+          if (error) throw error;
+          updated++;
+        } catch (error) {
+          console.error(`Error updating patch ${patchId}:`, error);
+          errors++;
+        }
+      }
+
 
       setImportResults({ created, updated, errors });
       setUploadStep('complete');

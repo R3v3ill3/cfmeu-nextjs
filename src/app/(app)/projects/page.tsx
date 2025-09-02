@@ -23,6 +23,7 @@ import { usePatchOrganiserLabels } from "@/hooks/usePatchOrganiserLabels"
 import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
 import { PROJECT_TIER_LABELS, ProjectTier } from "@/components/projects/types"
 import { ProjectTable } from "@/components/projects/ProjectTable"
+import DuplicateEmployerManager from "@/components/admin/DuplicateEmployerManager"
 
 type ProjectWithRoles = {
   id: string
@@ -353,6 +354,14 @@ function ProjectListCard({ p, summary, onOpenEmployer }: { p: ProjectWithRoles; 
             onClick={() => { window.location.href = `/projects/${p.id}?tab=contractors` }}
           />
         </div>
+        
+        {/* Employer Count Display */}
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Linked Employers:</span>
+          <Badge variant="outline" className="text-xs">
+            {engaged} {engaged === 1 ? 'employer' : 'employers'}
+          </Badge>
+        </div>
         <div className="pt-1 text-xs text-muted-foreground flex items-center justify-between min-w-0">
           {delegateName ? (
             <div className="truncate min-w-0">
@@ -468,7 +477,7 @@ export default function ProjectsPage() {
 
       // For database-sortable fields, apply sorting here
       const ascending = dir === "asc"
-      const needsClientSorting = ["workers", "members", "delegates", "eba_coverage"].includes(sort)
+      const needsClientSorting = ["workers", "members", "delegates", "eba_coverage", "employers"].includes(sort)
       
       if (!needsClientSorting) {
         if (sort === "name") {
@@ -520,8 +529,18 @@ export default function ProjectsPage() {
       })
     }
     
+    // Apply employers filter
+    const employersFilter = sp.get("employers") || "all"
+    if (employersFilter !== "all") {
+      filtered = filtered.filter((p: any) => {
+        const summary = summaries[p.id]
+        const employerCount = summary?.engaged_employer_count || 0
+        return employersFilter === "zero" ? employerCount === 0 : employerCount > 0
+      })
+    }
+    
     // Apply client-side sorting for summary-based fields
-    const needsClientSorting = ["workers", "members", "delegates", "eba_coverage"].includes(sort)
+    const needsClientSorting = ["workers", "members", "delegates", "eba_coverage", "employers"].includes(sort)
     if (needsClientSorting) {
       const ascending = dir === "asc"
       filtered.sort((a: any, b: any) => {
@@ -537,6 +556,9 @@ export default function ProjectsPage() {
         } else if (sort === "members") {
           valueA = summaryA?.total_members || 0
           valueB = summaryB?.total_members || 0
+        } else if (sort === "employers") {
+          valueA = summaryA?.engaged_employer_count || 0
+          valueB = summaryB?.engaged_employer_count || 0
         } else if (sort === "delegates") {
           valueA = summaryA?.delegate_name ? 1 : 0
           valueB = summaryB?.delegate_name ? 1 : 0
@@ -598,6 +620,19 @@ export default function ProjectsPage() {
             </Select>
           </div>
           <div className="w-40">
+            <div className="text-xs text-muted-foreground mb-1">Employers</div>
+            <Select value={sp.get("employers") || "all"} onValueChange={(value) => setParam("employers", value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Filter by employers" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Projects</SelectItem>
+                <SelectItem value="nonzero">Has Employers</SelectItem>
+                <SelectItem value="zero">No Employers</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="w-40">
             <div className="text-xs text-muted-foreground mb-1">Workers</div>
             <Select value={workersFilter} onValueChange={(value) => setParam("workers", value)}>
               <SelectTrigger>
@@ -620,6 +655,7 @@ export default function ProjectsPage() {
                 <SelectItem value="name">Name</SelectItem>
                 <SelectItem value="value">Project Value</SelectItem>
                 <SelectItem value="tier">Tier</SelectItem>
+                <SelectItem value="employers">Employer Count</SelectItem>
                 <SelectItem value="workers">Worker Count</SelectItem>
                 <SelectItem value="members">Member Count</SelectItem>
                 <SelectItem value="delegates">Has Delegate</SelectItem>

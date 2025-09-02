@@ -596,10 +596,16 @@ export default function ProjectDetailPage() {
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <div className="font-medium">Contractors</div>
-                  <div className="text-muted-foreground">{(contractorSummary as any[]).length}</div>
-                  <div className="text-muted-foreground truncate">
-                    {(contractorNames as string[]).join(', ') || '—'}
+                  <button type="button" className="font-medium text-left text-primary hover:underline" onClick={() => setTab("contractors")}>
+                    Linked Employers
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <div className="px-2 py-1 bg-gray-100 rounded text-xs border">
+                      {(contractorSummary as any[]).length} employers
+                    </div>
+                  </div>
+                  <div className="text-muted-foreground text-xs truncate">
+                    {(contractorNames as string[]).join(', ') || 'No employers linked'}
                   </div>
                 </div>
                 <div className="space-y-1">

@@ -27,32 +27,31 @@ export default function PatchMatchingDialog({ patches, existingPatches, onConfir
   }>({ oneToMany: [], manyToOne: [] });
 
   const handlePatchSelection = (fid: number, patchId: string) => {
-    setSelectedMatches(prev => ({ 
-      ...prev, 
-      [fid]: prev[fid] ? [...prev[fid], patchId] : [patchId] 
-    }));
-    
-    // Update the confirmed patches
-    setConfirmedPatches(prev => prev.map(patch => {
-      if (patch.fid === fid) {
-        const selectedMatch = patch.suggested_matches?.find(m => m.id === patchId);
-        const currentPatchIds = selectedMatches[fid] || [];
-        const newPatchIds = currentPatchIds.includes(patchId) 
-          ? currentPatchIds 
-          : [...currentPatchIds, patchId];
-        
-        return {
-          ...patch,
-          status: newPatchIds.length > 1 ? 'multiple_match' as const : 'manual_match' as const,
-          existing_patch_ids: newPatchIds,
-          match_confidence: selectedMatch?.confidence || 'medium',
-          match_similarity: selectedMatch?.similarity || 0.7,
-          is_mapped: true,
-          can_clear_match: true
-        };
+    setConfirmedPatches(prev => {
+      const patchIndex = prev.findIndex(p => p.fid === fid);
+      if (patchIndex === -1) return prev;
+
+      const updatedPatches = [...prev];
+      const patchToUpdate = { ...updatedPatches[patchIndex] };
+      
+      const currentPatchIds = patchToUpdate.existing_patch_ids || [];
+      const newPatchIds = currentPatchIds.includes(patchId)
+        ? currentPatchIds.filter(id => id !== patchId)
+        : [...currentPatchIds, patchId];
+
+      patchToUpdate.existing_patch_ids = newPatchIds;
+      patchToUpdate.status = newPatchIds.length > 0 ? 'manual_match' : patchToUpdate.status;
+      patchToUpdate.is_mapped = newPatchIds.length > 0;
+
+      const selectedMatch = patchToUpdate.suggested_matches?.find(m => m.id === patchId);
+      if (selectedMatch) {
+        patchToUpdate.match_confidence = selectedMatch.confidence;
+        patchToUpdate.match_similarity = selectedMatch.similarity;
       }
-      return patch;
-    }));
+      
+      updatedPatches[patchIndex] = patchToUpdate;
+      return updatedPatches;
+    });
   };
 
   const handleCreateNew = (fid: number) => {
@@ -90,31 +89,25 @@ export default function PatchMatchingDialog({ patches, existingPatches, onConfir
   };
 
   const handleManualPatchSelection = (fid: number, patchId: string) => {
-    setSelectedMatches(prev => ({ 
-      ...prev, 
-      [fid]: prev[fid] ? [...prev[fid], patchId] : [patchId] 
-    }));
-    
-    setConfirmedPatches(prev => prev.map(patch => {
-      if (patch.fid === fid) {
-        const selectedPatch = existingPatches.find(p => p.id === patchId);
-        const currentPatchIds = selectedMatches[fid] || [];
-        const newPatchIds = currentPatchIds.includes(patchId) 
-          ? currentPatchIds 
-          : [...currentPatchIds, patchId];
-        
-        return {
-          ...patch,
-          status: newPatchIds.length > 1 ? 'multiple_match' as const : 'manual_match' as const,
-          existing_patch_ids: newPatchIds,
-          match_confidence: 'medium',
-          match_similarity: 0.7,
-          is_mapped: true,
-          can_clear_match: true
-        };
-      }
-      return patch;
-    }));
+    setConfirmedPatches(prev => {
+      const patchIndex = prev.findIndex(p => p.fid === fid);
+      if (patchIndex === -1) return prev;
+
+      const updatedPatches = [...prev];
+      const patchToUpdate = { ...updatedPatches[patchIndex] };
+      
+      const currentPatchIds = patchToUpdate.existing_patch_ids || [];
+      const newPatchIds = currentPatchIds.includes(patchId)
+        ? currentPatchIds.filter(id => id !== patchId)
+        : [...currentPatchIds, patchId];
+
+      patchToUpdate.existing_patch_ids = newPatchIds;
+      patchToUpdate.status = newPatchIds.length > 0 ? 'manual_match' : patchToUpdate.status;
+      patchToUpdate.is_mapped = newPatchIds.length > 0;
+      
+      updatedPatches[patchIndex] = patchToUpdate;
+      return updatedPatches;
+    });
   };
 
   const removePatchFromFeature = (fid: number, patchId: string) => {
@@ -229,10 +222,10 @@ export default function PatchMatchingDialog({ patches, existingPatches, onConfir
   };
 
   const summary = {
-    exact: patches.filter(p => p.status === 'existing').length,
-    manual: patches.filter(p => p.status === 'manual_match').length,
-    new: patches.filter(p => p.status === 'new').length,
-    total: patches.length
+    exact: confirmedPatches.filter(p => p.status === 'existing').length,
+    manual: confirmedPatches.filter(p => p.status === 'manual_match').length,
+    new: confirmedPatches.filter(p => p.status === 'new').length,
+    total: confirmedPatches.length
   };
 
   return (
@@ -318,7 +311,7 @@ export default function PatchMatchingDialog({ patches, existingPatches, onConfir
         </CardHeader>
         <CardContent>
           <div className="space-y-4 max-h-96 overflow-y-auto">
-            {patches.map((patch) => (
+            {confirmedPatches.map((patch) => (
               <div 
                 key={patch.fid} 
                 className="border rounded-lg p-4 space-y-3"
@@ -345,7 +338,7 @@ export default function PatchMatchingDialog({ patches, existingPatches, onConfir
                         patch.suggested_matches.map((match) => (
                           <Button
                             key={match.id}
-                            variant={(selectedMatches[patch.fid] || []).includes(match.id) ? "default" : "outline"}
+                            variant={(patch.existing_patch_ids || []).includes(match.id) ? "default" : "outline"}
                             size="sm"
                             onClick={() => handlePatchSelection(patch.fid, match.id)}
                             className="text-xs"
@@ -368,7 +361,7 @@ export default function PatchMatchingDialog({ patches, existingPatches, onConfir
                       {existingPatches.map((existingPatch) => (
                         <Button
                           key={existingPatch.id}
-                          variant={(selectedMatches[patch.fid] || []).includes(existingPatch.id) ? "default" : "outline"}
+                          variant={(patch.existing_patch_ids || []).includes(existingPatch.id) ? "default" : "outline"}
                           size="sm"
                           onClick={() => handleManualPatchSelection(patch.fid, existingPatch.id)}
                           className="text-xs"
@@ -380,7 +373,7 @@ export default function PatchMatchingDialog({ patches, existingPatches, onConfir
                       ))}
                       
                       <Button
-                        variant={(selectedMatches[patch.fid] || []).length === 0 ? "default" : "outline"}
+                        variant={(patch.existing_patch_ids || []).length === 0 ? "default" : "outline"}
                         size="sm"
                         onClick={() => handleCreateNew(patch.fid)}
                         className="text-xs"

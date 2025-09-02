@@ -9,18 +9,10 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { GoogleMap } from '@/components/ui/GoogleMap';
 
-interface PatchMapProps {
-  patchId: string;
+interface AllPatchesMapProps {
   height?: string;
-}
-
-interface JobSiteMarker {
-  id: string;
-  name: string;
-  lat: number;
-  lng: number;
-  project_id: string;
-  project_name: string;
+  selectedPatchIds?: string[];
+  onPatchClick?: (patchId: string) => void;
 }
 
 interface Patch {
@@ -32,27 +24,41 @@ interface Patch {
   geom: string;
 }
 
-export function PatchMap({ patchId, height = '400px' }: PatchMapProps) {
-  const { data: patch, isLoading, error } = useQuery({
-    queryKey: ['patch-map-data', patchId],
+interface JobSiteMarker {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  project_id: string;
+  project_name: string;
+  patch_id: string;
+}
+
+export function AllPatchesMap({ 
+  height = '500px', 
+  selectedPatchIds = [],
+  onPatchClick 
+}: AllPatchesMapProps) {
+  // Fetch all active geo patches
+  const { data: patches = [], isLoading: patchesLoading } = useQuery({
+    queryKey: ['all-patches-map-data'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .rpc('get_patches_with_geometry_text')
-        .eq('id', patchId)
-        .single();
+        .rpc('get_patches_with_geometry_text');
 
       if (error) throw error;
-      return data as Patch;
+      return (data || []) as Patch[];
     }
   });
 
-  // Fetch job sites within this patch
-  const { data: jobSites = [] } = useQuery({
-    queryKey: ['patch-job-sites', patchId],
+  // Fetch all job sites with projects for the selected patches (or all if none selected)
+  const { data: jobSites = [], isLoading: sitesLoading } = useQuery({
+    queryKey: ['all-patch-job-sites', selectedPatchIds],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('patch_job_sites')
         .select(`
+          patch_id,
           job_site_id,
           job_sites:job_site_id (
             id,
@@ -66,9 +72,14 @@ export function PatchMap({ patchId, height = '400px' }: PatchMapProps) {
             )
           )
         `)
-        .eq('patch_id', patchId)
         .is('effective_to', null);
 
+      // Filter by selected patches if any are specified
+      if (selectedPatchIds.length > 0) {
+        query = query.in('patch_id', selectedPatchIds);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       
       return (data || [])
@@ -83,12 +94,15 @@ export function PatchMap({ patchId, height = '400px' }: PatchMapProps) {
             lat: site.latitude,
             lng: site.longitude,
             project_id: project?.id || '',
-            project_name: project?.name || 'Unknown Project'
+            project_name: project?.name || 'Unknown Project',
+            patch_id: item.patch_id
           } as JobSiteMarker;
         })
         .filter(Boolean) as JobSiteMarker[];
     }
   });
+
+  const isLoading = patchesLoading || sitesLoading;
 
   if (isLoading) {
     return (
@@ -96,49 +110,40 @@ export function PatchMap({ patchId, height = '400px' }: PatchMapProps) {
         <CardContent className="p-6 text-center">
           <div className="flex items-center justify-center gap-2">
             <img src="/spinner.gif" alt="Loading" className="h-4 w-4" />
-            <span>Loading patch map...</span>
+            <span>Loading patches map...</span>
           </div>
         </CardContent>
       </Card>
     );
   }
 
-  if (error || !patch) {
-    return (
-      <Card>
-        <CardContent className="p-6 text-center">
-          <p className="text-red-600">Failed to load patch map</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (!patch.geom) {
-    return (
-      <Card>
-        <CardContent className="p-6 text-center">
-          <p className="text-muted-foreground">This patch doesn't have a map boundary defined</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
   // Generate color based on patch type
-  const getPatchColor = (type: string, status: string) => {
+  const getPatchColor = (type: string, status: string, isSelected: boolean) => {
     if (status !== 'active') return '#808080'; // Gray for inactive
     
+    // Highlight selected patches
+    if (isSelected) {
+      switch (type) {
+        case 'geo': return '#FF0000'; // Bright red for selected geo patches
+        case 'trade': return '#00FF00'; // Bright green for selected trade patches
+        case 'sub-sector': return '#0000FF'; // Bright blue for selected sub-sector patches
+        default: return '#FFA500'; // Orange for other selected types
+      }
+    }
+    
+    // Muted colors for unselected patches
     switch (type) {
-      case 'geo': return '#FF0000'; // Red for geo patches
-      case 'trade': return '#00FF00'; // Green for trade patches
-      case 'sub-sector': return '#0000FF'; // Blue for sub-sector patches
-      default: return '#FFA500'; // Orange for other types
+      case 'geo': return '#FF9999'; // Light red for unselected geo patches
+      case 'trade': return '#99FF99'; // Light green for unselected trade patches
+      case 'sub-sector': return '#9999FF'; // Light blue for unselected sub-sector patches
+      default: return '#FFD699'; // Light orange for other unselected types
     }
   };
 
-  const mapPatches = [{
+  const mapPatches = patches.map(patch => ({
     ...patch,
-    color: getPatchColor(patch.type, patch.status)
-  }];
+    color: getPatchColor(patch.type, patch.status, selectedPatchIds.includes(patch.id))
+  }));
 
   // Convert job sites to project markers for the map
   const projectMarkers = jobSites.map(site => ({
@@ -153,13 +158,24 @@ export function PatchMap({ patchId, height = '400px' }: PatchMapProps) {
     window.location.href = `/projects/${projectId}`;
   };
 
+  const handlePatchClickInternal = (patchId: string) => {
+    if (onPatchClick) {
+      onPatchClick(patchId);
+    } else {
+      // Default behavior: navigate to patch page with selection
+      const currentUrl = new URL(window.location.href);
+      currentUrl.searchParams.set('patch', patchId);
+      window.location.href = currentUrl.toString();
+    }
+  };
+
   return (
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <MapPin className="h-5 w-5" />
-            Patch Map
+            {selectedPatchIds.length > 0 ? 'Selected Patches Map' : 'All Patches Map'}
             {jobSites.length > 0 && (
               <Badge variant="secondary" className="text-xs">
                 {jobSites.length} project{jobSites.length !== 1 ? 's' : ''}
@@ -167,10 +183,9 @@ export function PatchMap({ patchId, height = '400px' }: PatchMapProps) {
             )}
           </div>
           <div className="flex items-center gap-2">
-            <Badge variant={patch.status === 'active' ? 'default' : 'secondary'}>
-              {patch.status}
+            <Badge variant="outline">
+              {patches.length} patch{patches.length !== 1 ? 'es' : ''}
             </Badge>
-            <Badge variant="outline">{patch.type}</Badge>
             <Button
               size="sm"
               variant="ghost"
@@ -188,9 +203,14 @@ export function PatchMap({ patchId, height = '400px' }: PatchMapProps) {
           projectMarkers={projectMarkers}
           height={height}
           showControls={true}
-          onPatchClick={() => {}} // No action needed for single patch view
+          onPatchClick={handlePatchClickInternal}
           onProjectClick={handleProjectClick}
         />
+        {selectedPatchIds.length === 0 && (
+          <div className="p-3 bg-muted/50 border-t text-xs text-muted-foreground">
+            Click on a patch to view its details, or click on project markers to view project details.
+          </div>
+        )}
       </CardContent>
     </Card>
   );

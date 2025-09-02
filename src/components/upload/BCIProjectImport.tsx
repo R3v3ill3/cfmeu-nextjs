@@ -410,20 +410,40 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
         };
       }
       
-      // 2. Try fuzzy matching with broader word-level matching (exclude common legal suffixes)
-      const stopwords = new Set(['pty','ltd','ptyltd','proprietary','limited','pl','co']);
+      // 2. Try fuzzy matching with improved logic for simple company names
+      const stopwords = new Set(['pty','ltd','ptyltd','proprietary','limited','pl','co','group','construction','builders','building','contractor','contracting']);
       const tokens = String(companyName)
         .split(/[^A-Za-z0-9]+/)
         .map(t => t.trim().toLowerCase())
-        .filter(t => t.length >= 3 && !stopwords.has(t))
-        .slice(0, 8);
+        .filter(t => t.length >= 2 && !stopwords.has(t)) // Lowered from 3 to 2 to catch short names
+        .slice(0, 10); // Increased from 8 to 10
+      
       const firstToken = tokens[0];
       const orParts = [
-        `name.ilike.%${companyName}%`,
-        ...(firstToken ? [`name.ilike.${firstToken}%`] : []),
-        ...tokens.map(t => `name.ilike.%${t}%`)
+        `name.ilike.%${companyName}%`, // Full company name match
       ];
+      
+      // Add individual token searches with better logic
+      if (firstToken && firstToken.length >= 3) {
+        orParts.push(`name.ilike.${firstToken}%`); // Starts with first token
+        orParts.push(`name.ilike.%${firstToken}%`); // Contains first token anywhere
+      }
+      
+      // For short company names (like "Multiplex", "Keller"), add more aggressive matching
+      if (tokens.length === 1 && firstToken && firstToken.length >= 4) {
+        orParts.push(`name.ilike.%${firstToken.substring(0, 4)}%`); // First 4 characters
+      }
+      
+      // Add other significant tokens
+      tokens.slice(1).forEach(token => {
+        if (token.length >= 3) {
+          orParts.push(`name.ilike.%${token}%`);
+        }
+      });
+      
       const orQuery = orParts.join(',');
+      console.log('Fuzzy search query for', companyName, ':', orQuery);
+      
       const { data: fuzzyMatches, error: fuzzyError } = await supabase
         .from('employers')
         .select('id, name, address_line_1, suburb, state')
@@ -491,10 +511,36 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
     }
   };
 
-  // Enhanced employer creation
+  // Enhanced employer creation with duplicate prevention
   const createEmployer = async (companyData: any): Promise<string> => {
     const supabase = getSupabaseBrowserClient();
     
+    // Step 1: Check for exact name match
+    const { data: exactMatch } = await supabase
+      .from('employers')
+      .select('id, name, address_line_1, suburb, state')
+      .eq('name', companyData.companyName)
+      .maybeSingle();
+    
+    if (exactMatch) {
+      console.log(`✓ Using existing employer: ${exactMatch.name} (ID: ${exactMatch.id})`);
+      return exactMatch.id;
+    }
+    
+    // Step 2: Check for similar names (fuzzy matching)
+    const { data: similarEmployers } = await supabase
+      .from('employers')
+      .select('id, name, address_line_1, suburb, state')
+      .ilike('name', `%${companyData.companyName}%`)
+      .limit(5);
+    
+    const hasSimilar = similarEmployers && similarEmployers.length > 0;
+    if (hasSimilar) {
+      console.warn(`⚠ Found ${similarEmployers.length} similar employers for "${companyData.companyName}":`, 
+        similarEmployers.map(e => e.name));
+    }
+    
+    // Step 3: Create new employer
     const { data, error } = await supabase
       .from('employers')
       .insert({
@@ -512,6 +558,8 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
       .single();
     
     if (error) throw error;
+    
+    console.log(`✓ Created new employer: ${companyData.companyName} (ID: ${data.id})`);
     return data.id;
   };
 
@@ -664,12 +712,7 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
   // Move to trade type confirmation step
   const confirmEmployerMatches = () => {
     console.log('confirmEmployerMatches called, current state:', employerMatches);
-    // Employers-only path: skip trade type step (no subcontractor trade linking on this path)
-    if (mode === 'employers-to-existing') {
-      setCurrentStep('importing');
-      performEmployersToExistingImport();
-      return;
-    }
+    // Always show trade type confirmation step for user review
     setCurrentStep('trade_type_confirmation');
     // Scroll to top of the page
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -680,7 +723,13 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
     setCurrentStep('importing');
     // Scroll to top of the page
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    performImport();
+    
+    // Choose the appropriate import function based on mode
+    if (mode === 'employers-to-existing') {
+      performEmployersToExistingImport();
+    } else {
+      performImport();
+    }
   };
 
   // Enhanced import with user confirmations
@@ -782,29 +831,77 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
             const finalTradeType = matchResult?.finalTradeType || company.tradeType || 'general_construction';
             
             if (company.ourRole === 'builder') {
-              // Update project.builder_id
-              await supabase
+              // Check if project already has a builder
+              const { data: currentProject } = await supabase
                 .from('projects')
-                .update({ builder_id: employerId })
-                .eq('id', newProject.id);
+                .select('id, builder_id, employers:builder_id(name)')
+                .eq('id', newProject.id)
+                .maybeSingle();
+              
+              if (currentProject?.builder_id) {
+                if (currentProject.builder_id === employerId) {
+                  console.log(`✓ Builder already assigned to ${project.projectName}`);
+                } else {
+                  const existingBuilderName = (currentProject as any).employers?.name || 'Unknown';
+                  console.warn(`⚠ Project ${project.projectName} already has builder: ${existingBuilderName}. Skipping duplicate.`);
+                }
+              } else {
+                await supabase
+                  .from('projects')
+                  .update({ builder_id: employerId })
+                  .eq('id', newProject.id);
+                console.log(`✓ Assigned builder to ${project.projectName}`);
+              }
+              
             } else if (company.ourRole === 'head_contractor') {
-              // Add to project_employer_roles
-              await supabase
+              // Check for existing head contractor role
+              const { data: existingRole } = await supabase
                 .from('project_employer_roles')
-                .insert({
-                  project_id: newProject.id,
-                  employer_id: employerId,
-                  role: 'head_contractor'
-                });
+                .select('id')
+                .eq('project_id', newProject.id)
+                .eq('employer_id', employerId)
+                .eq('role', 'head_contractor')
+                .maybeSingle();
+              
+              if (existingRole) {
+                console.log(`✓ Head contractor relationship already exists for ${project.projectName}`);
+              } else {
+                await supabase
+                  .from('project_employer_roles')
+                  .insert({
+                    project_id: newProject.id,
+                    employer_id: employerId,
+                    role: 'head_contractor'
+                  });
+                console.log(`✓ Created head contractor role for ${project.projectName}`);
+              }
+              
             } else if (company.ourRole === 'subcontractor') {
-              // Add to project_contractor_trades
-              await supabase
+              // Check for existing trade relationship
+              const { data: existingTrade } = await supabase
                 .from('project_contractor_trades')
-                .insert({
-                  project_id: newProject.id,
-                  employer_id: employerId,
-                  trade_type: finalTradeType
-                });
+                .select('id, trade_type')
+                .eq('project_id', newProject.id)
+                .eq('employer_id', employerId)
+                .maybeSingle();
+              
+              if (existingTrade) {
+                if (existingTrade.trade_type === finalTradeType) {
+                  console.log(`✓ Trade relationship already exists for ${project.projectName}: ${finalTradeType}`);
+                } else {
+                  console.warn(`⚠ Trade type mismatch for ${project.projectName}. Existing: ${existingTrade.trade_type}, New: ${finalTradeType}`);
+                  // Skip creating duplicate with different trade type
+                }
+              } else {
+                await supabase
+                  .from('project_contractor_trades')
+                  .insert({
+                    project_id: newProject.id,
+                    employer_id: employerId,
+                    trade_type: finalTradeType
+                  });
+                console.log(`✓ Created trade relationship for ${project.projectName}: ${finalTradeType}`);
+              }
             }
           }
         }
@@ -860,13 +957,66 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
           }
           if (!employerId) continue;
 
-          // Link employer to project: builder/head_contractor/subcontractor with inferred trade
+          // Enhanced relationship creation with duplicate prevention
           if (company.ourRole === 'builder') {
-            await supabase.from('projects').update({ builder_id: employerId }).eq('id', existingProject.id);
+            const { data: currentProject } = await supabase
+              .from('projects')
+              .select('id, builder_id, employers:builder_id(name)')
+              .eq('id', existingProject.id)
+              .maybeSingle();
+            
+            if (currentProject?.builder_id && currentProject.builder_id !== employerId) {
+              const existingBuilderName = (currentProject as any).employers?.name || 'Unknown';
+              results.errors.push(`Project ${project.projectName} already has builder: ${existingBuilderName}`);
+            } else if (!currentProject?.builder_id) {
+              await supabase.from('projects').update({ builder_id: employerId }).eq('id', existingProject.id);
+              console.log(`✓ Assigned builder to ${project.projectName}`);
+            }
+            
           } else if (company.ourRole === 'head_contractor') {
-            await supabase.from('project_employer_roles').insert({ project_id: existingProject.id, employer_id: employerId, role: 'head_contractor' });
+            const { data: existingRole } = await supabase
+              .from('project_employer_roles')
+              .select('id')
+              .eq('project_id', existingProject.id)
+              .eq('employer_id', employerId)
+              .eq('role', 'head_contractor')
+              .maybeSingle();
+            
+            if (!existingRole) {
+              await supabase.from('project_employer_roles').insert({ 
+                project_id: existingProject.id, 
+                employer_id: employerId, 
+                role: 'head_contractor' 
+              });
+              console.log(`✓ Created head contractor role for ${project.projectName}`);
+            } else {
+              console.log(`✓ Head contractor relationship already exists for ${project.projectName}`);
+            }
+            
           } else if (company.ourRole === 'subcontractor') {
-            await supabase.from('project_contractor_trades').insert({ project_id: existingProject.id, employer_id: employerId, trade_type: company.tradeType || 'general_construction' });
+            const { data: existingTrade } = await supabase
+              .from('project_contractor_trades')
+              .select('id, trade_type')
+              .eq('project_id', existingProject.id)
+              .eq('employer_id', employerId)
+              .maybeSingle();
+            
+            const finalTradeType = company.tradeType || 'general_construction';
+            
+            if (existingTrade) {
+              if (existingTrade.trade_type !== finalTradeType) {
+                results.errors.push(`${project.projectName}: Employer already linked with different trade type (${existingTrade.trade_type} vs ${finalTradeType})`);
+              } else {
+                console.log(`✓ Trade relationship already exists for ${project.projectName}: ${finalTradeType}`);
+              }
+            } else {
+              await supabase.from('project_contractor_trades').insert({ 
+                project_id: existingProject.id, 
+                employer_id: employerId, 
+                trade_type: finalTradeType 
+              });
+              console.log(`✓ Created trade relationship for ${project.projectName}: ${finalTradeType}`);
+            }
           }
           results.employersMatched++;
         }
@@ -1011,31 +1161,76 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
     );
     
     if (csvRow) {
-      // Persist to pending_employers table
-      (async () => {
-        try {
-          const supabase = getSupabaseBrowserClient();
-          await supabase
-            .from('pending_employers')
-            .insert({
-              company_name: company.companyName,
-              csv_role: company.csvRole,
-              source: 'bci',
-              raw: csvRow
-            });
-        } catch (e) {
-          // Non-fatal; fall back to in-memory list only
-          console.warn('Failed to persist pending employer; keeping in-memory only');
-        }
-      })();
+      // Check if this company (by normalized name) is already in the list
+      const normalizedName = normalizeCompanyName(company.companyName);
+      const alreadyAdded = employersToAdd.some(emp => 
+        normalizeCompanyName(emp.companyName) === normalizedName
+      );
 
-      setEmployersToAdd(prev => [...prev, {
-        companyName: company.companyName,
-        csvRole: company.csvRole,
-        companyData: csvRow,
-        matchKey
-      }]);
+      if (!alreadyAdded) {
+        // Persist to pending_employers table (only once per unique company)
+        (async () => {
+          try {
+            const supabase = getSupabaseBrowserClient();
+            await supabase
+              .from('pending_employers')
+              .insert({
+                company_name: company.companyName,
+                csv_role: company.csvRole,
+                source: 'bci',
+                inferred_trade_type: company.tradeType,
+                our_role: company.ourRole,
+                project_associations: [{
+                  project_id: projectId,
+                  project_name: processedData.find(p => p.projectId === projectId)?.projectName || `Project ${projectId}`,
+                  csv_role: company.csvRole
+                }],
+                raw: csvRow
+              });
+          } catch (e) {
+            // Non-fatal; fall back to in-memory list only
+            console.warn('Failed to persist pending employer; keeping in-memory only');
+          }
+        })();
+
+        setEmployersToAdd(prev => [...prev, {
+          companyName: company.companyName,
+          csvRole: company.csvRole,
+          companyData: csvRow,
+          matchKey
+        }]);
+      }
+
+      // Update the current match key regardless
       updateEmployerMatch(matchKey, 'add_to_list');
+      
+      // Also update all other instances of this company across projects
+      const norm = (s: string) => normalizeCompanyName(s);
+      const companyNorm = norm(company.companyName);
+      
+      setEmployerMatches(prev => {
+        const updated = { ...prev };
+        
+        // Find all match keys for this company across all projects
+        for (const project of processedData) {
+          for (const comp of project.companies) {
+            if (!comp.shouldImport) continue;
+            if (norm(comp.companyName) !== companyNorm) continue;
+            
+            const k = `${project.projectId}-${comp.companyName}-${comp.csvRole}`;
+            const existing = updated[k];
+            if (existing) {
+              updated[k] = {
+                ...existing,
+                action: 'add_to_list',
+                userConfirmed: true
+              };
+            }
+          }
+        }
+        
+        return updated;
+      });
     }
   };
 
@@ -1049,16 +1244,38 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
     if (!searchTerm.trim()) return;
     
     setIsSearching(true);
+    setSearchResults([]); // Clear previous results
+    
     try {
       const supabase = getSupabaseBrowserClient();
+      
+      console.log('Performing manual search for:', searchTerm);
+      console.log('Supabase client:', supabase);
+      
+      // Test basic connectivity first
+      const { data: testData, error: testError } = await supabase
+        .from('employers')
+        .select('count', { count: 'exact', head: true });
+      
+      console.log('Test query result:', { testData, testError });
+      
+      if (testError) {
+        console.error('Basic connectivity test failed:', testError);
+        throw new Error(`Database connection failed: ${testError.message}`);
+      }
       
       const { data, error } = await supabase
         .from('employers')
         .select('id, name, address_line_1, suburb, state')
-        .or(`name.ilike.%${searchTerm}%,name.ilike.${searchTerm}%`)
+        .ilike('name', `%${searchTerm.trim()}%`)
         .limit(10);
       
-      if (error) throw error;
+      console.log('Search query result:', { data, error, searchTerm: searchTerm.trim() });
+      
+      if (error) {
+        console.error('Search query failed:', error);
+        throw new Error(`Search failed: ${error.message}`);
+      }
       
       const results = data?.map((emp: any) => ({
         id: emp.id,
@@ -1066,9 +1283,13 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
         address: `${emp.address_line_1 || ''} ${emp.suburb || ''} ${emp.state || ''}`.trim()
       })) || [];
       
+      console.log('Processed results:', results);
       setSearchResults(results);
+      
     } catch (error) {
       console.error('Manual search error:', error);
+      // Show error to user
+      alert(`Search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setSearchResults([]);
     } finally {
       setIsSearching(false);
@@ -1515,7 +1736,10 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
                     Searching...
                   </>
                 ) : (
-                  'Search'
+                  <>
+                    <Search className="w-4 h-4 mr-2" />
+                    Search
+                  </>
                 )}
               </Button>
               <Button 
@@ -1589,15 +1813,21 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
                     onClick={() => {
                       if (!currentSearchMatchKey) return;
                       // Add to list for later import
-                      const [projId, compName, csvRole] = currentSearchMatchKey.split('-');
+                      const [projId, ...rest] = currentSearchMatchKey.split('-');
+                      // Handle company names that might contain dashes
+                      const lastDashIndex = currentSearchMatchKey.lastIndexOf('-');
+                      const csvRole = currentSearchMatchKey.substring(lastDashIndex + 1);
+                      const compName = currentSearchMatchKey.substring(projId.length + 1, lastDashIndex);
+                      
                       const project = processedData.find(p => p.projectId === projId);
                       const company = project?.companies.find(c => c.companyName === compName && c.csvRole === csvRole);
                       if (project && company) {
                         addEmployerToList(currentSearchMatchKey, company as any, project.projectId);
-                        // Also finalize the card immediately
-                        updateEmployerMatch(currentSearchMatchKey, 'add_to_list');
                       }
                       setShowManualSearch(false);
+                      setSearchResults([]);
+                      setSearchingForCompany('');
+                      setCurrentSearchMatchKey('');
                     }}
                   >
                     Add to Import List
@@ -1881,7 +2111,7 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
                      )}
                    </div>
                    <p className="text-sm text-blue-700 mt-3">
-                     Go to <strong>Data Upload → Employers</strong> to import these companies.
+                     Go to <strong>Data Upload → Employers tab</strong> to import these companies.
                    </p>
                  </CardContent>
                </Card>

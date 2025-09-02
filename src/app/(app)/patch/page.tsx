@@ -3,21 +3,30 @@ export const dynamic = 'force-dynamic'
 
 import RoleGuard from "@/components/guards/RoleGuard"
 import { PatchKPICards, PatchSitesTable, PatchMap } from "@/components/patch"
+import { AllPatchesMap } from "@/components/patch/AllPatchesMap"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
 import { useMemo, useState } from "react"
-import { useSearchParams } from "next/navigation"
+import { useSearchParams, useRouter, usePathname } from "next/navigation"
 import { usePatchDashboard } from "@/hooks/usePatchDashboard"
 import AddressLookupDialog from "@/components/AddressLookupDialog"
 import { Button } from "@/components/ui/button"
 
 export default function PatchPage() {
+  const router = useRouter()
+  const pathname = usePathname()
   const sp = useSearchParams()
   const [lookupOpen, setLookupOpen] = useState(false)
   const patchParam = sp.get("patch") || ""
   const patchIds = patchParam.split(",").map(s => s.trim()).filter(Boolean)
   const status = sp.get("status") || undefined
   const q = sp.get("q")?.toLowerCase() || ""
+
+  const handlePatchClick = (patchId: string) => {
+    const params = new URLSearchParams(sp.toString())
+    params.set('patch', patchId)
+    router.push(`${pathname}?${params.toString()}`)
+  }
 
   // For now, this dashboard still expects a single patch; feed first if present
   const { data } = usePatchDashboard(patchIds[0])
@@ -65,9 +74,15 @@ export default function PatchPage() {
           openAudits: kpis.openAudits,
         }} />
         
-        {/* Show patch map if a specific patch is selected */}
-        {patchIds.length === 1 && (
+        {/* Always show map - either all patches or specific patch detail */}
+        {patchIds.length === 1 ? (
           <PatchMap patchId={patchIds[0]} height="400px" />
+        ) : (
+          <AllPatchesMap 
+            height="500px" 
+            selectedPatchIds={patchIds}
+            onPatchClick={handlePatchClick}
+          />
         )}
         
         <Card>

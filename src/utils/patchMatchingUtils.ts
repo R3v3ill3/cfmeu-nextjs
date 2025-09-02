@@ -28,6 +28,7 @@ export interface ParsedPatch {
   patch_name: string;
   coordinator?: string;
   geometry: string; // WKT format for PostGIS
+  original_geometry: any; // Keep original GeoJSON geometry
   status: 'new' | 'existing' | 'manual_match' | 'multiple_match' | 'unmapped';
   existing_patch_ids?: string[]; // For one-to-many mappings
   match_confidence?: 'exact' | 'high' | 'medium' | 'low';
@@ -286,6 +287,7 @@ export function parsePatchesWithFuzzyMatching(
       patch_name,
       coordinator,
       geometry: wkt,
+      original_geometry: feature.geometry,
       status,
       existing_patch_ids,
       match_confidence,
