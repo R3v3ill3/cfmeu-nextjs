@@ -1,6 +1,6 @@
 'use client';
 import { GoogleMap, useJsApiLoader, Polygon } from '@react-google-maps/api';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 
 const containerStyle = {
@@ -34,16 +34,46 @@ function MobileMap() {
     fetchPatches();
   }, []);
 
-  const polygons = patches.map(patch => {
-    if (!patch.geom_geojson) return null;
-    const geojson = typeof patch.geom_geojson === 'string' ? JSON.parse(patch.geom_geojson) : patch.geom_geojson;
-    const paths = geojson.coordinates[0].map((coord: any) => ({ lat: coord[1], lng: coord[0] }));
-    return <Polygon key={patch.id} paths={paths} />;
-  });
+  const extractPolygonsFromGeoJSON = useCallback((geojson: any): google.maps.LatLngLiteral[][][] => {
+    try {
+      if (!geojson || !geojson.type || !geojson.coordinates) return []
+
+      const toRing = (coords: [number, number][]) => coords.map(([lng, lat]) => ({ lat, lng }))
+
+      if (geojson.type === "Polygon") {
+        const rings: google.maps.LatLngLiteral[][] = (geojson.coordinates as [number, number][][]).map(toRing)
+        return [rings]
+      }
+      if (geojson.type === "MultiPolygon") {
+        const polygons: google.maps.LatLngLiteral[][][] = (geojson.coordinates as [number, number][][][]).map(
+          (poly) => (poly as [number, number][][]).map(toRing)
+        )
+        return polygons
+      }
+      return []
+    } catch (e) {
+      console.warn("⚠️ Failed to parse GeoJSON:", e)
+      return []
+    }
+  }, []);
 
   return isLoaded ? (
     <GoogleMap mapContainerStyle={containerStyle} center={center} zoom={10}>
-      {polygons}
+      {patches.map(patch => {
+        if (!patch.geom_geojson) return null;
+        const polygons = extractPolygonsFromGeoJSON(patch.geom_geojson);
+        return polygons.map((rings, idx) => (
+          <Polygon
+            key={`${patch.id}-${idx}`}
+            paths={rings}
+            options={{
+              fillOpacity: 0.2,
+              strokeOpacity: 1,
+              strokeWeight: 2,
+            }}
+          />
+        ));
+      })}
     </GoogleMap>
   ) : <></>;
 }
