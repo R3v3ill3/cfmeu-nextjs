@@ -12,10 +12,11 @@ import { CheckCircle, AlertCircle, Info, Loader2, MapPin, Upload, FileText } fro
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
-import { 
-  parsePatchesWithFuzzyMatching, 
-  ParsedPatch, 
-  GeoJSONFeature 
+import {
+  parsePatchesWithFuzzyMatching,
+  ParsedPatch,
+  GeoJSONFeature,
+  convertToWKT,
 } from '@/utils/patchMatchingUtils';
 import PatchMatchingDialog from './PatchMatchingDialog';
 
@@ -165,17 +166,16 @@ export default function GeoJSONPatchUpload({ onUploadComplete, onBack }: GeoJSON
           if (insertError) throw insertError;
           
           const newPatchId = newPatch.id;
+          const wktGeometries = geometries.map(g => convertToWKT(g));
 
-          const geometryCollection = {
-            type: "GeometryCollection",
-            geometries: geometries
-          };
-
-          const { error: rpcError } = await supabase.rpc('apply_feature_geometries_to_patch', {
-            p_patch_id: newPatchId,
-            p_geometry_collection_geojson: geometryCollection,
-            p_overwrite: true
-          });
+          const { error: rpcError } = await supabase.rpc(
+            'apply_geometries_to_patch_wkt',
+            {
+              p_patch_id: newPatchId,
+              p_geometries_wkt: wktGeometries,
+              p_overwrite: true,
+            }
+          );
 
           if (rpcError) throw rpcError;
 
@@ -189,15 +189,16 @@ export default function GeoJSONPatchUpload({ onUploadComplete, onBack }: GeoJSON
       // 2. Update existing patches with aggregated geometries
       for (const [patchId, geometries] of existingPatchGeometryMap.entries()) {
         try {
-          const geometryCollection = {
-            type: "GeometryCollection",
-            geometries: geometries
-          };
-          const { error } = await supabase.rpc('apply_feature_geometries_to_patch', {
-            p_patch_id: patchId,
-            p_geometry_collection_geojson: geometryCollection,
-            p_overwrite: true
-          });
+          const wktGeometries = geometries.map(g => convertToWKT(g));
+          console.log('DEBUG: Sending to apply_geometries_to_patch_wkt', { patchId, wktGeometries });
+          const { error } = await supabase.rpc(
+            'apply_geometries_to_patch_wkt',
+            {
+              p_patch_id: patchId,
+              p_geometries_wkt: wktGeometries,
+              p_overwrite: true,
+            }
+          );
 
           if (error) throw error;
           updated++;

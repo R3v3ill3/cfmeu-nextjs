@@ -99,7 +99,7 @@ function parseSearchResults(html: string, searchQuery: string): FWCSearchResult[
     '.result-item'
   ];
 
-  let resultElements: cheerio.Cheerio<cheerio.Element> = $();
+  let resultElements = $('<div></div>').empty();
   
   // Try different selectors to find results
   for (const selector of searchSelectors) {
