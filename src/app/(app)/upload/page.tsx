@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { useMemo, useState, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import FileUpload from "@/components/upload/FileUpload"
 import ColumnMapper from "@/components/upload/ColumnMapper"
@@ -17,6 +17,7 @@ import ProjectImport from "@/components/upload/ProjectImport"
 import BCICsvParser from "@/components/upload/BCICsvParser"
 import BCIProjectImport from "@/components/upload/BCIProjectImport"
 import PendingEmployersImport from "@/components/upload/PendingEmployersImport"
+import EbaProjectSearch from "@/components/upload/EbaProjectSearch"
 import { useAuth } from "@/hooks/useAuth"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 
@@ -175,7 +176,32 @@ export default function UploadPage() {
               
               {availableTypes.includes("eba") && (
                 <TabsContent value="eba">
-                  <FileUpload onFileUploaded={onFileUploaded} />
+                  <div className="space-y-6">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>EBA Data Import</CardTitle>
+                        <CardDescription>
+                          Upload CSV files with EBA data or search for existing project employers
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <Tabs defaultValue="upload" className="w-full">
+                          <TabsList>
+                            <TabsTrigger value="upload">Upload EBA CSV</TabsTrigger>
+                            <TabsTrigger value="search">Search Project Employers</TabsTrigger>
+                          </TabsList>
+                          
+                          <TabsContent value="upload" className="mt-4">
+                            <FileUpload onFileUploaded={onFileUploaded} />
+                          </TabsContent>
+                          
+                          <TabsContent value="search" className="mt-4">
+                            <EbaProjectSearch />
+                          </TabsContent>
+                        </Tabs>
+                      </CardContent>
+                    </Card>
+                  </div>
                 </TabsContent>
               )}
               

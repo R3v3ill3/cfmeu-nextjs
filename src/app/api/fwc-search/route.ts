@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as cheerio from 'cheerio';
+import puppeteer from 'puppeteer';
 
 export interface FWCSearchResult {
   title: string;
@@ -13,7 +14,48 @@ export interface FWCSearchResult {
   downloadToken?: string; // For handling dynamic URLs
 }
 
+// Function to simplify company names for better search results
+function simplifyCompanyName(companyName: string): string {
+  if (!companyName) return '';
+  
+  let simplified = companyName
+    // Remove common company suffixes
+    .replace(/\s+(Pty\s+Ltd|Pty\.?\s*Ltd\.?|Limited|Ltd\.?|Incorporated|Inc\.?|Corporation|Corp\.?)$/i, '')
+    // Remove parenthetical information (like "Formerly known as...")
+    .replace(/\s*\([^)]*\)/g, '')
+    // Remove common business words that might confuse search
+    .replace(/\s+(Group|Holdings|Enterprises|Services|Solutions|Systems|Technologies|International|Australia|Australian)$/i, '')
+    // Remove punctuation and extra spaces
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  
+  // Take only the first few significant words (max 3)
+  const words = simplified.split(' ').filter(word => word.length > 2);
+  simplified = words.slice(0, 3).join(' ');
+  
+  console.log(`📝 Simplified "${companyName}" → "${simplified}"`);
+  return simplified;
+}
+
+async function getBrowser() {
+  // For local development, Puppeteer will download Chromium.
+  // For Vercel, we need to use a specific configuration.
+  if (process.env.VERCEL_ENV) {
+    const puppeteerCore = await import('puppeteer-core');
+    const chrome = await import('@sparticuz/chromium');
+    return puppeteerCore.launch({
+      args: chrome.args,
+      executablePath: await chrome.executablePath(),
+      headless: chrome.headless,
+    });
+  } else {
+    return puppeteer.launch({ headless: true });
+  }
+}
+
 export async function POST(request: NextRequest) {
+  let browser;
   try {
     const { companyName, searchTerm } = await request.json();
     
@@ -24,40 +66,40 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Build FWC search URL
-    const query = searchTerm || `cfmeu construction ${companyName}`;
+    // Build FWC search URL with simplified company name and expiry filter
+    const simplifiedCompanyName = simplifyCompanyName(companyName);
+    const query = searchTerm || `cfmeu construction nsw ${simplifiedCompanyName}`;
     const searchUrl = new URL('https://www.fwc.gov.au/document-search');
     searchUrl.searchParams.set('q', query);
-    searchUrl.searchParams.set('options', 'SearchType_3,SortOrder_agreement-relevance');
+    searchUrl.searchParams.set('options', 'SearchType_3,SortOrder_agreement-relevance,ExpiryFromDate_01/01/2024'); // SearchType_3 = Agreements, recent expiry
     searchUrl.searchParams.set('pagesize', '50');
     searchUrl.searchParams.set('facets', 'AgreementStatusDesc_Approved,AgreementType_Single-enterprise Agreement,AgreementIndustry_Building metal and civil construction industries');
 
     console.log(`🔍 Searching FWC for: "${query}"`);
     console.log(`📍 Search URL: ${searchUrl.toString()}`);
 
-    // Fetch search results with proper headers
-    const response = await fetch(searchUrl.toString(), {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
-      },
-      // Add timeout
-      signal: AbortSignal.timeout(15000)
+    browser = await getBrowser();
+    const page = await browser.newPage();
+    
+    // Set a realistic user agent
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+
+    console.log('Navigating to FWC page...');
+    await page.goto(searchUrl.toString(), {
+      waitUntil: 'networkidle2', // Wait for network to be idle
+      timeout: 30000 // 30 second timeout
     });
+    
+    console.log('Page loaded. Waiting for results to render...');
+    
+    // It's good practice to wait for a selector that indicates results are loaded.
+    // Based on manual inspection, the results are inside a div that gets populated.
+    // We can wait for the presence of the result headings.
+    await page.waitForSelector('a h3', { timeout: 15000 });
 
-    if (!response.ok) {
-      console.error(`❌ FWC search failed: ${response.status} ${response.statusText}`);
-      return NextResponse.json(
-        { error: `FWC search failed: ${response.statusText}`, results: [] },
-        { status: response.status }
-      );
-    }
-
-    const html = await response.text();
+    console.log('Results selector found. Getting page content.');
+    const html = await page.content();
+    
     const results = parseSearchResults(html, query);
 
     console.log(`✅ Found ${results.length} EBA results for "${query}"`);
@@ -72,17 +114,23 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('❌ FWC search error:', error);
     
-    if (error instanceof Error && error.name === 'TimeoutError') {
-      return NextResponse.json(
-        { error: 'Search request timed out. Please try again.', results: [] },
-        { status: 408 }
-      );
+    if (error instanceof Error) {
+      if (error.name === 'TimeoutError' || error.message.includes('timeout')) {
+        return NextResponse.json(
+          { error: 'Search request timed out waiting for FWC results. The site may be slow or blocking requests. Please try again.', results: [] },
+          { status: 408 }
+        );
+      }
     }
     
     return NextResponse.json(
-      { error: 'Failed to search FWC database', results: [] },
+      { error: 'Failed to search FWC database using Puppeteer', results: [] },
       { status: 500 }
     );
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
   }
 }
 
@@ -90,123 +138,135 @@ function parseSearchResults(html: string, searchQuery: string): FWCSearchResult[
   const $ = cheerio.load(html);
   const results: FWCSearchResult[] = [];
 
-  // Look for search result items - FWC uses various selectors
-  const searchSelectors = [
-    '.search-result',
-    '.document-result', 
-    '.agreement-result',
-    '[data-document-type="agreement"]',
-    '.result-item'
-  ];
-
-  let resultElements = $('<div></div>').empty();
+  console.log('🔍 Parsing FWC search results...');
   
-  // Try different selectors to find results
-  for (const selector of searchSelectors) {
-    resultElements = $(selector);
-    if (resultElements.length > 0) {
-      console.log(`📋 Found ${resultElements.length} results using selector: ${selector}`);
-      break;
-    }
-  }
-
-  // If no structured results, look for any links containing agreement info
-  if (resultElements.length === 0) {
-    console.log('🔍 No structured results found, scanning for agreement links...');
-    resultElements = $('a').filter((_, el) => {
-      const href = $(el).attr('href') || '';
-      const text = $(el).text().toLowerCase();
-      return href.includes('agreement') || href.includes('document') || 
-             text.includes('agreement') || text.includes('eba');
-    });
-    console.log(`📋 Found ${resultElements.length} potential agreement links`);
-  }
-
-  resultElements.each((index, element) => {
+  // Based on browser inspection, FWC uses a structure like:
+  // - Each result is in a container with heading level 3
+  // - Metadata is in sibling generic containers
+  // - PDF links are in the format /document-search/view/3/[encoded]
+  
+  // Find all h3 headings that are agreement titles (inside links)
+  const agreementLinks = $('a h3').parent();
+  console.log(`📋 Found ${agreementLinks.length} agreement title links`);
+  
+  agreementLinks.each((index, linkElement) => {
     try {
-      const $el = $(element);
+      const $link = $(linkElement);
+      const $container = $link.closest('div').parent(); // Get the parent container
       
-      // Extract title - try multiple approaches
-      let title = $el.find('h3, h4, .title, .document-title').first().text().trim() ||
-                  $el.find('a').first().text().trim() ||
-                  $el.text().trim().split('\n')[0].trim();
-
-      // Skip if title is too generic or empty
-      if (!title || title.length < 10 || 
-          title.toLowerCase().includes('search') ||
-          title.toLowerCase().includes('filter')) {
-        return;
-      }
-
+      // Extract title from h3
+      const title = $link.find('h3').text().trim();
+      if (!title || title.length < 10) return;
+      
+      console.log(`📄 Processing agreement: ${title}`);
+      
       // Extract document URL
-      let documentUrl = $el.find('a').first().attr('href') || '';
+      let documentUrl = $link.attr('href') || '';
       if (documentUrl && !documentUrl.startsWith('http')) {
         documentUrl = `https://www.fwc.gov.au${documentUrl}`;
       }
-
-      // Extract metadata
-      const metadata = $el.text();
       
-      // Parse agreement type
-      let agreementType = 'Single-enterprise Agreement';
-      if (metadata.toLowerCase().includes('multi-enterprise')) {
-        agreementType = 'Multi-enterprise Agreement';
-      }
-
-      // Parse status
+      // Find the metadata container (sibling to the link container)
+      const $metadataContainer = $container.find('div').last(); // Usually the last div has metadata
+      const metadataText = $metadataContainer.text();
+      
+      console.log(`📊 Metadata for ${title.substring(0, 30)}...: ${metadataText.substring(0, 200)}`);
+      
+      // Extract specific metadata fields
       let status = 'Unknown';
-      if (metadata.toLowerCase().includes('approved')) {
-        status = 'Approved';
-      } else if (metadata.toLowerCase().includes('terminated')) {
-        status = 'Terminated';
-      } else if (metadata.toLowerCase().includes('replaced')) {
-        status = 'Replaced';
-      }
-
-      // Extract dates using regex
-      const approvedMatch = metadata.match(/approved[:\s]*(\d{1,2}\/\d{1,2}\/\d{4}|\d{4}-\d{2}-\d{2})/i);
-      const expiryMatch = metadata.match(/expir[a-z]*[:\s]*(\d{1,2}\/\d{1,2}\/\d{4}|\d{4}-\d{2}-\d{2})/i);
-      const lodgementMatch = metadata.match(/lodgement[:\s]*([A-Z0-9]+)/i);
-
-      // Extract download links - look for PDF or document download URLs
-      let downloadUrl = '';
-      $el.find('a').each((_, link) => {
-        const href = $(link).attr('href') || '';
-        const linkText = $(link).text().toLowerCase();
-        if (href.includes('.pdf') || 
-            linkText.includes('download') || 
-            linkText.includes('view document') ||
-            href.includes('/documents/')) {
-          downloadUrl = href.startsWith('http') ? href : `https://www.fwc.gov.au${href}`;
-          return false; // break
+      let agreementId = '';
+      let approvedDate = '';
+      let expiryDate = '';
+      let abn = '';
+      let employerName = '';
+      
+      // Look for status (Approved, Terminated, etc.)
+      const statusMatch = metadataText.match(/\b(Approved|Terminated|Replaced|Superseded)\b/i);
+      if (statusMatch) status = statusMatch[1];
+      
+      // Look for agreement ID (format: AE123456)
+      const idMatch = metadataText.match(/\b(AE\d+)\b/);
+      if (idMatch) agreementId = idMatch[1];
+      
+      // Look for approved date
+      const approvedMatch = metadataText.match(/Approved:\s*(\d{1,2}\s+\w+\s+\d{4})/i);
+      if (approvedMatch) approvedDate = approvedMatch[1];
+      
+      // Look for expiry date
+      const expiryMatch = metadataText.match(/Nominal expiry:\s*(\d{1,2}\s+\w+\s+\d{4})/i);
+      if (expiryMatch) expiryDate = expiryMatch[1];
+      
+      // Look for ABN
+      const abnMatch = metadataText.match(/ABN:\s*(\d+)/);
+      if (abnMatch) abn = abnMatch[1];
+      
+      // Extract employer name (usually after ABN or before ABN)
+      const employerMatch = title.match(/^([^-]+)/);
+      if (employerMatch) employerName = employerMatch[1].trim();
+      
+      // Find PDF download link
+      let pdfUrl = '';
+      const $pdfLink = $container.find('a').filter((_, el) => {
+        const href = $(el).attr('href') || '';
+        const text = $(el).text().toLowerCase();
+        return href.includes('/document-search/view/') || text.includes('pdf');
+      }).first();
+      
+      if ($pdfLink.length > 0) {
+        pdfUrl = $pdfLink.attr('href') || '';
+        if (pdfUrl && !pdfUrl.startsWith('http')) {
+          pdfUrl = `https://www.fwc.gov.au${pdfUrl}`;
         }
-      });
+      }
 
       const result: FWCSearchResult = {
-        title: title.substring(0, 200), // Limit title length
-        agreementType,
-        status,
-        approvedDate: approvedMatch?.[1],
-        expiryDate: expiryMatch?.[1],
-        lodgementNumber: lodgementMatch?.[1],
-        documentUrl: documentUrl || undefined,
-        summaryUrl: downloadUrl || undefined,
+        title: title,
+        agreementType: 'Single-enterprise Agreement', // Default, could be parsed from metadata
+        status: status,
+        approvedDate: approvedDate || undefined,
+        expiryDate: expiryDate || undefined,
+        lodgementNumber: agreementId || undefined,
+        documentUrl: pdfUrl || documentUrl,
+        summaryUrl: documentUrl,
       };
 
-      // Only add if we have meaningful data
-      if (result.title.length > 10) {
-        results.push(result);
-      }
+      console.log(`✅ Parsed result:`, {
+        title: result.title.substring(0, 50),
+        status: result.status,
+        agreementId,
+        approvedDate,
+        expiryDate
+      });
+
+      results.push(result);
 
     } catch (error) {
-      console.error('Error parsing search result:', error);
+      console.error('Error parsing agreement result:', error);
     }
   });
 
-  // If still no results, provide fallback message
+  console.log(`✅ Successfully parsed ${results.length} EBA results`);
+
+  // If still no results, provide detailed debugging
   if (results.length === 0) {
-    console.log('⚠️ No EBA results could be parsed from FWC response');
-    console.log('📄 HTML preview:', html.substring(0, 500));
+    console.log('⚠️ No EBA results could be parsed from FWC response. Dumping full HTML for review.');
+    console.log('📄 Full FWC Response HTML:', html);
+    
+    // Debug: Check what elements exist
+    const $ = cheerio.load(html);
+    console.log('🔍 Page title:', $('title').text());
+    console.log('🔍 Main headings:', $('h1, h2, h3').map((_, el) => $(el).text().trim()).get());
+    console.log('🔍 Links found:', $('a').length);
+    console.log('🔍 Forms found:', $('form').length);
+    
+    // Check for common FWC page elements
+    const commonElements = ['.search-results', '.results', '.documents', '.agreements', '.no-results', '.error'];
+    commonElements.forEach(selector => {
+      const elements = $(selector);
+      if (elements.length > 0) {
+        console.log(`🔍 Found ${selector}:`, elements.first().text().trim().substring(0, 200));
+      }
+    });
   }
 
   // Remove duplicates based on title similarity
@@ -229,9 +289,11 @@ export async function GET(request: NextRequest) {
   }
 
   // Return manual search URL for user to open
+  const simplifiedCompanyName = simplifyCompanyName(companyName);
   const manualSearchUrl = new URL('https://www.fwc.gov.au/document-search');
-  manualSearchUrl.searchParams.set('q', `cfmeu construction ${companyName}`);
-  manualSearchUrl.searchParams.set('options', 'SearchType_3,SortOrder_agreement-relevance');
+  manualSearchUrl.searchParams.set('q', `cfmeu construction nsw ${simplifiedCompanyName}`);
+  manualSearchUrl.searchParams.set('options', 'SearchType_3,SortOrder_agreement-relevance,ExpiryFromDate_01/01/2024');
+  manualSearchUrl.searchParams.set('pagesize', '50');
   manualSearchUrl.searchParams.set('facets', 'AgreementStatusDesc_Approved,AgreementType_Single-enterprise Agreement,AgreementIndustry_Building metal and civil construction industries');
 
   return NextResponse.json({ 

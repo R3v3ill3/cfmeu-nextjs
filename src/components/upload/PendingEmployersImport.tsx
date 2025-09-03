@@ -5,12 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle, AlertCircle, Info, Building2, Trash2, Eye, EyeOff, Wrench, AlertTriangle, Search, FileText, ExternalLink } from 'lucide-react';
+import { CheckCircle, AlertCircle, Info, Building2, Trash2, Eye, EyeOff, Wrench, AlertTriangle, Search, FileText, ExternalLink, ChevronDown, ChevronRight, XCircle } from 'lucide-react';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { getTradeTypeLabel, TradeType, getTradeTypeCategories } from '@/utils/bciTradeTypeInference';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
   import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useToast } from '@/components/ui/use-toast';
 
 interface FWCSearchResult {
   title: string;
@@ -55,6 +57,7 @@ interface ImportResults {
   success: number;
   errors: string[];
   employersCreated: string[];
+  processedEmployers: Array<{id: string, name: string}>; // Track all processed employers for EBA search
       duplicatesResolved: number;
     relationshipsCreated: number;
     ebaSearchesCompleted: number;
@@ -85,29 +88,57 @@ export default function PendingEmployersImport() {
     const [duplicateDetections, setDuplicateDetections] = useState<Record<string, DuplicateDetection>>({});
     const [showDuplicateResolution, setShowDuplicateResolution] = useState(false);
     const [isDetectingDuplicates, setIsDetectingDuplicates] = useState(false);
+    const [isMergingExact, setIsMergingExact] = useState<Record<string, boolean>>({});
+    const [selectedExactMatches, setSelectedExactMatches] = useState<Set<string>>(new Set());
+    const [isMergingAllExact, setIsMergingAllExact] = useState(false);
+    const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+    
+    // Workflow state management
+    const [workflowStep, setWorkflowStep] = useState<'review' | 'merge' | 'import' | 'complete'>('review');
+    const [importProgress, setImportProgress] = useState({ current: 0, total: 0, currentEmployer: '' });
+    const [showProcessedEmployers, setShowProcessedEmployers] = useState(false);
     
     // EBA search states
     const [showEbaSearch, setShowEbaSearch] = useState(false);
     const [ebaSearchStates, setEbaSearchStates] = useState<Record<string, EbaSearchState>>({});
     const [isEbaSearching, setIsEbaSearching] = useState(false);
+    const [expandedEbaResults, setExpandedEbaResults] = useState<Set<string>>(new Set());
+    const [employersToDismiss, setEmployersToDismiss] = useState<Set<string>>(new Set());
+    
+    const { toast } = useToast();
 
-  // Load pending employers on mount
+  // Load pending employers on mount and when filter changes
   useEffect(() => {
     loadPendingEmployers();
-  }, []);
+  }, [showProcessedEmployers]);
 
   const loadPendingEmployers = async () => {
     try {
       const supabase = getSupabaseBrowserClient();
-      const { data, error } = await supabase
+      let query = supabase
         .from('pending_employers')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .select('*');
+      
+      if (!showProcessedEmployers) {
+        // Only load employers that haven't been processed
+        query = query.is('import_status', null);
+      }
+      
+      const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) throw error;
+      
+      const statusText = showProcessedEmployers ? 'all' : 'unprocessed';
+      console.log(`Loaded ${(data || []).length} ${statusText} pending employers`);
+      
       setPendingEmployers(data || []);
-      // Select all by default
-      setSelectedEmployers(new Set(data?.map(emp => emp.id) || []));
+      // Select all unprocessed employers by default, but don't auto-select processed ones
+      if (showProcessedEmployers) {
+        const unprocessed = (data || []).filter(emp => !emp.import_status);
+        setSelectedEmployers(new Set(unprocessed.map(emp => emp.id)));
+      } else {
+        setSelectedEmployers(new Set(data?.map(emp => emp.id) || []));
+      }
     } catch (error) {
       console.error('Error loading pending employers:', error);
     } finally {
@@ -118,6 +149,8 @@ export default function PendingEmployersImport() {
   const createEmployer = async (pendingEmployer: PendingEmployer): Promise<string> => {
     const supabase = getSupabaseBrowserClient();
     const raw = pendingEmployer.raw;
+    
+    console.log(`Processing employer: ${pendingEmployer.company_name}`);
     
     // Check if user made a decision about duplicates
     const detection = duplicateDetections[pendingEmployer.id];
@@ -303,10 +336,12 @@ export default function PendingEmployersImport() {
 
   const performDirectImport = async () => {
     setIsImporting(true);
+    setWorkflowStep('import');
     const results: ImportResults = {
       success: 0,
               errors: [],
         employersCreated: [],
+        processedEmployers: [],
         duplicatesResolved: 0,
         relationshipsCreated: 0,
         ebaSearchesCompleted: 0,
@@ -314,12 +349,21 @@ export default function PendingEmployersImport() {
     };
 
     const employersToImport = pendingEmployers.filter(emp => selectedEmployers.has(emp.id));
+    setImportProgress({ current: 0, total: employersToImport.length, currentEmployer: '' });
 
-    for (const pendingEmployer of employersToImport) {
+    for (let i = 0; i < employersToImport.length; i++) {
+      const pendingEmployer = employersToImport[i];
+      setImportProgress(prev => ({ ...prev, current: i + 1, currentEmployer: pendingEmployer.company_name }));
       try {
         const employerId = await createEmployer(pendingEmployer);
         results.success++;
         results.employersCreated.push(pendingEmployer.company_name);
+        
+        // Track all processed employers for EBA search (both new and existing)
+        results.processedEmployers.push({
+          id: employerId,
+          name: pendingEmployer.company_name
+        });
         
         // Track if this was a duplicate resolution
         const detection = duplicateDetections[pendingEmployer.id];
@@ -329,18 +373,74 @@ export default function PendingEmployersImport() {
 
         // Enhanced project linking with duplicate prevention
         if (projectLinkingMode === 'with_projects' && pendingEmployer.project_associations) {
+          console.log(`🔗 Linking ${pendingEmployer.company_name} to ${pendingEmployer.project_associations.length} projects`);
           const supabase = getSupabaseBrowserClient();
           
           for (const projectAssoc of pendingEmployer.project_associations) {
+            console.log(`🔍 Looking for project: ${projectAssoc.project_name} (ID: ${projectAssoc.project_id})`);
             try {
-              // Find the project by BCI ID or regular ID
-              const { data: project } = await supabase
+              // Find the project by BCI ID first, then try regular UUID if needed
+              let project = null;
+              let projectQuery = null;
+              
+              // First try to match by BCI project ID (most likely case for imported data)
+              const { data: bciProject, error: bciError } = await supabase
                 .from('projects')
                 .select('id, name, builder_id')
-                .or(`id.eq.${projectAssoc.project_id},bci_project_id.eq.${projectAssoc.project_id}`)
+                .eq('bci_project_id', String(projectAssoc.project_id))
                 .maybeSingle();
+              
+              if (bciError) {
+                console.warn(`Error querying by BCI project ID ${projectAssoc.project_id}:`, bciError);
+              }
+              
+              if (bciProject) {
+                project = bciProject;
+                console.log(`✓ Found project by BCI ID: ${project.name} (${projectAssoc.project_id})`);
+              } else {
+                // If no BCI match and the ID looks like a UUID, try UUID match
+                const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(projectAssoc.project_id));
+                
+                if (isUUID) {
+                  const { data: uuidProject, error: uuidError } = await supabase
+                    .from('projects')
+                    .select('id, name, builder_id')
+                    .eq('id', projectAssoc.project_id)
+                    .maybeSingle();
+                  
+                  if (uuidError) {
+                    console.warn(`Error querying by UUID ${projectAssoc.project_id}:`, uuidError);
+                  }
+                  
+                  if (uuidProject) {
+                    project = uuidProject;
+                    console.log(`✓ Found project by UUID: ${project.name} (${projectAssoc.project_id})`);
+                  }
+                } else {
+                  // Final fallback: try to find by project name if we have it
+                  if (projectAssoc.project_name) {
+                    console.log(`🔍 Trying fallback search by project name: ${projectAssoc.project_name}`);
+                    const { data: nameProject, error: nameError } = await supabase
+                      .from('projects')
+                      .select('id, name, builder_id')
+                      .ilike('name', `%${projectAssoc.project_name}%`)
+                      .maybeSingle();
+                    
+                    if (nameError) {
+                      console.warn(`Error querying by project name ${projectAssoc.project_name}:`, nameError);
+                    }
+                    
+                    if (nameProject) {
+                      project = nameProject;
+                      console.log(`✓ Found project by name: ${project.name} (fallback for ID: ${projectAssoc.project_id})`);
+                    }
+                  }
+                }
+              }
 
               if (project) {
+                let relationshipCreated = false;
+                
                 if (pendingEmployer.our_role === 'builder') {
                   if (project.builder_id) {
                     if (project.builder_id === employerId) {
@@ -354,6 +454,7 @@ export default function PendingEmployersImport() {
                       .update({ builder_id: employerId })
                       .eq('id', project.id);
                     console.log(`✓ Assigned builder to ${project.name}`);
+                    relationshipCreated = true;
                   }
                   
                 } else if (pendingEmployer.our_role === 'head_contractor') {
@@ -377,6 +478,7 @@ export default function PendingEmployersImport() {
                         role: 'head_contractor'
                       });
                     console.log(`✓ Created head contractor role for ${project.name}`);
+                    relationshipCreated = true;
                   }
                   
                 } else if (pendingEmployer.our_role === 'subcontractor') {
@@ -405,8 +507,15 @@ export default function PendingEmployersImport() {
                         trade_type: finalTradeType
                       });
                     console.log(`✓ Created trade relationship for ${project.name}: ${finalTradeType}`);
+                    relationshipCreated = true;
                   }
                 }
+                
+                if (relationshipCreated) {
+                  results.relationshipsCreated++;
+                }
+              } else {
+                console.warn(`⚠ Project not found: ${projectAssoc.project_name} (ID: ${projectAssoc.project_id})`);
               }
             } catch (linkError) {
               console.warn(`Failed to link ${pendingEmployer.company_name} to project ${projectAssoc.project_name}:`, linkError);
@@ -433,11 +542,13 @@ export default function PendingEmployersImport() {
 
     setImportResults(results);
     setIsImporting(false);
+    setWorkflowStep('complete');
     setShowDuplicateResolution(false);
     
     // Reload the list
     await loadPendingEmployers();
     setSelectedEmployers(new Set());
+    setImportProgress({ current: 0, total: 0, currentEmployer: '' });
   };
 
   const deletePendingEmployer = async (id: string) => {
@@ -592,6 +703,7 @@ export default function PendingEmployersImport() {
   // Pre-import duplicate detection
   const runDuplicateDetection = async () => {
     setIsDetectingDuplicates(true);
+    setWorkflowStep('merge');
     try {
       const detections = await detectDuplicatesForImport();
       setDuplicateDetections(detections);
@@ -600,12 +712,14 @@ export default function PendingEmployersImport() {
         setShowDuplicateResolution(true);
       } else {
         // No duplicates, proceed directly to import
+        setWorkflowStep('import');
         await performDirectImport();
       }
       
     } catch (error) {
       console.error('Error detecting duplicates:', error);
       // Proceed with import anyway
+      setWorkflowStep('import');
       await performDirectImport();
     } finally {
       setIsDetectingDuplicates(false);
@@ -621,6 +735,165 @@ export default function PendingEmployersImport() {
         selectedEmployerId
       }
     }));
+  };
+
+  // Merge all exact matches for a pending employer into a single canonical employer
+  const mergeExactMatchesFor = async (employerId: string) => {
+    const detection = duplicateDetections[employerId];
+    if (!detection || !detection.hasExactMatch || (detection.exactMatches || []).length === 0) {
+      return;
+    }
+    const supabase = getSupabaseBrowserClient();
+    const exactIds = (detection.exactMatches || []).map((m) => m.id);
+    if (exactIds.length === 1) {
+      // Only one existing employer; resolve to use it
+      updateDuplicateDecision(employerId, 'use_existing', exactIds[0]);
+      return;
+    }
+
+    try {
+      setIsMergingExact((prev) => ({ ...prev, [employerId]: true }));
+      // Fetch created_at to pick the oldest as primary
+      const { data: details } = await supabase
+        .from('employers')
+        .select('id, created_at')
+        .in('id', exactIds);
+      const sorted = (details || []).slice().sort((a: any, b: any) => {
+        const ta = a?.created_at ? new Date(a.created_at).getTime() : Number.MAX_SAFE_INTEGER;
+        const tb = b?.created_at ? new Date(b.created_at).getTime() : Number.MAX_SAFE_INTEGER;
+        return ta - tb;
+      });
+      const primaryId: string = sorted.length > 0 ? sorted[0].id : exactIds[0];
+      const duplicates = exactIds.filter((id) => id !== primaryId);
+
+      if (duplicates.length > 0) {
+        const { error } = await supabase.rpc('merge_employers', {
+          p_primary_employer_id: primaryId,
+          p_duplicate_employer_ids: duplicates,
+        });
+        if (error) {
+          console.warn('Merge exact matches failed:', error);
+          // Fall back: still resolve to primary so user can proceed
+        }
+      }
+
+      // Mark this detection as resolved to the primary employer
+      updateDuplicateDecision(employerId, 'use_existing', primaryId);
+    } finally {
+      setIsMergingExact((prev) => ({ ...prev, [employerId]: false }));
+    }
+  };
+
+  // Merge all selected exact matches across all pending employers
+  const mergeAllSelectedExactMatches = async () => {
+    if (selectedExactMatches.size === 0) return;
+    
+    setIsMergingAllExact(true);
+    const supabase = getSupabaseBrowserClient();
+    let mergedCount = 0;
+    
+    try {
+      for (const employerId of selectedExactMatches) {
+        const detection = duplicateDetections[employerId];
+        if (!detection?.hasExactMatch || !detection.exactMatches?.length) continue;
+        
+        const exactIds = detection.exactMatches.map(m => m.id);
+        if (exactIds.length === 1) {
+          updateDuplicateDecision(employerId, 'use_existing', exactIds[0]);
+          continue;
+        }
+
+        // Fetch created_at to pick the oldest as primary
+        const { data: details } = await supabase
+          .from('employers')
+          .select('id, created_at')
+          .in('id', exactIds);
+        
+        const sorted = (details || []).slice().sort((a: any, b: any) => {
+          const ta = a?.created_at ? new Date(a.created_at).getTime() : Number.MAX_SAFE_INTEGER;
+          const tb = b?.created_at ? new Date(b.created_at).getTime() : Number.MAX_SAFE_INTEGER;
+          return ta - tb;
+        });
+        
+        const primaryId: string = sorted.length > 0 ? sorted[0].id : exactIds[0];
+        const duplicates = exactIds.filter(id => id !== primaryId);
+
+        if (duplicates.length > 0) {
+          console.log(`Merging ${duplicates.length} duplicates for ${detection.pendingEmployer.company_name}`);
+          const { data, error } = await supabase.rpc('merge_employers', {
+            p_primary_employer_id: primaryId,
+            p_duplicate_employer_ids: duplicates,
+          });
+          
+          if (error) {
+            console.error(`Merge failed for ${detection.pendingEmployer.company_name}:`, error);
+            throw error;
+          } else {
+            console.log(`Merge result:`, data);
+            mergedCount++;
+          }
+        }
+
+        updateDuplicateDecision(employerId, 'use_existing', primaryId);
+      }
+      
+      // Clear selection after successful merge
+      setSelectedExactMatches(new Set());
+      
+      // Refresh duplicate detections to show updated state
+      console.log(`Successfully merged ${mergedCount} employer groups`);
+      
+      // Re-run duplicate detection to update the UI state
+      setTimeout(async () => {
+        const refreshedDetections = await detectDuplicatesForImport();
+        setDuplicateDetections(refreshedDetections);
+      }, 1000);
+      
+    } catch (error) {
+      console.error('Error during bulk merge:', error);
+      // Don't clear selection on error so user can retry
+    } finally {
+      setIsMergingAllExact(false);
+    }
+  };
+
+  // Toggle selection of exact match
+  const toggleExactMatchSelection = (employerId: string) => {
+    setSelectedExactMatches(prev => {
+      const updated = new Set(prev);
+      if (updated.has(employerId)) {
+        updated.delete(employerId);
+      } else {
+        updated.add(employerId);
+      }
+      return updated;
+    });
+  };
+
+  // Select all exact matches
+  const selectAllExactMatches = () => {
+    const exactMatchIds = Object.entries(duplicateDetections)
+      .filter(([_, detection]) => detection.hasExactMatch)
+      .map(([employerId, _]) => employerId);
+    setSelectedExactMatches(new Set(exactMatchIds));
+  };
+
+  // Clear all exact match selections
+  const clearExactMatchSelection = () => {
+    setSelectedExactMatches(new Set());
+  };
+
+  // Toggle card expansion
+  const toggleCardExpansion = (employerId: string) => {
+    setExpandedCards(prev => {
+      const updated = new Set(prev);
+      if (updated.has(employerId)) {
+        updated.delete(employerId);
+      } else {
+        updated.add(employerId);
+      }
+      return updated;
+    });
   };
 
   // EBA Search Functions
@@ -694,6 +967,8 @@ export default function PendingEmployersImport() {
               error: error instanceof Error ? error.message : 'Search failed'
             }
           }));
+          // Automatically mark for dismissal on error
+          setEmployersToDismiss(prev => new Set(prev).add(employer.id));
         }
       }
 
@@ -745,6 +1020,73 @@ export default function PendingEmployersImport() {
     }
   };
 
+  const toggleEbaResultsExpansion = (employerId: string) => {
+    setExpandedEbaResults(prev => {
+      const updated = new Set(prev);
+      if (updated.has(employerId)) {
+        updated.delete(employerId);
+      } else {
+        updated.add(employerId);
+      }
+      return updated;
+    });
+  };
+
+  const finalizeEbaDismissals = async () => {
+    if (employersToDismiss.size === 0) return;
+
+    const employersToUpdate = Array.from(employersToDismiss);
+    const recordsToInsert = employersToUpdate.map(id => ({
+      employer_id: id,
+      comments: 'Batch marked as "No EBA Found" during import process.',
+      eba_file_number: 'N/A - No EBA Found'
+    }));
+
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const { error } = await supabase
+        .from('company_eba_records')
+        .insert(recordsToInsert);
+
+      if (error) throw error;
+
+      toast({
+        title: `${employersToUpdate.length} Employers Updated`,
+        description: `Successfully marked employers as having no EBA.`,
+      });
+
+      // Remove the dismissed employers from the search results view
+      setEbaSearchStates(prev => {
+        const updated = { ...prev };
+        employersToUpdate.forEach(id => {
+          delete updated[id];
+        });
+        return updated;
+      });
+      setEmployersToDismiss(new Set());
+
+    } catch (error) {
+      console.error('Error batch marking as No EBA:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update employer statuses.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const toggleDismissal = (employerId: string) => {
+    setEmployersToDismiss(prev => {
+      const updated = new Set(prev);
+      if (updated.has(employerId)) {
+        updated.delete(employerId);
+      } else {
+        updated.add(employerId);
+      }
+      return updated;
+    });
+  };
+
   if (isLoading) {
     return (
       <div className="text-center space-y-4">
@@ -759,8 +1101,38 @@ export default function PendingEmployersImport() {
     return (
       <div className="text-center space-y-4">
         <img src="/spinner.gif" alt="Loading" className="w-8 h-8 mx-auto" />
-        <h2 className="text-xl font-semibold">Detecting Duplicates...</h2>
+        <h2 className="text-xl font-semibold">Step 2: Detecting Duplicates...</h2>
         <p className="text-gray-600">Checking for existing employers in database</p>
+      </div>
+    );
+  }
+
+  if (isImporting) {
+    return (
+      <div className="text-center space-y-6">
+        <div className="flex items-center justify-center space-x-2">
+          <img src="/spinner.gif" alt="Loading" className="w-8 h-8" />
+          <h2 className="text-xl font-semibold">Step 3: Importing Employers...</h2>
+        </div>
+        
+        {/* Progress Bar */}
+        <div className="max-w-md mx-auto">
+          <div className="flex justify-between text-sm text-gray-600 mb-2">
+            <span>{importProgress.current} of {importProgress.total} employers</span>
+            <span>{Math.round((importProgress.current / importProgress.total) * 100)}%</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2">
+            <div 
+              className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+              style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
+            ></div>
+          </div>
+          {importProgress.currentEmployer && (
+            <p className="text-sm text-gray-600 mt-2">
+              Currently processing: {importProgress.currentEmployer}
+            </p>
+          )}
+        </div>
       </div>
     );
   }
@@ -842,7 +1214,7 @@ export default function PendingEmployersImport() {
           <div className="flex gap-2 justify-center">
             <Button 
               onClick={() => setShowEbaSearch(true)}
-              disabled={isEbaSearching || importResults.employersCreated.length === 0}
+              disabled={isEbaSearching || !(importResults as ImportResults)?.processedEmployers || (importResults as ImportResults).processedEmployers.length === 0}
               variant="outline"
             >
               {isEbaSearching ? (
@@ -859,14 +1231,19 @@ export default function PendingEmployersImport() {
             </Button>
             <Button onClick={() => {
               setImportResults(null);
+              setWorkflowStep('review');
+              setDuplicateDetections({});
+              setSelectedExactMatches(new Set());
+              setExpandedCards(new Set());
+              setEbaSearchStates({});
               loadPendingEmployers();
             }}>
               Import More Employers
             </Button>
           </div>
-          {importResults.employersCreated.length > 0 && (
+          {(importResults as ImportResults)?.processedEmployers && (importResults as ImportResults).processedEmployers.length > 0 && (
             <p className="text-sm text-gray-600">
-              Search FWC database for Enterprise Bargaining Agreements for the newly imported employers
+              Search FWC database for Enterprise Bargaining Agreements for the processed employers
             </p>
           )}
         </div>
@@ -881,33 +1258,81 @@ export default function PendingEmployersImport() {
         <p className="text-gray-600">
           Import employers with comprehensive duplicate detection and prevention
         </p>
+        
+        {/* Workflow Steps Indicator */}
+        <div className="flex items-center justify-center space-x-4 mt-4 mb-6">
+          <div className={`flex items-center space-x-2 ${workflowStep === 'review' ? 'text-blue-600' : workflowStep === 'merge' || workflowStep === 'import' || workflowStep === 'complete' ? 'text-green-600' : 'text-gray-400'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${workflowStep === 'review' ? 'bg-blue-100 text-blue-600' : workflowStep === 'merge' || workflowStep === 'import' || workflowStep === 'complete' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+              1
+            </div>
+            <span className="text-sm font-medium">Review & Select</span>
+          </div>
+          
+          <div className={`w-8 h-0.5 ${workflowStep === 'merge' || workflowStep === 'import' || workflowStep === 'complete' ? 'bg-green-600' : 'bg-gray-300'}`}></div>
+          
+          <div className={`flex items-center space-x-2 ${workflowStep === 'merge' ? 'text-blue-600' : workflowStep === 'import' || workflowStep === 'complete' ? 'text-green-600' : 'text-gray-400'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${workflowStep === 'merge' ? 'bg-blue-100 text-blue-600' : workflowStep === 'import' || workflowStep === 'complete' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+              2
+            </div>
+            <span className="text-sm font-medium">Merge Duplicates</span>
+          </div>
+          
+          <div className={`w-8 h-0.5 ${workflowStep === 'import' || workflowStep === 'complete' ? 'bg-green-600' : 'bg-gray-300'}`}></div>
+          
+          <div className={`flex items-center space-x-2 ${workflowStep === 'import' ? 'text-blue-600' : workflowStep === 'complete' ? 'text-green-600' : 'text-gray-400'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${workflowStep === 'import' ? 'bg-blue-100 text-blue-600' : workflowStep === 'complete' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+              3
+            </div>
+            <span className="text-sm font-medium">Import</span>
+          </div>
+        </div>
       </div>
 
-      {pendingEmployers.length === 0 ? (
+      <div className="space-y-4">
+        {/* Always show the toggle and controls */}
         <Card>
-          <CardContent className="p-8 text-center">
-            <Building2 className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium mb-2">No Pending Employers</h3>
-            <p className="text-gray-600">
-              No employers are currently queued for import. Use the BCI Projects import 
-              and select "Add to Import List" to queue employers for batch import.
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building2 className="h-5 w-5" />
-                {pendingEmployers.length} Pending Employers
-              </CardTitle>
-              <CardDescription>
-                Review and import employers queued from previous data uploads
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Building2 className="h-5 w-5" />
+                  {pendingEmployers.length} {showProcessedEmployers ? 'Total' : 'Pending'} Employers
+                </CardTitle>
+                <CardDescription>
+                  {showProcessedEmployers 
+                    ? 'All employers (including processed ones)' 
+                    : 'Unprocessed employers queued for import'
+                  }
+                </CardDescription>
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={showProcessedEmployers}
+                  onChange={(e) => setShowProcessedEmployers(e.target.checked)}
+                  className="w-4 h-4"
+                />
+                Show processed
+              </label>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {pendingEmployers.length === 0 ? (
+              <div className="p-8 text-center">
+                <Building2 className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium mb-2">
+                  {showProcessedEmployers ? 'No Employers Found' : 'No Pending Employers'}
+                </h3>
+                <p className="text-gray-600">
+                  {showProcessedEmployers 
+                    ? 'No employers found in the system. Import some data to get started.'
+                    : 'No employers are currently queued for import. Use the BCI Projects import and select "Add to Import List" to queue employers for batch import.'
+                  }
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-4">
                 <div className="flex gap-2 mb-4">
                   <Button variant="outline" size="sm" onClick={selectAll}>
                     Select All
@@ -955,9 +1380,21 @@ export default function PendingEmployersImport() {
                           checked={selectedEmployers.has(employer.id)}
                           onChange={() => toggleSelection(employer.id)}
                           className="w-4 h-4"
+                          disabled={!!employer.import_status} // Disable selection for processed employers
                         />
                         <div>
-                          <h4 className="font-medium">{employer.company_name}</h4>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-medium">{employer.company_name}</h4>
+                            {employer.import_status && (
+                              <Badge 
+                                variant={employer.import_status === 'imported' ? 'default' : 'destructive'}
+                                className="text-xs"
+                              >
+                                {employer.import_status === 'imported' ? '✓ Imported' : 
+                                 employer.import_status === 'error' ? '✗ Failed' : employer.import_status}
+                              </Badge>
+                            )}
+                          </div>
                           <div className="flex items-center gap-2 mt-1">
                             <Badge variant={employer.our_role === 'builder' ? 'default' : employer.our_role === 'head_contractor' ? 'secondary' : 'outline'}>
                               {employer.our_role === 'builder' ? 'Builder' : 
@@ -982,6 +1419,11 @@ export default function PendingEmployersImport() {
                           <p className="text-xs text-gray-500">
                             Added: {new Date(employer.created_at).toLocaleDateString()}
                           </p>
+                          {employer.import_status && employer.import_notes && (
+                            <p className="text-xs text-gray-600 mt-1">
+                              {employer.import_notes}
+                            </p>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -1078,27 +1520,62 @@ export default function PendingEmployersImport() {
                   </div>
                 ))}
               </div>
-            </CardContent>
-          </Card>
 
-          <div className="flex justify-center">
-            <Button 
-              onClick={importSelectedEmployers}
-              disabled={isImporting || selectedEmployers.size === 0}
-              className="px-8"
-            >
-              {isImporting ? (
-                <>
-                  <img src="/spinner.gif" alt="Loading" className="w-4 h-4 mr-2" />
-                  Importing...
-                </>
-              ) : (
-                `Import ${selectedEmployers.size} Selected Employers${projectLinkingMode === 'with_projects' ? ' + Link to Projects' : ''} (with Duplicate Detection)`
-              )}
-            </Button>
-          </div>
-        </>
-      )}
+              <div className="flex justify-center gap-4 mt-6">
+                {/* Show EBA search for processed employers */}
+                {showProcessedEmployers && pendingEmployers.some(emp => emp.import_status === 'imported') && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      const importedEmployers = pendingEmployers.filter(emp => emp.import_status === 'imported');
+                      const processedEmployers = importedEmployers.map(emp => ({
+                        id: emp.imported_employer_id || emp.id,
+                        name: emp.company_name
+                      }));
+                      
+                      // Set up mock import results for EBA search
+                      setImportResults({
+                        success: importedEmployers.length,
+                        errors: [],
+                        employersCreated: importedEmployers.map(emp => emp.company_name),
+                        processedEmployers: processedEmployers,
+                        duplicatesResolved: 0,
+                        relationshipsCreated: 0,
+                        ebaSearchesCompleted: 0,
+                        ebaRecordsCreated: 0
+                      });
+                      setShowEbaSearch(true);
+                    }}
+                    disabled={isEbaSearching}
+                  >
+                    <Search className="w-4 h-4 mr-2" />
+                    Search EBAs for Imported Employers
+                  </Button>
+                )}
+                
+                {/* Regular import button - only show for unprocessed employers */}
+                {selectedEmployers.size > 0 && pendingEmployers.some(emp => selectedEmployers.has(emp.id) && !emp.import_status) && (
+                  <Button 
+                    onClick={importSelectedEmployers}
+                    disabled={isImporting || selectedEmployers.size === 0}
+                    className="px-8"
+                  >
+                    {isImporting ? (
+                      <>
+                        <img src="/spinner.gif" alt="Loading" className="w-4 h-4 mr-2" />
+                        Importing...
+                      </>
+                    ) : (
+                      `Import ${selectedEmployers.size} Selected Employers${projectLinkingMode === 'with_projects' ? ' + Link to Projects' : ''} (with Duplicate Detection)`
+                    )}
+                  </Button>
+                )}
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
       
              {/* EBA Search Dialog */}
        <Dialog open={showEbaSearch} onOpenChange={setShowEbaSearch}>
@@ -1114,11 +1591,11 @@ export default function PendingEmployersImport() {
            </DialogHeader>
            
            <div className="space-y-4">
-             {!importResults || (importResults as ImportResults).employersCreated.length === 0 ? (
+             {!importResults || !(importResults as ImportResults).processedEmployers || (importResults as ImportResults).processedEmployers.length === 0 ? (
                <Alert>
                  <Info className="h-4 w-4" />
                  <AlertDescription>
-                   No new employers were imported. EBA search is only available for newly imported employers.
+                   No employers were processed. EBA search is only available after importing employers.
                  </AlertDescription>
                </Alert>
              ) : (
@@ -1127,7 +1604,7 @@ export default function PendingEmployersImport() {
                    <Info className="h-4 w-4" />
                    <AlertDescription>
                      This will search the Fair Work Commission database for Enterprise Bargaining Agreements 
-                     for the {(importResults as ImportResults)?.employersCreated?.length || 0} newly imported employers.
+                     for the {(importResults as ImportResults)?.processedEmployers?.length || 0} processed employers.
                    </AlertDescription>
                  </Alert>
                  
@@ -1140,15 +1617,14 @@ export default function PendingEmployersImport() {
                    </Button>
                    <Button
                      onClick={async () => {
-                       // Get the employer IDs of newly imported employers
-                       const supabase = getSupabaseBrowserClient();
-                       const { data: employers } = await supabase
-                         .from('employers')
-                         .select('id')
-                         .in('name', (importResults as ImportResults)?.employersCreated || []);
+                       // Use the processed employers directly (they already have IDs)
+                       const processedEmployers = (importResults as ImportResults)?.processedEmployers || [];
+                       console.log('Searching EBAs for processed employers:', processedEmployers);
                        
-                       if (employers) {
-                         await searchEbaForEmployers(employers.map(e => e.id));
+                       if (processedEmployers.length > 0) {
+                         await searchEbaForEmployers(processedEmployers.map(e => e.id));
+                       } else {
+                         console.warn('No processed employers found for EBA search');
                        }
                        setShowEbaSearch(false);
                      }}
@@ -1166,11 +1642,19 @@ export default function PendingEmployersImport() {
                        </>
                      )}
                    </Button>
+                   <Button
+                    onClick={finalizeEbaDismissals}
+                    disabled={employersToDismiss.size === 0}
+                    variant="destructive"
+                  >
+                    <XCircle className="h-4 w-4 mr-2" />
+                    Finalize {employersToDismiss.size} Dismissals
+                  </Button>
                  </div>
                  
                  {/* Display EBA Search Results */}
                  {Object.keys(ebaSearchStates).length > 0 && (
-                   <div className="space-y-3 mt-4">
+                   <div className="space-y-3 mt-4 max-h-[50vh] overflow-y-auto">
                      <h4 className="font-medium">EBA Search Results</h4>
                      {Object.entries(ebaSearchStates).map(([employerId, searchState]) => (
                        <Card key={employerId} className="border-blue-200">
@@ -1197,7 +1681,10 @@ export default function PendingEmployersImport() {
                                <p className="text-sm font-medium text-green-700">
                                  Found {searchState.results.length} potential EBA matches:
                                </p>
-                               {searchState.results.slice(0, 3).map((result, index) => (
+                               {(expandedEbaResults.has(employerId)
+                                 ? searchState.results
+                                 : searchState.results.slice(0, 3)
+                               ).map((result, index) => (
                                  <div key={index} className="bg-green-50 p-3 rounded border">
                                    <div className="flex justify-between items-start">
                                      <div className="flex-1">
@@ -1242,12 +1729,31 @@ export default function PendingEmployersImport() {
                                  </div>
                                ))}
                                {searchState.results.length > 3 && (
-                                 <p className="text-sm text-gray-600">
-                                   ...and {searchState.results.length - 3} more results
-                                 </p>
+                                <div className="text-center mt-2">
+                                  <Button
+                                    variant="link"
+                                    onClick={() => toggleEbaResultsExpansion(employerId)}
+                                  >
+                                    {expandedEbaResults.has(employerId)
+                                      ? 'Show Less'
+                                      : `Show ${searchState.results.length - 3} More Results`}
+                                  </Button>
+                                </div>
                                )}
                              </div>
                            )}
+
+                            <div className="mt-3 pt-3 border-t flex justify-end">
+                              <label htmlFor={`dismiss-import-${employerId}`} className="text-sm text-red-600 flex items-center gap-2 cursor-pointer p-2 rounded hover:bg-red-50">
+                                <Checkbox
+                                  id={`dismiss-import-${employerId}`}
+                                  checked={employersToDismiss.has(employerId)}
+                                  onCheckedChange={() => toggleDismissal(employerId)}
+                                />
+                                Mark for Dismissal (No EBA Found)
+                              </label>
+                            </div>
+
                          </CardContent>
                        </Card>
                      ))}
@@ -1272,24 +1778,128 @@ export default function PendingEmployersImport() {
             </DialogDescription>
           </DialogHeader>
           
+          {/* Select All Controls for Exact Matches */}
+          {Object.values(duplicateDetections).some(d => d.hasExactMatch) && (
+            <div className="border-b pb-4 mb-4">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-medium text-gray-900">
+                  Exact Matches ({Object.values(duplicateDetections).filter(d => d.hasExactMatch).length} found)
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={selectAllExactMatches}
+                    disabled={isMergingAllExact}
+                  >
+                    Select All
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={clearExactMatchSelection}
+                    disabled={isMergingAllExact}
+                  >
+                    Clear Selection
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={mergeAllSelectedExactMatches}
+                    disabled={selectedExactMatches.size === 0 || isMergingAllExact}
+                  >
+                    {isMergingAllExact ? (
+                      <>
+                        <img src="/spinner.gif" alt="Loading" className="w-4 h-4 mr-2" />
+                        Merging {selectedExactMatches.size}...
+                      </>
+                    ) : (
+                      `Merge ${selectedExactMatches.size} Selected`
+                    )}
+                  </Button>
+                </div>
+              </div>
+              <p className="text-sm text-gray-600 mt-2">
+                Select exact matches to merge duplicates automatically and use the oldest record as the canonical employer.
+              </p>
+            </div>
+          )}
+          
           <div className="space-y-4">
             {Object.entries(duplicateDetections).map(([employerId, detection]) => (
-              <Card key={employerId} className="border-amber-200">
-                <CardHeader>
-                  <CardTitle className="text-lg">{detection.pendingEmployer.company_name}</CardTitle>
-                  <CardDescription>
-                    Role: {detection.pendingEmployer.csv_role} • 
-                    {detection.hasExactMatch ? ' Exact match found' : ` ${detection.similarMatches.length} similar matches`}
-                  </CardDescription>
+              <Card key={employerId} className={`border-amber-200 ${selectedExactMatches.has(employerId) ? 'ring-2 ring-blue-500' : ''}`}>
+                <CardHeader className="cursor-pointer" onClick={() => toggleCardExpansion(employerId)}>
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-3">
+                      {detection.hasExactMatch && (
+                        <input
+                          type="checkbox"
+                          checked={selectedExactMatches.has(employerId)}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            toggleExactMatchSelection(employerId);
+                          }}
+                          className="w-4 h-4 mt-1"
+                          disabled={isMergingAllExact}
+                        />
+                      )}
+                      <div className="flex items-center gap-2">
+                        {expandedCards.has(employerId) ? (
+                          <ChevronDown className="h-4 w-4 text-gray-500" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4 text-gray-500" />
+                        )}
+                        <div>
+                          <CardTitle className="text-lg">{detection.pendingEmployer.company_name}</CardTitle>
+                          <CardDescription>
+                            Role: {detection.pendingEmployer.csv_role} • 
+                            {detection.hasExactMatch ? ' Exact match found' : ` ${detection.similarMatches.length} similar matches`}
+                          </CardDescription>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {detection.userDecision && (
+                        <Badge variant="outline" className="text-xs">
+                          {detection.userDecision === 'use_existing' ? '✓ Using Existing' : '✓ Creating New'}
+                        </Badge>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleCardExpansion(employerId);
+                        }}
+                      >
+                        {expandedCards.has(employerId) ? 'Collapse' : 'Review Matches'}
+                      </Button>
+                    </div>
+                  </div>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  
-                  {detection.hasExactMatch && (
+                {expandedCards.has(employerId) && (
+                  <CardContent className="space-y-4">
+                    
+                    {detection.hasExactMatch && (
                     <div className="bg-red-50 p-4 rounded border border-red-200">
                       <h4 className="font-medium text-red-800 mb-2">Exact Match Found</h4>
                       <p className="text-sm text-red-700 mb-3">
                         An employer with this exact name already exists. Choose how to proceed:
                       </p>
+                      {/* Merge all exact matches into a single employer (oldest record as primary) */}
+                      {detection.exactMatches.length > 1 && (
+                        <div className="flex items-center justify-between p-3 mb-2 rounded border bg-white">
+                          <div className="text-sm text-gray-700">
+                            Merge {detection.exactMatches.length} exact matches into one employer
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={() => mergeExactMatchesFor(employerId)}
+                            disabled={Boolean(isMergingExact[employerId])}
+                          >
+                            {isMergingExact[employerId] ? 'Merging...' : 'Merge Exact Matches'}
+                          </Button>
+                        </div>
+                      )}
                       {detection.exactMatches.map((match) => (
                         <div key={match.id} className="flex items-center justify-between bg-white p-3 rounded border mb-2">
                           <div>
@@ -1350,9 +1960,10 @@ export default function PendingEmployersImport() {
                         {detection.userDecision === 'create_new' ? '✓ Create New' : 'Create New Employer'}
                       </Button>
                     </div>
-                  )}
-                  
-                </CardContent>
+                    )}
+                    
+                  </CardContent>
+                )}
               </Card>
             ))}
             
@@ -1364,7 +1975,21 @@ export default function PendingEmployersImport() {
                 Cancel Import
               </Button>
               <Button
-                onClick={() => performDirectImport()}
+                onClick={async () => {
+                  try {
+                    console.log('Starting import with resolved duplicates...');
+                    console.log('Duplicate decisions:', Object.fromEntries(
+                      Object.entries(duplicateDetections).map(([k, v]) => [k, {
+                        decision: v.userDecision,
+                        selectedEmployerId: v.selectedEmployerId,
+                        pendingEmployer: v.pendingEmployer.company_name
+                      }])
+                    ));
+                    await performDirectImport();
+                  } catch (error) {
+                    console.error('Import failed:', error);
+                  }
+                }}
                 disabled={Object.values(duplicateDetections).some(d => !d.userDecision)}
               >
                 Proceed with Import ({Object.values(duplicateDetections).filter(d => d.userDecision).length}/{Object.keys(duplicateDetections).length} resolved)
@@ -1376,3 +2001,4 @@ export default function PendingEmployersImport() {
     </div>
   );
 }
+
