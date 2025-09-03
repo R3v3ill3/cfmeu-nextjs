@@ -10,46 +10,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Trash2, Plus } from "lucide-react";
 import { toast } from "sonner";
+import { getTradeOptionsByStage, getAllStages, getStageLabel, type TradeStage } from "@/utils/tradeUtils";
 
-const STAGES: Array<{ key: string; label: string }> = [
-  { key: "early_works", label: "Early Works" },
-  { key: "structure", label: "Structure" },
-  { key: "finishing", label: "Finishing" },
-  { key: "other", label: "Other" },
-];
+const STAGES: Array<{ key: TradeStage; label: string }> = getAllStages().map(stage => ({
+  key: stage,
+  label: getStageLabel(stage),
+}));
 
-const TRADES_BY_STAGE: Record<string, Array<{ value: string; label: string }>> = {
-  early_works: [
-    { value: "demolition", label: "Demolition" },
-    { value: "piling", label: "Piling" },
-    { value: "excavations", label: "Excavations" },
-    { value: "scaffolding", label: "Scaffold" },
-    { value: "cleaning", label: "Cleaners" },
-    { value: "traffic_control", label: "Traffic Control" },
-    { value: "labour_hire", label: "Labour Hire" },
-  ],
-  structure: [
-    { value: "steel_fixing", label: "Steel Fixer" },
-    { value: "tower_crane", label: "Tower Crane" },
-    { value: "concreting", label: "Concreters" },
-    { value: "post_tensioning", label: "Stressor" },
-    { value: "form_work", label: "Formwork" },
-    { value: "bricklaying", label: "Bricklayer" },
-    { value: "structural_steel", label: "Structural Steel" },
-  ],
-  finishing: [
-    { value: "facade", label: "Facade" },
-    { value: "carpentry", label: "Carpenter" },
-    { value: "plastering", label: "Plasterer" },
-    { value: "painting", label: "Painters" },
-    { value: "tiling", label: "Tiling" },
-    { value: "kitchens", label: "Kitchens" },
-    { value: "flooring", label: "Flooring" },
-    { value: "landscaping", label: "Landscaping" },
-    { value: "final_clean", label: "Final Clean" },
-  ],
-  other: [],
-};
+// Get trade options dynamically from the canonical source
+const TRADES_BY_STAGE = getTradeOptionsByStage();
 
 type AssignmentRow = { id: string; employer_id: string; employer_name: string; trade_type: string; stage: string; estimated_project_workforce: number | null };
 

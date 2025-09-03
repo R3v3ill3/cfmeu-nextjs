@@ -22,7 +22,8 @@ export interface ProcessedContractorData {
 }
 
 // Trade name mapping from CSV format to database enum
-const TRADE_MAPPING: Record<string, string> = {
+// Legacy mappings for existing CSV imports
+const LEGACY_TRADE_MAPPING: Record<string, string> = {
   'Tower Crane': 'tower_crane',
   'Mobile Crane': 'mobile_crane',
   'Demo': 'demolition',
@@ -58,6 +59,81 @@ const TRADE_MAPPING: Record<string, string> = {
   'Flooring': 'flooring',
   'Structural Steel': 'structural_steel',
   'Landscaping': 'landscaping'
+};
+
+// Complete BCI subcontractor type mapping to database enum
+const BCI_TRADE_MAPPING: Record<string, string> = {
+  "Bridge Contractor": "civil_infrastructure",
+  "Building Services Subcontractor": "building_services",
+  "Carpentry Subcontractor": "carpentry",
+  "Ceiling Subcontractor": "ceilings",
+  "Civil Works Contractor": "civil_infrastructure",
+  "Concrete Subcontractor": "concreting",
+  "Curtain Wall Subcontractor": "facade",
+  "Demolition Contractor": "demolition",
+  "Diaphragm Wall Contractor": "structural_steel",
+  "Doors & Windows Subcontractor": "windows",
+  "Drilling Subcontractor": "piling",
+  "Earthworks, Excavation & Civil Subcontractor": "earthworks",
+  "Electrical Contractor": "electrical",
+  "Electrical Subcontractor": "electrical",
+  "Equipment Hire Services": "plant_and_equipment",
+  "Escalator Subcontractor": "mechanical_services",
+  "External Walls Subcontractor": "facade",
+  "Facade Contractor": "facade",
+  "Fencing Subcontractor": "general_construction",
+  "Fire Protection Subcontractor": "fire_protection",
+  "Fitout Subcontractor": "fitout",
+  "Flooring Subcontractor": "flooring",
+  "Formwork Contractor": "form_work",
+  "Foundation Contractor": "foundations",
+  "Information Technology Subcontractor": "technology",
+  "Insulation Subcontractor": "insulation",
+  "Internal Walls Subcontractor": "internal_walls",
+  "Joinery Subcontractor": "carpentry",
+  "Landscape Contractor": "landscaping",
+  "Landscaping Subcontractor": "landscaping",
+  "Lift Subcontractor": "mechanical_services",
+  "Masonry Subcontractor": "bricklaying",
+  "Mechanical & Electrical Contractor": "mechanical_services",
+  "Mechanical, Ventilation & Air Conditioning Subcontractor": "mechanical_services",
+  "Metalwork Subcontractor": "structural_steel",
+  "Paint Subcontractor": "painting",
+  "Pest Control Subcontractor": "general_construction",
+  "Piling & Boring Contractor": "piling",
+  "Pipeline & Subsea Contractor": "pipeline",
+  "Piping Subcontractor": "plumbing",
+  "Plant Subcontractor": "plant_and_equipment",
+  "Plaster & Render Subcontractor": "plastering",
+  "Post Tensioning Subcontractor": "post_tensioning",
+  "Reinforcing Steel Subcontractor": "reinforcing_steel",
+  "Renovation Contractor": "general_construction",
+  "Road Work Subcontractor": "earthworks",
+  "Roofing Subcontractor": "roofing",
+  "Sanitary, Plumbing & Drainage Subcontractor": "plumbing",
+  "Scaffolding Subcontractor": "scaffolding",
+  "Security Subcontractor": "security_systems",
+  "Sewerage Subcontractor": "plumbing",
+  "Sewerage Treatment Plant Subcontractor": "plumbing",
+  "Site Works Contractor": "earthworks",
+  "Space-Frame System Subcontractor": "structural_steel",
+  "Stairs & Balustrades Subcontractor": "stairs_balustrades",
+  "Structural Steel Subcontractor": "structural_steel",
+  "Structured Cabling Subcontractor": "electrical",
+  "Subcontractor": "general_construction",
+  "Substructure Contractor": "foundations",
+  "Superstructure Subcontractor": "structural_steel",
+  "Survey Subcontractor": "general_construction",
+  "Swimming Pool Subcontractor": "pools",
+  "Telecommunication Subcontractor": "electrical",
+  "Tiling Subcontractor": "tiling",
+  "Waterproofing Subcontractor": "waterproofing",
+};
+
+// Combined mapping for all trade name formats
+const TRADE_MAPPING: Record<string, string> = {
+  ...LEGACY_TRADE_MAPPING,
+  ...BCI_TRADE_MAPPING,
 };
 
 export function parseContactDetails(contactString: string): ContactDetails {

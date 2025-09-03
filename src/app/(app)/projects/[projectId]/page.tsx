@@ -22,6 +22,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input"
 import { usePatchOrganiserLabels } from "@/hooks/usePatchOrganiserLabels"
 import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
+import { useUnifiedContractors } from "@/hooks/useUnifiedContractors"
 
 function SiteContactsSummary({ projectId, siteIds }: { projectId: string; siteIds: string[] }) {
   const [delegates, setDelegates] = useState<string[]>([])
@@ -288,67 +289,20 @@ export default function ProjectDetailPage() {
     }
   })
 
-  // Build contractor rows client-side to include: builders, head contractor and site-trade contractors
-  const { data: contractorRows = [] } = useQuery({
-    queryKey: ["project-contractors-v2", projectId, sortedSiteIds],
-    enabled: !!projectId,
-    staleTime: 30000,
-    refetchOnWindowFocus: false,
-    queryFn: async () => {
-      if (!projectId) return []
-      const rows: any[] = []
-
-      // 1) Project roles: builders and head contractor
-      const { data: roles } = await supabase
-        .from("project_employer_roles")
-        .select("role, employer_id, employers(name)")
-        .eq("project_id", projectId)
-
-      ;(roles || []).forEach((r: any, idx: number) => {
-        if (!r.employer_id) return
-        rows.push({
-          id: `role:${r.role}:${r.employer_id}:${idx}`,
-          employerId: r.employer_id,
-          employerName: r.employers?.name || r.employer_id,
-          siteName: r.role === 'builder' ? 'Builder' : r.role === 'head_contractor' ? 'Head contractor' : r.role,
-          siteId: null,
-          tradeLabel: r.role === 'builder' ? 'Builder' : r.role === 'head_contractor' ? 'Head Contractor' : r.role,
-        })
-      })
-
-      // 2) Site contractors by trade
-      const { data: sct } = await (supabase as any)
-        .from("site_contractor_trades")
-        .select("id, job_site_id, employer_id, trade_type, job_sites(name), employers(name)")
-        .in("job_site_id", sortedSiteIds)
-
-      const tradeMap = new Map<string, string>((await import("@/constants/trades")).TRADE_OPTIONS.map((t: any) => [t.value, t.label]))
-
-      ;(sct || []).forEach((r: any) => {
-        if (!r.employer_id) return
-        const tradeLabel = tradeMap.get(String(r.trade_type)) || String(r.trade_type)
-        rows.push({
-          id: `sct:${r.id}`,
-          employerId: r.employer_id,
-          employerName: r.employers?.name || r.employer_id,
-          siteName: r.job_sites?.name || null,
-          siteId: r.job_site_id,
-          tradeLabel,
-        })
-      })
-
-      // De-duplicate identical employer+site+trade rows
-      const seen = new Set<string>()
-      const deduped = rows.filter((r) => {
-        const key = `${r.employerId}:${r.siteId || ''}:${r.tradeLabel}`
-        if (seen.has(key)) return false
-        seen.add(key)
-        return true
-      })
-
-      return deduped
-    }
-  })
+  // Use unified contractor data from all sources
+  const { data: unifiedContractors = [] } = useUnifiedContractors(projectId, sortedSiteIds)
+  
+  // Transform to match existing interface for backward compatibility
+  const contractorRows = useMemo(() => {
+    return unifiedContractors.map(contractor => ({
+      id: contractor.id,
+      employerId: contractor.employerId,
+      employerName: contractor.employerName,
+      siteName: contractor.siteName,
+      siteId: contractor.siteId,
+      tradeLabel: contractor.tradeLabel,
+    }))
+  }, [unifiedContractors])
 
   // Compute EBA stats including all employers represented in contractorRows (includes head contractor)
   const stableAllEmployerIds = useMemo(

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -897,7 +897,7 @@ export default function PendingEmployersImport() {
   };
 
   // EBA Search Functions
-  const searchEbaForEmployers = async (employerIds: string[]) => {
+  const searchEbaForEmployers = useCallback(async (employerIds: string[]) => {
     setIsEbaSearching(true);
     const supabase = getSupabaseBrowserClient();
     let searchesCompleted = 0;
@@ -984,9 +984,9 @@ export default function PendingEmployersImport() {
     } finally {
       setIsEbaSearching(false);
     }
-  };
+  }, [importResults]);
 
-  const createEbaRecord = async (employerId: string, result: FWCSearchResult) => {
+  const createEbaRecord = useCallback(async (employerId: string, result: FWCSearchResult) => {
     try {
       const supabase = getSupabaseBrowserClient();
       
@@ -1018,7 +1018,7 @@ export default function PendingEmployersImport() {
       console.error('Error creating EBA record:', error);
       return false;
     }
-  };
+  }, [importResults]);
 
   const toggleEbaResultsExpansion = (employerId: string) => {
     setExpandedEbaResults(prev => {

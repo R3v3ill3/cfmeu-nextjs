@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -68,36 +68,7 @@ export default function EbaProjectSearch() {
     };
   }, [employersToDismiss.size]);
 
-  // Load employers connected to projects with unknown EBA status
-  useEffect(() => {
-    loadProjectEmployers();
-  }, []);
-
-  const loadProjectEmployers = async () => {
-    try {
-      setIsLoading(true);
-      
-      // Get employers that are connected to projects and have unknown EBA status
-      const { data, error } = await supabase.rpc('get_project_employers_unknown_eba');
-      
-      if (error) {
-        console.error('Error loading project employers:', error);
-        // Fallback query if RPC doesn't exist
-        await loadProjectEmployersFallback();
-        return;
-      }
-      
-      setProjectEmployers(data || []);
-      console.log(`Loaded ${(data || []).length} project employers with unknown EBA status`);
-    } catch (error) {
-      console.error('Error loading project employers:', error);
-      await loadProjectEmployersFallback();
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const loadProjectEmployersFallback = async () => {
+  const loadProjectEmployersFallback = useCallback(async () => {
     try {
       // Fallback query using standard SQL
       const { data: employers, error } = await supabase
@@ -136,7 +107,36 @@ export default function EbaProjectSearch() {
     } catch (error) {
       console.error('Fallback query failed:', error);
     }
-  };
+  }, [supabase]);
+
+  const loadProjectEmployers = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      
+      // Get employers that are connected to projects and have unknown EBA status
+      const { data, error } = await supabase.rpc('get_project_employers_unknown_eba');
+      
+      if (error) {
+        console.error('Error loading project employers:', error);
+        // Fallback query if RPC doesn't exist
+        await loadProjectEmployersFallback();
+        return;
+      }
+      
+      setProjectEmployers(data || []);
+      console.log(`Loaded ${(data || []).length} project employers with unknown EBA status`);
+    } catch (error) {
+      console.error('Error loading project employers:', error);
+      await loadProjectEmployersFallback();
+    } finally {
+      setIsLoading(false);
+    }
+  }, [supabase, loadProjectEmployersFallback]);
+
+  // Load employers connected to projects with unknown EBA status
+  useEffect(() => {
+    loadProjectEmployers();
+  }, [loadProjectEmployers]);
 
   const searchEbaForEmployer = async (employer: ProjectEmployer) => {
     setSearchResults(prev => ({
@@ -215,7 +215,7 @@ export default function EbaProjectSearch() {
     }
   };
 
-  const createEbaRecord = async (employerId: string, result: FWCSearchResult) => {
+  const createEbaRecord = useCallback(async (employerId: string, result: FWCSearchResult) => {
     try {
       const { error } = await supabase
         .from('company_eba_records')
@@ -240,9 +240,9 @@ export default function EbaProjectSearch() {
       console.error('Error creating EBA record:', error);
       return false;
     }
-  };
+  }, [loadProjectEmployers, supabase, toast]);
 
-  const finalizeDismissals = async () => {
+  const finalizeDismissals = useCallback(async () => {
     if (employersToDismiss.size === 0) return;
 
     const employersToUpdate = Array.from(employersToDismiss);
@@ -275,7 +275,7 @@ export default function EbaProjectSearch() {
         variant: 'destructive',
       });
     }
-  };
+  }, [employersToDismiss, supabase, toast, loadProjectEmployers]);
 
   const toggleDismissal = (employerId: string) => {
     setEmployersToDismiss(prev => {

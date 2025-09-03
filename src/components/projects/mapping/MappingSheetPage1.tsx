@@ -58,19 +58,41 @@ export function MappingSheetPage1({ projectId }: { projectId: string }) {
         const { data: site } = await (supabase as any).from("job_sites").select("full_address, location").eq("id", siteId).maybeSingle();
         setAddress((site as any)?.full_address || (site as any)?.location || "");
       }
-      const builderId = (projectData as any)?.builder_id as string | null;
-      if (builderId) {
-        const { data: b } = await supabase
-          .from("employers")
-          .select("name, enterprise_agreement_status")
-          .eq("id", builderId)
-          .maybeSingle();
-        setBuilderName(((b as any)?.name as string) || builderId);
-        const status = (b as any)?.enterprise_agreement_status as string | null;
+
+      // Get builder information from both legacy field and project_employer_roles
+      let builderId: string | null = null;
+      
+      // First, check project_employer_roles for builder role (preferred)
+      const { data: builderRoles } = await supabase
+        .from("project_employer_roles")
+        .select("employer_id, employers(name, enterprise_agreement_status)")
+        .eq("project_id", projectId)
+        .eq("role", "builder")
+        .limit(1);
+      
+      if (builderRoles && builderRoles.length > 0) {
+        const builderRole = builderRoles[0] as any;
+        builderId = builderRole.employer_id;
+        const employer = builderRole.employers;
+        setBuilderName(employer?.name || builderId);
+        const status = employer?.enterprise_agreement_status as string | null;
         setBuilderHasEba(status ? status !== "no_eba" : null);
       } else {
-        setBuilderName("—");
-        setBuilderHasEba(null);
+        // Fallback to legacy projects.builder_id field
+        builderId = (projectData as any)?.builder_id as string | null;
+        if (builderId) {
+          const { data: b } = await supabase
+            .from("employers")
+            .select("name, enterprise_agreement_status")
+            .eq("id", builderId)
+            .maybeSingle();
+          setBuilderName(((b as any)?.name as string) || builderId);
+          const status = (b as any)?.enterprise_agreement_status as string | null;
+          setBuilderHasEba(status ? status !== "no_eba" : null);
+        } else {
+          setBuilderName("—");
+          setBuilderHasEba(null);
+        }
       }
     };
 
