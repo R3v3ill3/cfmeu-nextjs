@@ -302,7 +302,7 @@ export function EditProjectDialog({
         <DialogHeader>
           <DialogTitle>Edit Project</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
+        <div className="max-h-[70vh] overflow-y-auto pr-4 space-y-4">
           <div>
             <Label htmlFor="proj_name">Project Name</Label>
             <Input id="proj_name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" />

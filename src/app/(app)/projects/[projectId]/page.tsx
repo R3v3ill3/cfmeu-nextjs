@@ -76,8 +76,7 @@ export default function ProjectDetailPage() {
   const router = useRouter()
   const pathname = usePathname()
   const projectId = params?.projectId as string
-  const [tab, setTab] = useState(sp.get("tab") || "overview")
-  const [showAssign, setShowAssign] = useState(false)
+  const [tab, setTab] = useState(sp.get("tab") || "mappingsheets")
   const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null)
   const [showEbaForEmployerId, setShowEbaForEmployerId] = useState<string | null>(null)
   const [chartEmployer, setChartEmployer] = useState<{ id: string; name: string } | null>(null)
@@ -164,6 +163,52 @@ export default function ProjectDetailPage() {
       if (error) return []
       const unique = Array.from(new Set((data || []).map((r: any) => r.employer_id).filter(Boolean)))
       return unique
+    }
+  })
+
+  // Builder and main site address for mapping sheet
+  const { data: mappingSheetData } = useQuery({
+    queryKey: ["project-mapping-details", project?.id, project?.main_job_site_id, project?.builder_id],
+    enabled: !!project?.id,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      let builderName: string | null = null
+      let builderHasEba: boolean | null = null
+      let address: string | null = null
+
+      if (project?.main_job_site_id) {
+        const { data: site } = await supabase.from("job_sites").select("full_address, location").eq("id", project.main_job_site_id).maybeSingle()
+        address = site?.full_address || site?.location || null
+      }
+
+      // First, check project_employer_roles for builder role (preferred)
+      const { data: builderRoles } = await supabase
+        .from("project_employer_roles")
+        .select("employer_id, employers(name, enterprise_agreement_status)")
+        .eq("project_id", project!.id)
+        .eq("role", "builder")
+        .limit(1)
+      
+      if (builderRoles && builderRoles.length > 0) {
+        const builderRole = builderRoles[0] as any
+        const employer = builderRole.employers
+        builderName = employer?.name || builderRole.employer_id
+        const status = employer?.enterprise_agreement_status as string | null
+        builderHasEba = status ? status !== "no_eba" : null
+      } else if (project?.builder_id) {
+        // Fallback to legacy projects.builder_id field
+        const { data: b } = await supabase
+          .from("employers")
+          .select("name, enterprise_agreement_status")
+          .eq("id", project.builder_id)
+          .maybeSingle()
+        builderName = (b as any)?.name as string || project.builder_id
+        const status = (b as any)?.enterprise_agreement_status as string | null
+        builderHasEba = status ? status !== "no_eba" : null
+      }
+
+      return { builderName, builderHasEba, address }
     }
   })
 
@@ -525,156 +570,45 @@ export default function ProjectDetailPage() {
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
           {/* Sites tab trigger hidden; accessible via Overview 'Sites' link */}
-          <TabsTrigger value="contractors">Contractors</TabsTrigger>
-          <TabsTrigger value="wallcharts">Wallcharts</TabsTrigger>
           <TabsTrigger value="mappingsheets">Mapping Sheets</TabsTrigger>
+          <TabsTrigger value="wallcharts">Wallcharts</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview">
-          <Card>
-            <CardHeader>
-              <CardTitle>Project Overview</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                <SiteContactsSummary projectId={projectId} siteIds={sortedSiteIds} />
-                <div className="space-y-1">
-                  <button type="button" className="font-medium text-left text-primary hover:underline" onClick={() => setTab("sites")}>
-                    Sites
-                  </button>
-                  <div className="text-muted-foreground">{(sites as any[]).length}</div>
-                  <div className="text-muted-foreground truncate">
-                    {(sites as any[]).map((s) => s.name).join(', ') || '—'}
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <button type="button" className="font-medium text-left text-primary hover:underline" onClick={() => setTab("contractors")}>
-                    Linked Employers
-                  </button>
-                  <div className="flex items-center gap-2">
-                    <div className="px-2 py-1 bg-gray-100 rounded text-xs border">
-                      {(contractorSummary as any[]).length} employers
-                    </div>
-                  </div>
-                  <div className="text-muted-foreground text-xs truncate">
-                    {(contractorNames as string[]).join(', ') || 'No employers linked'}
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <div className="font-medium">Total workers</div>
-                  <div className="text-muted-foreground">{workerTotals?.totalWorkers ?? 0}</div>
-                </div>
-                <div className="space-y-1">
-                  <div className="font-medium">Total members</div>
-                  <div className="text-muted-foreground">{workerTotals?.totalMembers ?? 0}</div>
-                </div>
-                <div className="space-y-1">
-                  <div className="font-medium">Total leaders</div>
-                  <div className="text-muted-foreground">{workerTotals?.totalLeaders ?? 0}</div>
-                </div>
-                <div className="space-y-1">
-                  <div className="font-medium">EBA coverage</div>
-                  <div className="text-muted-foreground">{ebaStats ? `${ebaStats.ebaCount} eba: ${ebaStats.employerCount} employers` : "—"}</div>
-                </div>
-                <div className="space-y-1">
-                  <div className="font-medium">Last site visit</div>
-                  <div className="text-muted-foreground">{lastVisit || "—"}</div>
-                </div>
-                <div className="space-y-1">
-                  <div className="font-medium">Patch</div>
-                  <div className="text-muted-foreground truncate">
-                    {(projectPatches as any[]).length > 0 ? `${(projectPatches as any[])[0]?.name}${(projectPatches as any[]).length > 1 ? ` +${(projectPatches as any[]).length - 1}` : ''}` : '—'}
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <div className="font-medium">Organiser{(patchOrganisers as any[]).length === 1 ? '' : 's'}</div>
-                  <div className="text-muted-foreground truncate">
-                    {(patchOrganisers as any[]).slice(0, 4).join(', ') || '—'}
-                  </div>
-                </div>
-              </div>
-
-              {/* Per-site bars */}
-              {(sites as any[]).length > 0 && (
-                <div className="mt-4 space-y-3">
-                  {(sites as any[]).map((s: any) => {
-                    const sid = String(s.id)
-                    const mem = (siteMembershipTotals as Record<string, { members: number; total: number }>)[sid] || { members: 0, total: 0 }
-                    const pct = mem.total > 0 ? (mem.members / mem.total) * 100 : 0
-                    const eba = ebaBySite.get(sid) || { active: 0, total: 0 }
-                    return (
-                      <div key={sid} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <div className="text-xs text-muted-foreground mb-1">{s.name} — Members</div>
-                          <GradientBar percent={pct} baseRgb={memberRedRgb} heightClass="h-2.5" />
-                          <div className="mt-1 text-[11px] text-muted-foreground">{mem.members}/{mem.total}</div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-muted-foreground mb-1">{s.name} — EBA</div>
-                          <EbaBlocks active={eba.active} total={eba.total} heightClass="h-2.5" />
-                          <div className="mt-1 text-[11px] text-muted-foreground">{eba.active}/{eba.total} employers</div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
         <TabsContent value="mappingsheets">
-          {project && (
-            <div className="space-y-4">
-              <div className="no-print flex items-center justify-between">
-                <div className="text-sm text-muted-foreground">Printable CFMEU mapping sheets</div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      try {
-                        setTab('overview')
-                        const params = new URLSearchParams(sp.toString())
-                        params.delete('tab')
-                        const qs = params.toString()
-                        router.replace(qs ? `${pathname}?${qs}` : pathname)
-                      } catch {}
-                    }}
-                  >
-                    Close Mapping Sheets
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      try {
-                        const url = `/projects/${project.id}/print?print=1`
-                        const newWin = window.open(url, "_blank")
-                        if (!newWin) {
-                          window.location.href = url
-                        }
-                      } catch {
-                        try { window.location.href = `/projects/${project.id}/print?print=1` } catch {}
-                      }
-                    }}
-                  >
-                    Print
-                  </Button>
+          <div className="space-y-4">
+            {project && (
+              <div className="space-y-4">
+                <div className="grid gap-6">
+                  {(() => {
+                    const Comp = require("@/components/projects/mapping/MappingSheetPage1").MappingSheetPage1;
+                    const projectData = {
+                      ...(project as any),
+                      address: mappingSheetData?.address,
+                      builderName: mappingSheetData?.builderName,
+                      builderHasEba: mappingSheetData?.builderHasEba,
+                      organisers: (patchOrganisers as any[]).join(', '),
+                      workerTotals,
+                      ebaStats,
+                      lastVisit,
+                      patches: projectPatches,
+                    }
+                    const handleProjectUpdate = (patch: any) => {
+                      // No need to update local state as react-query will refetch
+                    }
+                    const handleAddressUpdate = (address: string) => {
+                      // No need to update local state as react-query will refetch
+                    }
+                    return <Comp projectData={projectData} onProjectUpdate={handleProjectUpdate} onAddressUpdate={handleAddressUpdate} />
+                  })()}
+                  {(() => {
+                    const Subs = require("@/components/projects/mapping/MappingSubcontractorsTable").MappingSubcontractorsTable;
+                    return <Subs projectId={project.id} />
+                  })()}
                 </div>
               </div>
-              <div className="grid gap-6">
-                {(() => {
-                  const Comp = require("@/components/projects/mapping/MappingSheetPage1").MappingSheetPage1;
-                  return <Comp projectId={project.id} />
-                })()}
-                {(() => {
-                  const Subs = require("@/components/projects/mapping/MappingSubcontractorsTable").MappingSubcontractorsTable;
-                  return <Subs projectId={project.id} />
-                })()}
-              </div>
-            </div>
-          )}
+            )}
+          </div>
         </TabsContent>
 
         <TabsContent value="sites">
@@ -684,65 +618,6 @@ export default function ProjectDetailPage() {
               <SiteContactsEditor projectId={project.id} siteIds={sortedSiteIds} />
             </div>
           )}
-        </TabsContent>
-
-        <TabsContent value="contractors">
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-sm text-muted-foreground">Assign contractors to sites and review EBA status.</div>
-            <Button onClick={() => setShowAssign(true)}>Assign contractors to sites</Button>
-          </div>
-          <Card>
-            <CardHeader>
-              <CardTitle>Contractors</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ContractorsSummary
-                rows={contractorRows as any}
-                ebaEmployers={ebaEmployers}
-                projectId={projectId}
-                groupBySite={true}
-                membershipByEmployerSite={membershipByEmployerSite as any}
-                ebaCategoryByEmployer={finalEbaCategoryByEmployer as any}
-                onEmployerClick={async (id) => {
-                  try {
-                    const { data: pct } = await (supabase as any)
-                      .from("project_contractor_trades")
-                      .select("id, estimated_project_workforce")
-                      .eq("project_id", projectId)
-                      .eq("employer_id", id)
-                      .limit(10)
-                    const hasEstimate = (pct || []).some((r: any) => typeof r.estimated_project_workforce === 'number' && r.estimated_project_workforce > 0)
-                    if (!hasEstimate) {
-                      const { data: emp } = await supabase.from('employers').select('name').eq('id', id).maybeSingle()
-                      setEstPrompt({ employerId: id, employerName: emp?.name || 'Employer' })
-                      setEstValue("")
-                    } else {
-                      setSelectedEmployerId(id)
-                    }
-                  } catch {
-                    setSelectedEmployerId(id)
-                  }
-                }}
-                onEbaClick={async (id) => {
-                  // Try open FWC URL in new tab; otherwise show Employer modal at EBA tab
-                  const { data } = await supabase
-                    .from("company_eba_records")
-                    .select("fwc_document_url")
-                    .eq("employer_id", id)
-                    .maybeSingle()
-                  const url = data?.fwc_document_url
-                  if (url) {
-                    try { window.open(url, '_blank') } catch {}
-                  } else {
-                    toast.error("No FWC URL on record for this employer.")
-                  }
-                }}
-              />
-            </CardContent>
-          </Card>
-          <div className="mt-4">
-            <StageTradeAssignmentManager projectId={projectId} />
-          </div>
         </TabsContent>
 
         <TabsContent value="wallcharts">
@@ -769,10 +644,6 @@ export default function ProjectDetailPage() {
           </Card>
         </TabsContent>
       </Tabs>
-
-      <ContractorSiteAssignmentModal
-        projectId={projectId}
-      />
 
       <EmployerDetailModal
         employerId={selectedEmployerId}

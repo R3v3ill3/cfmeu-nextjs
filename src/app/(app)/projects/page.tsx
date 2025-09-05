@@ -17,13 +17,14 @@ import AddressLookupDialog from "@/components/AddressLookupDialog"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { ArrowUp, ArrowDown, LayoutGrid, List as ListIcon } from "lucide-react"
+import { ArrowUp, ArrowDown, LayoutGrid, List as ListIcon, MapPin } from "lucide-react"
 import CreateProjectDialog from "@/components/projects/CreateProjectDialog"
 import { usePatchOrganiserLabels } from "@/hooks/usePatchOrganiserLabels"
 import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
 import { PROJECT_TIER_LABELS, ProjectTier } from "@/components/projects/types"
 import { ProjectTable } from "@/components/projects/ProjectTable"
 import DuplicateEmployerManager from "@/components/admin/DuplicateEmployerManager"
+import ProjectsMapView from "@/components/projects/ProjectsMapView"
 
 type ProjectWithRoles = {
   id: string
@@ -678,6 +679,7 @@ export default function ProjectsPage() {
           <ToggleGroup type="single" variant="outline" size="sm" value={view} onValueChange={(v) => v && setParam("view", v)}>
             <ToggleGroupItem value="card" aria-label="Card view" className="gap-1"><LayoutGrid className="h-4 w-4" /> Card</ToggleGroupItem>
             <ToggleGroupItem value="list" aria-label="List view" className="gap-1"><ListIcon className="h-4 w-4" /> List</ToggleGroupItem>
+            <ToggleGroupItem value="map" aria-label="Map view" className="gap-1"><MapPin className="h-4 w-4" /> Map</ToggleGroupItem>
           </ToggleGroup>
         </div>
       </div>
@@ -698,6 +700,18 @@ export default function ProjectsPage() {
             }}
           />
         </div>
+      ) : view === 'map' ? (
+        <ProjectsMapView
+          projects={projects as any[]}
+          summaries={summaries}
+          onProjectClick={(id) => {
+            window.location.href = `/projects/${id}`
+          }}
+          searchQuery={q}
+          patchIds={patchIds}
+          tierFilter={tierFilter}
+          workersFilter={workersFilter}
+        />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {(projects as any[]).map((p: any) => (

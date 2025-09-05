@@ -145,7 +145,6 @@ export function MappingSiteContactsTable({ projectId, mainSiteId }: { projectId:
           </TableBody>
         </Table>
       </div>
-      <div className="text-sm text-muted-foreground mt-2" aria-live="polite">{saving ? "Saving…" : "All changes saved"}</div>
     </div>
   );
 }
