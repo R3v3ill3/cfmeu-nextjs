@@ -20,6 +20,8 @@ type EditableProject = {
   id: string;
   name: string;
   value: number | null;
+  organising_universe?: 'active' | 'potential' | 'excluded' | null;
+  stage_class?: 'future' | 'pre_construction' | 'construction' | 'archived' | null;
   proposed_start_date: string | null;
   proposed_finish_date: string | null;
   roe_email: string | null;
@@ -39,6 +41,8 @@ export function EditProjectDialog({
   const [start, setStart] = useState(project.proposed_start_date || "");
   const [finish, setFinish] = useState(project.proposed_finish_date || "");
   const [roeEmail, setRoeEmail] = useState(project.roe_email || "");
+  const [organisingUniverse, setOrganisingUniverse] = useState<'active' | 'potential' | 'excluded'>((project as any).organising_universe || 'potential');
+  const [stageClass, setStageClass] = useState<'future' | 'pre_construction' | 'construction' | 'archived'>((project as any).stage_class || 'pre_construction');
   const [projectType, setProjectType] = useState<string>("");
   const [stateFunding, setStateFunding] = useState<string>("");
   const [federalFunding, setFederalFunding] = useState<string>("");
@@ -61,6 +65,8 @@ export function EditProjectDialog({
     setStart(project.proposed_start_date || "");
     setFinish(project.proposed_finish_date || "");
     setRoeEmail(project.roe_email || "");
+    setOrganisingUniverse(((project as any).organising_universe as any) || 'potential');
+    setStageClass(((project as any).stage_class as any) || 'pre_construction');
     setProjectType("");
     setStateFunding("");
     setFederalFunding("");
@@ -209,6 +215,8 @@ export function EditProjectDialog({
         proposed_start_date: start || null,
         proposed_finish_date: finish || null,
         roe_email: roeEmail ? roeEmail.trim() : null,
+        organising_universe: organisingUniverse,
+        stage_class: stageClass,
         project_type: projectType || null,
         state_funding: stateFunding ? Number(stateFunding.replace(/[^0-9.]/g, "")) : 0,
         federal_funding: federalFunding ? Number(federalFunding.replace(/[^0-9.]/g, "")) : 0,
@@ -306,6 +314,35 @@ export function EditProjectDialog({
           <div>
             <Label htmlFor="proj_name">Project Name</Label>
             <Input id="proj_name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label>Stage</Label>
+              <Select value={stageClass} onValueChange={(v: any) => setStageClass(v)}>
+                <SelectTrigger className="mt-1 w-full">
+                  <SelectValue placeholder="Select stage" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="future">Future</SelectItem>
+                  <SelectItem value="pre_construction">Pre-construction</SelectItem>
+                  <SelectItem value="construction">Construction</SelectItem>
+                  <SelectItem value="archived">Archived</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Organising universe</Label>
+              <Select value={organisingUniverse} onValueChange={(v: any) => setOrganisingUniverse(v)}>
+                <SelectTrigger className="mt-1 w-full">
+                  <SelectValue placeholder="Select universe" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="potential">Potential</SelectItem>
+                  <SelectItem value="excluded">Excluded</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           {/* Project Value with Tier Preview */}
           <div className="space-y-2">

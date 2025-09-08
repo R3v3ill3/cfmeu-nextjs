@@ -1,87 +1,117 @@
 /* Print styles for maps */
 @media print {
-  /* Hide navigation and other non-essential elements */
-  .sidebar,
-  .header,
-  nav,
-  .print-hide {
-    display: none !important;
-  }
-
-  /* Ensure map takes full page */
-  body.printing-map {
-    margin: 0;
-    padding: 0;
-  }
-
-  body.printing-map * {
-    visibility: hidden;
-  }
-
-  body.printing-map .print-show,
-  body.printing-map .print-show * {
-    visibility: visible;
-  }
-
-  /* Full page map for printing */
-  body.printing-map .print-show {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100vh;
-    z-index: 9999;
-  }
-
-  /* Map container adjustments */
-  .map-print-container {
-    width: 100% !important;
-    height: 100vh !important;
-    page-break-inside: avoid;
-  }
-
-  /* Legend positioning for print */
-  .print-legend {
-    position: absolute;
-    bottom: 20px;
-    left: 20px;
-    background: white;
-    padding: 15px;
-    border: 2px solid #000;
-    border-radius: 5px;
-    font-size: 12px;
-    z-index: 1000;
-  }
-
-  /* Title for printed map */
-  .print-title {
-    position: absolute;
-    top: 20px;
-    left: 20px;
-    background: white;
-    padding: 10px 15px;
-    border: 2px solid #000;
-    border-radius: 5px;
-    font-size: 16px;
-    font-weight: bold;
-    z-index: 1000;
-  }
-
-  /* Ensure high contrast for patches */
-  .print-patch-polygon {
-    stroke-width: 3 !important;
-    stroke: #000 !important;
+  /* Force color printing */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   /* Page setup */
   @page {
     size: A4 landscape;
-    margin: 0.5in;
+    margin: 0.75in;
+  }
+
+  /* Hide navigation and other non-essential elements */
+  .sidebar,
+  .header,
+  nav,
+  .print-hide,
+  .no-print {
+    display: none !important;
+  }
+
+  /* Show print-only elements */
+  .print-only {
+    display: block !important;
+  }
+
+  /* Body adjustments for printing */
+  body.printing-map {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    overflow: visible !important;
+  }
+
+  /* Map container adjustments for print */
+  .map-print-container {
+    position: relative !important;
+    width: 100% !important;
+    height: 80vh !important;
+    min-height: 80vh !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 2px solid #000 !important;
+    page-break-inside: avoid;
+    overflow: hidden;
+  }
+
+  .map-print-container .map-container,
+  .map-print-container > div {
+    height: 100% !important;
+    width: 100% !important;
+  }
+
+  /* Google Maps specific print fixes */
+  .map-container > div,
+  .map-container > div > div,
+  .map-container > div > div > div {
+    height: 100% !important;
+    width: 100% !important;
+    position: relative !important;
+  }
+
+  /* Legend positioning for print */
+  .print-legend {
+    position: absolute !important;
+    bottom: 20px;
+    left: 20px;
+    background: white !important;
+    padding: 10px;
+    border: 2px solid #000 !important;
+    border-radius: 5px;
+    font-size: 11px;
+    z-index: 1000;
+    max-width: 250px;
+    max-height: 200px;
+    overflow: hidden;
+  }
+
+  /* Title for printed map */
+  .print-title {
+    position: absolute !important;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: white !important;
+    padding: 8px 15px;
+    border: 2px solid #000 !important;
+    border-radius: 5px;
+    font-size: 16px !important;
+    font-weight: bold !important;
+    z-index: 1000;
+    color: black !important;
+  }
+
+  /* Ensure Google Maps elements are visible */
+  .map-print-container * {
+    visibility: visible !important;
   }
 
   /* Controls should be hidden in print */
-  .map-controls {
+  .map-controls,
+  button,
+  input,
+  select {
     display: none !important;
+  }
+
+  /* Patch polygons should have good contrast */
+  [class*="polygon"] {
+    stroke-width: 2 !important;
+    stroke: #000 !important;
   }
 }
 

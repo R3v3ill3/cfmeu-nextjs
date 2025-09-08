@@ -181,7 +181,9 @@ const DATABASE_TABLES = {
       main_job_site_address: { type: "text", required: true, description: "Main job site full address" },
       employer_name: { type: "text", required: false, description: "Builder/Head contractor employer name (auto-match/create)" },
       jv_status: { type: "enum", required: false, description: "JV status", options: ["yes","no","unsure"] },
-      jv_label: { type: "text", required: false, description: "JV label (if status yes)" }
+      jv_label: { type: "text", required: false, description: "JV label (if status yes)" },
+      organising_universe: { type: "enum", required: false, description: "Organising universe classification", options: ["active","potential","excluded"] },
+      stage_class: { type: "enum", required: false, description: "Project stage classification", options: ["future","pre_construction","construction","archived"] }
     }
   },
   

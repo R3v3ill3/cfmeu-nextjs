@@ -3,6 +3,8 @@ export interface Project {
   name: string;
   value: number | null;
   tier: string | null;
+  organising_universe?: 'active' | 'potential' | 'excluded' | null;
+  stage_class?: 'future' | 'pre_construction' | 'construction' | 'archived' | null;
   proposed_start_date: string | null;
   proposed_finish_date: string | null;
   roe_email: string | null;

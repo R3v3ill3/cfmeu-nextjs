@@ -11,6 +11,8 @@ type ProjectRow = {
   main_job_site_id: string | null
   value: number | null
   tier: string | null
+  organising_universe?: string | null
+  stage_class?: string | null
   project_employer_roles?: Array<{
     role: string
     employer_id: string
@@ -47,6 +49,7 @@ export function ProjectTable({
           <TableHead>Project</TableHead>
           <TableHead>Primary Contractor</TableHead>
           <TableHead>Tier</TableHead>
+          <TableHead>Classifications</TableHead>
           <TableHead>Patch</TableHead>
           <TableHead className="text-right">Employers</TableHead>
           <TableHead className="text-right">Workers</TableHead>
@@ -119,6 +122,16 @@ export function ProjectTable({
                 ) : (
                   <span className="text-muted-foreground">—</span>
                 )}
+              </TableCell>
+              <TableCell>
+                <div className="flex items-center gap-2">
+                  {project.stage_class && (
+                    <Badge variant="secondary" className="text-[10px] capitalize">{String(project.stage_class).replace('_',' ')}</Badge>
+                  )}
+                  {project.organising_universe && (
+                    <Badge variant="outline" className="text-[10px] capitalize">{String(project.organising_universe)}</Badge>
+                  )}
+                </div>
               </TableCell>
               <TableCell>
                 <span className="text-sm">{patchName}</span>

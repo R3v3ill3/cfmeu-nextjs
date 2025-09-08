@@ -1,6 +1,152 @@
 @import "tailwindcss";
 @import "../styles/print.css";
 
+/* Map label styling for better readability */
+.map-patch-label {
+  text-shadow: 
+    2px 2px 4px rgba(0, 0, 0, 0.8),
+    -1px -1px 2px rgba(0, 0, 0, 0.6),
+    1px -1px 2px rgba(0, 0, 0, 0.6),
+    -1px 1px 2px rgba(0, 0, 0, 0.6) !important;
+  background-color: rgba(0, 0, 0, 0.7) !important;
+  border-radius: 4px !important;
+  padding: 2px 6px !important;
+  backdrop-filter: blur(2px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Print styles for A4 map printing */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 1cm;
+  }
+  
+  /* Reset and show everything for print */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  
+  /* Hide screen-only elements */
+  .print\\:hidden,
+  nav,
+  header,
+  footer,
+  .no-print {
+    display: none !important;
+  }
+  
+  /* Main page layout for print */
+  body {
+    margin: 0;
+    padding: 0;
+    background: white !important;
+  }
+  
+  /* Print container takes full page */
+  .print-container {
+    display: flex !important;
+    flex-direction: column;
+    width: 100%;
+    height: 100vh;
+    background: white;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    box-sizing: border-box;
+  }
+  
+  /* Print title */
+  .print-title {
+    font-size: 18px;
+    font-weight: bold;
+    text-align: center;
+    margin-bottom: 0.5rem;
+    color: black !important;
+    page-break-inside: avoid;
+  }
+  
+  /* Map container for print */
+  .print-map {
+    flex: 1;
+    height: 65vh;
+    min-height: 65vh;
+    max-height: 65vh;
+    border: 2px solid #000;
+    overflow: hidden;
+    page-break-inside: avoid;
+  }
+  
+  /* Ensure Google Maps renders in print */
+  .print-map > div,
+  .print-map > div > div {
+    height: 100% !important;
+    width: 100% !important;
+  }
+  
+  /* Key tables at bottom */
+  .print-keys {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    height: 30vh;
+    max-height: 30vh;
+    overflow: hidden;
+    page-break-inside: avoid;
+  }
+  
+  .print-key-section {
+    flex: 1;
+    min-width: 250px;
+    border: 1px solid #000;
+    padding: 0.5rem;
+    background: white;
+    overflow: hidden;
+  }
+  
+  .print-key-title {
+    font-size: 14px;
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+    color: black !important;
+  }
+  
+  .print-key-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.25rem;
+    font-size: 9px;
+    overflow: hidden;
+  }
+  
+  .print-key-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.2rem;
+    page-break-inside: avoid;
+  }
+  
+  .print-key-color {
+    width: 10px;
+    height: 10px;
+    border: 1px solid #000 !important;
+    flex-shrink: 0;
+    -webkit-print-color-adjust: exact !important;
+    color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  
+  .print-key-label {
+    font-size: 9px;
+    color: black !important;
+    line-height: 1.1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;

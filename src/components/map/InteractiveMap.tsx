@@ -10,6 +10,7 @@ import { MapPin, Building, Users, ExternalLink } from "lucide-react"
 import Link from "next/link"
 import dynamic from "next/dynamic"
 import { usePatchOrganiserLabels } from "@/hooks/usePatchOrganiserLabels"
+import { getProjectColor } from "@/utils/projectColors"
 
 interface InteractiveMapProps {
   showJobSites: boolean
@@ -18,6 +19,9 @@ interface InteractiveMapProps {
   mapMode: "standard" | "satellite"
   showPatchNames?: boolean
   showOrganisers?: boolean
+  selectedPatchIds?: string[]
+  projectColorBy?: 'tier' | 'organising_universe' | 'stage' | 'default'
+  labelMode?: 'always' | 'hover' | 'key' | 'off'
 }
 
 interface PatchData {
@@ -39,6 +43,9 @@ interface JobSiteData {
   patch_id: string | null
   projects?: {
     name: string
+    tier?: string | null
+    organising_universe?: string | null
+    stage_class?: string | null
   }
 }
 
@@ -127,7 +134,10 @@ export default function InteractiveMap({
   selectedPatchTypes,
   mapMode,
   showPatchNames = false,
-  showOrganisers = false
+  showOrganisers = false,
+  selectedPatchIds = [],
+  projectColorBy = 'default',
+  labelMode = 'always'
 }: InteractiveMapProps) {
   const [map, setMap] = useState<google.maps.Map | null>(null)
   const [selectedPatch, setSelectedPatch] = useState<PatchData | null>(null)
@@ -135,6 +145,7 @@ export default function InteractiveMap({
   const [infoWindowPosition, setInfoWindowPosition] = useState<{ lat: number, lng: number } | null>(null)
   const [mapsLoaded, setMapsLoaded] = useState(false)
   const [mapsError, setMapsError] = useState<string | null>(null)
+  const [hoveredPatchId, setHoveredPatchId] = useState<string | null>(null)
 
   // Load Google Maps
   useEffect(() => {
@@ -300,7 +311,7 @@ export default function InteractiveMap({
             longitude,
             project_id,
             patch_id,
-            projects:projects!fk_job_sites_project(name)
+            projects:projects!fk_job_sites_project(name, tier, organising_universe, stage_class)
           `)
           .not("latitude", "is", null)
           .not("longitude", "is", null)
@@ -339,8 +350,15 @@ export default function InteractiveMap({
   // Filter patches (only geographic patches are loaded)
   const filteredPatches = useMemo(() => {
     if (!showPatches) return []
-    return patches // All patches are already filtered to geographic and active
-  }, [patches, showPatches])
+    
+    // If specific patches are selected via FiltersBar, filter to only those
+    if (selectedPatchIds.length > 0) {
+      return patches.filter(patch => selectedPatchIds.includes(patch.id))
+    }
+    
+    // Otherwise show all patches (already filtered to geographic and active)
+    return patches
+  }, [patches, showPatches, selectedPatchIds])
 
   // Convert GeoJSON to Google Maps Polygon paths
   // Extract polygons from GeoJSON. Returns an array of polygons; each polygon is an array of rings; each ring is an array of LatLng points
@@ -378,6 +396,15 @@ export default function InteractiveMap({
         lng: event.latLng.lng()
       })
     }
+  }, [])
+
+  // Handle patch hover
+  const handlePatchMouseOver = useCallback((patch: PatchData) => {
+    setHoveredPatchId(patch.id)
+  }, [])
+
+  const handlePatchMouseOut = useCallback(() => {
+    setHoveredPatchId(null)
   }, [])
 
   // Handle job site marker click
@@ -537,62 +564,147 @@ export default function InteractiveMap({
                     clickable: true
                   }}
                   onClick={(event) => handlePatchClick(patch, event)}
+                  onMouseOver={() => handlePatchMouseOver(patch)}
+                  onMouseOut={handlePatchMouseOut}
                 />
               ))}
             </>
           )
         })}
 
-        {/* Render labels for patches (centroid markers with text) */}
-        {showPatches && (showPatchNames || showOrganisers) && filteredPatches.map(patch => {
-          if (!patch.geom_geojson) return null
-          const polygons = extractPolygonsFromGeoJSON(patch.geom_geojson)
-          if (polygons.length === 0) return null
-          // Pick centroid of the largest polygon's outer ring
-          let best: { center: google.maps.LatLngLiteral | null; area: number } = { center: null, area: 0 }
-          polygons.forEach(rings => {
-            const outer = rings[0] || []
-            const area = bboxArea(outer)
-            if (area > best.area) best = { center: centroidOfRing(outer), area }
-          })
-          const pos = best.center
-          if (!pos) return null
-          const label = labelForPatch(patch, organiserNamesByPatch[patch.id])
-          if (!label) return null
-          return (
-            <Marker
-              key={`label-${patch.id}`}
-              position={pos}
-              icon={{
-                url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='1' height='1'></svg>`),
-                scaledSize: new google.maps.Size(1, 1)
-              }}
-              label={{ text: label, color: "#111827", fontSize: "12px", fontWeight: "600" }}
-            />
-          )
-        })}
+        {/* Render labels for patches (centroid markers with text) - Group by location */}
+        {(() => {
+          if (!showPatches || (!showPatchNames && !showOrganisers) || labelMode === 'off' || labelMode === 'key') return null;
+          
+          // Group patches by their centroid coordinates to handle multiple patches at same location
+          const patchGroups = new Map<string, {
+            position: google.maps.LatLngLiteral;
+            patches: Array<{patch: PatchData; organiserNames: string[] | undefined}>;
+          }>();
+          
+          filteredPatches.forEach(patch => {
+            
+            if (!patch.geom_geojson) return;
+            const polygons = extractPolygonsFromGeoJSON(patch.geom_geojson);
+            if (polygons.length === 0) return;
+            
+            // Pick centroid of the largest polygon's outer ring
+            let best: { center: google.maps.LatLngLiteral | null; area: number } = { center: null, area: 0 };
+            polygons.forEach(rings => {
+              const outer = rings[0] || [];
+              const area = bboxArea(outer);
+              if (area > best.area) best = { center: centroidOfRing(outer), area };
+            });
+            
+            const pos = best.center;
+            if (!pos) return;
+            
+            // Create a key based on rounded coordinates to group nearby patches
+            const locationKey = `${Math.round(pos.lat * 10000)},${Math.round(pos.lng * 10000)}`;
+            
+            if (!patchGroups.has(locationKey)) {
+              patchGroups.set(locationKey, {
+                position: pos,
+                patches: []
+              });
+            }
+            
+            patchGroups.get(locationKey)!.patches.push({
+              patch,
+              organiserNames: organiserNamesByPatch[patch.id]
+            });
+          });
+          
+          // Render one label per location group
+          return Array.from(patchGroups.entries()).map(([locationKey, group]) => {
+            // For hover mode, only show if any patch in this group is hovered
+            if (labelMode === 'hover') {
+              const hasHoveredPatch = group.patches.some(p => p.patch.id === hoveredPatchId);
+              if (!hasHoveredPatch) return null;
+            }
+            // Combine all patch names and organiser names
+            const allPatchNames = group.patches.map(p => p.patch.name).filter(Boolean);
+            const allOrganiserNames = group.patches
+              .flatMap(p => p.organiserNames || [])
+              .filter((name, index, arr) => arr.indexOf(name) === index); // Remove duplicates
+            
+            const namePart = showPatchNames && allPatchNames.length > 0 ? allPatchNames.join(", ") : undefined;
+            const orgPart = showOrganisers && allOrganiserNames.length > 0 ? allOrganiserNames.join(", ") : undefined;
+            
+            let label: string;
+            if (namePart && orgPart) {
+              label = `${namePart} — ${orgPart}`;
+            } else {
+              label = namePart || orgPart || "";
+            }
+            
+            if (!label) return null;
+            
+            // Calculate label dimensions based on text length
+            const fontSize = 12;
+            const charWidth = fontSize * 0.6; // Approximate character width
+            const padding = 12; // Horizontal padding
+            const minWidth = 120;
+            const maxWidth = 400;
+            const labelWidth = Math.min(maxWidth, Math.max(minWidth, label.length * charWidth + padding));
+            const labelHeight = 40;
+            
+            // Create SVG with dynamic width for better readability
+            const svgIcon = `
+              <svg xmlns='http://www.w3.org/2000/svg' width='${labelWidth}' height='${labelHeight}' viewBox='0 0 ${labelWidth} ${labelHeight}'>
+                <defs>
+                  <filter id="shadow-${locationKey}" x="-20%" y="-20%" width="140%" height="140%">
+                    <feDropShadow dx="2" dy="2" stdDeviation="2" flood-color="black" flood-opacity="0.6"/>
+                  </filter>
+                </defs>
+                <rect x='2' y='6' width='${labelWidth - 4}' height='28' rx='4' ry='4' 
+                      fill='rgba(0,0,0,0.8)' stroke='rgba(255,255,255,0.3)' stroke-width='1' 
+                      filter="url(#shadow-${locationKey})"/>
+                <text x='${labelWidth / 2}' y='24' text-anchor='middle' fill='white' 
+                      font-family='Arial, sans-serif' font-size='${fontSize}' font-weight='bold'>
+                  ${label.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}
+                </text>
+              </svg>
+            `;
+            
+            return (
+              <Marker
+                key={`label-group-${locationKey}`}
+                position={group.position}
+                icon={{
+                  url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svgIcon),
+                  scaledSize: new google.maps.Size(labelWidth, labelHeight),
+                  anchor: new google.maps.Point(labelWidth / 2, labelHeight / 2)
+                }}
+              />
+            );
+          });
+        })()}
 
         {/* Debug: compare view vs table counts to help diagnose missing patches */}
         {/* Intentionally logs in queryFn and auth check above */}
 
         {/* Render Job Sites as Markers */}
-        {showJobSites && jobSites.map(site => (
-          <Marker
-            key={site.id}
-            position={{ lat: site.latitude, lng: site.longitude }}
-            icon={{
-              url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="12" cy="12" r="8" fill="#3b82f6" stroke="#ffffff" stroke-width="2"/>
-                  <circle cx="12" cy="12" r="3" fill="#ffffff"/>
-                </svg>
-              `),
-              scaledSize: new google.maps.Size(24, 24),
-              anchor: new google.maps.Point(12, 12)
-            }}
-            onClick={() => handleJobSiteClick(site)}
-          />
-        ))}
+        {showJobSites && jobSites.map(site => {
+          const color = getProjectColor(projectColorBy, site.projects || {});
+          return (
+            <Marker
+              key={site.id}
+              position={{ lat: site.latitude, lng: site.longitude }}
+              icon={{
+                url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="12" cy="12" r="8" fill="${color}" stroke="#ffffff" stroke-width="2"/>
+                    <circle cx="12" cy="12" r="3" fill="#ffffff"/>
+                  </svg>
+                `),
+                scaledSize: new google.maps.Size(24, 24),
+                anchor: new google.maps.Point(12, 12)
+              }}
+              onClick={() => handleJobSiteClick(site)}
+            />
+          );
+        })}
 
         {/* Info Window for Patches */}
         {selectedPatch && infoWindowPosition && (

@@ -185,8 +185,34 @@ export default function ProjectsMapView({
     staleTime: 30000
   })
 
-  // Fetch patches data with geometry (only if patchIds filter is applied)
-  const { data: patches = [] } = useQuery<PatchData[]>({
+  // Fetch all patches data with geometry for overlay display
+  const { data: allPatches = [] } = useQuery<PatchData[]>({
+    queryKey: ["patches-with-geometry-all"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("patches_with_geojson")
+        .select("id, name, code, geom_geojson")
+        .not("geom_geojson", "is", null)
+
+      if (error) throw error
+
+      const normalized: PatchData[] = (data || []).map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        code: row.code,
+        type: "geo",
+        status: "active",
+        geom_geojson: row.geom_geojson
+      }))
+
+      return normalized
+    },
+    retry: 1,
+    staleTime: 30000
+  })
+
+  // Fetch filtered patches data (only if patchIds filter is applied)
+  const { data: filteredPatches = [] } = useQuery<PatchData[]>({
     queryKey: ["patches-with-geometry-filtered", patchIds],
     queryFn: async () => {
       if (patchIds.length === 0) return []
@@ -214,6 +240,9 @@ export default function ProjectsMapView({
     retry: 1,
     staleTime: 30000
   })
+
+  // Use filtered patches if there's a filter, otherwise show all patches as overlay
+  const patches = patchIds.length > 0 ? filteredPatches : allPatches
 
   // Convert GeoJSON to Google Maps Polygon paths
   const extractPolygonsFromGeoJSON = useCallback((geojson: any): google.maps.LatLngLiteral[][][] => {

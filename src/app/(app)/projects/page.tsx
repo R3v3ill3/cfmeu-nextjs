@@ -302,6 +302,14 @@ function ProjectListCard({ p, summary, onOpenEmployer }: { p: ProjectWithRoles; 
             <Link href={`/projects/${p.id}`} className="hover:underline inline-block rounded border border-dashed border-transparent hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 px-1">
               {p.name}
             </Link>
+            <div className="flex items-center gap-2">
+              {('stage_class' in p && (p as any).stage_class) && (
+                <Badge variant="secondary" className="text-[10px] capitalize">{String((p as any).stage_class).replace('_',' ')}</Badge>
+              )}
+              {('organising_universe' in p && (p as any).organising_universe) && (
+                <Badge variant="outline" className="text-[10px] capitalize">{String((p as any).organising_universe)}</Badge>
+              )}
+            </div>
             <button
               type="button"
               className="text-xs text-primary hover:underline whitespace-nowrap"
@@ -397,6 +405,8 @@ export default function ProjectsPage() {
   const dir = sp.get("dir") || "asc"
   const view = sp.get("view") || "card"
   const workersFilter = sp.get("workers") || "all" // all, zero, nonzero
+  const universeFilter = sp.get("universe") || "all"
+  const stageFilter = sp.get("stage") || "all"
   const page = Math.max(1, parseInt(sp.get('page') || '1', 10) || 1)
   const PAGE_SIZE = 24
 
@@ -443,7 +453,7 @@ export default function ProjectsPage() {
   })
 
   const { data: projectsData, isLoading } = useQuery<{ projects: ProjectWithRoles[]; summaries: Record<string, ProjectSummary> }>({
-    queryKey: ["projects-list+summary", patchIds, patchProjectIds, tierFilter, q],
+    queryKey: ["projects-list+summary", patchIds, patchProjectIds, tierFilter, universeFilter, stageFilter, q],
     staleTime: 30000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
@@ -455,6 +465,8 @@ export default function ProjectsPage() {
           main_job_site_id,
           value,
           tier,
+          organising_universe,
+          stage_class,
           project_employer_roles!left(
             role,
             employer_id,
@@ -469,6 +481,12 @@ export default function ProjectsPage() {
 
       if (tierFilter !== "all") {
         qy = qy.eq('tier', tierFilter)
+      }
+      if (universeFilter !== "all") {
+        qy = qy.eq('organising_universe', universeFilter)
+      }
+      if (stageFilter !== "all") {
+        qy = qy.eq('stage_class', stageFilter)
       }
 
       if (patchIds.length > 0) {
@@ -530,15 +548,7 @@ export default function ProjectsPage() {
       })
     }
     
-    // Apply employers filter
-    const employersFilter = sp.get("employers") || "all"
-    if (employersFilter !== "all") {
-      filtered = filtered.filter((p: any) => {
-        const summary = summaries[p.id]
-        const employerCount = summary?.engaged_employer_count || 0
-        return employersFilter === "zero" ? employerCount === 0 : employerCount > 0
-      })
-    }
+    // Employers filter removed
     
     // Apply client-side sorting for summary-based fields
     const needsClientSorting = ["workers", "members", "delegates", "eba_coverage", "employers"].includes(sort)
@@ -621,16 +631,32 @@ export default function ProjectsPage() {
               </SelectContent>
             </Select>
           </div>
-          <div className="w-40">
-            <div className="text-xs text-muted-foreground mb-1">Employers</div>
-            <Select value={sp.get("employers") || "all"} onValueChange={(value) => setParam("employers", value)}>
+          <div className="w-44">
+            <div className="text-xs text-muted-foreground mb-1">Universe</div>
+            <Select value={universeFilter} onValueChange={(value) => setParam("universe", value)}>
               <SelectTrigger>
-                <SelectValue placeholder="Filter by employers" />
+                <SelectValue placeholder="Filter by universe" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Projects</SelectItem>
-                <SelectItem value="nonzero">Has Employers</SelectItem>
-                <SelectItem value="zero">No Employers</SelectItem>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="potential">Potential</SelectItem>
+                <SelectItem value="excluded">Excluded</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="w-56">
+            <div className="text-xs text-muted-foreground mb-1">Stage</div>
+            <Select value={stageFilter} onValueChange={(value) => setParam("stage", value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Filter by stage" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="future">Future</SelectItem>
+                <SelectItem value="pre_construction">Pre-construction</SelectItem>
+                <SelectItem value="construction">Construction</SelectItem>
+                <SelectItem value="archived">Archived</SelectItem>
               </SelectContent>
             </Select>
           </div>

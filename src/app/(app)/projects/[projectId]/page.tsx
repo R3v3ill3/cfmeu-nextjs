@@ -6,6 +6,7 @@ import { useParams, useSearchParams, useRouter, usePathname } from "next/navigat
 import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import JobSitesManager from "@/components/projects/JobSitesManager"
 import EditProjectDialog from "@/components/projects/EditProjectDialog"
@@ -93,7 +94,7 @@ export default function ProjectDetailPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("projects")
-        .select("id, name, main_job_site_id, value, tier, proposed_start_date, proposed_finish_date, roe_email, project_type, state_funding, federal_funding")
+        .select("id, name, main_job_site_id, value, tier, organising_universe, stage_class, proposed_start_date, proposed_finish_date, roe_email, project_type, state_funding, federal_funding")
         .eq("id", projectId)
         .maybeSingle()
       if (error) throw error
@@ -552,6 +553,12 @@ export default function ProjectDetailPage() {
           <h1 className="text-3xl font-bold">{project?.name}</h1>
           <div className="flex items-center gap-3">
                             <ProjectTierBadge tier={project?.tier || null} size="lg" />
+            {project?.stage_class && (
+              <Badge variant="secondary" className="capitalize">{String(project.stage_class).replace('_',' ')}</Badge>
+            )}
+            {project?.organising_universe && (
+              <Badge variant="outline" className="capitalize">{String(project.organising_universe)}</Badge>
+            )}
             {project?.value && (
               <span className="text-lg text-muted-foreground">
                 ${(project.value / 1000000).toFixed(1)}M

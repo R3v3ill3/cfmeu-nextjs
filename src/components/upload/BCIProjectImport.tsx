@@ -13,6 +13,7 @@ import { CheckCircle, AlertCircle, Info, Users, Building2, Wrench, MapPin, Searc
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { inferTradeTypeFromCompanyName, inferTradeTypeFromCsvRole, getTradeTypeLabel, TradeType, getTradeTypeCategories } from '@/utils/bciTradeTypeInference';
 import { findBestEmployerMatch, normalizeCompanyName } from '@/utils/workerDataProcessor';
+import { mapBciStageToStageClass, defaultOrganisingUniverseFor } from '@/utils/stageClassification';
 
 // Enhanced types for BCI CSV data
 interface BCICsvRow {
@@ -693,7 +694,12 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
             proposed_finish_date: project.constructionEndDate,
             project_stage: project.projectStage,
             project_status: project.projectStatus,
-            last_update_date: project.lastUpdateDate
+            last_update_date: project.lastUpdateDate,
+            stage_class: mapBciStageToStageClass(project.projectStage, project.projectStatus),
+            organising_universe: defaultOrganisingUniverseFor(
+              mapBciStageToStageClass(project.projectStage, project.projectStatus),
+              project.localValue
+            )
           })
           .select('id')
           .single();
@@ -786,7 +792,12 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
             proposed_finish_date: project.constructionEndDate,
             project_stage: project.projectStage,
             project_status: project.projectStatus,
-            last_update_date: project.lastUpdateDate
+            last_update_date: project.lastUpdateDate,
+            stage_class: mapBciStageToStageClass(project.projectStage, project.projectStatus),
+            organising_universe: defaultOrganisingUniverseFor(
+              mapBciStageToStageClass(project.projectStage, project.projectStatus),
+              project.localValue
+            )
           })
           .select('id')
           .single();
