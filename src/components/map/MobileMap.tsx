@@ -13,6 +13,7 @@ interface MobileMapProps {
   selectedPatchIds?: string[];
   projectColorBy?: 'tier' | 'organising_universe' | 'stage' | 'default';
   labelMode?: 'always' | 'hover' | 'key' | 'off';
+  autoFocusPatches?: boolean;
 }
 
 interface PatchData {
@@ -54,7 +55,8 @@ function MobileMap({
   showOrganisers = false,
   selectedPatchIds = [],
   projectColorBy = 'default',
-  labelMode = 'always'
+  labelMode = 'always',
+  autoFocusPatches = false
 }: MobileMapProps) {
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
@@ -62,6 +64,7 @@ function MobileMap({
   });
 
   const [hoveredPatchId, setHoveredPatchId] = useState<string | null>(null);
+  const [map, setMap] = useState<google.maps.Map | null>(null);
 
   // Fetch patch data with geometry
   const { data: patches = [] } = useQuery<PatchData[]>({
@@ -180,6 +183,54 @@ function MobileMap({
     setHoveredPatchId(null);
   }, []);
 
+  // Auto-focus on selected patches for batch printing
+  useEffect(() => {
+    if (!map || !autoFocusPatches || selectedPatchIds.length === 0 || filteredPatches.length === 0) return;
+
+    const bounds = new google.maps.LatLngBounds();
+    let hasPoints = false;
+
+    filteredPatches.forEach(patch => {
+      if (patch.geom_geojson) {
+        try {
+          const geojson = patch.geom_geojson;
+          
+          const extractCoords = (coords: any): google.maps.LatLngLiteral[] => {
+            if (geojson.type === 'Polygon') {
+              return coords[0].map(([lng, lat]: [number, number]) => ({ lat, lng }));
+            } else if (geojson.type === 'MultiPolygon') {
+              return coords.flat(2).filter((_: any, i: number) => i % 2 === 0)
+                .map((lng: number, i: number) => ({ 
+                  lat: coords.flat(2)[i * 2 + 1], 
+                  lng 
+                }));
+            }
+            return [];
+          };
+          
+          const coordinates = extractCoords(geojson.coordinates);
+          coordinates.forEach(coord => {
+            bounds.extend(coord);
+            hasPoints = true;
+          });
+        } catch (e) {
+          console.warn('Could not process geometry for mobile patch:', patch.name);
+        }
+      }
+    });
+
+    if (hasPoints) {
+      map.fitBounds(bounds);
+      // Limit max zoom for better context
+      setTimeout(() => {
+        const currentZoom = map.getZoom() || 10;
+        if (currentZoom > 15) {
+          map.setZoom(15); // Max zoom for mobile
+        }
+      }, 100);
+    }
+  }, [map, autoFocusPatches, selectedPatchIds, filteredPatches]);
+
   // Compute label for patch
   const labelForPatch = useCallback((patch: PatchData, organiserNames: string[] | undefined) => {
     const namePart = showPatchNames ? patch.name : undefined;
@@ -189,7 +240,12 @@ function MobileMap({
   }, [showPatchNames, showOrganisers]);
 
   return isLoaded ? (
-    <GoogleMap mapContainerStyle={containerStyle} center={center} zoom={10}>
+    <GoogleMap 
+      mapContainerStyle={containerStyle} 
+      center={center} 
+      zoom={10}
+      onLoad={setMap}
+    >
       {/* Render Patches as Polygons */}
       {filteredPatches.map(patch => {
         if (!patch.geom_geojson) return null;
@@ -215,7 +271,61 @@ function MobileMap({
 
       {/* Render labels for patches (centroid markers with text) - Group by location */}
       {(() => {
-        if (!showPatchNames && !showOrganisers || labelMode === 'off' || labelMode === 'key') return null;
+        if (!showPatchNames && !showOrganisers || labelMode === 'off') return null;
+        
+        // For key mode, show only patch codes and exit early
+        if (labelMode === 'key') {
+          return filteredPatches.map(patch => {
+            if (!patch.geom_geojson) return null;
+            const polygons = extractPolygonsFromGeoJSON(patch.geom_geojson);
+            if (polygons.length === 0) return null;
+            
+            // Pick centroid of the largest polygon's outer ring
+            let best: { center: google.maps.LatLngLiteral | null; area: number } = { center: null, area: 0 };
+            polygons.forEach(rings => {
+              const outer = rings[0] || [];
+              const area = bboxArea(outer);
+              if (area > best.area) best = { center: centroidOfRing(outer), area };
+            });
+            
+            const pos = best.center;
+            if (!pos) return null;
+            
+            // Show only the patch code in large font (smaller for mobile)
+            const codeLabel = patch.code || patch.name;
+            
+            const svgIcon = `
+              <svg xmlns='http://www.w3.org/2000/svg' width='60' height='30' viewBox='0 0 60 30'>
+                <defs>
+                  <filter id="code-shadow-mobile-${patch.id}" x="-20%" y="-20%" width="140%" height="140%">
+                    <feDropShadow dx="1" dy="1" stdDeviation="1" flood-color="black" flood-opacity="0.8"/>
+                  </filter>
+                </defs>
+                <rect x='2' y='4' width='56' height='22' rx='3' ry='3' 
+                      fill='rgba(0,0,0,0.9)' stroke='rgba(255,255,255,0.4)' stroke-width='1' 
+                      filter="url(#code-shadow-mobile-${patch.id})"/>
+                <text x='30' y='19' text-anchor='middle' fill='white' 
+                      font-family='Arial, sans-serif' font-size='12' font-weight='bold'>
+                  ${codeLabel.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}
+                </text>
+              </svg>
+            `;
+            
+            return (
+              <Marker
+                key={`code-${patch.id}`}
+                position={pos}
+                icon={{
+                  url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svgIcon),
+                  scaledSize: new google.maps.Size(60, 30),
+                  anchor: new google.maps.Point(30, 15)
+                }}
+              />
+            );
+          });
+        }
+        
+        // Continue with regular label logic only for non-key modes
         
         // Group patches by their centroid coordinates to handle multiple patches at same location
         const patchGroups = new Map<string, {

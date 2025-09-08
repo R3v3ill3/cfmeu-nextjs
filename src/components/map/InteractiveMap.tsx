@@ -22,6 +22,7 @@ interface InteractiveMapProps {
   selectedPatchIds?: string[]
   projectColorBy?: 'tier' | 'organising_universe' | 'stage' | 'default'
   labelMode?: 'always' | 'hover' | 'key' | 'off'
+  autoFocusPatches?: boolean
 }
 
 interface PatchData {
@@ -137,7 +138,8 @@ export default function InteractiveMap({
   showOrganisers = false,
   selectedPatchIds = [],
   projectColorBy = 'default',
-  labelMode = 'always'
+  labelMode = 'always',
+  autoFocusPatches = false
 }: InteractiveMapProps) {
   const [map, setMap] = useState<google.maps.Map | null>(null)
   const [selectedPatch, setSelectedPatch] = useState<PatchData | null>(null)
@@ -426,7 +428,39 @@ export default function InteractiveMap({
 
   // Auto-fit bounds when data changes
   useEffect(() => {
-    if (!map || (!filteredPatches.length && !jobSites.length)) return
+    if (!map) return
+
+    // For auto-focus mode (batch printing), only focus on selected patches
+    if (autoFocusPatches && selectedPatchIds.length > 0 && filteredPatches.length > 0) {
+      const bounds = new google.maps.LatLngBounds()
+      let hasPoints = false
+
+      // Add only the selected patch bounds
+      filteredPatches.forEach(patch => {
+        if (patch.geom_geojson) {
+          const polys = extractPolygonsFromGeoJSON(patch.geom_geojson)
+          polys.forEach((rings) => {
+            const outer = rings[0] || []
+            outer.forEach((point) => { bounds.extend(point); hasPoints = true })
+          })
+        }
+      })
+
+      if (hasPoints) {
+        map.fitBounds(bounds)
+        // Add some padding and limit max zoom for better visibility
+        setTimeout(() => {
+          const currentZoom = map.getZoom() || 10
+          if (currentZoom > 16) {
+            map.setZoom(16) // Max zoom to maintain context
+          }
+        }, 100)
+      }
+      return
+    }
+
+    // Regular auto-fit logic for normal viewing
+    if (!filteredPatches.length && !jobSites.length) return
 
     const bounds = new google.maps.LatLngBounds()
     let hasPoints = false
@@ -453,7 +487,7 @@ export default function InteractiveMap({
     if (hasPoints) {
       map.fitBounds(bounds)
     }
-  }, [map, filteredPatches, jobSites, showJobSites, extractPolygonsFromGeoJSON])
+  }, [map, filteredPatches, jobSites, showJobSites, extractPolygonsFromGeoJSON, autoFocusPatches, selectedPatchIds])
   // Build organiser labels per patch
   const patchIdsForLabels = useMemo(() => (showOrganisers ? filteredPatches.map(p => p.id) : []), [filteredPatches, showOrganisers])
   const { byPatchId: organiserNamesByPatch } = usePatchOrganiserLabels(patchIdsForLabels)
@@ -574,7 +608,61 @@ export default function InteractiveMap({
 
         {/* Render labels for patches (centroid markers with text) - Group by location */}
         {(() => {
-          if (!showPatches || (!showPatchNames && !showOrganisers) || labelMode === 'off' || labelMode === 'key') return null;
+          if (!showPatches || (!showPatchNames && !showOrganisers) || labelMode === 'off') return null;
+          
+          // For key mode, show only patch codes and exit early
+          if (labelMode === 'key') {
+            return filteredPatches.map(patch => {
+              if (!patch.geom_geojson) return null;
+              const polygons = extractPolygonsFromGeoJSON(patch.geom_geojson);
+              if (polygons.length === 0) return null;
+              
+              // Pick centroid of the largest polygon's outer ring
+              let best: { center: google.maps.LatLngLiteral | null; area: number } = { center: null, area: 0 };
+              polygons.forEach(rings => {
+                const outer = rings[0] || [];
+                const area = bboxArea(outer);
+                if (area > best.area) best = { center: centroidOfRing(outer), area };
+              });
+              
+              const pos = best.center;
+              if (!pos) return null;
+              
+              // Show only the patch code in large font
+              const codeLabel = patch.code || patch.name;
+              
+              const svgIcon = `
+                <svg xmlns='http://www.w3.org/2000/svg' width='80' height='40' viewBox='0 0 80 40'>
+                  <defs>
+                    <filter id="code-shadow-${patch.id}" x="-20%" y="-20%" width="140%" height="140%">
+                      <feDropShadow dx="2" dy="2" stdDeviation="2" flood-color="black" flood-opacity="0.8"/>
+                    </filter>
+                  </defs>
+                  <rect x='2' y='6' width='76' height='28' rx='4' ry='4' 
+                        fill='rgba(0,0,0,0.9)' stroke='rgba(255,255,255,0.4)' stroke-width='1' 
+                        filter="url(#code-shadow-${patch.id})"/>
+                  <text x='40' y='26' text-anchor='middle' fill='white' 
+                        font-family='Arial, sans-serif' font-size='16' font-weight='bold'>
+                    ${codeLabel.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}
+                  </text>
+                </svg>
+              `;
+              
+              return (
+                <Marker
+                  key={`code-${patch.id}`}
+                  position={pos}
+                  icon={{
+                    url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svgIcon),
+                    scaledSize: new google.maps.Size(80, 40),
+                    anchor: new google.maps.Point(40, 20)
+                  }}
+                />
+              );
+            });
+          }
+          
+          // Continue with regular label logic only for non-key modes
           
           // Group patches by their centroid coordinates to handle multiple patches at same location
           const patchGroups = new Map<string, {
