@@ -405,8 +405,8 @@ export default function ProjectsPage() {
   const dir = sp.get("dir") || "asc"
   const view = sp.get("view") || "card"
   const workersFilter = sp.get("workers") || "all" // all, zero, nonzero
-  const universeFilter = sp.get("universe") || "all"
-  const stageFilter = sp.get("stage") || "all"
+  const universeFilter = sp.get("universe") || sp.get("universeFilter") || "all"
+  const stageFilter = sp.get("stage") || sp.get("stageFilter") || "all"
   const page = Math.max(1, parseInt(sp.get('page') || '1', 10) || 1)
   const PAGE_SIZE = 24
 
