@@ -905,30 +905,48 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
               }
               
             } else if (company.ourRole === 'subcontractor') {
-              // Check for existing trade relationship
-              const { data: existingTrade } = await supabase
-                .from('project_contractor_trades')
-                .select('id, trade_type')
-                .eq('project_id', newProject.id)
-                .eq('employer_id', employerId)
-                .maybeSingle();
-              
-              if (existingTrade) {
-                if (existingTrade.trade_type === finalTradeType) {
-                  console.log(`✓ Trade relationship already exists for ${project.projectName}: ${finalTradeType}`);
+              // Use unified assignment function for subcontractors
+              try {
+                const { data: assignmentResult, error: assignmentError } = await supabase.rpc('assign_contractor_unified', {
+                  p_project_id: newProject.id,
+                  p_job_site_id: jobSite.id,
+                  p_employer_id: employerId,
+                  p_trade_type: finalTradeType,
+                  p_estimated_workforce: null, // BCI doesn't provide workforce estimates
+                  p_eba_signatory: 'not_specified',
+                  p_stage: 'structure' // Default stage for BCI imports
+                });
+                
+                if (assignmentError) {
+                  console.error(`Error assigning contractor ${company.companyName}:`, assignmentError);
                 } else {
-                  console.warn(`⚠ Trade type mismatch for ${project.projectName}. Existing: ${existingTrade.trade_type}, New: ${finalTradeType}`);
-                  // Skip creating duplicate with different trade type
+                  const result = assignmentResult?.[0];
+                  if (result?.success) {
+                    console.log(`✓ Assigned contractor to project and site: ${company.companyName} (${finalTradeType})`);
+                  } else {
+                    console.warn(`⚠ Failed to assign contractor: ${result?.message || 'Unknown error'}`);
+                  }
                 }
-              } else {
-                await supabase
+              } catch (error) {
+                console.error(`Error in unified contractor assignment:`, error);
+                // Fallback to old method if unified function fails
+                const { data: existingTrade } = await supabase
                   .from('project_contractor_trades')
-                  .insert({
-                    project_id: newProject.id,
-                    employer_id: employerId,
-                    trade_type: finalTradeType
-                  });
-                console.log(`✓ Created trade relationship for ${project.projectName}: ${finalTradeType}`);
+                  .select('id, trade_type')
+                  .eq('project_id', newProject.id)
+                  .eq('employer_id', employerId)
+                  .maybeSingle();
+                
+                if (!existingTrade) {
+                  await supabase
+                    .from('project_contractor_trades')
+                    .insert({
+                      project_id: newProject.id,
+                      employer_id: employerId,
+                      trade_type: finalTradeType
+                    });
+                  console.log(`✓ Created trade relationship (fallback) for ${project.projectName}: ${finalTradeType}`);
+                }
               }
             }
           }

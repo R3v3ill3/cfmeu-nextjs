@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import StageTradeAssignmentManager from "@/components/projects/StageTradeAssignmentManager"
 import SiteContactsEditor from "@/components/projects/SiteContactsEditor"
+import { UnifiedContractorAssignmentModal } from "@/components/projects/UnifiedContractorAssignmentModal"
 import { EmployerWorkerChart } from "@/components/patchwall/EmployerWorkerChart"
 import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -84,6 +85,7 @@ export default function ProjectDetailPage() {
   const [estPrompt, setEstPrompt] = useState<{ employerId: string; employerName: string } | null>(null)
   const [estValue, setEstValue] = useState<string>("")
   const [estSaving, setEstSaving] = useState(false)
+  const [showContractorAssignment, setShowContractorAssignment] = useState(false)
 
   const { data: project } = useQuery({
     queryKey: ["project-detail", projectId],
@@ -93,7 +95,7 @@ export default function ProjectDetailPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("projects")
-        .select("id, name, main_job_site_id, value, tier, organising_universe, stage_class, proposed_start_date, proposed_finish_date, roe_email, project_type, state_funding, federal_funding")
+        .select("id, name, main_job_site_id, value, tier, organising_universe, stage_class, proposed_start_date, proposed_finish_date, roe_email, project_type, state_funding, federal_funding, builder_id")
         .eq("id", projectId)
         .maybeSingle()
       if (error) throw error
@@ -585,6 +587,12 @@ export default function ProjectDetailPage() {
           <div className="space-y-4">
             {project && (
               <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-xl font-semibold">Project Mapping</h2>
+                  <Button onClick={() => setShowContractorAssignment(true)}>
+                    Add Contractor
+                  </Button>
+                </div>
                 <div className="grid gap-6">
                   {(() => {
                     const Comp = require("@/components/projects/mapping/MappingSheetPage1").MappingSheetPage1;
@@ -711,6 +719,17 @@ export default function ProjectDetailPage() {
         siteIds={[]}
         contextSiteId={null}
         siteOptions={siteOptions}
+      />
+
+      {/* Contractor Assignment Modal */}
+      <UnifiedContractorAssignmentModal
+        isOpen={showContractorAssignment}
+        onClose={() => setShowContractorAssignment(false)}
+        projectId={projectId}
+        onSuccess={() => {
+          // Refresh contractor data
+          // The modal will handle query invalidation
+        }}
       />
     </div>
   )

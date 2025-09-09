@@ -16,18 +16,46 @@ export interface UnifiedContractorRow {
   ebaStatus?: boolean | null;
 }
 
+export interface UnifiedContractorsOptions {
+  siteIds?: string[];
+  groupBySite?: boolean;
+  includeEstimates?: boolean;
+  autoIncludeMainSite?: boolean;
+}
+
 /**
  * Unified hook to get all contractor information for a project
  * Combines data from project_employer_roles, site_contractor_trades, and project_contractor_trades
  */
-export function useUnifiedContractors(projectId: string, siteIds: string[] = []) {
+export function useUnifiedContractors(projectId: string, options: UnifiedContractorsOptions = {}) {
+  const { 
+    siteIds = [], 
+    groupBySite = false, 
+    includeEstimates = true,
+    autoIncludeMainSite = true 
+  } = options;
   return useQuery({
-    queryKey: ["unified-contractors", projectId, siteIds],
+    queryKey: ["unified-contractors", projectId, options],
     enabled: !!projectId,
     staleTime: 30000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
       if (!projectId) return [];
+      
+      let effectiveSiteIds = siteIds;
+      
+      // Auto-include main site if no sites specified and option is enabled
+      if (autoIncludeMainSite && (siteIds?.length || 0) === 0) {
+        const { data: project } = await supabase
+          .from("projects")
+          .select("main_job_site_id")
+          .eq("id", projectId)
+          .single();
+        
+        if (project?.main_job_site_id) {
+          effectiveSiteIds = [project.main_job_site_id];
+        }
+      }
       
       const rows: UnifiedContractorRow[] = [];
 
@@ -55,11 +83,11 @@ export function useUnifiedContractors(projectId: string, siteIds: string[] = [])
       });
 
       // 2) Site contractors by trade (if site IDs provided)
-      if (siteIds.length > 0) {
+      if ((effectiveSiteIds?.length || 0) > 0) {
         const { data: siteContractors } = await supabase
           .from("site_contractor_trades")
           .select("id, job_site_id, employer_id, trade_type, eba_status, job_sites(name), employers(name, enterprise_agreement_status)")
-          .in("job_site_id", siteIds);
+          .in("job_site_id", effectiveSiteIds);
 
         (siteContractors || []).forEach((r: any) => {
           if (!r.employer_id) return;
@@ -114,6 +142,27 @@ export function useUnifiedContractors(projectId: string, siteIds: string[] = [])
         return true;
       });
 
+      // 5) Group by site if requested
+      if (groupBySite) {
+        const groupedBySite = deduped.reduce((groups, contractor) => {
+          const siteKey = contractor.siteId || '__project__';
+          const siteName = contractor.siteName || 'Project Level';
+          
+          if (!groups[siteKey]) {
+            groups[siteKey] = {
+              siteId: contractor.siteId,
+              siteName,
+              contractors: [],
+            };
+          }
+          
+          groups[siteKey].contractors.push(contractor);
+          return groups;
+        }, {} as Record<string, { siteId: string | null; siteName: string; contractors: UnifiedContractorRow[] }>);
+
+        return Object.values(groupedBySite);
+      }
+
       return deduped;
     },
   });
@@ -123,37 +172,23 @@ export function useUnifiedContractors(projectId: string, siteIds: string[] = [])
  * Get contractors grouped by site
  */
 export function useContractorsBySite(projectId: string, siteIds: string[] = []) {
-  const { data: contractors = [], ...rest } = useUnifiedContractors(projectId, siteIds);
-  
-  const groupedBySite = contractors.reduce((groups, contractor) => {
-    const siteKey = contractor.siteId || '__project__';
-    const siteName = contractor.siteName || 'Project';
-    
-    if (!groups[siteKey]) {
-      groups[siteKey] = {
-        siteId: contractor.siteId,
-        siteName,
-        contractors: [],
-      };
-    }
-    
-    groups[siteKey].contractors.push(contractor);
-    return groups;
-  }, {} as Record<string, { siteId: string | null; siteName: string; contractors: UnifiedContractorRow[] }>);
-
-  return {
-    ...rest,
-    data: Object.values(groupedBySite),
-  };
+  return useUnifiedContractors(projectId, { 
+    siteIds, 
+    groupBySite: true, 
+    autoIncludeMainSite: true 
+  });
 }
 
 /**
  * Get contractors grouped by trade stage
  */
 export function useContractorsByStage(projectId: string, siteIds: string[] = []) {
-  const { data: contractors = [], ...rest } = useUnifiedContractors(projectId, siteIds);
+  const { data: contractors = [], ...rest } = useUnifiedContractors(projectId, { 
+    siteIds, 
+    autoIncludeMainSite: true 
+  });
   
-  const groupedByStage = contractors.reduce((groups, contractor) => {
+  const groupedByStage = (contractors as UnifiedContractorRow[]).reduce((groups, contractor) => {
     const stage = contractor.tradeStage;
     
     if (!groups[stage]) {

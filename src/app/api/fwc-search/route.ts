@@ -43,11 +43,11 @@ async function getBrowser() {
   // For Vercel, we need to use a specific configuration.
   if (process.env.VERCEL_ENV) {
     const puppeteerCore = await import('puppeteer-core');
-    const chrome = await import('@sparticuz/chromium');
+    const { default: chromium } = await import('@sparticuz/chromium');
     return puppeteerCore.launch({
-      args: chrome.args,
-      executablePath: await chrome.executablePath(),
-      headless: chrome.headless,
+      args: chromium.args,
+      executablePath: await chromium.executablePath(),
+      headless: chromium.headless,
     });
   } else {
     return puppeteer.launch({ headless: true });

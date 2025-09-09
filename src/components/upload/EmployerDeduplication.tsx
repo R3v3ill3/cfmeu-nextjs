@@ -241,7 +241,10 @@ export default function EmployerDeduplication({
               <div className="flex-1">
                 <CardTitle className="text-lg">{employer.name}</CardTitle>
                 <CardDescription>
-                  {employer.address || 'No address on file'}
+                  {(() => {
+                    const addrLike = (employer as any).address || (employer as any).address_line_1
+                    return addrLike || 'No address on file'
+                  })()}
                 </CardDescription>
                 {fullEmployer?.abn && (
                   <p className="text-sm text-gray-600 mt-1">ABN: {fullEmployer.abn}</p>
