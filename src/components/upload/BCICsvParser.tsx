@@ -16,6 +16,8 @@ const BCI_CSV_HEADERS = [
   'Project Stage',
   'Project Status',
   'Local Value',
+  'Funding Type Primary',
+  'Owner Type Level 1 Primary',
   'Development Type',
   'Floor Area (square meters)',
   'Site Area (hectares)',
@@ -56,6 +58,8 @@ interface BCICsvRow {
   projectStage: string;
   projectStatus: string;
   localValue: string;
+  fundingTypePrimary?: string;
+  ownerTypeLevel1Primary?: string;
   developmentType: string;
   floorArea: string;
   siteArea: string;
@@ -178,6 +182,8 @@ export default function BCICsvParser({ onDataParsed, onError, onModeChange }: BC
           projectStage: get(row, 'Project Stage'),
           projectStatus: get(row, 'Project Status'),
           localValue: get(row, 'Local Value', ['Value', 'LocalValue']),
+          fundingTypePrimary: get(row, 'Funding Type Primary', ['Funding Type']),
+          ownerTypeLevel1Primary: get(row, 'Owner Type Level 1 Primary', ['Owner Type']),
           developmentType: get(row, 'Development Type'),
           floorArea: get(row, 'Floor Area (square meters)', ['Floor Area']),
           siteArea: get(row, 'Site Area (hectares)', ['Site Area']),

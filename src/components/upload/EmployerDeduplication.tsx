@@ -145,6 +145,59 @@ export default function EmployerDeduplication({
     }
   };
 
+  const mergeAllExactMatches = async () => {
+    if (!searchResults?.exactMatches || searchResults.exactMatches.length < 2) {
+      toast({
+        title: 'No exact matches to merge',
+        description: 'Need at least 2 exact matches to perform automatic merge',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    // Auto-select the first match as primary (usually the oldest/most complete record)
+    const primaryEmployer = searchResults.exactMatches[0];
+    const duplicateIds = searchResults.exactMatches.slice(1).map(match => match.id);
+
+    setIsMerging(true);
+    try {
+      const { data, error } = await supabase.rpc('merge_employers', {
+        p_primary_employer_id: primaryEmployer.id,
+        p_duplicate_employer_ids: duplicateIds,
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Auto-merge successful',
+        description: `Merged ${duplicateIds.length} exact duplicate employers into "${primaryEmployer.name}"`,
+      });
+
+      // Refresh employers list
+      await loadAllEmployers();
+      
+      // Clear search results and selection
+      setSearchResults(null);
+      setSelectedEmployers(new Set());
+      setSearchTerm('');
+
+      // Notify parent component
+      if (onMergeComplete) {
+        onMergeComplete(primaryEmployer.id, duplicateIds);
+      }
+
+    } catch (error) {
+      console.error('Error auto-merging exact matches:', error);
+      toast({
+        title: 'Auto-merge failed',
+        description: error instanceof Error ? error.message : 'Failed to merge exact matches',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsMerging(false);
+    }
+  };
+
   const clearSelection = () => {
     setSelectedEmployers(new Set());
   };
@@ -350,8 +403,28 @@ export default function EmployerDeduplication({
               {searchResults.hasExactMatch && (
                 <Alert>
                   <AlertTriangle className="h-4 w-4" />
-                  <AlertDescription>
-                    Found {searchResults.exactMatches.length} exact match(es). These are likely duplicates that should be merged.
+                  <AlertDescription className="flex items-center justify-between">
+                    <span>Found {searchResults.exactMatches.length} exact match(es). These are likely duplicates that should be merged.</span>
+                    {searchResults.exactMatches.length >= 2 && (
+                      <Button
+                        size="sm"
+                        onClick={mergeAllExactMatches}
+                        disabled={isMerging}
+                        className="ml-4"
+                      >
+                        {isMerging ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Merging...
+                          </>
+                        ) : (
+                          <>
+                            <Merge className="h-4 w-4 mr-2" />
+                            Merge Exact Matches
+                          </>
+                        )}
+                      </Button>
+                    )}
                   </AlertDescription>
                 </Alert>
               )}

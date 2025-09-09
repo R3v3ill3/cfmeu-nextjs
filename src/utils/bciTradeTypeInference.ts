@@ -76,21 +76,26 @@ export function inferTradeTypeFromCompanyName(companyName: string): TradeType {
     return 'plumbing';
   }
   
-  // Concrete and formwork companies
+  // Concrete and formwork companies - Enhanced formwork matching
   if (
     name.includes('concrete') ||
     name.includes('concreting') ||
     name.includes('formwork') ||
     name.includes('form work') ||
+    name.includes('form-work') ||
     name.includes('formworker') ||
-    name.includes('form worker')
+    name.includes('form worker') ||
+    name.includes('farmwork') // Common misspelling
   ) {
-    // Prioritise explicit formwork indicators
+    // Prioritise explicit formwork indicators with better pattern matching
     if (
       name.includes('formwork') ||
       name.includes('form work') ||
+      name.includes('form-work') ||
       name.includes('formworker') ||
-      name.includes('form worker')
+      name.includes('form worker') ||
+      name.includes('farmwork') || // Common misspelling/typo
+      /form\s*work/i.test(name) // Regex for variations with spaces
     ) {
       return 'form_work';
     }
@@ -320,7 +325,7 @@ export function inferTradeTypeFromCsvRole(csvRole: string): TradeType | null {
   // Specific before general
   if (has('post tension')) return 'post_tensioning';
   if (has('steel fix')) return 'steel_fixing';
-  if (has('formwork') || has('form work') || has('form worker')) return 'form_work';
+  if (has('formwork') || has('form work') || has('form-work') || has('form worker') || has('farmwork') || /form\s*work/i.test(role)) return 'form_work';
   if (has('earthwork') || has('earth moving') || has('earthmoving')) return 'earthworks';
   if (has('excavat')) return 'excavations';
   if (has('piling')) return 'piling';

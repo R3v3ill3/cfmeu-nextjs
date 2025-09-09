@@ -23,6 +23,8 @@ interface BCICsvRow {
   projectStage: string;
   projectStatus: string;
   localValue: string;
+  fundingTypePrimary?: string;
+  ownerTypeLevel1Primary?: string;
   developmentType: string;
   floorArea: string;
   siteArea: string;
@@ -85,6 +87,8 @@ interface BCIProjectData {
   projectId: string;
   projectName: string;
   localValue: number;
+  fundingTypePrimary?: string;
+  ownerTypeLevel1Primary?: string;
   constructionStartDate: string | null;
   constructionEndDate: string | null;
   projectStage: string;
@@ -151,6 +155,8 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
           projectId: row.projectId,
           projectName: row.projectName && String(row.projectName).trim() !== '' ? row.projectName : `Project ${row.projectId}`,
           localValue: parseFloat(row.localValue.replace(/[^0-9.-]+/g, '')) || 0,
+          fundingTypePrimary: row.fundingTypePrimary,
+          ownerTypeLevel1Primary: row.ownerTypeLevel1Primary,
           constructionStartDate: parseDate(row.constructionStartDate),
           constructionEndDate: parseDate(row.constructionEndDate),
           projectStage: row.projectStage,
@@ -774,58 +780,115 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
           .from('projects')
           .select('id')
           .eq('bci_project_id', project.projectId)
-          .single();
+          .maybeSingle();
 
+        let projectId: string;
         if (existingProject) {
-          results.errors.push(`Project ${project.projectName} already exists with BCI ID ${project.projectId}`);
-          continue;
+          // Update existing project with new data (overwrite approach)
+          console.log(`✓ Updating existing project: ${project.projectName} (BCI ID: ${project.projectId})`);
+          const { data: updatedProject, error: updateError } = await supabase
+            .from('projects')
+            .update({
+              name: project.projectName,
+              value: project.localValue,
+              proposed_start_date: project.constructionStartDate,
+              proposed_finish_date: project.constructionEndDate,
+              project_stage: project.projectStage,
+              project_status: project.projectStatus,
+              last_update_date: project.lastUpdateDate,
+              stage_class: mapBciStageToStageClass(project.projectStage, project.projectStatus),
+              organising_universe: defaultOrganisingUniverseFor(
+                mapBciStageToStageClass(project.projectStage, project.projectStatus),
+                project.localValue
+              ),
+              funding_type_primary: project.fundingTypePrimary,
+              owner_type_level_1: project.ownerTypeLevel1Primary
+            })
+            .eq('id', existingProject.id)
+            .select('id')
+            .single();
+          
+          if (updateError) throw updateError;
+          projectId = existingProject.id;
+        } else {
+          // Create new project
+          const { data: newProject, error: projectError } = await supabase
+            .from('projects')
+            .insert({
+              name: project.projectName,
+              bci_project_id: project.projectId,
+              value: project.localValue,
+              proposed_start_date: project.constructionStartDate,
+              proposed_finish_date: project.constructionEndDate,
+              project_stage: project.projectStage,
+              project_status: project.projectStatus,
+              last_update_date: project.lastUpdateDate,
+              stage_class: mapBciStageToStageClass(project.projectStage, project.projectStatus),
+              organising_universe: defaultOrganisingUniverseFor(
+                mapBciStageToStageClass(project.projectStage, project.projectStatus),
+                project.localValue
+              ),
+              funding_type_primary: project.fundingTypePrimary,
+              owner_type_level_1: project.ownerTypeLevel1Primary
+            })
+            .select('id')
+            .single();
+
+          if (projectError) throw projectError;
+          projectId = newProject.id;
         }
 
-        // Create project with enhanced data
-        const { data: newProject, error: projectError } = await supabase
-          .from('projects')
-          .insert({
-            name: project.projectName,
-            bci_project_id: project.projectId,
-            value: project.localValue,
-            proposed_start_date: project.constructionStartDate,
-            proposed_finish_date: project.constructionEndDate,
-            project_stage: project.projectStage,
-            project_status: project.projectStatus,
-            last_update_date: project.lastUpdateDate,
-            stage_class: mapBciStageToStageClass(project.projectStage, project.projectStatus),
-            organising_universe: defaultOrganisingUniverseFor(
-              mapBciStageToStageClass(project.projectStage, project.projectStatus),
-              project.localValue
-            )
-          })
-          .select('id')
-          .single();
-
-        if (projectError) throw projectError;
-
-        // Create main job site with coordinates
-        const { data: jobSite, error: siteError } = await supabase
+        // Create or update main job site with coordinates
+        const { data: existingJobSite } = await supabase
           .from('job_sites')
-          .insert({
-            name: project.projectName,
-            location: `${project.projectAddress}, ${project.projectTown}, ${project.projectState} ${project.postCode}`,
-            full_address: `${project.projectAddress}, ${project.projectTown}, ${project.projectState} ${project.postCode}`,
-            project_id: newProject.id,
-            is_main_site: true,
-            latitude: project.latitude,
-            longitude: project.longitude
-          })
           .select('id')
-          .single();
+          .eq('project_id', projectId)
+          .eq('is_main_site', true)
+          .maybeSingle();
 
-        if (siteError) throw siteError;
+        let jobSiteId: string;
+        if (existingJobSite) {
+          // Update existing job site
+          const { data: updatedJobSite, error: siteUpdateError } = await supabase
+            .from('job_sites')
+            .update({
+              name: project.projectName,
+              location: `${project.projectAddress}, ${project.projectTown}, ${project.projectState} ${project.postCode}`,
+              full_address: `${project.projectAddress}, ${project.projectTown}, ${project.projectState} ${project.postCode}`,
+              latitude: project.latitude,
+              longitude: project.longitude
+            })
+            .eq('id', existingJobSite.id)
+            .select('id')
+            .single();
+          
+          if (siteUpdateError) throw siteUpdateError;
+          jobSiteId = existingJobSite.id;
+        } else {
+          // Create new job site
+          const { data: jobSite, error: siteError } = await supabase
+            .from('job_sites')
+            .insert({
+              name: project.projectName,
+              location: `${project.projectAddress}, ${project.projectTown}, ${project.projectState} ${project.postCode}`,
+              full_address: `${project.projectAddress}, ${project.projectTown}, ${project.projectState} ${project.postCode}`,
+              project_id: projectId,
+              is_main_site: true,
+              latitude: project.latitude,
+              longitude: project.longitude
+            })
+            .select('id')
+            .single();
 
-        // Update project with main job site
+          if (siteError) throw siteError;
+          jobSiteId = jobSite.id;
+        }
+
+        // Update project with main job site if needed
         await supabase
           .from('projects')
-          .update({ main_job_site_id: jobSite.id })
-          .eq('id', newProject.id);
+          .update({ main_job_site_id: jobSiteId })
+          .eq('id', projectId);
 
         // Process companies with user confirmations
         for (const company of project.companies) {
@@ -863,7 +926,7 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
               const { data: currentProject } = await supabase
                 .from('projects')
                 .select('id, builder_id, employers:builder_id(name)')
-                .eq('id', newProject.id)
+                .eq('id', projectId)
                 .maybeSingle();
               
               if (currentProject?.builder_id) {
@@ -871,13 +934,18 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
                   console.log(`✓ Builder already assigned to ${project.projectName}`);
                 } else {
                   const existingBuilderName = (currentProject as any).employers?.name || 'Unknown';
-                  console.warn(`⚠ Project ${project.projectName} already has builder: ${existingBuilderName}. Skipping duplicate.`);
+                  console.warn(`⚠ Project ${project.projectName} already has builder: ${existingBuilderName}. Overwriting with new data.`);
+                  await supabase
+                    .from('projects')
+                    .update({ builder_id: employerId })
+                    .eq('id', projectId);
+                  console.log(`✓ Updated builder for ${project.projectName}`);
                 }
               } else {
                 await supabase
                   .from('projects')
                   .update({ builder_id: employerId })
-                  .eq('id', newProject.id);
+                  .eq('id', projectId);
                 console.log(`✓ Assigned builder to ${project.projectName}`);
               }
               
@@ -886,7 +954,7 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
               const { data: existingRole } = await supabase
                 .from('project_employer_roles')
                 .select('id')
-                .eq('project_id', newProject.id)
+                .eq('project_id', projectId)
                 .eq('employer_id', employerId)
                 .eq('role', 'head_contractor')
                 .maybeSingle();
@@ -897,7 +965,7 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
                 await supabase
                   .from('project_employer_roles')
                   .insert({
-                    project_id: newProject.id,
+                    project_id: projectId,
                     employer_id: employerId,
                     role: 'head_contractor'
                   });
@@ -908,8 +976,8 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
               // Use unified assignment function for subcontractors
               try {
                 const { data: assignmentResult, error: assignmentError } = await supabase.rpc('assign_contractor_unified', {
-                  p_project_id: newProject.id,
-                  p_job_site_id: jobSite.id,
+                  p_project_id: projectId,
+                  p_job_site_id: jobSiteId,
                   p_employer_id: employerId,
                   p_trade_type: finalTradeType,
                   p_estimated_workforce: null, // BCI doesn't provide workforce estimates
@@ -933,7 +1001,7 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
                 const { data: existingTrade } = await supabase
                   .from('project_contractor_trades')
                   .select('id, trade_type')
-                  .eq('project_id', newProject.id)
+                  .eq('project_id', projectId)
                   .eq('employer_id', employerId)
                   .maybeSingle();
                 
@@ -941,7 +1009,7 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
                   await supabase
                     .from('project_contractor_trades')
                     .insert({
-                      project_id: newProject.id,
+                      project_id: projectId,
                       employer_id: employerId,
                       trade_type: finalTradeType
                     });
