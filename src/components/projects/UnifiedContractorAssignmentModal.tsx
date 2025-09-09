@@ -164,7 +164,7 @@ export function UnifiedContractorAssignmentModal({
         throw new Error("Estimated workforce must be a positive number");
       }
 
-      // Use the unified assignment function
+      // Use the enhanced unified assignment function
       const { data, error } = await supabase.rpc('assign_contractor_unified', {
         p_project_id: projectId,
         p_job_site_id: selectedSiteId,
@@ -180,6 +180,11 @@ export function UnifiedContractorAssignmentModal({
       const result = data?.[0];
       if (!result?.success) {
         throw new Error(result?.message || "Failed to assign contractor");
+      }
+
+      // Log the new assignment_id for tracking multiple trade types
+      if (result?.assignment_id) {
+        console.log(`✓ Contractor assigned with Assignment ID: ${result.assignment_id}`);
       }
 
       return result;

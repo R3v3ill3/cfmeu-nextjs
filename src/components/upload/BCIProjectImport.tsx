@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { CheckCircle, AlertCircle, Info, Users, Building2, Wrench, MapPin, Search, Plus } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { inferTradeTypeFromCompanyName, inferTradeTypeFromCsvRole, getTradeTypeLabel, TradeType, getTradeTypeCategories } from '@/utils/bciTradeTypeInference';
 import { findBestEmployerMatch, normalizeCompanyName } from '@/utils/workerDataProcessor';
@@ -61,6 +62,7 @@ interface CompanyClassification {
   csvRole: string;
   ourRole: 'builder' | 'head_contractor' | 'subcontractor' | 'skip';
   tradeType?: TradeType;
+  tradeTypes?: TradeType[]; // Support for multiple trade types
   employerId?: string;
   shouldImport: boolean;
   confidence?: 'exact' | 'fuzzy' | 'none';
@@ -81,6 +83,35 @@ interface EmployerMatchResult {
   userConfirmed: boolean;
   tradeTypeConfirmed: boolean;
   finalTradeType?: TradeType;
+}
+
+interface ConsolidatedEmployerMatch {
+  companyName: string;
+  normalizedName: string;
+  matchedEmployerId?: string;
+  matchedEmployerName?: string;
+  confidence: 'exact' | 'fuzzy' | 'none';
+  action: 'confirm_match' | 'search_manual' | 'create_new' | 'add_to_list' | 'skip';
+  userConfirmed: boolean;
+  
+  // Project assignments for this employer
+  projectAssignments: Array<{
+    projectId: string;
+    projectName: string;
+    csvRole: string;
+    ourRole: 'builder' | 'head_contractor' | 'subcontractor' | 'skip';
+    inferredTradeType?: TradeType;
+    finalTradeType?: TradeType;
+    tradeTypeConfirmed: boolean;
+    matchKey: string;
+  }>;
+  
+  // Bulk assignment capabilities
+  bulkRole?: 'builder' | 'head_contractor' | 'subcontractor';
+  bulkTradeType?: TradeType;
+  hasConsistentRole: boolean;
+  hasConsistentTrade: boolean;
+  suggestedMatches: Array<{id: string, name: string, address: string}>;
 }
 
 interface BCIProjectData {
@@ -116,6 +147,8 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
   const [currentStep, setCurrentStep] = useState<'preview' | 'employer_matching' | 'trade_type_confirmation' | 'importing' | 'complete'>('preview');
   const [processedData, setProcessedData] = useState<BCIProjectData[]>([]);
   const [employerMatches, setEmployerMatches] = useState<Record<string, EmployerMatchResult>>({});
+  const [consolidatedMatches, setConsolidatedMatches] = useState<Map<string, ConsolidatedEmployerMatch>>(new Map());
+  const [useConsolidatedView, setUseConsolidatedView] = useState(true);
   const [importResults, setImportResults] = useState<{
     success: number;
     errors: string[];
@@ -201,6 +234,43 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
     }
   }, [mode, processedData, currentStep, isProcessing]);
 
+  // Enhanced trade type detection for companies that may have multiple specialties
+  const detectMultipleTradeTypes = (csvRole: string, companyName: string): TradeType[] => {
+    const tradeTypes: Set<TradeType> = new Set();
+    
+    // Primary trade from CSV role
+    const primaryFromRole = inferTradeTypeFromCsvRole(csvRole);
+    if (primaryFromRole) {
+      tradeTypes.add(primaryFromRole);
+    }
+    
+    // Primary trade from company name
+    const primaryFromName = inferTradeTypeFromCompanyName(companyName);
+    if (primaryFromName && primaryFromName !== 'general_construction') {
+      tradeTypes.add(primaryFromName);
+    }
+    
+    // Check for multi-trade indicators in company name
+    const name = companyName.toLowerCase();
+    
+    // Common multi-trade combinations
+    if (name.includes('concrete') && (name.includes('form') || name.includes('steel'))) {
+      tradeTypes.add('concrete');
+      if (name.includes('form')) tradeTypes.add('form_work');
+      if (name.includes('steel')) tradeTypes.add('steel_fixing');
+    }
+    
+    if (name.includes('crane') && name.includes('rigging')) {
+      if (name.includes('tower')) tradeTypes.add('tower_crane');
+      if (name.includes('mobile')) tradeTypes.add('mobile_crane');
+      tradeTypes.add('crane_and_rigging');
+    }
+    
+    // Return array, fallback to general_construction if none found
+    const result = Array.from(tradeTypes);
+    return result.length > 0 ? result : ['general_construction'];
+  };
+
   // Enhanced company classification - prefer CSV Role, then fallback to name
   const classifyCompany = (csvRole: string, companyName: string): CompanyClassification => {
     const role = (csvRole || '').toLowerCase().trim();
@@ -261,16 +331,18 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
       };
     }
     
-    // Subcontractors (prefer CSV Role to infer trade)
+    // Subcontractors (prefer CSV Role to infer trade, detect multiple trades)
     if (role.includes('subcontractor') || role.includes('sub-contractor') || role.includes('sub contractor')) {
-      const prefillTrade = inferTradeTypeFromCsvRole(csvRole) ?? undefined;
+      const detectedTradeTypes = detectMultipleTradeTypes(csvRole, companyName);
+      const primaryTrade = detectedTradeTypes[0] || 'general_construction';
 
       return { 
         companyName, 
         csvRole, 
         ourRole: 'subcontractor', 
         shouldImport: true,
-        tradeType: prefillTrade ?? inferTradeTypeFromCompanyName(companyName),
+        tradeType: primaryTrade,
+        tradeTypes: detectedTradeTypes,
         userConfirmed: false,
         userExcluded: false
       };
@@ -278,25 +350,32 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
     
     // Fallback rules (contractors) - prioritise CSV role inference for trade type
     if (role.includes('contractor')) {
-      const csvTrade = inferTradeTypeFromCsvRole(csvRole);
+      const detectedTradeTypes = detectMultipleTradeTypes(csvRole, companyName);
+      const primaryTrade = detectedTradeTypes[0] || 'general_construction';
+      
       return {
         companyName,
         csvRole,
         ourRole: 'subcontractor',
         shouldImport: true,
-        tradeType: csvTrade ?? inferTradeTypeFromCompanyName(companyName),
+        tradeType: primaryTrade,
+        tradeTypes: detectedTradeTypes,
         userConfirmed: false,
         userExcluded: false,
       };
     }
 
     // Default: treat as subcontractor with name-based trade inference
+    const detectedTradeTypes = detectMultipleTradeTypes(csvRole, companyName);
+    const primaryTrade = detectedTradeTypes[0] || 'general_construction';
+    
     return {
       companyName,
       csvRole,
       ourRole: 'subcontractor',
       shouldImport: true,
-      tradeType: inferTradeTypeFromCompanyName(companyName),
+      tradeType: primaryTrade,
+      tradeTypes: detectedTradeTypes,
       userConfirmed: false,
       userExcluded: false,
     };
@@ -535,6 +614,78 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
     }
   };
 
+  // Create consolidated matches for improved UX
+  const createConsolidatedMatches = (
+    processed: BCIProjectData[], 
+    matches: Record<string, EmployerMatchResult>
+  ): Map<string, ConsolidatedEmployerMatch> => {
+    const consolidated = new Map<string, ConsolidatedEmployerMatch>();
+    
+    processed.forEach(project => {
+      project.companies.forEach(company => {
+        if (!company.shouldImport) return;
+        
+        const normalizedName = normalizeCompanyName(company.companyName);
+        const matchKey = `${project.projectId}-${company.companyName}-${company.csvRole}`;
+        const match = matches[matchKey];
+        
+        if (!consolidated.has(normalizedName)) {
+          const roles = processed.flatMap(p => 
+            p.companies
+              .filter(c => c.shouldImport && normalizeCompanyName(c.companyName) === normalizedName)
+              .map(c => c.ourRole)
+          );
+          const tradeTypes = processed.flatMap(p => 
+            p.companies
+              .filter(c => c.shouldImport && normalizeCompanyName(c.companyName) === normalizedName)
+              .map(c => c.tradeType)
+          ).filter(Boolean);
+          
+          const uniqueRoles = [...new Set(roles)];
+          const uniqueTradeTypes = [...new Set(tradeTypes)];
+          
+          consolidated.set(normalizedName, {
+            companyName: company.companyName,
+            normalizedName,
+            matchedEmployerId: match?.matchedEmployerId,
+            matchedEmployerName: match?.matchedEmployerName,
+            confidence: match?.confidence || 'none',
+            action: match?.action || 'search_manual',
+            userConfirmed: match?.userConfirmed || false,
+            projectAssignments: [],
+            hasConsistentRole: uniqueRoles.length === 1,
+            hasConsistentTrade: uniqueTradeTypes.length === 1,
+            bulkRole: uniqueRoles.length === 1 ? uniqueRoles[0] as any : undefined,
+            bulkTradeType: uniqueTradeTypes.length === 1 ? uniqueTradeTypes[0] as TradeType : undefined,
+            suggestedMatches: match?.suggestedMatches || []
+          });
+        }
+        
+        const consolidatedMatch = consolidated.get(normalizedName)!;
+        
+        // Check if this project assignment already exists
+        const existingAssignment = consolidatedMatch.projectAssignments.find(
+          pa => pa.projectId === project.projectId && pa.csvRole === company.csvRole
+        );
+        
+        if (!existingAssignment) {
+          consolidatedMatch.projectAssignments.push({
+            projectId: project.projectId,
+            projectName: project.projectName,
+            csvRole: company.csvRole,
+            ourRole: company.ourRole,
+            inferredTradeType: company.tradeType,
+            finalTradeType: match?.finalTradeType || company.tradeType,
+            tradeTypeConfirmed: match?.tradeTypeConfirmed || false,
+            matchKey
+          });
+        }
+      });
+    });
+    
+    return consolidated;
+  };
+
   // Enhanced employer creation with duplicate prevention
   const createEmployer = async (companyData: any): Promise<string> => {
     const supabase = getSupabaseBrowserClient();
@@ -654,6 +805,13 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
         }
       
       setEmployerMatches(matches);
+      
+      // Create consolidated view for better UX
+      if (useConsolidatedView) {
+        const consolidated = createConsolidatedMatches(processed, matches);
+        setConsolidatedMatches(consolidated);
+      }
+      
       setIsLoadingMatches(false);
       setIsProcessing(false); // Reset processing state after matching is complete
       
@@ -922,31 +1080,40 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
             const finalTradeType = matchResult?.finalTradeType || company.tradeType || 'general_construction';
             
             if (company.ourRole === 'builder') {
-              // Check if project already has a builder
-              const { data: currentProject } = await supabase
-                .from('projects')
-                .select('id, builder_id, employers:builder_id(name)')
-                .eq('id', projectId)
-                .maybeSingle();
-              
-              if (currentProject?.builder_id) {
-                if (currentProject.builder_id === employerId) {
-                  console.log(`✓ Builder already assigned to ${project.projectName}`);
+              // Use the new assign_bci_builder function to handle multiple builders intelligently
+              try {
+                const { data: builderResult, error: builderError } = await supabase.rpc('assign_bci_builder', {
+                  p_project_id: projectId,
+                  p_employer_id: employerId,
+                  p_company_name: company.companyName
+                });
+                
+                if (builderError) {
+                  console.error(`Error assigning builder ${company.companyName}:`, builderError);
                 } else {
-                  const existingBuilderName = (currentProject as any).employers?.name || 'Unknown';
-                  console.warn(`⚠ Project ${project.projectName} already has builder: ${existingBuilderName}. Overwriting with new data.`);
+                  const result = builderResult?.[0];
+                  if (result?.success) {
+                    console.log(`✓ ${result.message}`);
+                  } else {
+                    console.warn(`⚠ Failed to assign builder: ${result?.message || 'Unknown error'}`);
+                  }
+                }
+              } catch (error) {
+                console.error(`Error in BCI builder assignment:`, error);
+                // Fallback to original logic
+                const { data: currentProject } = await supabase
+                  .from('projects')
+                  .select('id, builder_id')
+                  .eq('id', projectId)
+                  .maybeSingle();
+                
+                if (!currentProject?.builder_id) {
                   await supabase
                     .from('projects')
                     .update({ builder_id: employerId })
                     .eq('id', projectId);
-                  console.log(`✓ Updated builder for ${project.projectName}`);
+                  console.log(`✓ Assigned builder to ${project.projectName} (fallback)`);
                 }
-              } else {
-                await supabase
-                  .from('projects')
-                  .update({ builder_id: employerId })
-                  .eq('id', projectId);
-                console.log(`✓ Assigned builder to ${project.projectName}`);
               }
               
             } else if (company.ourRole === 'head_contractor') {
@@ -973,47 +1140,85 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
               }
               
             } else if (company.ourRole === 'subcontractor') {
-              // Use unified assignment function for subcontractors
-              try {
-                const { data: assignmentResult, error: assignmentError } = await supabase.rpc('assign_contractor_unified', {
-                  p_project_id: projectId,
-                  p_job_site_id: jobSiteId,
-                  p_employer_id: employerId,
-                  p_trade_type: finalTradeType,
-                  p_estimated_workforce: null, // BCI doesn't provide workforce estimates
-                  p_eba_signatory: 'not_specified',
-                  p_stage: 'structure' // Default stage for BCI imports
-                });
-                
-                if (assignmentError) {
-                  console.error(`Error assigning contractor ${company.companyName}:`, assignmentError);
-                } else {
-                  const result = assignmentResult?.[0];
-                  if (result?.success) {
-                    console.log(`✓ Assigned contractor to project and site: ${company.companyName} (${finalTradeType})`);
-                  } else {
-                    console.warn(`⚠ Failed to assign contractor: ${result?.message || 'Unknown error'}`);
+              // Assign multiple trade types if detected, otherwise use single assignment
+              const tradeTypesToAssign = company.tradeTypes && company.tradeTypes.length > 1 
+                ? company.tradeTypes 
+                : [finalTradeType];
+              
+              if (tradeTypesToAssign.length > 1) {
+                // Use multiple trade types assignment function
+                console.log(`🔄 Assigning ${company.companyName} to ${tradeTypesToAssign.length} trade types: ${tradeTypesToAssign.join(', ')}`);
+                try {
+                  const { data: multipleResult, error: multipleError } = await supabase.rpc('assign_multiple_trade_types', {
+                    p_project_id: projectId,
+                    p_employer_id: employerId,
+                    p_trade_types: tradeTypesToAssign,
+                    p_stage: 'structure',
+                    p_estimated_workforce: null,
+                    p_eba_signatory: 'not_specified'
+                  });
+                  
+                  if (multipleError) {
+                    console.error(`Error assigning multiple trade types for ${company.companyName}:`, multipleError);
+                    results.errors.push(`Failed to assign multiple trade types for ${company.companyName}: ${multipleError.message}`);
+                  } else if (multipleResult) {
+                    const successful = multipleResult.filter((r: any) => r.success);
+                    const failed = multipleResult.filter((r: any) => !r.success);
+                    
+                    console.log(`✓ Assigned ${company.companyName} to ${successful.length}/${tradeTypesToAssign.length} trade types`);
+                    if (failed.length > 0) {
+                      console.warn(`⚠ Failed assignments for ${company.companyName}:`, failed.map((f: any) => f.message).join(', '));
+                    }
                   }
+                } catch (error) {
+                  console.error(`Error in multiple trade types assignment:`, error);
+                  results.errors.push(`Failed to assign multiple trade types for ${company.companyName}: ${error instanceof Error ? error.message : 'Unknown error'}`);
                 }
-              } catch (error) {
-                console.error(`Error in unified contractor assignment:`, error);
-                // Fallback to old method if unified function fails
-                const { data: existingTrade } = await supabase
-                  .from('project_contractor_trades')
-                  .select('id, trade_type')
-                  .eq('project_id', projectId)
-                  .eq('employer_id', employerId)
-                  .maybeSingle();
-                
-                if (!existingTrade) {
-                  await supabase
-                    .from('project_contractor_trades')
-                    .insert({
-                      project_id: projectId,
-                      employer_id: employerId,
-                      trade_type: finalTradeType
-                    });
-                  console.log(`✓ Created trade relationship (fallback) for ${project.projectName}: ${finalTradeType}`);
+              } else {
+                // Single trade type assignment (existing logic enhanced)
+                try {
+                  const { data: assignmentResult, error: assignmentError } = await supabase.rpc('assign_contractor_unified', {
+                    p_project_id: projectId,
+                    p_job_site_id: jobSiteId,
+                    p_employer_id: employerId,
+                    p_trade_type: finalTradeType,
+                    p_estimated_workforce: null, // BCI doesn't provide workforce estimates
+                    p_eba_signatory: 'not_specified',
+                    p_stage: 'structure' // Default stage for BCI imports
+                  });
+                  
+                  if (assignmentError) {
+                    console.error(`Error assigning contractor ${company.companyName}:`, assignmentError);
+                  } else {
+                    const result = assignmentResult?.[0];
+                    if (result?.success) {
+                      console.log(`✓ Assigned contractor to project and site: ${company.companyName} (${finalTradeType}) - Assignment ID: ${result.assignment_id}`);
+                    } else {
+                      console.warn(`⚠ Failed to assign contractor: ${result?.message || 'Unknown error'}`);
+                    }
+                  }
+                } catch (error) {
+                  console.error(`Error in unified contractor assignment:`, error);
+                  // Enhanced fallback that supports multiple trade types
+                  try {
+                    const assignmentId = crypto.randomUUID();
+                    await supabase
+                      .from('project_contractor_trades')
+                      .insert({
+                        project_id: projectId,
+                        employer_id: employerId,
+                        trade_type: finalTradeType,
+                        stage: 'structure',
+                        assignment_id: assignmentId,
+                        assignment_notes: `BCI import fallback - ${finalTradeType}`,
+                        created_at: new Date().toISOString()
+                      });
+                    console.log(`✓ Created trade relationship (enhanced fallback) for ${project.projectName}: ${finalTradeType} - Assignment ID: ${assignmentId}`);
+                  } catch (fallbackError) {
+                    console.error(`Enhanced fallback also failed:`, fallbackError);
+                    // Log but continue with other assignments
+                    results.errors.push(`Failed to assign ${company.companyName} (${finalTradeType}) to ${project.projectName}: ${fallbackError instanceof Error ? fallbackError.message : 'Unknown error'}`);
+                  }
                 }
               }
             }
@@ -1071,20 +1276,29 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
           }
           if (!employerId) continue;
 
-          // Enhanced relationship creation with duplicate prevention
+          // Enhanced relationship creation with multiple builder support
           if (company.ourRole === 'builder') {
-            const { data: currentProject } = await supabase
-              .from('projects')
-              .select('id, builder_id, employers:builder_id(name)')
-              .eq('id', existingProject.id)
-              .maybeSingle();
-            
-            if (currentProject?.builder_id && currentProject.builder_id !== employerId) {
-              const existingBuilderName = (currentProject as any).employers?.name || 'Unknown';
-              results.errors.push(`Project ${project.projectName} already has builder: ${existingBuilderName}`);
-            } else if (!currentProject?.builder_id) {
-              await supabase.from('projects').update({ builder_id: employerId }).eq('id', existingProject.id);
-              console.log(`✓ Assigned builder to ${project.projectName}`);
+            try {
+              const { data: builderResult, error: builderError } = await supabase.rpc('assign_bci_builder', {
+                p_project_id: existingProject.id,
+                p_employer_id: employerId,
+                p_company_name: company.companyName
+              });
+              
+              if (builderError) {
+                console.error(`Error assigning builder ${company.companyName}:`, builderError);
+                results.errors.push(`Failed to assign builder ${company.companyName} to ${project.projectName}: ${builderError.message}`);
+              } else {
+                const result = builderResult?.[0];
+                if (result?.success) {
+                  console.log(`✓ ${result.message}`);
+                } else {
+                  results.errors.push(`Failed to assign builder ${company.companyName}: ${result?.message || 'Unknown error'}`);
+                }
+              }
+            } catch (error) {
+              console.error(`Error in BCI builder assignment:`, error);
+              results.errors.push(`Error assigning builder ${company.companyName}: ${error instanceof Error ? error.message : 'Unknown error'}`);
             }
             
           } else if (company.ourRole === 'head_contractor') {
@@ -1422,6 +1636,341 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
     }));
   };
 
+  // Consolidated view functions
+  const updateConsolidatedMatch = (normalizedName: string, updates: Partial<ConsolidatedEmployerMatch>) => {
+    setConsolidatedMatches(prev => {
+      const updated = new Map(prev);
+      const existing = updated.get(normalizedName);
+      if (existing) {
+        updated.set(normalizedName, { ...existing, ...updates });
+      }
+      return updated;
+    });
+  };
+
+  const applyBulkRole = (normalizedName: string, role: 'builder' | 'head_contractor' | 'subcontractor') => {
+    const consolidated = consolidatedMatches.get(normalizedName);
+    if (!consolidated) return;
+
+    // Update consolidated match
+    updateConsolidatedMatch(normalizedName, { 
+      bulkRole: role,
+      hasConsistentRole: true 
+    });
+
+    // Update all project assignments
+    consolidated.projectAssignments.forEach(pa => {
+      pa.ourRole = role;
+    });
+
+    // Update processed data
+    setProcessedData(prev => prev.map(project => ({
+      ...project,
+      companies: project.companies.map(company => {
+        if (normalizeCompanyName(company.companyName) === normalizedName) {
+          return { ...company, ourRole: role };
+        }
+        return company;
+      })
+    })));
+
+    // Update individual employer matches
+    setEmployerMatches(prev => {
+      const updated = { ...prev };
+      consolidated.projectAssignments.forEach(pa => {
+        if (updated[pa.matchKey]) {
+          // Update corresponding individual match (for backward compatibility)
+        }
+      });
+      return updated;
+    });
+  };
+
+  const applyBulkTradeType = (normalizedName: string, tradeType: TradeType) => {
+    const consolidated = consolidatedMatches.get(normalizedName);
+    if (!consolidated) return;
+
+    // Update consolidated match
+    updateConsolidatedMatch(normalizedName, { 
+      bulkTradeType: tradeType,
+      hasConsistentTrade: true 
+    });
+
+    // Update all subcontractor project assignments
+    consolidated.projectAssignments.forEach(pa => {
+      if (pa.ourRole === 'subcontractor') {
+        pa.finalTradeType = tradeType;
+        pa.tradeTypeConfirmed = true;
+      }
+    });
+
+    // Update employer matches for subcontractor assignments
+    setEmployerMatches(prev => {
+      const updated = { ...prev };
+      consolidated.projectAssignments.forEach(pa => {
+        if (pa.ourRole === 'subcontractor' && updated[pa.matchKey]) {
+          updated[pa.matchKey] = {
+            ...updated[pa.matchKey],
+            finalTradeType: tradeType,
+            tradeTypeConfirmed: true
+          };
+        }
+      });
+      return updated;
+    });
+  };
+
+  const confirmConsolidatedEmployer = (normalizedName: string) => {
+    const consolidated = consolidatedMatches.get(normalizedName);
+    if (!consolidated) return;
+
+    // Mark as confirmed
+    updateConsolidatedMatch(normalizedName, { userConfirmed: true });
+
+    // Update all individual matches
+    setEmployerMatches(prev => {
+      const updated = { ...prev };
+      consolidated.projectAssignments.forEach(pa => {
+        if (updated[pa.matchKey]) {
+          updated[pa.matchKey] = {
+            ...updated[pa.matchKey],
+            userConfirmed: true,
+            matchedEmployerId: consolidated.matchedEmployerId,
+            matchedEmployerName: consolidated.matchedEmployerName,
+            confidence: consolidated.confidence,
+            action: consolidated.action
+          };
+        }
+      });
+      return updated;
+    });
+  };
+
+  const autoConfirmExactMatches = () => {
+    consolidatedMatches.forEach((consolidated, normalizedName) => {
+      if (consolidated.confidence === 'exact' && !consolidated.userConfirmed) {
+        confirmConsolidatedEmployer(normalizedName);
+      }
+    });
+  };
+
+  // Render consolidated employer card
+  const renderConsolidatedEmployerCard = (consolidated: ConsolidatedEmployerMatch) => {
+    const totalProjects = consolidated.projectAssignments.length;
+    const uniqueRoles = [...new Set(consolidated.projectAssignments.map(pa => pa.ourRole))];
+    const needsTradeType = consolidated.projectAssignments.some(pa => pa.ourRole === 'subcontractor' && !pa.tradeTypeConfirmed);
+    const subcontractorCount = consolidated.projectAssignments.filter(pa => pa.ourRole === 'subcontractor').length;
+
+    return (
+      <Card key={consolidated.normalizedName} className="border-2">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Checkbox
+                  checked={consolidated.userConfirmed}
+                  onCheckedChange={(checked: boolean) => {
+                    if (checked) {
+                      confirmConsolidatedEmployer(consolidated.normalizedName);
+                    } else {
+                      updateConsolidatedMatch(consolidated.normalizedName, { userConfirmed: false });
+                    }
+                  }}
+                />
+                {consolidated.companyName}
+              </CardTitle>
+              <CardDescription>
+                Appears on {totalProjects} project{totalProjects !== 1 ? 's' : ''} • 
+                Roles: {uniqueRoles.join(', ')}
+                {consolidated.hasConsistentRole && (
+                  <Badge variant="secondary" className="ml-2 text-xs">Consistent Role</Badge>
+                )}
+                {consolidated.hasConsistentTrade && subcontractorCount > 0 && (
+                  <Badge variant="secondary" className="ml-2 text-xs">Consistent Trade</Badge>
+                )}
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant={consolidated.confidence === 'exact' ? 'default' : consolidated.confidence === 'fuzzy' ? 'secondary' : 'destructive'}>
+                {consolidated.confidence === 'exact' ? 'Exact Match' : consolidated.confidence === 'fuzzy' ? 'Fuzzy Match' : 'No Match'}
+              </Badge>
+            </div>
+          </div>
+        </CardHeader>
+        
+        <CardContent className="space-y-4">
+          {/* Employer matching section */}
+          {consolidated.confidence === 'exact' && consolidated.matchedEmployerName && (
+            <div className="p-3 bg-green-50 rounded border border-green-200">
+              <p className="text-sm font-medium text-green-800">
+                ✓ Matched to: {consolidated.matchedEmployerName}
+              </p>
+            </div>
+          )}
+
+          {consolidated.confidence === 'fuzzy' && consolidated.suggestedMatches.length > 0 && (
+            <div className="p-3 bg-yellow-50 rounded border border-yellow-200">
+              <p className="text-sm font-medium text-yellow-800 mb-2">Similar matches found:</p>
+              <div className="space-y-1">
+                {consolidated.suggestedMatches.slice(0, 3).map((suggestion) => (
+                  <div key={suggestion.id} className="flex items-center justify-between bg-white p-2 rounded border text-sm">
+                    <div>
+                      <p className="font-medium">{suggestion.name}</p>
+                      <p className="text-xs text-gray-600">{suggestion.address}</p>
+                    </div>
+                    <Button 
+                      size="sm" 
+                      onClick={() => {
+                        updateConsolidatedMatch(consolidated.normalizedName, {
+                          matchedEmployerId: suggestion.id,
+                          matchedEmployerName: suggestion.name,
+                          confidence: 'exact',
+                          action: 'confirm_match'
+                        });
+                      }}
+                    >
+                      Select
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {consolidated.confidence === 'none' && (
+            <div className="p-3 bg-red-50 rounded border border-red-200">
+              <p className="text-sm font-medium text-red-800 mb-2">No matches found</p>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => {
+                  // Trigger manual search for this employer
+                  setSearchingForCompany(consolidated.companyName);
+                  setShowManualSearch(true);
+                }}>
+                  Search Database
+                </Button>
+                <Button size="sm" onClick={() => {
+                  updateConsolidatedMatch(consolidated.normalizedName, {
+                    action: 'create_new',
+                    userConfirmed: true
+                  });
+                }}>
+                  Create New
+                </Button>
+              </div>
+            </div>
+          )}
+          
+          {/* Bulk role assignment */}
+          {!consolidated.hasConsistentRole && uniqueRoles.length > 1 && (
+            <div className="p-3 bg-blue-50 rounded border border-blue-200">
+              <label className="text-sm font-medium text-blue-800 mb-2 block">
+                Multiple roles detected - set consistent role:
+              </label>
+              <Select
+                value={consolidated.bulkRole || ''}
+                onValueChange={(value) => applyBulkRole(consolidated.normalizedName, value as any)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose consistent role..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="builder">Builder (all projects)</SelectItem>
+                  <SelectItem value="head_contractor">Head Contractor (all projects)</SelectItem>
+                  <SelectItem value="subcontractor">Subcontractor (all projects)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          
+          {/* Bulk trade type assignment */}
+          {needsTradeType && (
+            <div className="p-3 bg-purple-50 rounded border border-purple-200">
+              <label className="text-sm font-medium text-purple-800 mb-2 block">
+                Trade Type for {subcontractorCount} Subcontractor Assignment{subcontractorCount > 1 ? 's' : ''}:
+              </label>
+              <Select
+                value={consolidated.bulkTradeType || ''}
+                onValueChange={(value) => applyBulkTradeType(consolidated.normalizedName, value as TradeType)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose trade type..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(getTradeTypeCategories()).map(([category, types]) => (
+                    <div key={category}>
+                      <div className="px-2 py-1.5 text-sm font-semibold text-gray-500 uppercase">
+                        {category}
+                      </div>
+                      {types.map((type) => (
+                        <SelectItem key={type} value={type}>
+                          {getTradeTypeLabel(type)}
+                        </SelectItem>
+                      ))}
+                    </div>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          
+          {/* Project assignments summary */}
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Project Assignments:</p>
+            <div className="space-y-1 max-h-40 overflow-y-auto">
+              {consolidated.projectAssignments.map((pa) => (
+                <div key={`${pa.projectId}-${pa.csvRole}`} className="flex items-center justify-between text-sm p-2 bg-gray-50 rounded">
+                  <span className="truncate flex-1">{pa.projectName}</span>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <Badge variant="outline" className="text-xs">
+                      {pa.ourRole}
+                    </Badge>
+                    {pa.ourRole === 'subcontractor' && (
+                      <Badge variant="secondary" className="text-xs">
+                        {pa.finalTradeType || pa.inferredTradeType || 'No trade'}
+                        {/* Show multiple trade indicator */}
+                        {(() => {
+                          const project = processedData.find(p => p.projectId === pa.projectId);
+                          const company = project?.companies.find(c => 
+                            normalizeCompanyName(c.companyName) === consolidated.normalizedName && 
+                            c.csvRole === pa.csvRole
+                          );
+                          return company?.tradeTypes && company.tradeTypes.length > 1 ? ` (+${company.tradeTypes.length - 1})` : '';
+                        })()}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          {/* Quick actions */}
+          <div className="flex gap-2 pt-2 border-t">
+            <Button 
+              size="sm" 
+              variant="outline" 
+              onClick={() => {
+                updateConsolidatedMatch(consolidated.normalizedName, {
+                  action: 'skip',
+                  userConfirmed: true
+                });
+              }}
+            >
+              Skip All Projects
+            </Button>
+            <Button 
+              size="sm" 
+              onClick={() => confirmConsolidatedEmployer(consolidated.normalizedName)}
+              disabled={consolidated.confidence === 'none' && consolidated.action !== 'create_new'}
+            >
+              Confirm All Assignments
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
   // Render employer matching step
   const renderEmployerMatching = () => {
     console.log('Rendering employer matching, current state:', { employerMatches, processedData });
@@ -1482,6 +2031,173 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
       return { total, resolved };
     })();
 
+    // Render consolidated view if enabled
+    if (useConsolidatedView && consolidatedMatches.size > 0) {
+      const consolidatedArray = Array.from(consolidatedMatches.values());
+      const confirmedCount = consolidatedArray.filter(c => c.userConfirmed).length;
+      const exactMatches = consolidatedArray.filter(c => c.confidence === 'exact').length;
+      const needsAttention = consolidatedArray.filter(c => !c.userConfirmed && c.confidence !== 'exact').length;
+
+      return (
+        <div className="space-y-6">
+          <div className="text-center">
+            <h2 className="text-xl font-semibold mb-2">Enhanced Employer Matching</h2>
+            <p className="text-gray-600">Consolidated view of {consolidatedMatches.size} unique employers across all projects</p>
+            <p className="text-sm text-gray-500">
+              {confirmedCount} confirmed • {exactMatches} exact matches • {needsAttention} need attention
+            </p>
+          </div>
+          
+          {/* Enhanced toolbar with bulk actions */}
+          <Card className="variant:desktop">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <Button size="sm" onClick={autoConfirmExactMatches} disabled={exactMatches === 0}>
+                    Auto-Confirm {exactMatches} Exact Matches
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    onClick={() => setUseConsolidatedView(false)}
+                  >
+                    Switch to Detailed View
+                  </Button>
+                </div>
+                <div className="text-sm text-gray-600">
+                  {confirmedCount} / {consolidatedMatches.size} employers confirmed
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          {/* Consolidated employer cards */}
+          <div className="space-y-4">
+            {consolidatedArray
+              .sort((a, b) => {
+                // Sort by: unconfirmed first, then by confidence (exact > fuzzy > none)
+                if (a.userConfirmed !== b.userConfirmed) {
+                  return a.userConfirmed ? 1 : -1;
+                }
+                const confidenceOrder = { exact: 3, fuzzy: 2, none: 1 };
+                return confidenceOrder[b.confidence] - confidenceOrder[a.confidence];
+              })
+              .map(renderConsolidatedEmployerCard)}
+          </div>
+          
+          <div className="flex justify-center">
+            <Button 
+              onClick={confirmEmployerMatches}
+              disabled={confirmedCount < consolidatedMatches.size}
+              className="px-8"
+            >
+              Continue to Final Review ({confirmedCount}/{consolidatedMatches.size} confirmed)
+            </Button>
+          </div>
+          
+          {/* Manual Search Dialog - reuse existing */}
+          <Dialog open={showManualSearch} onOpenChange={setShowManualSearch}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Manual Employer Search</DialogTitle>
+                <DialogDescription>
+                  Searching for: <strong>{searchingForCompany}</strong>
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="space-y-4">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Enter company name to search..."
+                    value={searchingForCompany}
+                    onChange={(e) => setSearchingForCompany(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && performManualSearch(searchingForCompany)}
+                  />
+                  <Button 
+                    onClick={() => performManualSearch(searchingForCompany)}
+                    disabled={isSearching || !searchingForCompany.trim()}
+                  >
+                    {isSearching ? (
+                      <>
+                        <img src="/spinner.gif" alt="Loading" className="w-4 h-4 mr-2" />
+                        Searching...
+                      </>
+                    ) : (
+                      <>
+                        <Search className="w-4 h-4 mr-2" />
+                        Search
+                      </>
+                    )}
+                  </Button>
+                  <Button 
+                    variant="outline"
+                    onClick={() => {
+                      setShowManualSearch(false);
+                      setSearchResults([]);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+                
+                {searchResults.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-gray-700">Search Results:</p>
+                    {searchResults.map((result) => (
+                      <div key={result.id} className="flex items-center justify-between p-3 border rounded-lg bg-gray-50">
+                        <div>
+                          <p className="font-medium">{result.name}</p>
+                          <p className="text-sm text-gray-600">{result.address}</p>
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            const normalizedName = normalizeCompanyName(searchingForCompany);
+                            updateConsolidatedMatch(normalizedName, {
+                              matchedEmployerId: result.id,
+                              matchedEmployerName: result.name,
+                              confidence: 'exact',
+                              action: 'confirm_match'
+                            });
+                            setShowManualSearch(false);
+                            setSearchResults([]);
+                            setSearchingForCompany('');
+                          }}
+                        >
+                          Select This Employer
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                {searchResults.length === 0 && !isSearching && searchingForCompany && (
+                  <div className="space-y-3 py-4 text-center">
+                    <p className="text-gray-700">No employers found matching "{searchingForCompany}"</p>
+                    <div className="flex flex-wrap gap-2 justify-center">
+                      <Button
+                        onClick={() => {
+                          const normalizedName = normalizeCompanyName(searchingForCompany);
+                          updateConsolidatedMatch(normalizedName, {
+                            action: 'create_new',
+                            userConfirmed: true
+                          });
+                          setShowManualSearch(false);
+                        }}
+                      >
+                        Create New Employer
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+      );
+    }
+
+    // Fallback to original detailed view
     return (
     <div className="space-y-6">
       <div className="text-center">
@@ -1494,6 +2210,15 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
         {totals.total - totals.resolved > 0 && (
           <p className="text-xs text-amber-700 mt-1">{totals.total - totals.resolved} company(ies) remaining to review</p>
         )}
+        <div className="mt-2">
+          <Button 
+            size="sm" 
+            variant="outline" 
+            onClick={() => setUseConsolidatedView(true)}
+          >
+            Switch to Consolidated View
+          </Button>
+        </div>
       </div>
       
       {/* Summary of matching results */}
@@ -2043,6 +2768,26 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
                   {company.ourRole === 'subcontractor' && (
                     <div className="space-y-2">
                       <Label htmlFor={`trade-${matchKey}`}>Trade Type:</Label>
+                      
+                      {/* Show detected multiple trade types if available */}
+                      {company.tradeTypes && company.tradeTypes.length > 1 && (
+                        <div className="p-3 bg-blue-50 rounded border border-blue-200 mb-2">
+                          <p className="text-sm font-medium text-blue-800 mb-1">
+                            🔍 Multiple trade types detected:
+                          </p>
+                          <div className="flex flex-wrap gap-1">
+                            {company.tradeTypes.map((trade, index) => (
+                              <Badge key={index} variant="secondary" className="text-xs">
+                                {getTradeTypeLabel(trade)}
+                              </Badge>
+                            ))}
+                          </div>
+                          <p className="text-xs text-blue-700 mt-1">
+                            Select primary trade type below. Multiple assignments will be created automatically during import.
+                          </p>
+                        </div>
+                      )}
+                      
                       <Select 
                         value={match.finalTradeType || company.tradeType || 'general_construction'} 
                         onValueChange={(value) => updateTradeType(matchKey, value as TradeType)}
@@ -2065,6 +2810,12 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
                           ))}
                         </SelectContent>
                       </Select>
+                      
+                      {company.tradeTypes && company.tradeTypes.length > 1 && (
+                        <p className="text-xs text-gray-600">
+                          ℹ️ This employer will be assigned to all {company.tradeTypes.length} detected trade types during import.
+                        </p>
+                      )}
                     </div>
                   )}
                   

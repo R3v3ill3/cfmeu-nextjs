@@ -442,19 +442,36 @@ export default function PendingEmployersImport() {
                 let relationshipCreated = false;
                 
                 if (pendingEmployer.our_role === 'builder') {
-                  if (project.builder_id) {
-                    if (project.builder_id === employerId) {
-                      console.log(`✓ Builder already assigned to ${project.name}`);
+                  // Use enhanced builder assignment that handles multiple builders
+                  try {
+                    const { data: builderResult, error: builderError } = await supabase.rpc('assign_bci_builder', {
+                      p_project_id: project.id,
+                      p_employer_id: employerId,
+                      p_company_name: pendingEmployer.company_name
+                    });
+                    
+                    if (builderError) {
+                      console.error(`Error assigning builder ${pendingEmployer.company_name}:`, builderError);
                     } else {
-                      console.warn(`⚠ Project ${project.name} already has a different builder assigned`);
+                      const result = builderResult?.[0];
+                      if (result?.success) {
+                        console.log(`✓ ${result.message}`);
+                        relationshipCreated = true;
+                      } else {
+                        console.warn(`⚠ Failed to assign builder: ${result?.message || 'Unknown error'}`);
+                      }
                     }
-                  } else {
-                    await supabase
-                      .from('projects')
-                      .update({ builder_id: employerId })
-                      .eq('id', project.id);
-                    console.log(`✓ Assigned builder to ${project.name}`);
-                    relationshipCreated = true;
+                  } catch (error) {
+                    console.error(`Error in builder assignment:`, error);
+                    // Fallback to original logic
+                    if (!project.builder_id) {
+                      await supabase
+                        .from('projects')
+                        .update({ builder_id: employerId })
+                        .eq('id', project.id);
+                      console.log(`✓ Assigned builder to ${project.name} (fallback)`);
+                      relationshipCreated = true;
+                    }
                   }
                   
                 } else if (pendingEmployer.our_role === 'head_contractor') {

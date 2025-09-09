@@ -105,7 +105,16 @@ export function AddEmployerToJobSiteModal({
         } else {
           await (supabase as any)
             .from("project_contractor_trades")
-            .insert([{ project_id: jobSite.project_id, employer_id: selectedEmployerId, trade_type: "labour_hire", eba_signatory: "not_specified", estimated_project_workforce: est }])
+            .insert([{ 
+              project_id: jobSite.project_id, 
+              employer_id: selectedEmployerId, 
+              trade_type: "labour_hire", 
+              eba_signatory: "not_specified", 
+              estimated_project_workforce: est,
+              assignment_id: crypto.randomUUID(), // Add unique assignment ID for multiple trade type support
+              created_at: new Date().toISOString(),
+              assignment_notes: "Added via job site modal"
+            }])
         }
       }
 
