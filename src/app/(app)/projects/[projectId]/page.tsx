@@ -337,11 +337,15 @@ export default function ProjectDetailPage() {
   })
 
   // Use unified contractor data from all sources
-  const { data: unifiedContractors = [] } = useUnifiedContractors(projectId, sortedSiteIds)
+  const { data: unifiedContractors = [] } = useUnifiedContractors(projectId, { 
+    siteIds: sortedSiteIds, 
+    autoIncludeMainSite: true,
+    groupBySite: false // Ensure we get flat array for backward compatibility
+  })
   
   // Transform to match existing interface for backward compatibility
   const contractorRows = useMemo(() => {
-    return unifiedContractors.map(contractor => ({
+    return (unifiedContractors as any[]).map((contractor: any) => ({
       id: contractor.id,
       employerId: contractor.employerId,
       employerName: contractor.employerName,

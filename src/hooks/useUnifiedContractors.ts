@@ -150,7 +150,7 @@ export function useUnifiedContractors(projectId: string, options: UnifiedContrac
           
           if (!groups[siteKey]) {
             groups[siteKey] = {
-              siteId: contractor.siteId,
+              siteId: contractor.siteId || null,
               siteName,
               contractors: [],
             };

@@ -106,3 +106,22 @@ export function searchTradeOptions(query: string): Array<{ value: string; label:
     trade.value.toLowerCase().includes(lowerQuery)
   );
 }
+
+/**
+ * Get all available trade types (values only)
+ */
+export function getAllTradeTypes(): string[] {
+  return TRADE_OPTIONS.map(trade => trade.value);
+}
+
+/**
+ * Get the human-readable label for a trade type (alias for getTradeLabel)
+ */
+export function getTradeTypeLabel(tradeValue: string): string {
+  return getTradeLabel(tradeValue);
+}
+
+/**
+ * Export the TradeType from constants for type safety
+ */
+export type TradeType = string; // This matches the trade_type enum values

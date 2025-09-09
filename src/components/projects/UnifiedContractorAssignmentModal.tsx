@@ -17,7 +17,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { SingleEmployerPicker } from "./SingleEmployerPicker";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle, AlertCircle, Building2, Users } from "lucide-react";
-import { getTradeTypeLabel, getAllTradeTypes, type TradeType } from "@/utils/tradeUtils";
+import { getTradeLabel, type TradeType } from "@/utils/tradeUtils";
+import { TRADE_OPTIONS } from "@/constants/trades";
 
 interface UnifiedContractorAssignmentModalProps {
   isOpen: boolean;
@@ -132,9 +133,9 @@ export function UnifiedContractorAssignmentModal({
   });
 
   const tradeTypeOptions = useMemo(() => {
-    return getAllTradeTypes().map(tradeType => ({
-      value: tradeType,
-      label: getTradeTypeLabel(tradeType)
+    return TRADE_OPTIONS.map((trade: { value: string; label: string }) => ({
+      value: trade.value,
+      label: trade.label
     }));
   }, []);
 
@@ -300,7 +301,7 @@ export function UnifiedContractorAssignmentModal({
                 <SelectValue placeholder="Select trade type..." />
               </SelectTrigger>
               <SelectContent>
-                {tradeTypeOptions.map((option) => (
+                {tradeTypeOptions.map((option: { value: string; label: string }) => (
                   <SelectItem key={option.value} value={option.value}>
                     {option.label}
                   </SelectItem>
@@ -378,8 +379,8 @@ export function UnifiedContractorAssignmentModal({
                   <div key={index} className="text-xs p-2 bg-muted rounded">
                     <div className="font-medium">
                       {assignment.type === 'project_role' && `Project Role: ${assignment.role}`}
-                      {assignment.type === 'site_trade' && `Site Trade: ${getTradeTypeLabel(assignment.trade_type)}`}
-                      {assignment.type === 'project_trade' && `Project Trade: ${getTradeTypeLabel(assignment.trade_type)} (${assignment.stage})`}
+                      {assignment.type === 'site_trade' && `Site Trade: ${getTradeLabel(assignment.trade_type)}`}
+                      {assignment.type === 'project_trade' && `Project Trade: ${getTradeLabel(assignment.trade_type)} (${assignment.stage})`}
                     </div>
                     {assignment.site_name && (
                       <div className="text-muted-foreground">Site: {assignment.site_name}</div>

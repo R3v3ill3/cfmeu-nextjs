@@ -59,7 +59,7 @@ export async function analyzeTradeAssignments(): Promise<TradeAnalysisResult> {
 
   allTrades.forEach(trade => {
     const tradeType = trade.trade_type;
-    const employer = trade.employers;
+    const employer = Array.isArray(trade.employers) ? trade.employers[0] : trade.employers;
     
     if (!employer) return;
     
@@ -80,7 +80,11 @@ export async function analyzeTradeAssignments(): Promise<TradeAnalysisResult> {
         employersByTradeType[tradeType] = [];
       }
       
-      const employer = allTrades.find(t => t.employers?.id === employerId)?.employers;
+      const employerData = allTrades.find(t => {
+        const emp = Array.isArray(t.employers) ? t.employers[0] : t.employers;
+        return emp?.id === employerId;
+      });
+      const employer = Array.isArray(employerData?.employers) ? employerData.employers[0] : employerData?.employers;
       if (employer) {
         employersByTradeType[tradeType].push({
           id: employerId,
@@ -99,7 +103,10 @@ export async function analyzeTradeAssignments(): Promise<TradeAnalysisResult> {
   const uniqueEmployers = Array.from(new Map(
     allTrades
       .filter(t => t.employers)
-      .map(t => [t.employers.id, t.employers])
+      .map(t => {
+        const emp = Array.isArray(t.employers) ? t.employers[0] : t.employers;
+        return [emp.id, emp];
+      })
   ).values());
 
   uniqueEmployers.forEach(employer => {
