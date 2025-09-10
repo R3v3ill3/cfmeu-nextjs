@@ -553,26 +553,33 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
         .filter(t => t.length >= 2 && !stopwords.has(t)) // Lowered from 3 to 2 to catch short names
         .slice(0, 10); // Increased from 8 to 10
       
+      // Helpers for safe PostgREST .or ilike building (which uses * wildcards and CSV-style clauses)
+      const sanitizeForOrIlike = (s: string) =>
+        String(s).replace(/[,"()]/g, ' ').replace(/\s+/g, ' ').trim();
+      const star = (s: string) => sanitizeForOrIlike(s).replace(/\*/g, '');
+      
       const firstToken = tokens[0];
-      const orParts = [
-        `name.ilike.%${companyName}%`, // Full company name match
-      ];
       
-      // Add individual token searches with better logic
+      // Build safe OR list
+      const orParts: string[] = [];
+      const cleanedFull = star(companyName);
+      if (cleanedFull) {
+        // Only include full-name contains if simple enough after sanitization
+        orParts.push(`name.ilike.*${cleanedFull}*`);
+      }
+      
       if (firstToken && firstToken.length >= 3) {
-        orParts.push(`name.ilike.${firstToken}%`); // Starts with first token
-        orParts.push(`name.ilike.%${firstToken}%`); // Contains first token anywhere
+        orParts.push(`name.ilike.${star(firstToken)}*`);   // Starts with first token
+        orParts.push(`name.ilike.*${star(firstToken)}*`);  // Contains first token
       }
       
-      // For short company names (like "Multiplex", "Keller"), add more aggressive matching
       if (tokens.length === 1 && firstToken && firstToken.length >= 4) {
-        orParts.push(`name.ilike.%${firstToken.substring(0, 4)}%`); // First 4 characters
+        orParts.push(`name.ilike.*${star(firstToken.substring(0, 4))}*`);
       }
       
-      // Add other significant tokens
-      tokens.slice(1).forEach(token => {
+      tokens.slice(1, 7).forEach(token => {
         if (token.length >= 3) {
-          orParts.push(`name.ilike.%${token}%`);
+          orParts.push(`name.ilike.*${star(token)}*`);
         }
       });
       
@@ -584,11 +591,25 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
         .select('id, name, address_line_1, suburb, state')
         .or(orQuery);
       
-      if (fuzzyError) throw fuzzyError;
+      let candidates = fuzzyMatches || [];
+      if (fuzzyError) {
+        console.warn('Fuzzy or() failed, falling back to single-token ilike', { companyName, firstToken, error: fuzzyError });
+        const fallbackToken = (firstToken && firstToken.length >= 2) ? firstToken : (cleanedFull.split(' ')[0] || '');
+        if (fallbackToken) {
+          const { data: fb, error: fbErr } = await supabase
+            .from('employers')
+            .select('id, name, address_line_1, suburb, state')
+            .ilike('name', `%${fallbackToken}%`);
+          if (fbErr) {
+            throw fbErr;
+          }
+          candidates = fb || [];
+        }
+      }
       
-      if (fuzzyMatches && fuzzyMatches.length > 0) {
+      if (candidates.length > 0) {
         // Sort by relevance (starts-with first token > exact substring > shorter names)
-        const sortedMatches = fuzzyMatches.sort((a, b) => {
+        const sortedMatches = candidates.sort((a, b) => {
           const aName = a.name.toLowerCase();
           const bName = b.name.toLowerCase();
           const companyNameLower = companyName.toLowerCase();
