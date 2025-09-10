@@ -32,8 +32,8 @@ type ProjectWithRoles = {
   main_job_site_id: string | null
   value: number | null
   tier: string | null
-  project_employer_roles?: Array<{
-    role: string
+  project_assignments?: Array<{
+    assignment_type: string
     employer_id: string
     employers?: { name: string | null } | null
   }>
@@ -131,13 +131,13 @@ function useProjectStats(projectId: string) {
 
       // Include head contractor in engaged employer ids
       try {
-        const { data: roles } = await (supabase as any)
-          .from("project_employer_roles")
-          .select("role, employer_id")
+        const { data: assignments } = await (supabase as any)
+          .from("project_assignments")
+          .select("assignment_type, employer_id, contractor_role_types(name)")
           .eq("project_id", projectId)
-          .in("role", ["head_contractor"]) // extend if builders should also be counted
-        ;(roles || []).forEach((r: any) => {
-          if (r?.employer_id) employerIdSet.add(String(r.employer_id))
+          .eq("assignment_type", "contractor_role") // Get contractor role assignments
+        ;(assignments || []).forEach((a: any) => {
+          if (a?.employer_id) employerIdSet.add(String(a.employer_id))
         })
       } catch {}
 
@@ -274,14 +274,28 @@ function EbaPercentBar({ active, total, onClick }: { active: number; total: numb
 
 function ProjectListCard({ p, summary, onOpenEmployer }: { p: ProjectWithRoles; summary?: ProjectSummary; onOpenEmployer: (id: string) => void }) {
   const builderNames = useMemo(() => {
-    const builders = (p.project_employer_roles || []).filter((r) => r.role === 'builder')
-    return builders.map((r) => ({ id: r.employer_id, name: r.employers?.name || r.employer_id }))
-  }, [p.project_employer_roles])
+    // Get all contractor role assignments as potential builders
+    const contractors = (p.project_assignments || []).filter((a) => 
+      a.assignment_type === 'contractor_role'
+    )
+    return contractors.map((a) => ({ id: a.employer_id, name: a.employers?.name || `Employer ${a.employer_id.slice(0, 8)}` }))
+  }, [p.project_assignments])
 
   const head = useMemo(() => {
-    const hc = (p.project_employer_roles || []).find((r) => r.role === 'head_contractor')
-    return hc ? { id: hc.employer_id, name: hc.employers?.name || hc.employer_id } : null
-  }, [p.project_employer_roles])
+    // For now, treat first contractor role as head contractor  
+    const hc = (p.project_assignments || []).find((a) => 
+      a.assignment_type === 'contractor_role'
+    )
+    return hc ? { id: hc.employer_id, name: hc.employers?.name || `Employer ${hc.employer_id.slice(0, 8)}` } : null
+  }, [p.project_assignments])
+
+  // Also show trade contractors
+  const tradeContractors = useMemo(() => {
+    const trades = (p.project_assignments || []).filter((a) => 
+      a.assignment_type === 'trade_work'
+    )
+    return trades.map((a) => ({ id: a.employer_id, name: a.employers?.name || `Employer ${a.employer_id.slice(0, 8)}` }))
+  }, [p.project_assignments])
 
   const primary = builderNames[0] || head
   const secondary = head && primary && head.id !== primary.id ? head : null
@@ -340,6 +354,14 @@ function ProjectListCard({ p, summary, onOpenEmployer }: { p: ProjectWithRoles; 
               <button type="button" className="text-primary hover:underline truncate rounded border border-dashed border-transparent hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 px-1" onClick={() => onOpenEmployer(secondary.id)} title={secondary.name}>
                 {secondary.name}
               </button>
+            </>
+          )}
+          {tradeContractors.length > 0 && (
+            <>
+              <span className="text-muted-foreground">·</span>
+              <span className="text-xs text-blue-600">
+                +{tradeContractors.length} trade contractor{tradeContractors.length !== 1 ? 's' : ''}
+              </span>
             </>
           )}
         </div>
@@ -457,6 +479,7 @@ export default function ProjectsPage() {
     staleTime: 30000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
+      // Load projects first
       let qy: any = supabase
         .from("projects")
         .select(`
@@ -466,12 +489,7 @@ export default function ProjectsPage() {
           value,
           tier,
           organising_universe,
-          stage_class,
-          project_employer_roles!left(
-            role,
-            employer_id,
-            employers(name)
-          )
+          stage_class
         `)
 
       // Apply search filter
@@ -512,7 +530,39 @@ export default function ProjectsPage() {
 
       const { data, error } = await qy
       if (error) throw error
-      const allProjects = (data as any[]) || []
+      const baseProjects = (data as any[]) || []
+      
+      // Load project assignments separately to avoid RLS issues
+      let projectsWithAssignments = baseProjects;
+      if (baseProjects.length > 0) {
+        const projectIds = baseProjects.map((p: any) => p.id);
+        const { data: assignments } = await supabase
+          .from("project_assignments")
+          .select(`
+            project_id,
+            assignment_type,
+            employer_id,
+            employers(name)
+          `)
+          .in('project_id', projectIds);
+        
+        // Group assignments by project
+        const assignmentsByProject = new Map<string, any[]>();
+        (assignments || []).forEach((assignment: any) => {
+          if (!assignmentsByProject.has(assignment.project_id)) {
+            assignmentsByProject.set(assignment.project_id, []);
+          }
+          assignmentsByProject.get(assignment.project_id)!.push(assignment);
+        });
+        
+        // Combine projects with their assignments
+        projectsWithAssignments = baseProjects.map((project: any) => ({
+          ...project,
+          project_assignments: assignmentsByProject.get(project.id) || []
+        }));
+      }
+      
+      const allProjects = projectsWithAssignments;
       
       // Get summaries for all projects
       let summaries: Record<string, ProjectSummary> = {}
@@ -728,7 +778,7 @@ export default function ProjectsPage() {
         </div>
       ) : view === 'map' ? (
         <ProjectsMapView
-          projects={projects as any[]}
+          projects={filteredAndSortedProjects as any[]}
           summaries={summaries}
           onProjectClick={(id) => {
             window.location.href = `/projects/${id}`
@@ -751,20 +801,28 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      <div className="flex items-center justify-between">
+      {view !== 'map' && (
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-muted-foreground">
+            Showing {from + 1}-{Math.min(to, totalProjects)} of {totalProjects} projects
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" disabled={!hasPrev} onClick={() => setParam('page', String(page - 1))}>
+              Previous
+            </Button>
+            <span className="text-xs text-muted-foreground">Page {page} of {Math.ceil(totalProjects / PAGE_SIZE)}</span>
+            <Button variant="outline" size="sm" disabled={!hasNext} onClick={() => setParam('page', String(page + 1))}>
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
+      
+      {view === 'map' && (
         <div className="text-sm text-muted-foreground">
-          Showing {from + 1}-{Math.min(to, totalProjects)} of {totalProjects} projects
+          Showing all {totalProjects} projects matching current filters
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" disabled={!hasPrev} onClick={() => setParam('page', String(page - 1))}>
-            Previous
-          </Button>
-          <span className="text-xs text-muted-foreground">Page {page} of {Math.ceil(totalProjects / PAGE_SIZE)}</span>
-          <Button variant="outline" size="sm" disabled={!hasNext} onClick={() => setParam('page', String(page + 1))}>
-            Next
-          </Button>
-        </div>
-      </div>
+      )}
 
       <EmployerDetailModal
         employerId={selectedEmployerId}

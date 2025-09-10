@@ -10,7 +10,7 @@ import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { getTradeTypeLabel, TradeType, getTradeTypeCategories } from '@/utils/bciTradeTypeInference';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-  import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/components/ui/use-toast';
 
@@ -91,7 +91,9 @@ export default function PendingEmployersImport() {
     const [isMergingExact, setIsMergingExact] = useState<Record<string, boolean>>({});
     const [selectedExactMatches, setSelectedExactMatches] = useState<Set<string>>(new Set());
     const [isMergingAllExact, setIsMergingAllExact] = useState(false);
+    const [mergeProgress, setMergeProgress] = useState({ current: 0, total: 0, currentEmployer: '' });
     const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+    const [isCancelling, setIsCancelling] = useState(false);
     
     // Workflow state management
     const [workflowStep, setWorkflowStep] = useState<'review' | 'merge' | 'import' | 'complete'>('review');
@@ -120,8 +122,8 @@ export default function PendingEmployersImport() {
         .select('*');
       
       if (!showProcessedEmployers) {
-        // Only load employers that haven't been processed
-        query = query.is('import_status', null);
+        // Only load employers that haven't been processed (pending or null status)
+        query = query.or('import_status.is.null,import_status.eq.pending');
       }
       
       const { data, error } = await query.order('created_at', { ascending: false });
@@ -132,9 +134,16 @@ export default function PendingEmployersImport() {
       console.log(`Loaded ${(data || []).length} ${statusText} pending employers`);
       
       setPendingEmployers(data || []);
+      // If any pending employers carry project associations, default to link-to-projects
+      try {
+        const hasAssociations = (data || []).some((e: any) => Array.isArray(e.project_associations) && e.project_associations.length > 0);
+        if (hasAssociations && projectLinkingMode === 'employer_only') {
+          setProjectLinkingMode('with_projects');
+        }
+      } catch {}
       // Select all unprocessed employers by default, but don't auto-select processed ones
       if (showProcessedEmployers) {
-        const unprocessed = (data || []).filter(emp => !emp.import_status);
+        const unprocessed = (data || []).filter(emp => !emp.import_status || emp.import_status === 'pending');
         setSelectedEmployers(new Set(unprocessed.map(emp => emp.id)));
       } else {
         setSelectedEmployers(new Set(data?.map(emp => emp.id) || []));
@@ -195,12 +204,30 @@ export default function PendingEmployersImport() {
       return detection.selectedEmployerId;
     }
     
-    // Step 1: Check for exact name match
-    const { data: exactMatch } = await supabase
-      .from('employers')
-      .select('id, name, address_line_1, suburb, state')
-      .eq('name', pendingEmployer.company_name)
-      .maybeSingle();
+    // Step 1: Check for BCI Company ID match first (if available)
+    let exactMatch = null;
+    if (pendingEmployer.raw?.companyId) {
+      const { data: bciMatch } = await supabase
+        .from('employers')
+        .select('id, name, address_line_1, suburb, state, bci_company_id')
+        .eq('bci_company_id', pendingEmployer.raw.companyId)
+        .maybeSingle();
+      
+      if (bciMatch) {
+        console.log(`✓ Found BCI Company ID match: ${bciMatch.name} (BCI ID: ${pendingEmployer.raw.companyId})`);
+        exactMatch = bciMatch;
+      }
+    }
+    
+    // Step 2: Fall back to exact name match if no BCI ID match
+    if (!exactMatch) {
+      const { data: nameMatch } = await supabase
+        .from('employers')
+        .select('id, name, address_line_1, suburb, state')
+        .eq('name', pendingEmployer.company_name)
+        .maybeSingle();
+      exactMatch = nameMatch;
+    }
     
     if (exactMatch) {
       console.log(`✓ Using existing employer: ${exactMatch.name} (ID: ${exactMatch.id})`);
@@ -263,6 +290,7 @@ export default function PendingEmployersImport() {
       .from('employers')
       .insert({
         name: pendingEmployer.company_name,
+        bci_company_id: raw.companyId || null, // Store BCI Company ID
         address_line_1: raw.companyStreet,
         suburb: raw.companyTown,
         state: raw.companyState,
@@ -475,56 +503,51 @@ export default function PendingEmployersImport() {
                   }
                   
                 } else if (pendingEmployer.our_role === 'head_contractor') {
-                  // Check for existing head contractor role
-                  const { data: existingRole } = await supabase
-                    .from('project_employer_roles')
-                    .select('id')
-                    .eq('project_id', project.id)
-                    .eq('employer_id', employerId)
-                    .eq('role', 'head_contractor')
-                    .maybeSingle();
-                  
-                  if (existingRole) {
-                    console.log(`✓ Head contractor relationship already exists for ${project.name}`);
-                  } else {
-                    await supabase
-                      .from('project_employer_roles')
-                      .insert({
-                        project_id: project.id,
-                        employer_id: employerId,
-                        role: 'head_contractor'
-                      });
-                    console.log(`✓ Created head contractor role for ${project.name}`);
-                    relationshipCreated = true;
+                  // Assign head contractor via RPC
+                  try {
+                    const { data: hcRes, error: hcErr } = await supabase.rpc('assign_contractor_role', {
+                      p_project_id: project.id,
+                      p_employer_id: employerId,
+                      p_role_code: 'head_contractor',
+                      p_company_name: pendingEmployer.company_name,
+                      p_is_primary: false
+                    });
+                    if (hcErr) {
+                      console.error('Head contractor assignment failed:', hcErr);
+                    } else {
+                      const r = hcRes?.[0];
+                      console.log(r?.message || `✓ Assigned head contractor for ${project.name}`);
+                      relationshipCreated = true;
+                    }
+                  } catch (e) {
+                    console.error('Head contractor RPC error:', e);
                   }
                   
                 } else if (pendingEmployer.our_role === 'subcontractor') {
                   const finalTradeType = getEffectiveTradeType(pendingEmployer);
                   
-                  // Check for existing trade relationship
-                  const { data: existingTrade } = await supabase
-                    .from('project_contractor_trades')
-                    .select('id, trade_type')
-                    .eq('project_id', project.id)
-                    .eq('employer_id', employerId)
-                    .maybeSingle();
-                  
-                  if (existingTrade) {
-                    if (existingTrade.trade_type === finalTradeType) {
-                      console.log(`✓ Trade relationship already exists for ${project.name}: ${finalTradeType}`);
+                  // Use enhanced trade assignment that handles conflicts
+                  try {
+                    const { data: tradeResult, error: tradeError } = await supabase.rpc('assign_contractor_trade', {
+                      p_project_id: project.id,
+                      p_employer_id: employerId,
+                      p_trade_type: finalTradeType,
+                      p_company_name: pendingEmployer.company_name
+                    });
+                    
+                    if (tradeError) {
+                      console.error(`Error assigning trade ${finalTradeType} to ${pendingEmployer.company_name}:`, tradeError);
                     } else {
-                      console.warn(`⚠ Trade type mismatch for ${project.name}. Existing: ${existingTrade.trade_type}, New: ${finalTradeType}`);
+                      const result = tradeResult?.[0];
+                      if (result?.success) {
+                        console.log(`✓ ${result.message}`);
+                        relationshipCreated = true;
+                      } else {
+                        console.warn(`⚠ Failed to assign trade: ${result?.message || 'Unknown error'}`);
+                      }
                     }
-                  } else {
-                    await supabase
-                      .from('project_contractor_trades')
-                      .insert({
-                        project_id: project.id,
-                        employer_id: employerId,
-                        trade_type: finalTradeType
-                      });
-                    console.log(`✓ Created trade relationship for ${project.name}: ${finalTradeType}`);
-                    relationshipCreated = true;
+                  } catch (error) {
+                    console.error(`Error in trade assignment:`, error);
                   }
                 }
                 
@@ -641,11 +664,29 @@ export default function PendingEmployersImport() {
     const employersToImport = pendingEmployers.filter(emp => selectedEmployers.has(emp.id));
     
     for (const pendingEmployer of employersToImport) {
-      // Check for exact matches
-      const { data: exactMatches } = await supabase
-        .from('employers')
-        .select('id, name, address_line_1, suburb, state')
-        .eq('name', pendingEmployer.company_name);
+      let exactMatches: any[] = [];
+      
+      // Check for BCI Company ID matches first (if available)
+      if (pendingEmployer.raw?.companyId) {
+        const { data: bciMatches } = await supabase
+          .from('employers')
+          .select('id, name, address_line_1, suburb, state, bci_company_id')
+          .eq('bci_company_id', pendingEmployer.raw.companyId);
+        
+        if (bciMatches && bciMatches.length > 0) {
+          exactMatches = bciMatches;
+          console.log(`Found ${bciMatches.length} BCI Company ID matches for ${pendingEmployer.company_name}`);
+        }
+      }
+      
+      // Fall back to name matches if no BCI ID matches
+      if (exactMatches.length === 0) {
+        const { data: nameMatches } = await supabase
+          .from('employers')
+          .select('id, name, address_line_1, suburb, state')
+          .eq('name', pendingEmployer.company_name);
+        exactMatches = nameMatches || [];
+      }
       
       // Check for similar matches (only if no exact match)
       let similarMatches: any[] = [];
@@ -790,7 +831,17 @@ export default function PendingEmployersImport() {
         });
         if (error) {
           console.warn('Merge exact matches failed:', error);
+          toast({
+            title: 'Merge Failed',
+            description: `Could not merge duplicates for ${detection.pendingEmployer.company_name}. You may need to resolve this manually.`,
+            variant: 'destructive',
+          });
           // Fall back: still resolve to primary so user can proceed
+        } else {
+          toast({
+            title: 'Merge Successful',
+            description: `Successfully merged ${duplicates.length + 1} records into one.`,
+          });
         }
       }
 
@@ -806,13 +857,25 @@ export default function PendingEmployersImport() {
     if (selectedExactMatches.size === 0) return;
     
     setIsMergingAllExact(true);
+    const employerIds = Array.from(selectedExactMatches);
+    setMergeProgress({ current: 0, total: employerIds.length, currentEmployer: '' });
     const supabase = getSupabaseBrowserClient();
     let mergedCount = 0;
     
     try {
-      for (const employerId of selectedExactMatches) {
+      for (let i = 0; i < employerIds.length; i++) {
+        const employerId = employerIds[i];
         const detection = duplicateDetections[employerId];
-        if (!detection?.hasExactMatch || !detection.exactMatches?.length) continue;
+        if (!detection?.hasExactMatch || !detection.exactMatches?.length) {
+          setMergeProgress(prev => ({ ...prev, current: i + 1 }));
+          continue;
+        }
+        
+        setMergeProgress(prev => ({ 
+          ...prev, 
+          current: i + 1, 
+          currentEmployer: detection.pendingEmployer.company_name 
+        }));
         
         const exactIds = detection.exactMatches.map(m => m.id);
         if (exactIds.length === 1) {
@@ -857,8 +920,11 @@ export default function PendingEmployersImport() {
       // Clear selection after successful merge
       setSelectedExactMatches(new Set());
       
-      // Refresh duplicate detections to show updated state
-      console.log(`Successfully merged ${mergedCount} employer groups`);
+      // Show toast notification for successful merge
+      toast({
+        title: 'Merge Successful',
+        description: `Successfully merged ${mergedCount} employer groups.`,
+      });
       
       // Re-run duplicate detection to update the UI state
       setTimeout(async () => {
@@ -868,10 +934,28 @@ export default function PendingEmployersImport() {
       
     } catch (error) {
       console.error('Error during bulk merge:', error);
+      toast({
+        title: 'Bulk Merge Error',
+        description: error instanceof Error ? error.message : 'An unexpected error occurred.',
+        variant: 'destructive',
+      });
       // Don't clear selection on error so user can retry
     } finally {
       setIsMergingAllExact(false);
+      setMergeProgress({ current: 0, total: 0, currentEmployer: '' });
     }
+  };
+
+  // Bulk accept: for all detections with no exact matches but with a strong inferred match list,
+  // proceed with 'create_new' automatically. This reduces per-employer clicks when staging from BCI.
+  const autoAcceptCreateNewForUnmatched = () => {
+    const updated: Record<string, DuplicateDetection> = { ...duplicateDetections } as any;
+    Object.entries(updated).forEach(([id, det]) => {
+      if (!det.hasExactMatch) {
+        updated[id] = { ...det, userDecision: 'create_new' } as any;
+      }
+    });
+    setDuplicateDetections(updated);
   };
 
   // Toggle selection of exact match
@@ -1104,6 +1188,19 @@ export default function PendingEmployersImport() {
     });
   };
 
+  const cancelImport = () => {
+    setIsCancelling(true);
+    // Potentially add any cleanup logic here
+    console.log('Import cancelled.');
+    // For now, just reset the state
+    setWorkflowStep('review');
+    setShowDuplicateResolution(false);
+    setDuplicateDetections({});
+    setSelectedEmployers(new Set());
+    loadPendingEmployers();
+    setTimeout(() => setIsCancelling(false), 500);
+  };
+
   if (isLoading) {
     return (
       <div className="text-center space-y-4">
@@ -1123,6 +1220,41 @@ export default function PendingEmployersImport() {
       </div>
     );
   }
+
+  if (isCancelling) {
+    return (
+      <div className="text-center space-y-4">
+        <img src="/spinner.gif" alt="Loading" className="w-8 h-8 mx-auto" />
+        <h2 className="text-xl font-semibold">Cancelling Import...</h2>
+        <p className="text-gray-600">Returning to the employer list.</p>
+      </div>
+    );
+  }
+
+  const renderWorkflowSteps = () => (
+    <div className="flex items-center justify-center space-x-4 mt-4 mb-6">
+      <div className={`flex items-center space-x-2 ${workflowStep === 'review' ? 'text-blue-600' : ['merge', 'import', 'complete'].includes(workflowStep) ? 'text-green-600' : 'text-gray-400'}`}>
+        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${workflowStep === 'review' ? 'bg-blue-100 text-blue-600' : ['merge', 'import', 'complete'].includes(workflowStep) ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+          1
+        </div>
+        <span className="text-sm font-medium">Review & Select</span>
+      </div>
+      <div className={`w-8 h-0.5 ${['merge', 'import', 'complete'].includes(workflowStep) ? 'bg-green-600' : 'bg-gray-300'}`}></div>
+      <div className={`flex items-center space-x-2 ${workflowStep === 'merge' ? 'text-blue-600' : ['import', 'complete'].includes(workflowStep) ? 'text-green-600' : 'text-gray-400'}`}>
+        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${workflowStep === 'merge' ? 'bg-blue-100 text-blue-600' : ['import', 'complete'].includes(workflowStep) ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+          2
+        </div>
+        <span className="text-sm font-medium">Merge Duplicates</span>
+      </div>
+      <div className={`w-8 h-0.5 ${['import', 'complete'].includes(workflowStep) ? 'bg-green-600' : 'bg-gray-300'}`}></div>
+      <div className={`flex items-center space-x-2 ${workflowStep === 'import' ? 'text-blue-600' : workflowStep === 'complete' ? 'text-green-600' : 'text-gray-400'}`}>
+        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${workflowStep === 'import' ? 'bg-blue-100 text-blue-600' : workflowStep === 'complete' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+          3
+        </div>
+        <span className="text-sm font-medium">Import</span>
+      </div>
+    </div>
+  );
 
   if (isImporting) {
     return (
@@ -1277,33 +1409,17 @@ export default function PendingEmployersImport() {
         </p>
         
         {/* Workflow Steps Indicator */}
-        <div className="flex items-center justify-center space-x-4 mt-4 mb-6">
-          <div className={`flex items-center space-x-2 ${workflowStep === 'review' ? 'text-blue-600' : workflowStep === 'merge' || workflowStep === 'import' || workflowStep === 'complete' ? 'text-green-600' : 'text-gray-400'}`}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${workflowStep === 'review' ? 'bg-blue-100 text-blue-600' : workflowStep === 'merge' || workflowStep === 'import' || workflowStep === 'complete' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
-              1
-            </div>
-            <span className="text-sm font-medium">Review & Select</span>
-          </div>
-          
-          <div className={`w-8 h-0.5 ${workflowStep === 'merge' || workflowStep === 'import' || workflowStep === 'complete' ? 'bg-green-600' : 'bg-gray-300'}`}></div>
-          
-          <div className={`flex items-center space-x-2 ${workflowStep === 'merge' ? 'text-blue-600' : workflowStep === 'import' || workflowStep === 'complete' ? 'text-green-600' : 'text-gray-400'}`}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${workflowStep === 'merge' ? 'bg-blue-100 text-blue-600' : workflowStep === 'import' || workflowStep === 'complete' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
-              2
-            </div>
-            <span className="text-sm font-medium">Merge Duplicates</span>
-          </div>
-          
-          <div className={`w-8 h-0.5 ${workflowStep === 'import' || workflowStep === 'complete' ? 'bg-green-600' : 'bg-gray-300'}`}></div>
-          
-          <div className={`flex items-center space-x-2 ${workflowStep === 'import' ? 'text-blue-600' : workflowStep === 'complete' ? 'text-green-600' : 'text-gray-400'}`}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${workflowStep === 'import' ? 'bg-blue-100 text-blue-600' : workflowStep === 'complete' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
-              3
-            </div>
-            <span className="text-sm font-medium">Import</span>
-          </div>
-        </div>
+        {renderWorkflowSteps()}
       </div>
+
+      <Alert>
+        <Info className="h-4 w-4" />
+        <AlertDescription>
+          Review the list of pending employers below. Use the checkboxes to select which employers you want to import.
+          For subcontractors, please ensure you review and confirm the assigned <strong>Trade Type</strong>.
+          You can also adjust the assigned <strong>Role</strong> for any employer.
+        </AlertDescription>
+      </Alert>
 
       <div className="space-y-4">
         {/* Always show the toggle and controls */}
@@ -1352,7 +1468,7 @@ export default function PendingEmployersImport() {
                 <div className="space-y-4">
                 <div className="flex gap-2 mb-4">
                   <Button variant="outline" size="sm" onClick={selectAll}>
-                    Select All
+                    Select All ({pendingEmployers.length})
                   </Button>
                   <Button variant="outline" size="sm" onClick={selectNone}>
                     Select None
@@ -1362,32 +1478,34 @@ export default function PendingEmployersImport() {
                   </div>
                 </div>
 
-                <div className="flex gap-4 p-3 bg-blue-50 rounded border border-blue-200">
-                  <Label className="text-sm font-medium">Import Mode:</Label>
-                  <div className="flex gap-4">
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        value="employer_only"
-                        checked={projectLinkingMode === 'employer_only'}
-                        onChange={(e) => setProjectLinkingMode(e.target.value as any)}
-                      />
-                      <span className="text-sm">Employers Only</span>
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        value="with_projects"
-                        checked={projectLinkingMode === 'with_projects'}
-                        onChange={(e) => setProjectLinkingMode(e.target.value as any)}
-                      />
-                      <span className="text-sm">Link to Projects</span>
-                    </label>
+                <div className="sticky top-0 z-10 bg-white py-4 border-b">
+                  <div className="flex gap-4 p-3 bg-blue-50 rounded border border-blue-200 items-center">
+                    <Label className="text-sm font-medium">Import Mode:</Label>
+                    <div className="flex gap-4">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          value="employer_only"
+                          checked={projectLinkingMode === 'employer_only'}
+                          onChange={(e) => setProjectLinkingMode(e.target.value as any)}
+                        />
+                        <span className="text-sm">Employers Only</span>
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          value="with_projects"
+                          checked={projectLinkingMode === 'with_projects'}
+                          onChange={(e) => setProjectLinkingMode(e.target.value as any)}
+                        />
+                        <span className="text-sm">Link to Projects</span>
+                      </label>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div className="space-y-3 max-h-96 overflow-y-auto">
+              <div className="space-y-3 max-h-[calc(100vh-450px)] overflow-y-auto">
                 {pendingEmployers.map((employer) => (
                   <div key={employer.id} className="border rounded-lg p-4 space-y-3">
                     <div className="flex items-center justify-between">
@@ -1397,7 +1515,7 @@ export default function PendingEmployersImport() {
                           checked={selectedEmployers.has(employer.id)}
                           onChange={() => toggleSelection(employer.id)}
                           className="w-4 h-4"
-                          disabled={!!employer.import_status} // Disable selection for processed employers
+                          disabled={!!(employer.import_status && employer.import_status !== 'pending')} // Disable selection for processed employers
                         />
                         <div>
                           <div className="flex items-center gap-2">
@@ -1538,56 +1656,58 @@ export default function PendingEmployersImport() {
                 ))}
               </div>
 
-              <div className="flex justify-center gap-4 mt-6">
-                {/* Show EBA search for processed employers */}
-                {showProcessedEmployers && pendingEmployers.some(emp => emp.import_status === 'imported') && (
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      const importedEmployers = pendingEmployers.filter(emp => emp.import_status === 'imported');
-                      const processedEmployers = importedEmployers.map(emp => ({
-                        id: emp.imported_employer_id || emp.id,
-                        name: emp.company_name
-                      }));
-                      
-                      // Set up mock import results for EBA search
-                      setImportResults({
-                        success: importedEmployers.length,
-                        errors: [],
-                        employersCreated: importedEmployers.map(emp => emp.company_name),
-                        processedEmployers: processedEmployers,
-                        duplicatesResolved: 0,
-                        relationshipsCreated: 0,
-                        ebaSearchesCompleted: 0,
-                        ebaRecordsCreated: 0
-                      });
-                      setShowEbaSearch(true);
-                    }}
-                    disabled={isEbaSearching}
-                  >
-                    <Search className="w-4 h-4 mr-2" />
-                    Search EBAs for Imported Employers
-                  </Button>
-                )}
-                
-                {/* Regular import button - only show for unprocessed employers */}
-                {selectedEmployers.size > 0 && pendingEmployers.some(emp => selectedEmployers.has(emp.id) && !emp.import_status) && (
-                  <Button 
-                    onClick={importSelectedEmployers}
-                    disabled={isImporting || selectedEmployers.size === 0}
-                    className="px-8"
-                  >
-                    {isImporting ? (
-                      <>
-                        <img src="/spinner.gif" alt="Loading" className="w-4 h-4 mr-2" />
-                        Importing...
-                      </>
-                    ) : (
-                      `Import ${selectedEmployers.size} Selected Employers${projectLinkingMode === 'with_projects' ? ' + Link to Projects' : ''} (with Duplicate Detection)`
-                    )}
-                  </Button>
-                )}
-                </div>
+              <div className="sticky bottom-0 z-10 bg-white py-4 border-t">
+                <div className="flex justify-center gap-4 mt-6">
+                  {/* Show EBA search for processed employers */}
+                  {showProcessedEmployers && pendingEmployers.some(emp => emp.import_status === 'imported') && (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        const importedEmployers = pendingEmployers.filter(emp => emp.import_status === 'imported');
+                        const processedEmployers = importedEmployers.map(emp => ({
+                          id: emp.imported_employer_id || emp.id,
+                          name: emp.company_name
+                        }));
+                        
+                        // Set up mock import results for EBA search
+                        setImportResults({
+                          success: importedEmployers.length,
+                          errors: [],
+                          employersCreated: importedEmployers.map(emp => emp.company_name),
+                          processedEmployers: processedEmployers,
+                          duplicatesResolved: 0,
+                          relationshipsCreated: 0,
+                          ebaSearchesCompleted: 0,
+                          ebaRecordsCreated: 0
+                        });
+                        setShowEbaSearch(true);
+                      }}
+                      disabled={isEbaSearching}
+                    >
+                      <Search className="w-4 h-4 mr-2" />
+                      Search EBAs for Imported Employers
+                    </Button>
+                  )}
+                  
+                  {/* Regular import button - only show for unprocessed employers */}
+                  {selectedEmployers.size > 0 && pendingEmployers.some(emp => selectedEmployers.has(emp.id) && (!emp.import_status || emp.import_status === 'pending')) && (
+                    <Button 
+                      onClick={importSelectedEmployers}
+                      disabled={isImporting || selectedEmployers.size === 0}
+                      className="px-8"
+                    >
+                      {isImporting ? (
+                        <>
+                          <img src="/spinner.gif" alt="Loading" className="w-4 h-4 mr-2" />
+                          Importing...
+                        </>
+                      ) : (
+                        `Import ${selectedEmployers.size} Selected Employers${projectLinkingMode === 'with_projects' ? ' + Link to Projects' : ''} (with Duplicate Detection)`
+                      )}
+                    </Button>
+                  )}
+                  </div>
+              </div>
               </>
             )}
           </CardContent>
@@ -1795,7 +1915,39 @@ export default function PendingEmployersImport() {
             </DialogDescription>
           </DialogHeader>
           
-          {/* Select All Controls for Exact Matches */}
+          {/* Merge Progress Indicator */}
+          {isMergingAllExact && (
+            <div className="border-b pb-4 mb-4 bg-blue-50 p-4 rounded">
+              <div className="flex items-center justify-center space-x-2 mb-4">
+                <img src="/spinner.gif" alt="Loading" className="w-6 h-6" />
+                <h3 className="text-lg font-semibold text-blue-800">Merging Duplicate Employers...</h3>
+              </div>
+              
+              {mergeProgress.total > 0 && (
+                <div className="space-y-3">
+                  <div className="flex justify-between text-sm text-gray-700">
+                    <span>Processing {mergeProgress.current} of {mergeProgress.total} employers</span>
+                    <span>{Math.round((mergeProgress.current / mergeProgress.total) * 100)}%</span>
+                  </div>
+                  
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div 
+                      className="bg-blue-600 h-3 rounded-full transition-all duration-300" 
+                      style={{ width: `${(mergeProgress.current / mergeProgress.total) * 100}%` }}
+                    ></div>
+                  </div>
+                  
+                  {mergeProgress.currentEmployer && (
+                    <p className="text-sm text-gray-600 text-center">
+                      Currently processing: <span className="font-medium">{mergeProgress.currentEmployer}</span>
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+          
+          {/* Bulk Resolution Controls */}
           {Object.values(duplicateDetections).some(d => d.hasExactMatch) && (
             <div className="border-b pb-4 mb-4">
               <div className="flex items-center justify-between">
@@ -1837,6 +1989,24 @@ export default function PendingEmployersImport() {
               </div>
               <p className="text-sm text-gray-600 mt-2">
                 Select exact matches to merge duplicates automatically and use the oldest record as the canonical employer.
+              </p>
+            </div>
+          )}
+          {/* Auto-accept create_new for all non-exact matches to reduce per-employer clicks */}
+          {Object.values(duplicateDetections).some(d => !d.hasExactMatch) && (
+            <div className="border-b pb-4 mb-4">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-medium text-gray-900">
+                  Fast-Track Unmatched Employers
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" onClick={autoAcceptCreateNewForUnmatched}>
+                    Accept All As New Employers
+                  </Button>
+                </div>
+              </div>
+              <p className="text-sm text-gray-600 mt-2">
+                For employers without exact matches, mark them as "Create New" in bulk. You can still review individual items before proceeding.
               </p>
             </div>
           )}
@@ -1911,9 +2081,14 @@ export default function PendingEmployersImport() {
                           <Button
                             size="sm"
                             onClick={() => mergeExactMatchesFor(employerId)}
-                            disabled={Boolean(isMergingExact[employerId])}
+                            disabled={Boolean(isMergingExact[employerId]) || detection.userDecision === 'use_existing'}
                           >
-                            {isMergingExact[employerId] ? 'Merging...' : 'Merge Exact Matches'}
+                            {isMergingExact[employerId] ? (
+                              <>
+                                <img src="/spinner.gif" alt="Loading" className="w-4 h-4 mr-2" />
+                                Merging...
+                              </>
+                            ) : detection.userDecision === 'use_existing' ? '✓ Merged' : 'Merge Exact Matches'}
                           </Button>
                         </div>
                       )}
@@ -1938,6 +2113,7 @@ export default function PendingEmployersImport() {
                         size="sm"
                         onClick={() => updateDuplicateDecision(employerId, 'create_new')}
                         className={detection.userDecision === 'create_new' ? 'bg-amber-100' : ''}
+                        disabled={detection.userDecision === 'use_existing'}
                       >
                         {detection.userDecision === 'create_new' ? '✓ Create New Anyway' : 'Create New Anyway'}
                       </Button>
@@ -1984,10 +2160,11 @@ export default function PendingEmployersImport() {
               </Card>
             ))}
             
-            <div className="flex justify-end gap-2 pt-4 border-t">
+            <div className="sticky bottom-0 z-10 bg-white py-4 border-t flex justify-end gap-2">
               <Button
                 variant="outline"
-                onClick={() => setShowDuplicateResolution(false)}
+                onClick={cancelImport}
+                disabled={isImporting || isMergingAllExact}
               >
                 Cancel Import
               </Button>

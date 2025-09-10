@@ -90,9 +90,14 @@ export default function CreateProjectDialog() {
       if (linkErr) throw linkErr;
 
       if (builderId) {
-        await (supabase as any)
-          .from("project_employer_roles")
-          .insert({ project_id: projectId, employer_id: builderId, role: "builder", start_date: new Date().toISOString().split('T')[0] });
+        // Use RPC function to assign builder role in new system
+        await supabase.rpc('assign_contractor_role', {
+          p_project_id: projectId,
+          p_employer_id: builderId,
+          p_role_code: 'builder',
+          p_company_name: 'Builder',
+          p_is_primary: true
+        });
       }
 
       if (jvStatus) {

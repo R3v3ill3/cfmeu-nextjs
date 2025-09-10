@@ -51,7 +51,7 @@ export default function EmployersPage() {
           estimated_worker_count,
           company_eba_records!left(*),
           worker_placements!left(id),
-          project_employer_roles!left(id)
+          project_assignments!left(id)
         `)
         .order("name", { ascending: true })
 
@@ -77,7 +77,7 @@ export default function EmployersPage() {
       list = list.filter((emp: any) => {
         const hasEstimatedWorkers = (emp.estimated_worker_count || 0) > 0
         const hasWorkers = Array.isArray(emp.worker_placements) && emp.worker_placements.length > 0
-        const hasProjectRoles = Array.isArray(emp.project_employer_roles) && emp.project_employer_roles.length > 0
+        const hasProjectRoles = Array.isArray(emp.project_assignments) && emp.project_assignments.length > 0
         const ebaRec = emp.company_eba_records?.[0]
         const cat = ebaRec ? getEbaCategory(ebaRec).category : 'no'
         const hasRecentEba = cat !== 'no'

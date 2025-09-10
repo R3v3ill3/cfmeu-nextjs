@@ -17,7 +17,7 @@ type Impact = {
   union_activities_count: number;
   worker_placements_count: number;
   project_contractor_trades_count: number;
-  project_employer_roles_count: number;
+  project_assignments_count: number;
   project_organisers_count: number;
   project_builder_jv_count: number;
   project_eba_details_count: number;
@@ -121,8 +121,8 @@ export function DeleteProjectDialog({
                   <Badge variant="secondary">{impact.project_contractor_trades_count}</Badge>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>Employer Roles</span>
-                  <Badge variant="secondary">{impact.project_employer_roles_count}</Badge>
+                  <span>Project Assignments</span>
+                  <Badge variant="secondary">{impact.project_assignments_count}</Badge>
                 </div>
                 <div className="flex items-center justify-between">
                   <span>Organisers</span>

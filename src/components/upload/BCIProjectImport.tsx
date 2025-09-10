@@ -9,12 +9,15 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle, AlertCircle, Info, Users, Building2, Wrench, MapPin, Search, Plus } from 'lucide-react';
+import { CheckCircle, AlertCircle, Info, Users, Building2, Wrench, MapPin, Search, Plus, ArrowRight, X, AlertTriangle, HelpCircle } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { inferTradeTypeFromCompanyName, inferTradeTypeFromCsvRole, getTradeTypeLabel, TradeType, getTradeTypeCategories } from '@/utils/bciTradeTypeInference';
 import { findBestEmployerMatch, normalizeCompanyName } from '@/utils/workerDataProcessor';
 import { mapBciStageToStageClass, defaultOrganisingUniverseFor } from '@/utils/stageClassification';
+// Removed unused and missing imports
+import { useToast } from '@/components/ui/use-toast';
+// Removed unused hooks
 
 // Enhanced types for BCI CSV data
 interface BCICsvRow {
@@ -39,6 +42,7 @@ interface BCICsvRow {
   postCode: string;
   projectCountry: string;
   roleOnProject: string;
+  companyId?: string;
   companyName: string;
   companyStreet: string;
   companyTown: string;
@@ -56,6 +60,9 @@ interface BCICsvRow {
   latitude?: string;
   longitude?: string;
 }
+
+
+// Removed misplaced early default export; declare at end of file
 
 interface CompanyClassification {
   companyName: string;
@@ -138,11 +145,13 @@ type BCIImportMode = 'projects-and-employers' | 'projects-only' | 'employers-to-
 
 interface BCIProjectImportProps {
   csvData: BCICsvRow[];
-  onImportComplete: () => void;
-  mode?: BCIImportMode;
+  mode: BCIImportMode;
+  onImportComplete?: () => void;
+  initialFile?: File;
+  onEmployersStaged?: () => void;
 }
 
-export default function BCIProjectImport({ csvData, onImportComplete, mode = 'projects-and-employers' }: BCIProjectImportProps) {
+const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onImportComplete, initialFile, onEmployersStaged }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentStep, setCurrentStep] = useState<'preview' | 'employer_matching' | 'trade_type_confirmation' | 'importing' | 'complete'>('preview');
   const [processedData, setProcessedData] = useState<BCIProjectData[]>([]);
@@ -162,6 +171,32 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
   const [isLoadingMatches, setIsLoadingMatches] = useState(false);
   const [matchingProgress, setMatchingProgress] = useState(0);
   const [totalCompanies, setTotalCompanies] = useState(0);
+  
+  // Help dialog state
+  const [showHelpDialog, setShowHelpDialog] = useState(false);
+  
+  // Import progress state
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0, currentItem: '' });
+  
+  // Auto-confirm progress state
+  const [isAutoConfirming, setIsAutoConfirming] = useState(false);
+  
+  // Project validation state
+  const [projectValidation, setProjectValidation] = useState<{
+    isValidating: boolean;
+    missingProjects: string[];
+    validProjects: string[];
+    showValidationDialog: boolean;
+  }>({
+    isValidating: false,
+    missingProjects: [],
+    validProjects: [],
+    showValidationDialog: false
+  });
+  
+  // Import model selection state
+  const [showImportModelDialog, setShowImportModelDialog] = useState(false);
+  const [selectedImportModel, setSelectedImportModel] = useState<'direct' | 'stage' | 'guided' | null>(null);
   
   // Manual search states
   const [showManualSearch, setShowManualSearch] = useState(false);
@@ -686,11 +721,135 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
     return consolidated;
   };
 
+  // Bulk: Create all unmatched employers directly (no staging)
+  const markAllAsCreateNew = async () => {
+    setIsProcessing(true);
+    setImportProgress({ current: 0, total: 0, currentItem: 'Preparing employers...' });
+    
+    try {
+      // Get all unmatched employers
+      const unmatchedEmployers = Array.from(consolidatedMatches.values())
+        .filter(c => c.confidence !== 'exact');
+      
+      setImportProgress({ current: 0, total: unmatchedEmployers.length, currentItem: 'Creating employers...' });
+      
+      let created = 0;
+      const createdEmployerIds = new Map<string, string>(); // normalized name -> employer ID
+      
+      for (const consolidated of unmatchedEmployers) {
+        setImportProgress(prev => ({ 
+          ...prev, 
+          current: created + 1, 
+          currentItem: `Creating ${consolidated.companyName}...` 
+        }));
+        
+        // Find a CSV row for this company to get full data
+        const csvRow = csvData.find(row => 
+          normalizeCompanyName(row.companyName) === consolidated.normalizedName
+        );
+        
+        if (csvRow) {
+          try {
+            const employerId = await createEmployer(csvRow);
+            createdEmployerIds.set(consolidated.normalizedName, employerId);
+            created++;
+          } catch (error) {
+            console.error(`Failed to create employer ${consolidated.companyName}:`, error);
+          }
+        }
+      }
+      
+      // Update the matches to reflect the created employers
+      const updated = new Map(consolidatedMatches);
+      updated.forEach((c, key) => {
+        if (c.confidence !== 'exact' && createdEmployerIds.has(key)) {
+          updated.set(key, { 
+            ...c, 
+            userConfirmed: true,
+            matchedEmployerId: createdEmployerIds.get(key),
+            confidence: 'exact',
+            action: 'confirm_match'
+          });
+        }
+      });
+      setConsolidatedMatches(updated);
+
+      // Also update detailed employerMatches
+      setEmployerMatches(prev => {
+        const copy = { ...prev } as any;
+        processedData.forEach(project => {
+          project.companies.forEach(company => {
+            if (!company.shouldImport) return;
+            const mk = `${project.projectId}-${company.companyName}-${company.csvRole}`;
+            const norm = normalizeCompanyName(company.companyName);
+            const employerId = createdEmployerIds.get(norm);
+            if (employerId) {
+              copy[mk] = {
+                ...(copy[mk] || {}),
+                action: 'confirm_match',
+                userConfirmed: true,
+                matchedEmployerId: employerId,
+                confidence: 'exact'
+              };
+            }
+          });
+        });
+        return copy;
+      });
+      
+      setImportProgress({ current: created, total: created, currentItem: 'Complete!' });
+      
+      setTimeout(() => {
+        setImportProgress({ current: 0, total: 0, currentItem: '' });
+        setIsProcessing(false);
+      }, 1000);
+      
+    } catch (error) {
+      console.error('Error creating employers:', error);
+      setIsProcessing(false);
+      setImportProgress({ current: 0, total: 0, currentItem: '' });
+    }
+  };
+
+  // Batch stage + batch import from within BCI flow (uses pending_employers + existing import path semantics)
+  const stageAndImportAll = async () => {
+    try {
+      // Stage all unmatched first
+      await stageAllUnmatchedEmployers();
+      // Open Employers tab programmatically by switching UploadPage Tabs via URL
+      // Note: we use query param to switch to employers tab and show Pending list
+      const url = new URL(window.location.href);
+      url.searchParams.set('importType', 'employers');
+      window.history.replaceState({}, '', url.toString());
+      alert('Staged all unmatched employers. Switching to Employers → Pending Import.');
+      // Soft navigate by simulating a click on Employers tab if present
+      const tab = Array.from(document.querySelectorAll('[role="tab"]')).find(el => el.textContent?.toLowerCase().includes('employers')) as HTMLElement | undefined;
+      if (tab) tab.click();
+    } catch (e) {
+      console.error('Stage and Import failed:', e);
+      alert('Stage and Import failed. Check console for details.');
+    }
+  };
+
   // Enhanced employer creation with duplicate prevention
   const createEmployer = async (companyData: any): Promise<string> => {
     const supabase = getSupabaseBrowserClient();
     
-    // Step 1: Check for exact name match
+    // Step 1: Check for BCI Company ID match first (if available)
+    if (companyData.companyId) {
+      const { data: bciMatch } = await supabase
+        .from('employers')
+        .select('id, name, bci_company_id')
+        .eq('bci_company_id', companyData.companyId)
+        .maybeSingle();
+      
+      if (bciMatch) {
+        console.log(`✓ Using existing BCI employer: ${bciMatch.name} (BCI ID: ${companyData.companyId})`);
+        return bciMatch.id;
+      }
+    }
+    
+    // Step 2: Check for exact name match
     const { data: exactMatch } = await supabase
       .from('employers')
       .select('id, name, address_line_1, suburb, state')
@@ -702,20 +861,7 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
       return exactMatch.id;
     }
     
-    // Step 2: Check for similar names (fuzzy matching)
-    const { data: similarEmployers } = await supabase
-      .from('employers')
-      .select('id, name, address_line_1, suburb, state')
-      .ilike('name', `%${companyData.companyName}%`)
-      .limit(5);
-    
-    const hasSimilar = similarEmployers && similarEmployers.length > 0;
-    if (hasSimilar) {
-      console.warn(`⚠ Found ${similarEmployers.length} similar employers for "${companyData.companyName}":`, 
-        similarEmployers.map(e => e.name));
-    }
-    
-    // Step 3: Create new employer
+    // Step 3: Create new employer WITH bci_company_id
     const { data, error } = await supabase
       .from('employers')
       .insert({
@@ -727,14 +873,22 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
         phone: companyData.companyPhone,
         email: companyData.companyEmail,
         primary_contact_name: `${companyData.contactFirstName} ${companyData.contactSurname}`.trim(),
-        employer_type: 'large_contractor'
+        employer_type: 'large_contractor',
+        bci_company_id: companyData.companyId  // ✅ ADD THIS CRITICAL FIELD
       })
       .select('id')
       .single();
     
     if (error) throw error;
     
-    console.log(`✓ Created new employer: ${companyData.companyName} (ID: ${data.id})`);
+    console.log(`✅ Created new employer: ${companyData.companyName} (ID: ${data.id}, BCI ID: ${companyData.companyId || 'MISSING'})`);
+    
+    // Debug: Log what we actually inserted
+    if (!companyData.companyId) {
+      console.warn(`⚠️ WARNING: Created employer without BCI Company ID! Company: ${companyData.companyName}`);
+      console.log('CSV Row data:', companyData);
+    }
+    
     return data.id;
   };
 
@@ -828,6 +982,9 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
 
   // Import only projects (no employers)
   const importProjectsOnly = async () => {
+    setIsProcessing(true);
+    setImportProgress({ current: 0, total: processedData.length, currentItem: 'Starting projects-only import...' });
+    
     const results = {
       success: 0,
       errors: [] as string[],
@@ -836,7 +993,16 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
       employersMatched: 0
     };
 
-    for (const project of processedData) {
+    console.log(`🚀 Starting projects-only import of ${processedData.length} projects...`);
+
+    for (let i = 0; i < processedData.length; i++) {
+      const project = processedData[i];
+      
+      setImportProgress(prev => ({ 
+        ...prev, 
+        current: i + 1, 
+        currentItem: `Creating ${project.projectName}...` 
+      }));
       try {
         const supabase = getSupabaseBrowserClient();
         // Check if project exists
@@ -891,9 +1057,19 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
         results.errors.push(e instanceof Error ? e.message : 'Unknown error');
       }
     }
+    
+    console.log(`✅ Projects-only import complete! Created ${results.success} projects.`);
+    
+    setImportProgress({ current: processedData.length, total: processedData.length, currentItem: 'Import complete!' });
+    
+    // Brief delay to show completion, then clear progress
+    setTimeout(() => {
+      setImportProgress({ current: 0, total: 0, currentItem: '' });
+      setIsProcessing(false);
+    }, 2000);
+    
     setImportResults(results);
     setCurrentStep('complete');
-    setIsProcessing(false);
   };
 
   // Move to trade type confirmation step
@@ -903,6 +1079,125 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
     setCurrentStep('trade_type_confirmation');
     // Scroll to top of the page
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Batch stage all unmatched employers to pending_employers table
+  const stageAllUnmatchedEmployers = async () => {
+    try {
+      console.log('🚀 Starting batch staging of all unmatched employers...');
+      console.log(`📊 Processing ${processedData.length} projects`);
+      
+      // Group all companies by BCI Company ID first, then by normalized name
+      const employerGroups = new Map<string, {
+        companyId?: string;
+        companyName: string;
+        projectAssociations: Array<{
+          project_id: string;
+          project_name: string;
+          csv_role: string;
+        }>;
+        csvRows: BCICsvRow[];
+        inferredRole: string;
+        inferredTradeType?: string;
+      }>();
+
+      let totalCompanies = 0;
+      let importableCompanies = 0;
+
+      // Process all companies from all projects
+      processedData.forEach(project => {
+        project.companies.forEach(company => {
+          totalCompanies++;
+          if (!company.shouldImport) {
+            console.log(`⏭️ Skipping ${company.companyName} (shouldImport: false, role: ${company.ourRole})`);
+            return;
+          }
+          importableCompanies++;
+
+          const csvRow = csvData.find(row => 
+            row.projectId === project.projectId && 
+            row.companyName === company.companyName
+          );
+
+          if (!csvRow) return;
+
+          // Use BCI Company ID as primary key, fallback to normalized name
+          const primaryKey = csvRow.companyId || normalizeCompanyName(company.companyName);
+          
+          const existing = employerGroups.get(primaryKey);
+          const projectAssociation = {
+            project_id: project.projectId,
+            project_name: project.projectName,
+            csv_role: company.csvRole
+          };
+
+          if (existing) {
+            // Check if this project association already exists
+            const hasAssociation = existing.projectAssociations.some(pa => 
+              pa.project_id === projectAssociation.project_id && 
+              pa.csv_role === projectAssociation.csv_role
+            );
+            
+            if (!hasAssociation) {
+              existing.projectAssociations.push(projectAssociation);
+              existing.csvRows.push(csvRow);
+            }
+          } else {
+            employerGroups.set(primaryKey, {
+              companyId: csvRow.companyId,
+              companyName: company.companyName,
+              projectAssociations: [projectAssociation],
+              csvRows: [csvRow],
+              inferredRole: company.ourRole,
+              inferredTradeType: company.tradeType
+            });
+          }
+        });
+      });
+
+      // Insert all unique employers to pending_employers table
+      const supabase = getSupabaseBrowserClient();
+      const pendingEmployersToInsert = Array.from(employerGroups.values()).map(group => ({
+        company_name: group.companyName,
+        csv_role: group.csvRows.map(r => r.roleOnProject).join(', '), // Combine all roles
+        source: 'bci',
+        bci_company_id: group.companyId || null,
+        inferred_trade_type: group.inferredTradeType,
+        our_role: group.inferredRole,
+        project_associations: group.projectAssociations,
+        raw: group.csvRows[0] // Use first CSV row as representative
+      }));
+
+      console.log(`📈 Summary:`);
+      console.log(`  - Total companies in CSV: ${totalCompanies}`);
+      console.log(`  - Importable companies: ${importableCompanies}`);
+      console.log(`  - Unique employers to stage: ${pendingEmployersToInsert.length}`);
+      console.log(`  - Total project associations: ${employerGroups.size}`);
+
+      if (pendingEmployersToInsert.length === 0) {
+        alert('No employers found to stage. This could mean:\n\n1. All companies are marked as non-construction (consultants, engineers, etc.)\n2. All companies are already staged\n3. No companies meet the import criteria\n\nCheck the browser console for detailed logs.');
+        return;
+      }
+
+      // Batch insert to pending_employers
+      const { data, error } = await supabase
+        .from('pending_employers')
+        .insert(pendingEmployersToInsert)
+        .select('id, company_name');
+
+      if (error) {
+        console.error('Batch insert failed:', error);
+        alert(`Failed to stage employers: ${error.message}`);
+        return;
+      }
+
+      console.log(`✅ Successfully staged ${data?.length || 0} employers`);
+      alert(`✅ Successfully staged ${data?.length || 0} unique employers for import!\n\nGo to the Pending Employers Import page to review and import them.`);
+
+    } catch (error) {
+      console.error('Error staging employers:', error);
+      alert(`Error staging employers: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   };
 
   // Move to import step
@@ -921,6 +1216,9 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
 
   // Enhanced import with user confirmations
   const performImport = async () => {
+    setIsProcessing(true);
+    setImportProgress({ current: 0, total: processedData.length, currentItem: 'Starting import...' });
+    
     const results = {
       success: 0,
       errors: [] as string[],
@@ -929,7 +1227,16 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
       employersMatched: 0
     };
 
-    for (const project of processedData) {
+    console.log(`🚀 Starting BCI import of ${processedData.length} projects...`);
+
+    for (let i = 0; i < processedData.length; i++) {
+      const project = processedData[i];
+      
+      setImportProgress(prev => ({ 
+        ...prev, 
+        current: i + 1, 
+        currentItem: `Importing ${project.projectName}...` 
+      }));
       try {
         const supabase = getSupabaseBrowserClient();
         
@@ -1117,26 +1424,23 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
               }
               
             } else if (company.ourRole === 'head_contractor') {
-              // Check for existing head contractor role
-              const { data: existingRole } = await supabase
-                .from('project_employer_roles')
-                .select('id')
-                .eq('project_id', projectId)
-                .eq('employer_id', employerId)
-                .eq('role', 'head_contractor')
-                .maybeSingle();
-              
-              if (existingRole) {
-                console.log(`✓ Head contractor relationship already exists for ${project.projectName}`);
-              } else {
-                await supabase
-                  .from('project_employer_roles')
-                  .insert({
-                    project_id: projectId,
-                    employer_id: employerId,
-                    role: 'head_contractor'
-                  });
-                console.log(`✓ Created head contractor role for ${project.projectName}`);
+              // Assign as head contractor via new RPC
+              try {
+                const { data: hcResult, error: hcError } = await supabase.rpc('assign_contractor_role', {
+                  p_project_id: projectId,
+                  p_employer_id: employerId,
+                  p_role_code: 'head_contractor',
+                  p_company_name: company.companyName,
+                  p_is_primary: false
+                });
+                if (hcError) {
+                  console.error(`Error assigning head contractor ${company.companyName}:`, hcError);
+                } else {
+                  const result = hcResult?.[0];
+                  console.log(result?.message || `✓ Assigned ${company.companyName} as head_contractor`);
+                }
+              } catch (e) {
+                console.error('Head contractor assignment failed:', e);
               }
               
             } else if (company.ourRole === 'subcontractor') {
@@ -1145,80 +1449,24 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
                 ? company.tradeTypes 
                 : [finalTradeType];
               
-              if (tradeTypesToAssign.length > 1) {
-                // Use multiple trade types assignment function
-                console.log(`🔄 Assigning ${company.companyName} to ${tradeTypesToAssign.length} trade types: ${tradeTypesToAssign.join(', ')}`);
+              // Assign all trade types via RPC (supports multiple per employer)
+              for (const tt of tradeTypesToAssign) {
                 try {
-                  const { data: multipleResult, error: multipleError } = await supabase.rpc('assign_multiple_trade_types', {
+                  const { data: tRes, error: tErr } = await supabase.rpc('assign_contractor_trade', {
                     p_project_id: projectId,
                     p_employer_id: employerId,
-                    p_trade_types: tradeTypesToAssign,
-                    p_stage: 'structure',
-                    p_estimated_workforce: null,
-                    p_eba_signatory: 'not_specified'
+                    p_trade_type: tt,
+                    p_company_name: company.companyName
                   });
-                  
-                  if (multipleError) {
-                    console.error(`Error assigning multiple trade types for ${company.companyName}:`, multipleError);
-                    results.errors.push(`Failed to assign multiple trade types for ${company.companyName}: ${multipleError.message}`);
-                  } else if (multipleResult) {
-                    const successful = multipleResult.filter((r: any) => r.success);
-                    const failed = multipleResult.filter((r: any) => !r.success);
-                    
-                    console.log(`✓ Assigned ${company.companyName} to ${successful.length}/${tradeTypesToAssign.length} trade types`);
-                    if (failed.length > 0) {
-                      console.warn(`⚠ Failed assignments for ${company.companyName}:`, failed.map((f: any) => f.message).join(', '));
-                    }
-                  }
-                } catch (error) {
-                  console.error(`Error in multiple trade types assignment:`, error);
-                  results.errors.push(`Failed to assign multiple trade types for ${company.companyName}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-                }
-              } else {
-                // Single trade type assignment (existing logic enhanced)
-                try {
-                  const { data: assignmentResult, error: assignmentError } = await supabase.rpc('assign_contractor_unified', {
-                    p_project_id: projectId,
-                    p_job_site_id: jobSiteId,
-                    p_employer_id: employerId,
-                    p_trade_type: finalTradeType,
-                    p_estimated_workforce: null, // BCI doesn't provide workforce estimates
-                    p_eba_signatory: 'not_specified',
-                    p_stage: 'structure' // Default stage for BCI imports
-                  });
-                  
-                  if (assignmentError) {
-                    console.error(`Error assigning contractor ${company.companyName}:`, assignmentError);
+                  if (tErr) {
+                    console.error(`Error assigning ${company.companyName} to ${tt}:`, tErr);
+                    results.errors.push(`Failed to assign ${company.companyName} to ${tt}: ${tErr.message}`);
                   } else {
-                    const result = assignmentResult?.[0];
-                    if (result?.success) {
-                      console.log(`✓ Assigned contractor to project and site: ${company.companyName} (${finalTradeType}) - Assignment ID: ${result.assignment_id}`);
-                    } else {
-                      console.warn(`⚠ Failed to assign contractor: ${result?.message || 'Unknown error'}`);
-                    }
+                    const r = tRes?.[0];
+                    console.log(r?.message || `✓ Assigned ${company.companyName} to ${tt}`);
                   }
-                } catch (error) {
-                  console.error(`Error in unified contractor assignment:`, error);
-                  // Enhanced fallback that supports multiple trade types
-                  try {
-                    const assignmentId = crypto.randomUUID();
-                    await supabase
-                      .from('project_contractor_trades')
-                      .insert({
-                        project_id: projectId,
-                        employer_id: employerId,
-                        trade_type: finalTradeType,
-                        stage: 'structure',
-                        assignment_id: assignmentId,
-                        assignment_notes: `BCI import fallback - ${finalTradeType}`,
-                        created_at: new Date().toISOString()
-                      });
-                    console.log(`✓ Created trade relationship (enhanced fallback) for ${project.projectName}: ${finalTradeType} - Assignment ID: ${assignmentId}`);
-                  } catch (fallbackError) {
-                    console.error(`Enhanced fallback also failed:`, fallbackError);
-                    // Log but continue with other assignments
-                    results.errors.push(`Failed to assign ${company.companyName} (${finalTradeType}) to ${project.projectName}: ${fallbackError instanceof Error ? fallbackError.message : 'Unknown error'}`);
-                  }
+                } catch (e) {
+                  console.error(`Trade assignment exception for ${company.companyName}/${tt}:`, e);
                 }
               }
             }
@@ -1234,13 +1482,25 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
       }
     }
 
+    console.log(`✅ BCI import complete! Created/updated ${results.success} projects, ${results.employersCreated} employers created, ${results.employersMatched} employers matched.`);
+    
+    setImportProgress({ current: processedData.length, total: processedData.length, currentItem: 'Import complete!' });
+    
+    // Brief delay to show completion, then clear progress
+    setTimeout(() => {
+      setImportProgress({ current: 0, total: 0, currentItem: '' });
+      setIsProcessing(false);
+    }, 2000);
+    
     setImportResults(results);
     setCurrentStep('complete');
-    setIsProcessing(false);
   };
 
   // Employers to existing projects only, matching by BCI Project ID
   const performEmployersToExistingImport = async () => {
+    setIsProcessing(true);
+    setImportProgress({ current: 0, total: processedData.length, currentItem: 'Starting employers-to-existing import...' });
+    
     const results = {
       success: 0,
       errors: [] as string[],
@@ -1249,7 +1509,16 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
       employersMatched: 0
     };
 
-    for (const project of processedData) {
+    console.log(`🚀 Starting employers-to-existing import for ${processedData.length} projects...`);
+
+    for (let i = 0; i < processedData.length; i++) {
+      const project = processedData[i];
+      
+      setImportProgress(prev => ({ 
+        ...prev, 
+        current: i + 1, 
+        currentItem: `Processing ${project.projectName}...` 
+      }));
       try {
         const supabase = getSupabaseBrowserClient();
         const { data: existingProject } = await supabase
@@ -1302,48 +1571,50 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
             }
             
           } else if (company.ourRole === 'head_contractor') {
-            const { data: existingRole } = await supabase
-              .from('project_employer_roles')
-              .select('id')
-              .eq('project_id', existingProject.id)
-              .eq('employer_id', employerId)
-              .eq('role', 'head_contractor')
-              .maybeSingle();
-            
-            if (!existingRole) {
-              await supabase.from('project_employer_roles').insert({ 
-                project_id: existingProject.id, 
-                employer_id: employerId, 
-                role: 'head_contractor' 
+            try {
+              const { data: hcRes, error: hcErr } = await supabase.rpc('assign_contractor_role', {
+                p_project_id: existingProject.id,
+                p_employer_id: employerId,
+                p_role_code: 'head_contractor',
+                p_company_name: company.companyName,
+                p_is_primary: false
               });
-              console.log(`✓ Created head contractor role for ${project.projectName}`);
-            } else {
-              console.log(`✓ Head contractor relationship already exists for ${project.projectName}`);
+              if (hcErr) {
+                console.error('Head contractor assignment failed:', hcErr);
+              } else {
+                const r = hcRes?.[0];
+                console.log(r?.message || `✓ Assigned head contractor for ${project.projectName}`);
+              }
+            } catch (e) {
+              console.error('Head contractor RPC error:', e);
             }
             
           } else if (company.ourRole === 'subcontractor') {
-            const { data: existingTrade } = await supabase
-              .from('project_contractor_trades')
-              .select('id, trade_type')
-              .eq('project_id', existingProject.id)
-              .eq('employer_id', employerId)
-              .maybeSingle();
-            
             const finalTradeType = company.tradeType || 'general_construction';
             
-            if (existingTrade) {
-              if (existingTrade.trade_type !== finalTradeType) {
-                results.errors.push(`${project.projectName}: Employer already linked with different trade type (${existingTrade.trade_type} vs ${finalTradeType})`);
-              } else {
-                console.log(`✓ Trade relationship already exists for ${project.projectName}: ${finalTradeType}`);
-              }
-            } else {
-              await supabase.from('project_contractor_trades').insert({ 
-                project_id: existingProject.id, 
-                employer_id: employerId, 
-                trade_type: finalTradeType 
+            // Use enhanced trade assignment that handles conflicts
+            try {
+              const { data: tradeResult, error: tradeError } = await supabase.rpc('assign_contractor_trade', {
+                p_project_id: existingProject.id,
+                p_employer_id: employerId,
+                p_trade_type: finalTradeType,
+                p_company_name: company.companyName
               });
-              console.log(`✓ Created trade relationship for ${project.projectName}: ${finalTradeType}`);
+              
+              if (tradeError) {
+                console.error(`Error assigning trade ${finalTradeType} to ${company.companyName}:`, tradeError);
+                results.errors.push(`${project.projectName}: Failed to assign trade ${finalTradeType} to ${company.companyName}: ${tradeError.message}`);
+              } else {
+                const result = tradeResult?.[0];
+                if (result?.success) {
+                  console.log(`✓ ${result.message} (${project.projectName})`);
+                } else {
+                  console.warn(`⚠ Trade assignment issue: ${result?.message || 'Unknown error'}`);
+                }
+              }
+            } catch (error) {
+              console.error(`Error in trade assignment:`, error);
+              results.errors.push(`${project.projectName}: Trade assignment failed for ${company.companyName}: ${error instanceof Error ? error.message : 'Unknown error'}`);
             }
           }
           results.employersMatched++;
@@ -1354,9 +1625,19 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
         results.errors.push(e instanceof Error ? e.message : 'Unknown error');
       }
     }
+    
+    console.log(`✅ Employers-to-existing import complete! Processed ${results.success} projects, ${results.employersCreated} employers created, ${results.employersMatched} employers matched.`);
+    
+    setImportProgress({ current: processedData.length, total: processedData.length, currentItem: 'Import complete!' });
+    
+    // Brief delay to show completion, then clear progress
+    setTimeout(() => {
+      setImportProgress({ current: 0, total: 0, currentItem: '' });
+      setIsProcessing(false);
+    }, 2000);
+    
     setImportResults(results);
     setCurrentStep('complete');
-    setIsProcessing(false);
   };
 
   // Update employer match action
@@ -1506,6 +1787,7 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
                 company_name: company.companyName,
                 csv_role: company.csvRole,
                 source: 'bci',
+                bci_company_id: csvRow.companyId || null, // Store BCI Company ID
                 inferred_trade_type: company.tradeType,
                 our_role: company.ourRole,
                 project_associations: [{
@@ -1565,6 +1847,398 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
   // Skip this company
   const skipCompany = (matchKey: string) => {
     updateEmployerMatch(matchKey, 'skip');
+  };
+
+  // Validate that projects exist before import
+  const validateProjects = async () => {
+    setProjectValidation(prev => ({ ...prev, isValidating: true }));
+    
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const uniqueProjectIds = [...new Set(processedData.map(p => p.projectId))];
+      
+      const { data: existingProjects } = await supabase
+        .from('projects')
+        .select('id, name')
+        .in('id', uniqueProjectIds);
+      
+      const existingIds = new Set(existingProjects?.map(p => p.id) || []);
+      const validProjects = uniqueProjectIds.filter(id => existingIds.has(id));
+      const missingProjects = uniqueProjectIds.filter(id => !existingIds.has(id));
+      
+      setProjectValidation({
+        isValidating: false,
+        validProjects,
+        missingProjects,
+        showValidationDialog: missingProjects.length > 0
+      });
+      
+      return { validProjects, missingProjects };
+    } catch (error) {
+      console.error('Error validating projects:', error);
+      setProjectValidation(prev => ({ ...prev, isValidating: false }));
+      return { validProjects: [], missingProjects: [] };
+    }
+  };
+
+  // Help Dialog Component
+  const HelpDialog = () => (
+    <Dialog open={showHelpDialog} onOpenChange={setShowHelpDialog}>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="sm" className="p-1 h-6 w-6">
+          <HelpCircle className="h-4 w-4 text-gray-500" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Employer Import Options</DialogTitle>
+          <DialogDescription>
+            Choose how to handle unmatched employers from your BCI data
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="border rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              <h4 className="font-semibold text-green-800">Accept All As New (Recommended)</h4>
+            </div>
+            <p className="text-sm text-gray-600 mb-2">
+              Creates new employer records directly in the database with complete BCI data including Company IDs.
+            </p>
+            <div className="text-xs text-gray-500">
+              ✅ Direct creation • ✅ Complete data • ✅ No staging required • ✅ Immediate import
+            </div>
+          </div>
+          
+          <div className="border rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Plus className="h-5 w-5 text-blue-600" />
+              <h4 className="font-semibold text-blue-800">Stage All Unmatched Employers</h4>
+            </div>
+            <p className="text-sm text-gray-600 mb-2">
+              Saves unmatched employers to a staging area for later review and manual processing.
+            </p>
+            <div className="text-xs text-gray-500">
+              ⚠️ Requires manual navigation to "Upload Data → Employers" • ⚠️ Additional review step required
+            </div>
+          </div>
+          
+          <div className="border rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <ArrowRight className="h-5 w-5 text-purple-600" />
+              <h4 className="font-semibold text-purple-800">Stage + Import All</h4>
+            </div>
+            <p className="text-sm text-gray-600 mb-2">
+              Stages employers and automatically navigates you to the Employers import page for immediate processing.
+            </p>
+            <div className="text-xs text-gray-500">
+              ⚠️ Auto-navigation • ⚠️ Still requires manual review and import on next page
+            </div>
+          </div>
+          
+          <div className="bg-blue-50 border border-blue-200 rounded p-3">
+            <p className="text-sm text-blue-800">
+              <strong>Recommendation:</strong> Use "Accept All As New" for the cleanest, most direct workflow. 
+              The staging options are only needed if you want to review employers before importing them.
+            </p>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+
+  // Project Validation Dialog Component
+  const ProjectValidationDialog = () => (
+    <Dialog open={projectValidation.showValidationDialog} onOpenChange={(open) => 
+      setProjectValidation(prev => ({ ...prev, showValidationDialog: open }))
+    }>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-orange-600" />
+            Missing Projects Detected
+          </DialogTitle>
+          <DialogDescription>
+            Some projects from your BCI data don't exist in the database yet.
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="p-4 bg-red-50 border border-red-200 rounded">
+              <h4 className="font-semibold text-red-800 mb-2">
+                Missing Projects ({projectValidation.missingProjects.length})
+              </h4>
+              <div className="max-h-32 overflow-y-auto">
+                {projectValidation.missingProjects.map(projectId => (
+                  <div key={projectId} className="text-sm text-red-700 py-1">
+                    • {projectId}
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            <div className="p-4 bg-green-50 border border-green-200 rounded">
+              <h4 className="font-semibold text-green-800 mb-2">
+                Valid Projects ({projectValidation.validProjects.length})
+              </h4>
+              <div className="max-h-32 overflow-y-auto">
+                {projectValidation.validProjects.slice(0, 10).map(projectId => (
+                  <div key={projectId} className="text-sm text-green-700 py-1">
+                    • {projectId}
+                  </div>
+                ))}
+                {projectValidation.validProjects.length > 10 && (
+                  <div className="text-sm text-green-600 italic">
+                    ... and {projectValidation.validProjects.length - 10} more
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-blue-50 border border-blue-200 rounded p-3">
+            <p className="text-sm text-blue-800">
+              <strong>What would you like to do?</strong>
+            </p>
+            <div className="mt-2 space-y-2 text-sm text-blue-700">
+              <div>• <strong>Import Projects First:</strong> Cancel this import and upload the missing projects</div>
+              <div>• <strong>Import Employers Only:</strong> Create employers without project relationships (can be linked later)</div>
+              <div>• <strong>Import Valid Only:</strong> Only import employers for existing projects</div>
+            </div>
+          </div>
+          
+          <div className="flex gap-2 justify-end">
+            <Button 
+              variant="outline" 
+              onClick={() => setProjectValidation(prev => ({ ...prev, showValidationDialog: false }))}
+            >
+              Cancel Import
+            </Button>
+            <Button 
+              variant="secondary"
+              onClick={() => {
+                // Filter to only valid projects
+                const validProjectIds = new Set(projectValidation.validProjects);
+                const filteredData = processedData.filter(p => validProjectIds.has(p.projectId));
+                setProcessedData(filteredData);
+                setProjectValidation(prev => ({ ...prev, showValidationDialog: false }));
+                alert(`✅ Filtered to ${filteredData.length} projects with valid project IDs`);
+              }}
+            >
+              Import Valid Projects Only
+            </Button>
+            <Button 
+              onClick={() => {
+                setProjectValidation(prev => ({ ...prev, showValidationDialog: false }));
+                // Continue with import but employers won't have project relationships
+                alert(`⚠️ Continuing import without project relationships. You can link projects later.`);
+              }}
+            >
+              Import Employers Without Projects
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+
+  // Import Model Selection Dialog Component
+  const ImportModelDialog = () => {
+    const consolidatedArray = Array.from(consolidatedMatches.values());
+    const totalEmployers = consolidatedMatches.size;
+    const exactMatches = consolidatedArray.filter(c => c.confidence === 'exact').length;
+    const fuzzyMatches = consolidatedArray.filter(c => c.confidence === 'fuzzy').length;
+    const noMatches = consolidatedArray.filter(c => c.confidence === 'none').length;
+    const unconfirmedCount = consolidatedArray.filter(c => !c.userConfirmed).length;
+    const confirmedCount = consolidatedArray.filter(c => c.userConfirmed).length;
+    
+    const getRecommendation = () => {
+      const highConfidenceRatio = exactMatches / totalEmployers;
+      const complexDataThreshold = totalEmployers > 50;
+      const manyDuplicatesRatio = fuzzyMatches / totalEmployers > 0.3;
+      
+      if (highConfidenceRatio > 0.7 && !complexDataThreshold) return 'direct';
+      if (manyDuplicatesRatio || complexDataThreshold) return 'stage';
+      return 'guided';
+    };
+    
+    const recommendation = getRecommendation();
+    
+    const selectImportModel = (model: 'direct' | 'stage' | 'guided') => {
+      setSelectedImportModel(model);
+      setShowImportModelDialog(false);
+      
+      // Execute the selected workflow
+      switch (model) {
+        case 'direct':
+          markAllAsCreateNew();
+          break;
+        case 'stage':
+          stageAllUnmatchedEmployers();
+          break;
+        case 'guided':
+          stageAndImportAll();
+          break;
+      }
+    };
+    
+    return (
+      <Dialog open={showImportModelDialog} onOpenChange={setShowImportModelDialog}>
+        <DialogContent className="max-w-5xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl">Choose Your Import Strategy</DialogTitle>
+            <DialogDescription>
+              {confirmedCount} of {totalEmployers} employers are ready. How would you like to proceed?
+            </DialogDescription>
+          </DialogHeader>
+          
+          {/* Data Quality Summary */}
+          <div className="grid grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg mb-4">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-green-600">{exactMatches}</div>
+              <div className="text-xs text-gray-600">Exact Matches</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-blue-600">{fuzzyMatches}</div>
+              <div className="text-xs text-gray-600">Fuzzy Matches</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-orange-600">{noMatches}</div>
+              <div className="text-xs text-gray-600">No Matches</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-purple-600">{unconfirmedCount}</div>
+              <div className="text-xs text-gray-600">Unconfirmed</div>
+            </div>
+          </div>
+          
+          <div className="grid gap-4 md:grid-cols-3">
+            {/* Quick Import */}
+            <Card 
+              className={`cursor-pointer transition-all ${
+                recommendation === 'direct' 
+                  ? 'ring-2 ring-green-400 bg-green-50 border-green-200' 
+                  : 'hover:bg-green-50 border-2 border-transparent hover:border-green-200'
+              }`}
+              onClick={() => selectImportModel('direct')}
+            >
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-6 w-6 text-green-600" />
+                  <CardTitle className="text-lg">Quick Import</CardTitle>
+                  {recommendation === 'direct' && (
+                    <Badge className="bg-green-100 text-green-800 ml-auto">Recommended</Badge>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-gray-600 mb-3">
+                  Create employers immediately with full BCI data. Best for clean, trusted data with high match confidence.
+                </p>
+                <div className="space-y-1 text-xs">
+                  <div className="text-green-700">✅ Fastest workflow (~30 seconds)</div>
+                  <div className="text-green-700">✅ Complete BCI data with Company IDs</div>
+                  <div className="text-green-700">✅ Immediate project linking</div>
+                  <div className="text-green-700">✅ No additional steps required</div>
+                </div>
+                <div className="mt-3 text-xs text-gray-500">
+                  <strong>Best for:</strong> High-quality data, small-medium imports, single-user workflows
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Review & Validate */}
+            <Card 
+              className={`cursor-pointer transition-all ${
+                recommendation === 'stage' 
+                  ? 'ring-2 ring-blue-400 bg-blue-50 border-blue-200' 
+                  : 'hover:bg-blue-50 border-2 border-transparent hover:border-blue-200'
+              }`}
+              onClick={() => selectImportModel('stage')}
+            >
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Search className="h-6 w-6 text-blue-600" />
+                  <CardTitle className="text-lg">Review & Validate</CardTitle>
+                  {recommendation === 'stage' && (
+                    <Badge className="bg-blue-100 text-blue-800 ml-auto">Recommended</Badge>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-gray-600 mb-3">
+                  Stage for advanced duplicate detection and manual review. Navigate to dedicated import tools.
+                </p>
+                <div className="space-y-1 text-xs">
+                  <div className="text-blue-700">🔍 Advanced fuzzy duplicate detection</div>
+                  <div className="text-blue-700">📝 Manual data validation & editing</div>
+                  <div className="text-blue-700">🔄 Bulk merge capabilities</div>
+                  <div className="text-blue-700">📊 Detailed import audit trails</div>
+                </div>
+                <div className="mt-3 text-xs text-gray-500">
+                  <strong>Best for:</strong> Large imports, dirty data, multi-user approval workflows
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Guided Workflow */}
+            <Card 
+              className={`cursor-pointer transition-all ${
+                recommendation === 'guided' 
+                  ? 'ring-2 ring-purple-400 bg-purple-50 border-purple-200' 
+                  : 'hover:bg-purple-50 border-2 border-transparent hover:border-purple-200'
+              }`}
+              onClick={() => selectImportModel('guided')}
+            >
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <ArrowRight className="h-6 w-6 text-purple-600" />
+                  <CardTitle className="text-lg">Guided Workflow</CardTitle>
+                  {recommendation === 'guided' && (
+                    <Badge className="bg-purple-100 text-purple-800 ml-auto">Recommended</Badge>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-gray-600 mb-3">
+                  Stage employers and automatically navigate to advanced import tools with guided steps.
+                </p>
+                <div className="space-y-1 text-xs">
+                  <div className="text-purple-700">🎯 Auto-navigation to import tools</div>
+                  <div className="text-purple-700">👥 Step-by-step guided process</div>
+                  <div className="text-purple-700">📊 Comprehensive audit trail</div>
+                  <div className="text-purple-700">🔄 Rollback capabilities</div>
+                </div>
+                <div className="mt-3 text-xs text-gray-500">
+                  <strong>Best for:</strong> Mixed data quality, training scenarios, multi-step approval
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          
+          {/* Recommendation explanation */}
+          <Alert className="border-blue-200 bg-blue-50">
+            <Info className="h-4 w-4 text-blue-600" />
+            <AlertDescription className="text-blue-800">
+              <strong>Our Recommendation:</strong> 
+              {recommendation === 'direct' && " Quick Import - Your data has high match confidence and is suitable for direct creation."}
+              {recommendation === 'stage' && " Review & Validate - Your data has many potential duplicates or is complex and would benefit from manual review."}
+              {recommendation === 'guided' && " Guided Workflow - Your data has mixed quality and would benefit from a step-by-step approach."}
+            </AlertDescription>
+          </Alert>
+          
+          <div className="flex justify-between items-center pt-4">
+            <Button variant="outline" onClick={() => setShowImportModelDialog(false)}>
+              Cancel
+            </Button>
+            <div className="text-sm text-gray-500">
+              Choose the approach that best fits your data quality and workflow needs
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
   };
 
   // Manual search function
@@ -1746,12 +2420,37 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
     });
   };
 
-  const autoConfirmExactMatches = () => {
-    consolidatedMatches.forEach((consolidated, normalizedName) => {
-      if (consolidated.confidence === 'exact' && !consolidated.userConfirmed) {
-        confirmConsolidatedEmployer(normalizedName);
+  const autoConfirmExactMatches = async () => {
+    setIsAutoConfirming(true);
+    const exactMatchesToConfirm = Array.from(consolidatedMatches.values())
+      .filter(c => c.confidence === 'exact' && !c.userConfirmed);
+    
+    let confirmed = 0;
+    for (const consolidated of exactMatchesToConfirm) {
+      confirmConsolidatedEmployer(consolidated.normalizedName);
+      confirmed++;
+      // Small delay for visual feedback
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    
+    setIsAutoConfirming(false);
+    
+    // Show success feedback with better UX
+    if (confirmed > 0) {
+      // Visual feedback with a brief highlight effect
+      const toolbar = document.querySelector('.variant\\:desktop');
+      if (toolbar) {
+        toolbar.classList.add('ring-2', 'ring-green-400', 'ring-opacity-50');
+        setTimeout(() => {
+          toolbar.classList.remove('ring-2', 'ring-green-400', 'ring-opacity-50');
+        }, 2000);
       }
-    });
+      
+      // Success message
+      setTimeout(() => {
+        alert(`✅ Auto-confirmed ${confirmed} exact employer matches!\n\nThese assignments are now ready for import. You can see the updated count in the toolbar.`);
+      }, 200);
+    }
   };
 
   // Render consolidated employer card
@@ -1794,6 +2493,14 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
               <Badge variant={consolidated.confidence === 'exact' ? 'default' : consolidated.confidence === 'fuzzy' ? 'secondary' : 'destructive'}>
                 {consolidated.confidence === 'exact' ? 'Exact Match' : consolidated.confidence === 'fuzzy' ? 'Fuzzy Match' : 'No Match'}
               </Badge>
+            </div>
+            <div className="flex items-center gap-2">
+              {/* Inline change action opens manual search directly */}
+              <Button size="sm" variant="outline" onClick={() => {
+                setSearchingForCompany(consolidated.matchedEmployerName || consolidated.companyName);
+                setCurrentSearchMatchKey(consolidated.projectAssignments[0]?.matchKey || '');
+                setShowManualSearch(true);
+              }}>Change</Button>
             </div>
           </div>
         </CardHeader>
@@ -2048,26 +2755,136 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
             </p>
           </div>
           
-          {/* Enhanced toolbar with bulk actions */}
+          {/* Simplified toolbar with import model selection */}
           <Card className="variant:desktop">
             <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <Button size="sm" onClick={autoConfirmExactMatches} disabled={exactMatches === 0}>
-                    Auto-Confirm {exactMatches} Exact Matches
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    variant="outline" 
-                    onClick={() => setUseConsolidatedView(false)}
-                  >
-                    Switch to Detailed View
-                  </Button>
+              <div className="space-y-4">
+                {/* Quick actions row */}
+                <div className="flex flex-wrap items-center gap-2 justify-between">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button 
+                      size="sm" 
+                      onClick={autoConfirmExactMatches} 
+                      disabled={exactMatches === 0 || isAutoConfirming}
+                      variant="outline"
+                    >
+                      {isAutoConfirming ? (
+                        <>
+                          <img src="/spinner.gif" alt="Loading" className="w-4 h-4 mr-2" />
+                          Confirming...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          Auto-Confirm {exactMatches} Exact
+                        </>
+                      )}
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      onClick={() => setUseConsolidatedView(false)}
+                    >
+                      Detailed View
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={validateProjects}
+                      disabled={projectValidation.isValidating}
+                    >
+                      {projectValidation.isValidating ? (
+                        <>
+                          <img src="/spinner.gif" alt="Loading" className="w-4 h-4 mr-2" />
+                          Checking...
+                        </>
+                      ) : (
+                        <>
+                          <Search className="w-4 h-4 mr-2" />
+                          Check Projects
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="text-sm text-gray-600">
+                      {confirmedCount} / {consolidatedMatches.size} employers confirmed
+                    </div>
+                    {selectedImportModel && (
+                      <Badge variant="outline" className="text-xs">
+                        Strategy: {selectedImportModel === 'direct' ? 'Quick Import' : selectedImportModel === 'stage' ? 'Review & Validate' : 'Guided Workflow'}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
-                <div className="text-sm text-gray-600">
-                  {confirmedCount} / {consolidatedMatches.size} employers confirmed
-                </div>
+                
+                {/* Main import action */}
+                {confirmedCount > 0 ? (
+                  <div className="border-t pt-4">
+                    <Button 
+                      size="lg" 
+                      className="w-full bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700 text-white font-semibold py-3"
+                      onClick={() => setShowImportModelDialog(true)}
+                      disabled={isProcessing}
+                    >
+                      {isProcessing ? (
+                        <>
+                          <img src="/spinner.gif" alt="Loading" className="w-5 h-5 mr-2" />
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          <ArrowRight className="w-5 h-5 mr-2" />
+                          Choose Import Strategy ({confirmedCount}/{consolidatedMatches.size} ready)
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="border-t pt-4">
+                    <Alert>
+                      <Info className="h-4 w-4" />
+                      <AlertDescription>
+                        <div className="flex items-center justify-between">
+                          <span>Confirm employer matches above to enable import options.</span>
+                          {exactMatches > 0 && (
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={autoConfirmExactMatches}
+                              disabled={isAutoConfirming}
+                              className="ml-4"
+                            >
+                              Quick-start: Confirm {exactMatches} Exact
+                            </Button>
+                          )}
+                        </div>
+                      </AlertDescription>
+                    </Alert>
+                  </div>
+                )}
               </div>
+              
+              {/* Progress indicator */}
+              {isProcessing && importProgress.total > 0 && (
+                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded">
+                  <div className="flex items-center gap-3 mb-2">
+                    <img src="/spinner.gif" alt="Loading" className="w-5 h-5" />
+                    <span className="text-sm font-medium text-blue-800">
+                      {importProgress.currentItem}
+                    </span>
+                  </div>
+                  <div className="w-full bg-blue-200 rounded-full h-2">
+                    <div 
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                      style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
+                    />
+                  </div>
+                  <div className="text-xs text-blue-600 mt-1">
+                    {importProgress.current} of {importProgress.total} employers processed
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
           
@@ -3020,7 +3837,7 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
              )}
              
              <div className="text-center">
-               <Button onClick={onImportComplete} className="px-8">
+               <Button onClick={() => onImportComplete && onImportComplete()} className="px-8">
                  Done
                </Button>
              </div>
@@ -3034,6 +3851,26 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
         <img src="/spinner.gif" alt="Loading" className="w-8 h-8 mx-auto" />
         <h2 className="text-xl font-semibold">Importing Projects...</h2>
         <p className="text-gray-600">Please wait while we create projects and link employers</p>
+        
+        {/* Progress indicator for importing */}
+        {importProgress.total > 0 && (
+          <div className="max-w-md mx-auto">
+            <div className="flex items-center gap-3 mb-2">
+              <span className="text-sm font-medium text-blue-800">
+                {importProgress.currentItem}
+              </span>
+            </div>
+            <div className="w-full bg-blue-200 rounded-full h-3">
+              <div 
+                className="bg-blue-600 h-3 rounded-full transition-all duration-300" 
+                style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
+              />
+            </div>
+            <div className="text-sm text-blue-600 mt-2">
+              {importProgress.current} of {importProgress.total} projects processed
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -3044,6 +3881,12 @@ export default function BCIProjectImport({ csvData, onImportComplete, mode = 'pr
       {currentStep === 'employer_matching' && renderEmployerMatching()}
       {currentStep === 'trade_type_confirmation' && renderTradeTypeConfirmation()}
       {currentStep === 'complete' && renderImportResults()}
+      
+      {/* Dialogs */}
+      <ProjectValidationDialog />
+      <ImportModelDialog />
     </div>
   );
 }
+
+export default BCIProjectImport;

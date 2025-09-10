@@ -58,19 +58,17 @@ export function AddEmployerToJobSiteModal({
 
     setIsAdding(true);
     try {
-      // Add employer to project_employer_roles if project exists
+      // Ensure employer is linked to the project as a contractor role via RPC
       if (jobSite.project_id) {
-        const { error: projectError } = await supabase
-          .from("project_employer_roles")
-          .insert({
-            project_id: jobSite.project_id,
-            employer_id: selectedEmployerId,
-            role: "contractor" // Default role
-          });
-
-        if (projectError && !projectError.message.includes("duplicate")) {
-          throw projectError;
-        }
+        const { data: roleRes, error: roleErr } = await (supabase as any).rpc('assign_contractor_role', {
+          p_project_id: jobSite.project_id,
+          p_employer_id: selectedEmployerId,
+          p_role_code: 'contractor',
+          p_company_name: null,
+          p_is_primary: false,
+          p_estimated_workers: est
+        });
+        if (roleErr) throw roleErr;
       }
 
       // Add employer to site_contractor_trades for direct job site link
@@ -87,35 +85,16 @@ export function AddEmployerToJobSiteModal({
         throw siteError;
       }
 
-      // Upsert project-level estimate row for this employer
+      // Also add a default trade assignment at project level if desired (optional logic)
       if (jobSite.project_id) {
-        // Try to find an existing project_contractor_trades row; otherwise insert one
-        const { data: existingPct } = await (supabase as any)
-          .from("project_contractor_trades")
-          .select("id")
-          .eq("project_id", jobSite.project_id)
-          .eq("employer_id", selectedEmployerId)
-
-        if ((existingPct as any[])?.length) {
-          const firstId = (existingPct as any[])[0].id
-          await (supabase as any)
-            .from("project_contractor_trades")
-            .update({ estimated_project_workforce: est })
-            .eq("id", firstId)
-        } else {
-          await (supabase as any)
-            .from("project_contractor_trades")
-            .insert([{ 
-              project_id: jobSite.project_id, 
-              employer_id: selectedEmployerId, 
-              trade_type: "labour_hire", 
-              eba_signatory: "not_specified", 
-              estimated_project_workforce: est,
-              assignment_id: crypto.randomUUID(), // Add unique assignment ID for multiple trade type support
-              created_at: new Date().toISOString(),
-              assignment_notes: "Added via job site modal"
-            }])
-        }
+        const { error: twErr } = await (supabase as any).rpc('assign_trade_work', {
+          p_project_id: jobSite.project_id,
+          p_employer_id: selectedEmployerId,
+          p_trade_code: 'general_construction',
+          p_company_name: null,
+          p_estimated_workers: est
+        });
+        if (twErr && !String(twErr.message || '').includes('already assigned')) throw twErr;
       }
 
       toast({

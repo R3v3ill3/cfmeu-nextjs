@@ -13,8 +13,8 @@ type ProjectRow = {
   tier: string | null
   organising_universe?: string | null
   stage_class?: string | null
-  project_employer_roles?: Array<{
-    role: string
+  project_assignments?: Array<{
+    assignment_type: string
     employer_id: string
     employers?: { name: string | null } | null
   }>
@@ -63,14 +63,14 @@ export function ProjectTable({
           const summary = summaries[project.id]
           
           const builderNames = useMemo(() => {
-            const builders = (project.project_employer_roles || []).filter((r) => r.role === 'builder')
-            return builders.map((r) => ({ id: r.employer_id, name: r.employers?.name || r.employer_id }))
-          }, [project.project_employer_roles])
+            const contractors = (project.project_assignments || []).filter((a) => a.assignment_type === 'contractor_role')
+            return contractors.map((a) => ({ id: a.employer_id, name: a.employers?.name || a.employer_id }))
+          }, [project.project_assignments])
 
           const head = useMemo(() => {
-            const hc = (project.project_employer_roles || []).find((r) => r.role === 'head_contractor')
+            const hc = (project.project_assignments || []).find((a) => a.assignment_type === 'contractor_role')
             return hc ? { id: hc.employer_id, name: hc.employers?.name || hc.employer_id } : null
-          }, [project.project_employer_roles])
+          }, [project.project_assignments])
 
           const primary = builderNames[0] || head
           const totalWorkers = summary?.total_workers || 0

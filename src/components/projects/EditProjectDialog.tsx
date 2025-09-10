@@ -81,19 +81,21 @@ export function EditProjectDialog({
   const loadRelations = async () => {
     setLoadingRelations(true);
     try {
-      const { data: roles, error: rolesErr } = await supabase
-        .from("project_employer_roles")
-        .select("role, employer_id")
-        .eq("project_id", project.id);
-      if (rolesErr) throw rolesErr;
+      // Load from project_assignments instead of legacy project_employer_roles
+      const { data: assignments, error: assignmentsErr } = await supabase
+        .from("project_assignments")
+        .select("assignment_type, employer_id, contractor_role_types(code)")
+        .eq("project_id", project.id)
+        .eq("assignment_type", "contractor_role");
+      if (assignmentsErr) throw assignmentsErr;
 
-      const builders = (roles || [])
-        .filter((r: any) => r.role === "builder")
-        .map((r: any) => r.employer_id)
+      const builders = (assignments || [])
+        .filter((a: any) => a.contractor_role_types?.code === "builder")
+        .map((a: any) => a.employer_id)
         .filter(Boolean) as string[];
       setBuilderIds(builders);
 
-      const head = (roles || []).find((r: any) => r.role === "head_contractor");
+      const head = (assignments || []).find((a: any) => a.contractor_role_types?.code === "head_contractor");
       setHeadContractorId((head?.employer_id as string) || "");
 
       const { data: jv, error: jvErr } = await supabase
@@ -240,35 +242,37 @@ export function EditProjectDialog({
         .upsert(jvPayload, { onConflict: "project_id" });
       if (jvError) throw jvError;
 
-      // 3) Replace builder/head_contractor roles atomically (best-effort)
+      // 3) Use RPC functions to manage contractor roles (handles new assignment system)
+      // First remove existing contractor role assignments
       const { error: delErr } = await supabase
-        .from("project_employer_roles")
+        .from("project_assignments")
         .delete()
         .eq("project_id", project.id)
-        .in("role", ["builder", "head_contractor"] as any);
+        .eq("assignment_type", "contractor_role");
       if (delErr) throw delErr;
 
-      if (builderIds.length > 0) {
-        const builderRows = builderIds.map((id) => ({
-          project_id: project.id,
-          employer_id: id,
-          role: "builder",
-        }));
-        const { error: insBuildersErr } = await (supabase as any)
-          .from("project_employer_roles")
-          .insert(builderRows);
-        if (insBuildersErr) throw insBuildersErr;
+      // Add builders using the RPC function
+      for (const builderId of builderIds) {
+        const { error: builderErr } = await supabase.rpc('assign_contractor_role', {
+          p_project_id: project.id,
+          p_employer_id: builderId,
+          p_role_code: 'builder',
+          p_company_name: 'Builder', // Will be looked up from employer
+          p_is_primary: true
+        });
+        if (builderErr) console.warn('Failed to assign builder:', builderErr);
       }
 
+      // Add head contractor using the RPC function  
       if (headContractorId) {
-        const { error: insHeadErr } = await (supabase as any)
-          .from("project_employer_roles")
-          .insert({
-            project_id: project.id,
-            employer_id: headContractorId,
-            role: "head_contractor",
-          });
-        if (insHeadErr) throw insHeadErr;
+        const { error: headErr } = await supabase.rpc('assign_contractor_role', {
+          p_project_id: project.id,
+          p_employer_id: headContractorId,
+          p_role_code: 'head_contractor', 
+          p_company_name: 'Head Contractor', // Will be looked up from employer
+          p_is_primary: true
+        });
+        if (headErr) throw headErr;
       }
     },
     onSuccess: () => {

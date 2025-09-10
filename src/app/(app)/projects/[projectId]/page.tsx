@@ -184,18 +184,19 @@ export default function ProjectDetailPage() {
         address = site?.full_address || site?.location || null
       }
 
-      // First, check project_employer_roles for builder role (preferred)
-      const { data: builderRoles } = await supabase
-        .from("project_employer_roles")
-        .select("employer_id, employers(name, enterprise_agreement_status)")
+      // First, check project_assignments for builder role (new system)
+      const { data: builderAssignments } = await supabase
+        .from("project_assignments")
+        .select("employer_id, employers(name, enterprise_agreement_status), contractor_role_types(code)")
         .eq("project_id", project!.id)
-        .eq("role", "builder")
+        .eq("assignment_type", "contractor_role")
+        .eq("contractor_role_types.code", "builder")
         .limit(1)
       
-      if (builderRoles && builderRoles.length > 0) {
-        const builderRole = builderRoles[0] as any
-        const employer = builderRole.employers
-        builderName = employer?.name || builderRole.employer_id
+      if (builderAssignments && builderAssignments.length > 0) {
+        const builderAssignment = builderAssignments[0] as any
+        const employer = builderAssignment.employers
+        builderName = employer?.name || builderAssignment.employer_id
         const status = employer?.enterprise_agreement_status as string | null
         builderHasEba = status ? status !== "no_eba" : null
       } else if (project?.builder_id) {

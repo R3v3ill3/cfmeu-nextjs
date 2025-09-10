@@ -1,3 +1,5 @@
+'use client';
+
 import { useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -71,21 +73,28 @@ export default function ProjectImport({ csvData, onImportComplete, onBack }: Pro
     const results: ProjectImportResults = { successful: 0, failed: 0, errors: [], newEmployers: 0 };
 
     try {
-      // Step 1: Geocode all addresses
+      // Step 1: Geocode all addresses (always include geocoding)
       setCurrentStep("geocoding");
       setGeocodingProgress(0);
       
       const addressesToGeocode = previewRows.map(row => row.address).filter(Boolean);
       const geocodedResults: Array<{ address: string; coords: { lat: number; lng: number } | null }> = [];
       
+      console.log(`🗺️ Starting geocoding for ${addressesToGeocode.length} addresses...`);
+      
       for (let i = 0; i < addressesToGeocode.length; i++) {
         const address = addressesToGeocode[i];
-        const geocodeResult = await geocodeAddress(address);
         
-        geocodedResults.push({
-          address,
-          coords: geocodeResult ? { lat: geocodeResult.latitude, lng: geocodeResult.longitude } : null
-        });
+        try {
+          const geocodeResult = await geocodeAddress(address);
+          geocodedResults.push({
+            address,
+            coords: geocodeResult ? { lat: geocodeResult.latitude, lng: geocodeResult.longitude } : null
+          });
+        } catch (error) {
+          console.warn(`Geocoding failed for ${address}:`, error);
+          geocodedResults.push({ address, coords: null });
+        }
         
         setGeocodingProgress(Math.round(((i + 1) / addressesToGeocode.length) * 100));
         
@@ -100,11 +109,21 @@ export default function ProjectImport({ csvData, onImportComplete, onBack }: Pro
       geocodedResults.forEach(result => {
         coordsLookup.set(result.address, result.coords);
       });
+      
+      console.log(`✅ Geocoding complete. ${geocodedResults.filter(r => r.coords).length}/${geocodedResults.length} addresses geocoded successfully.`);
 
       // Step 2: Import projects with coordinates
       setCurrentStep("importing");
       
-      for (const row of previewRows) {
+      console.log(`📊 Starting import of ${previewRows.length} projects...`);
+      
+      for (let i = 0; i < previewRows.length; i++) {
+        const row = previewRows[i];
+        
+        // Log progress every 10 projects
+        if (i % 10 === 0) {
+          console.log(`📈 Importing project ${i + 1}/${previewRows.length}: ${row.name}`);
+        }
         try {
           if (!row.name || !row.address) throw new Error("Missing required name or address");
 
