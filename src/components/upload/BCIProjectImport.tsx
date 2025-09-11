@@ -1386,7 +1386,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
         if (existingProject) {
           // Update existing project with new data (overwrite approach)
           console.log(`✓ Updating existing project: ${project.projectName} (BCI ID: ${project.projectId})`);
-          const { data: updatedProject, error: updateError } = await supabase
+          const { error: updateError } = await supabase
             .from('projects')
             .update({
               name: project.projectName,
@@ -1405,8 +1405,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
               owner_type_level_1: project.ownerTypeLevel1Primary
             })
             .eq('id', existingProject.id)
-            .select('id')
-            .single();
+            .select('id');
           
           if (updateError) throw updateError;
           projectId = existingProject.id;
@@ -1449,7 +1448,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
         let jobSiteId: string;
         if (existingJobSite) {
           // Update existing job site
-          const { data: updatedJobSite, error: siteUpdateError } = await supabase
+          const { error: siteUpdateError } = await supabase
             .from('job_sites')
             .update({
               name: project.projectName,
