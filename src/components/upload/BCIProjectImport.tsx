@@ -142,7 +142,7 @@ interface BCIProjectData {
   companies: CompanyClassification[];
 }
 
-type BCIImportMode = 'projects-and-employers' | 'projects-only' | 'employers-to-existing';
+type BCIImportMode = 'projects-and-employers' | 'projects-only' | 'employers-to-existing' | 'employers-to-existing-quick-match';
 
 interface BCIProjectImportProps {
   csvData: BCICsvRow[];
@@ -197,6 +197,14 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
   
   // Import model selection state
   const [showImportModelDialog, setShowImportModelDialog] = useState(false);
+  
+  // Quick match mode state - for tracking skipped rows
+  const [skippedRows, setSkippedRows] = useState<BCICsvRow[]>([]);
+  const [quickMatchStats, setQuickMatchStats] = useState<{
+    totalRows: number;
+    validRows: number;
+    skippedRows: number;
+  }>({ totalRows: 0, validRows: 0, skippedRows: 0 });
   const [selectedImportModel, setSelectedImportModel] = useState<'direct' | 'stage' | 'guided' | null>(null);
   
   // Manual search states
@@ -217,8 +225,20 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
   // Enhanced CSV processing with latitude/longitude
   const processCSVData = useCallback(() => {
     const projectMap = new Map<string, BCIProjectData>();
+    const skipped: BCICsvRow[] = [];
+    let validRowCount = 0;
 
     csvData.forEach(row => {
+      // For quick match mode, skip rows without BCI Company ID
+      if (mode === 'employers-to-existing-quick-match') {
+        if (!row.companyId || row.companyId.trim() === '') {
+          skipped.push(row);
+          return; // Skip this row entirely
+        }
+      }
+
+      validRowCount++;
+
       if (!projectMap.has(row.projectId)) {
         projectMap.set(row.projectId, {
           projectId: row.projectId,
@@ -249,8 +269,18 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
       }
     });
 
+    // Update skipped rows and stats for quick match mode
+    if (mode === 'employers-to-existing-quick-match') {
+      setSkippedRows(skipped);
+      setQuickMatchStats({
+        totalRows: csvData.length,
+        validRows: validRowCount,
+        skippedRows: skipped.length
+      });
+    }
+
     return Array.from(projectMap.values());
-  }, [csvData]);
+  }, [csvData, mode]);
 
   // Initialize processed projects for preview/editing
   useEffect(() => {
@@ -938,6 +968,160 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
     }
   };
 
+  // Quick match by BCI Company ID only
+  const quickMatchEmployerByBciId = async (csvRow: BCICsvRow): Promise<string | null> => {
+    const supabase = getSupabaseBrowserClient();
+    
+    if (!csvRow.companyId) return null;
+    
+    const { data: bciMatch } = await supabase
+      .from('employers')
+      .select('id, name, bci_company_id')
+      .eq('bci_company_id', csvRow.companyId)
+      .maybeSingle();
+    
+    if (bciMatch) {
+      console.log(`✓ Quick matched employer: ${bciMatch.name} (BCI ID: ${csvRow.companyId})`);
+      return bciMatch.id;
+    }
+    
+    return null;
+  };
+
+  // Create new employer with BCI Company ID
+  const createEmployerWithBciId = async (csvRow: BCICsvRow): Promise<string> => {
+    const supabase = getSupabaseBrowserClient();
+    
+    const { data, error } = await supabase
+      .from('employers')
+      .insert({
+        name: csvRow.companyName,
+        address_line_1: csvRow.companyStreet,
+        suburb: csvRow.companyTown,
+        state: csvRow.companyState,
+        postcode: csvRow.companyPostcode,
+        country: csvRow.companyCountry,
+        phone: csvRow.companyPhone,
+        email: csvRow.companyEmail,
+        bci_company_id: csvRow.companyId
+      })
+      .select('id')
+      .single();
+
+    if (error) throw error;
+    
+    console.log(`✓ Created new employer: ${csvRow.companyName} (BCI ID: ${csvRow.companyId})`);
+    return data.id;
+  };
+
+  // Merge employer data - update existing employer with new CSV data while preserving relationships
+  const mergeEmployerData = async (employerId: string, csvRow: BCICsvRow): Promise<void> => {
+    const supabase = getSupabaseBrowserClient();
+    
+    // Update employer with new data, but preserve existing project relationships
+    const updateData: any = {
+      name: csvRow.companyName,
+      address_line_1: csvRow.companyStreet,
+      suburb: csvRow.companyTown,
+      state: csvRow.companyState,
+      postcode: csvRow.companyPostcode,
+      country: csvRow.companyCountry
+    };
+    
+    // Only update phone/email if they're provided in CSV
+    if (csvRow.companyPhone && csvRow.companyPhone.trim() !== '') {
+      updateData.phone = csvRow.companyPhone;
+    }
+    if (csvRow.companyEmail && csvRow.companyEmail.trim() !== '') {
+      updateData.email = csvRow.companyEmail;
+    }
+    
+    const { error } = await supabase
+      .from('employers')
+      .update(updateData)
+      .eq('id', employerId);
+
+    if (error) {
+      console.error(`Error updating employer ${csvRow.companyName}:`, error);
+      throw error;
+    }
+    
+    console.log(`✓ Merged employer data: ${csvRow.companyName} (ID: ${employerId})`);
+  };
+
+  // Download skipped rows as CSV
+  const downloadSkippedRowsCSV = useCallback(() => {
+    if (skippedRows.length === 0) return;
+    
+    // Create CSV headers based on the original CSV structure
+    const headers = [
+      'Project ID', 'Project Type', 'Project Name', 'Project Stage', 'Project Status',
+      'Local Value', 'Development Type', 'Floor Area (square meters)', 'Site Area (hectares)', 
+      'Storeys', 'Last Update', 'Construction Start Date (Original format)', 
+      'Construction End Date (Original format)', 'Project Address', 'Project Town / Suburb', 
+      'Project Province / State', 'Post Code', 'Project Country', 'Role on Project', 
+      'Company Name', 'Company Street Name', 'Company Town / Suburb', 
+      'Company State / Province', 'Company Post Code', 'Company Country', 
+      'Company Phone', 'Company Email', 'Contact First Name', 'Contact Surname', 
+      'Contact Position', 'Contact Landline', 'Contact Email', 'Contact Remark', 
+      'Skip Reason'
+    ];
+    
+    // Convert skipped rows to CSV format
+    const csvContent = [
+      headers.join(','),
+      ...skippedRows.map(row => [
+        `"${row.projectId || ''}"`,
+        `"${row.projectType || ''}"`,
+        `"${row.projectName || ''}"`,
+        `"${row.projectStage || ''}"`,
+        `"${row.projectStatus || ''}"`,
+        `"${row.localValue || ''}"`,
+        `"${row.developmentType || ''}"`,
+        `"${row.floorArea || ''}"`,
+        `"${row.siteArea || ''}"`,
+        `"${row.storeys || ''}"`,
+        `"${row.lastUpdate || ''}"`,
+        `"${row.constructionStartDate || ''}"`,
+        `"${row.constructionEndDate || ''}"`,
+        `"${row.projectAddress || ''}"`,
+        `"${row.projectTown || ''}"`,
+        `"${row.projectState || ''}"`,
+        `"${row.postCode || ''}"`,
+        `"${row.projectCountry || ''}"`,
+        `"${row.roleOnProject || ''}"`,
+        `"${row.companyName || ''}"`,
+        `"${row.companyStreet || ''}"`,
+        `"${row.companyTown || ''}"`,
+        `"${row.companyState || ''}"`,
+        `"${row.companyPostcode || ''}"`,
+        `"${row.companyCountry || ''}"`,
+        `"${row.companyPhone || ''}"`,
+        `"${row.companyEmail || ''}"`,
+        `"${row.contactFirstName || ''}"`,
+        `"${row.contactSurname || ''}"`,
+        `"${row.contactPosition || ''}"`,
+        `"${row.contactLandline || ''}"`,
+        `"${row.contactEmail || ''}"`,
+        `"${row.contactRemark || ''}"`,
+        `"Missing BCI Company ID"`
+      ].join(','))
+    ].join('\n');
+    
+    // Create and download the file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `skipped-rows-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    console.log(`📥 Downloaded ${skippedRows.length} skipped rows as CSV`);
+  }, [skippedRows]);
+
   // Enhanced employer creation with duplicate prevention
   const createEmployer = async (companyData: any): Promise<string> => {
     const supabase = getSupabaseBrowserClient();
@@ -1316,6 +1500,8 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
     // Choose the appropriate import function based on mode
     if (mode === 'employers-to-existing') {
       performEmployersToExistingImport();
+    } else if (mode === 'employers-to-existing-quick-match') {
+      performQuickMatchImport();
     } else {
       performImport();
     }
@@ -1598,6 +1784,165 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
       setIsProcessing(false);
     }, 2000);
     
+    setImportResults(results);
+    setCurrentStep('complete');
+  };
+
+  // Quick match import - employers to existing projects using BCI Company ID only
+  const performQuickMatchImport = async () => {
+    setIsProcessing(true);
+    setImportProgress({ current: 0, total: processedData.length, currentItem: 'Starting quick match import...' });
+    
+    const results = {
+      success: 0,
+      errors: [] as string[],
+      projectsCreated: [] as string[],
+      employersCreated: 0,
+      employersMatched: 0,
+      employersMerged: 0
+    };
+
+    console.log(`🚀 Starting quick match import for ${processedData.length} projects...`);
+    console.log(`📊 Quick match stats: ${quickMatchStats.validRows} valid rows, ${quickMatchStats.skippedRows} skipped`);
+
+    for (let i = 0; i < processedData.length; i++) {
+      const project = processedData[i];
+      
+      setImportProgress(prev => ({ 
+        ...prev, 
+        current: i + 1, 
+        currentItem: `Processing ${project.projectName}...` 
+      }));
+      try {
+        const supabase = getSupabaseBrowserClient();
+        const { data: existingProject } = await supabase
+          .from('projects')
+          .select('id')
+          .eq('bci_project_id', project.projectId)
+          .maybeSingle();
+        if (!existingProject) {
+          results.errors.push(`No existing project found for BCI ID ${project.projectId}`);
+          continue;
+        }
+
+        for (const company of project.companies) {
+          if (!company.shouldImport || company.userExcluded) continue;
+          
+          // Get original CSV row to access companyId
+          const csvRow = csvData.find(r => r.projectId === project.projectId && r.companyName === company.companyName);
+          if (!csvRow || !csvRow.companyId) {
+            results.errors.push(`No BCI Company ID found for ${company.companyName} in ${project.projectName}`);
+            continue;
+          }
+
+          // Quick match by BCI Company ID only
+          let employerId = await quickMatchEmployerByBciId(csvRow);
+          
+          if (!employerId) {
+            // Create new employer with BCI Company ID
+            employerId = await createEmployerWithBciId(csvRow);
+            results.employersCreated++;
+          } else {
+            // Merge employer data (update existing employer)
+            await mergeEmployerData(employerId, csvRow);
+            results.employersMatched++;
+            results.employersMerged++;
+          }
+          
+          if (!employerId) continue;
+
+          // Enhanced relationship creation with multiple builder support
+          if (company.ourRole === 'builder') {
+            try {
+              const { data: builderResult, error: builderError } = await supabase.rpc('assign_bci_builder', {
+                p_project_id: existingProject.id,
+                p_employer_id: employerId,
+                p_company_name: company.companyName
+              });
+              
+              if (builderError) {
+                console.error(`Error assigning builder ${company.companyName}:`, builderError);
+                results.errors.push(`Failed to assign builder ${company.companyName} to ${project.projectName}: ${builderError.message}`);
+              } else {
+                const result = builderResult?.[0];
+                if (result?.success) {
+                  console.log(`✓ ${result.message}`);
+                } else {
+                  results.errors.push(`Failed to assign builder ${company.companyName}: ${result?.message || 'Unknown error'}`);
+                }
+              }
+            } catch (error) {
+              console.error(`Error in BCI builder assignment:`, error);
+              results.errors.push(`Error assigning builder ${company.companyName}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            }
+            
+          } else if (company.ourRole === 'head_contractor') {
+            try {
+              const { data: hcRes, error: hcErr } = await supabase.rpc('assign_contractor_role', {
+                p_project_id: existingProject.id,
+                p_employer_id: employerId,
+                p_role_code: company.roleCode || 'head_contractor',
+                p_company_name: company.companyName,
+                p_is_primary: false
+              });
+              if (hcErr) {
+                console.error('Head contractor assignment failed:', hcErr);
+              } else {
+                const r = hcRes?.[0];
+                console.log(r?.message || `✓ Assigned head contractor for ${project.projectName}`);
+              }
+            } catch (e) {
+              console.error('Head contractor RPC error:', e);
+            }
+            
+          } else if (company.ourRole === 'subcontractor') {
+            const finalTradeType = company.tradeType || 'general_construction';
+            try {
+              // Check if this exact assignment already exists
+              const { data: existingAssignment } = await supabase
+                .from('project_contractor_trades')
+                .select('id')
+                .eq('project_id', existingProject.id)
+                .eq('employer_id', employerId)
+                .eq('trade_type', finalTradeType)
+                .maybeSingle();
+
+              if (!existingAssignment) {
+                const { error: tradeError } = await supabase
+                  .from('project_contractor_trades')
+                  .insert({
+                    project_id: existingProject.id,
+                    employer_id: employerId,
+                    trade_type: finalTradeType
+                  });
+
+                if (tradeError) {
+                  console.error(`Trade assignment failed for ${company.companyName}:`, tradeError);
+                  results.errors.push(`Failed to assign trade ${finalTradeType} to ${company.companyName}: ${tradeError.message}`);
+                } else {
+                  console.log(`✓ Assigned ${finalTradeType} trade to ${company.companyName} for ${project.projectName}`);
+                }
+              } else {
+                console.log(`⚠️  Trade assignment already exists for ${company.companyName} (${finalTradeType}) on ${project.projectName}`);
+              }
+            } catch (e) {
+              console.error('Trade assignment error:', e);
+              results.errors.push(`Error assigning trade to ${company.companyName}: ${e instanceof Error ? e.message : 'Unknown error'}`);
+            }
+          }
+        }
+        
+        results.success++;
+      } catch (error) {
+        console.error(`Error processing project ${project.projectName}:`, error);
+        results.errors.push(`Error processing project ${project.projectName}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+    
+    setIsProcessing(false);
+    setImportProgress({ current: 0, total: 0, currentItem: '' });
+    
+    console.log('✅ Quick match import completed:', results);
     setImportResults(results);
     setCurrentStep('complete');
   };
@@ -3828,7 +4173,15 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
     <div className="space-y-4">
       <div className="flex items-center gap-2 text-sm text-gray-600">
         <Info className="h-4 w-4" />
-        <span>Preview of {csvData.length} CSV rows processed into {processedData.length} unique projects</span>
+        <div>
+          <span>Preview of {csvData.length} CSV rows processed into {processedData.length} unique projects</span>
+          {mode === 'employers-to-existing-quick-match' && (
+            <div className="mt-1">
+              <span className="text-green-700 font-medium">{quickMatchStats.validRows} rows</span> with BCI Company ID will be processed, 
+              <span className="text-orange-700 font-medium"> {quickMatchStats.skippedRows} rows</span> will be skipped
+            </div>
+          )}
+        </div>
       </div>
       {processedData.length === 0 && (
         <div className="p-3 border border-red-200 bg-red-50 text-sm text-red-800 rounded">
@@ -3898,7 +4251,10 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
               Processing...
             </>
           ) : (
-            mode === 'projects-only' ? 'Create Projects' : (mode === 'employers-to-existing' ? 'Start Employer Matching' : 'Start Employer Matching')
+            mode === 'projects-only' ? 'Create Projects' : 
+            mode === 'employers-to-existing' ? 'Start Employer Matching' : 
+            mode === 'employers-to-existing-quick-match' ? 'Start Quick Match Import' : 
+            'Start Employer Matching'
           )}
         </Button>
         {processedData.filter(p => !p.projectName || String(p.projectName).trim() === '').length > 0 && (
@@ -3925,7 +4281,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
         <Card className="variant:desktop">
           <CardContent className="p-6 text-center">
             <div className="text-2xl font-bold text-green-600">{importResults.success}</div>
-            <p className="text-sm text-gray-600">Projects Created</p>
+            <p className="text-sm text-gray-600">Projects Processed</p>
           </CardContent>
         </Card>
         
@@ -3943,6 +4299,47 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
           </CardContent>
         </Card>
       </div>
+
+      {mode === 'employers-to-existing-quick-match' && quickMatchStats.skippedRows > 0 && (
+        <Card className="variant:desktop border-orange-200">
+          <CardHeader>
+            <CardTitle className="text-orange-800 flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" />
+              Quick Match Summary
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div className="text-center">
+                <div className="text-xl font-bold text-gray-600">{quickMatchStats.totalRows}</div>
+                <p className="text-sm text-gray-600">Total CSV Rows</p>
+              </div>
+              <div className="text-center">
+                <div className="text-xl font-bold text-green-600">{quickMatchStats.validRows}</div>
+                <p className="text-sm text-gray-600">Processed Rows</p>
+              </div>
+              <div className="text-center">
+                <div className="text-xl font-bold text-orange-600">{quickMatchStats.skippedRows}</div>
+                <p className="text-sm text-gray-600">Skipped Rows</p>
+              </div>
+            </div>
+            {(importResults as any).employersMerged > 0 && (
+              <div className="text-center mb-4">
+                <div className="text-lg font-bold text-indigo-600">{(importResults as any).employersMerged}</div>
+                <p className="text-sm text-gray-600">Employers Merged/Updated</p>
+              </div>
+            )}
+            <div className="text-center">
+              <Button onClick={downloadSkippedRowsCSV} variant="outline" className="gap-2">
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Download Skipped Rows CSV ({quickMatchStats.skippedRows} rows)
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
       
       {importResults.errors.length > 0 && (
         <Card className="variant:desktop border-red-200">

@@ -35,7 +35,7 @@ export default function UploadPage() {
   const [csv, setCsv] = useState<ParsedCSV | null>(null)
   const [mappedRows, setMappedRows] = useState<Record<string, any>[]>([])
   const [bciData, setBciData] = useState<any[]>([])
-  const [bciMode, setBciMode] = useState<'projects-and-employers' | 'projects-only' | 'employers-to-existing'>('projects-and-employers')
+  const [bciMode, setBciMode] = useState<'projects-and-employers' | 'projects-only' | 'employers-to-existing' | 'employers-to-existing-quick-match'>('projects-and-employers')
 
   // Get user role on component mount
   useEffect(() => {

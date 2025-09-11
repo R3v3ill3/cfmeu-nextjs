@@ -93,7 +93,7 @@ interface BCICsvRow {
   contactRemark: string;
 }
 
-type BCIImportMode = 'projects-and-employers' | 'projects-only' | 'employers-to-existing';
+type BCIImportMode = 'projects-and-employers' | 'projects-only' | 'employers-to-existing' | 'employers-to-existing-quick-match';
 
 interface BCICsvParserProps {
   onDataParsed: (data: BCICsvRow[]) => void;
@@ -288,6 +288,7 @@ export default function BCICsvParser({ onDataParsed, onError, onModeChange }: BC
             <Button size="sm" variant={mode === 'projects-and-employers' ? 'default' : 'outline'} onClick={() => setMode('projects-and-employers')}>Projects + Employers</Button>
             <Button size="sm" variant={mode === 'projects-only' ? 'default' : 'outline'} onClick={() => setMode('projects-only')}>Projects only</Button>
             <Button size="sm" variant={mode === 'employers-to-existing' ? 'default' : 'outline'} onClick={() => setMode('employers-to-existing')}>Employers → existing projects</Button>
+            <Button size="sm" variant={mode === 'employers-to-existing-quick-match' ? 'default' : 'outline'} onClick={() => setMode('employers-to-existing-quick-match')}>Quick Match (BCI ID only)</Button>
           </div>
           <div className="mt-3 text-xs text-gray-600">
             {mode === 'projects-only' && (
@@ -295,6 +296,9 @@ export default function BCICsvParser({ onDataParsed, onError, onModeChange }: BC
             )}
             {mode === 'employers-to-existing' && (
               <div>Requires a <strong>Project ID</strong> column to match employers to existing projects in the database.</div>
+            )}
+            {mode === 'employers-to-existing-quick-match' && (
+              <div>Fast matching using <strong>BCI Company ID</strong> only. Rows without BCI Company ID will be skipped and available for download. No fuzzy matching or manual review required.</div>
             )}
           </div>
         </CardContent>
