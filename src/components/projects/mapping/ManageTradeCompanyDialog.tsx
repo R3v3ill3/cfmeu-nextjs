@@ -22,13 +22,13 @@ export function ManageTradeCompanyDialog({ open, onOpenChange, mode, onRemove, o
 				<div className="space-y-2">
 					{mode === "existing" ? (
 						<div className="grid grid-cols-1 gap-2">
-							<Button variant="destructive" onClick={() => { onOpenChange(false); onRemove && onRemove(); }}>Remove</Button>
-							<Button variant="secondary" onClick={() => { onOpenChange(false); onChange && onChange(); }}>Change</Button>
-							<Button onClick={() => { onOpenChange(false); onAdd && onAdd(); }}>Add another</Button>
+							<Button variant="destructive" onClick={() => { onOpenChange(false); if (onRemove) onRemove(); }}>Remove</Button>
+							<Button variant="secondary" onClick={() => { onOpenChange(false); if (onChange) onChange(); }}>Change</Button>
+							<Button onClick={() => { onOpenChange(false); if (onAdd) onAdd(); }}>Add another</Button>
 						</div>
 					) : (
 						<div className="grid grid-cols-1 gap-2">
-							<Button onClick={() => { onOpenChange(false); onAdd && onAdd(); }}>Add</Button>
+							<Button onClick={() => { onOpenChange(false); if (onAdd) onAdd(); }}>Add</Button>
 						</div>
 					)}
 				</div>

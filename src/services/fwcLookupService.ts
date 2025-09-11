@@ -111,7 +111,7 @@ export class FwcLookupService {
       while (this.jobQueue.length > 0) {
         const job = this.jobQueue.shift()!;
         
-        if (job.status === 'cancelled') {
+        if ((job as FwcLookupJob).status === 'cancelled') {
           this.activeJobs.delete(job.id);
           continue;
         }
@@ -151,7 +151,7 @@ export class FwcLookupService {
       const batches = this.chunkArray(employers, job.batchSize);
       
       for (const batch of batches) {
-        if (job.status === 'cancelled') break;
+        if ((job as FwcLookupJob).status === 'cancelled') break;
         
         // Process batch with concurrency limit
         const batchPromises = batch.map(employer => 

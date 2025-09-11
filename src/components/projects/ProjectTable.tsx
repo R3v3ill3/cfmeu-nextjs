@@ -65,15 +65,11 @@ export function ProjectTable({
         {rows.map((project) => {
           const summary = summaries[project.id]
           
-          const builderNames = useMemo(() => {
-            const contractors = (project.project_assignments || []).filter((a) => a.assignment_type === 'contractor_role')
-            return contractors.map((a) => ({ id: a.employer_id, name: a.employers?.name || a.employer_id }))
-          }, [project.project_assignments])
+          const contractors = (project.project_assignments || []).filter((a) => a.assignment_type === 'contractor_role')
+          const builderNames = contractors.map((a) => ({ id: a.employer_id, name: a.employers?.name || a.employer_id }))
 
-          const head = useMemo(() => {
-            const hc = (project.project_assignments || []).find((a) => a.assignment_type === 'contractor_role')
-            return hc ? { id: hc.employer_id, name: hc.employers?.name || hc.employer_id } : null
-          }, [project.project_assignments])
+          const hc = (project.project_assignments || []).find((a) => a.assignment_type === 'contractor_role')
+          const head = hc ? { id: hc.employer_id, name: hc.employers?.name || hc.employer_id } : null
 
           const primary = builderNames[0] || head
           const totalWorkers = summary?.total_workers || 0

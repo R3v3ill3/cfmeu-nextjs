@@ -227,7 +227,7 @@ export async function auditContractorDataConsistency(projectId: string) {
       );
       
       if (!hasAssignment) {
-        issues.push(`Role ${role.role} for ${role.employers?.name} missing from assignments table`);
+        issues.push(`Role ${role.role} for ${(role.employers as any)?.name} missing from assignments table`);
       }
     });
     
@@ -241,7 +241,7 @@ export async function auditContractorDataConsistency(projectId: string) {
     employersWithTrades.forEach(employerId => {
       if (!employersWithRoles.has(employerId)) {
         const tradeEmployer = trades.find(t => t.employer_id === employerId);
-        issues.push(`Trade assignments found for ${tradeEmployer?.employers?.name} without role assignment`);
+        issues.push(`Trade assignments found for ${(tradeEmployer?.employers as any)?.name} without role assignment`);
       }
     });
     

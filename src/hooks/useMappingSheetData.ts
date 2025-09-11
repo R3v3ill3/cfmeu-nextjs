@@ -61,7 +61,7 @@ export function useMappingSheetData(projectId: string) {
 
       if (!project) throw new Error("Project not found");
 
-      let projectInfo = {
+      let projectInfo: any = {
         id: project.id,
         name: project.name,
         legacyBuilderId: project.builder_id,
