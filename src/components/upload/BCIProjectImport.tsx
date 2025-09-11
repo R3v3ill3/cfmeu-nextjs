@@ -1018,23 +1018,42 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
   const mergeEmployerData = async (employerId: string, csvRow: BCICsvRow): Promise<void> => {
     const supabase = getSupabaseBrowserClient();
     
-    // Update employer with new data, but preserve existing project relationships
-    const updateData: any = {
-      name: csvRow.companyName,
-      address_line_1: csvRow.companyStreet,
-      suburb: csvRow.companyTown,
-      state: csvRow.companyState,
-      postcode: csvRow.companyPostcode,
-      country: csvRow.companyCountry
-    };
+    // Clean and validate data before updating - only send non-empty values
+    const updateData: any = {};
     
-    // Only update phone/email if they're provided in CSV
+    // Only add fields that have valid, non-empty values
+    if (csvRow.companyName && csvRow.companyName.trim() !== '') {
+      updateData.name = csvRow.companyName.trim();
+    }
+    if (csvRow.companyStreet && csvRow.companyStreet.trim() !== '') {
+      updateData.address_line_1 = csvRow.companyStreet.trim();
+    }
+    if (csvRow.companyTown && csvRow.companyTown.trim() !== '') {
+      updateData.suburb = csvRow.companyTown.trim();
+    }
+    if (csvRow.companyState && csvRow.companyState.trim() !== '') {
+      updateData.state = csvRow.companyState.trim();
+    }
+    if (csvRow.companyPostcode && csvRow.companyPostcode.trim() !== '') {
+      updateData.postcode = csvRow.companyPostcode.trim();
+    }
+    if (csvRow.companyCountry && csvRow.companyCountry.trim() !== '') {
+      updateData.country = csvRow.companyCountry.trim();
+    }
     if (csvRow.companyPhone && csvRow.companyPhone.trim() !== '') {
-      updateData.phone = csvRow.companyPhone;
+      updateData.phone = csvRow.companyPhone.trim();
     }
     if (csvRow.companyEmail && csvRow.companyEmail.trim() !== '') {
-      updateData.email = csvRow.companyEmail;
+      updateData.email = csvRow.companyEmail.trim();
     }
+    
+    // Skip update if no fields to update
+    if (Object.keys(updateData).length === 0) {
+      console.log(`⚠️  No valid data to update for employer: ${csvRow.companyName || 'Unknown'}`);
+      return;
+    }
+    
+    console.log(`🔄 Updating employer ${csvRow.companyName} with data:`, updateData);
     
     const { error } = await supabase
       .from('employers')
@@ -1042,8 +1061,23 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
       .eq('id', employerId);
 
     if (error) {
-      console.error(`Error updating employer ${csvRow.companyName}:`, error);
-      throw error;
+      console.error(`Error updating employer ${csvRow.companyName}:`, {
+        error,
+        employerId,
+        updateData,
+        csvRowSample: {
+          companyName: csvRow.companyName,
+          companyStreet: csvRow.companyStreet,
+          companyTown: csvRow.companyTown,
+          companyState: csvRow.companyState,
+          companyPostcode: csvRow.companyPostcode,
+          companyCountry: csvRow.companyCountry,
+          companyPhone: csvRow.companyPhone,
+          companyEmail: csvRow.companyEmail
+        }
+      });
+      // Don't throw error - just log it and continue processing
+      return;
     }
     
     console.log(`✓ Merged employer data: ${csvRow.companyName} (ID: ${employerId})`);
