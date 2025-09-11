@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -63,11 +63,6 @@ export function PostImportFwcLookup({
 
   const fwcService = FwcLookupService.getInstance();
 
-  // Analyze eligible employers on mount
-  useEffect(() => {
-    analyzeEligibleEmployers();
-  }, [importResults, analyzeEligibleEmployers]);
-
   // Poll job status if running
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -103,7 +98,7 @@ export function PostImportFwcLookup({
     };
   }, [currentJob, isJobRunning, onComplete, fwcService]);
 
-  const analyzeEligibleEmployers = async () => {
+  const analyzeEligibleEmployers = useCallback(async () => {
     setIsAnalyzing(true);
     
     try {
@@ -148,7 +143,12 @@ export function PostImportFwcLookup({
     } finally {
       setIsAnalyzing(false);
     }
-  };
+  }, [importResults, toast]);
+
+  // Analyze eligible employers on mount
+  useEffect(() => {
+    analyzeEligibleEmployers();
+  }, [importResults, analyzeEligibleEmployers]);
 
   const startFwcLookup = async () => {
     if (selectedEmployers.size === 0) {

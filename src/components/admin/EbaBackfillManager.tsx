@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -79,12 +79,7 @@ export function EbaBackfillManager() {
   const [isProcessingBatch, setIsProcessingBatch] = useState(false);
   const [backfillResults, setBackfillResults] = useState<BackfillResults | null>(null);
 
-  // Load employers without EBA records
-  useEffect(() => {
-    loadEmployersWithoutEba();
-  }, [loadEmployersWithoutEba]);
-
-  const loadEmployersWithoutEba = async () => {
+  const loadEmployersWithoutEba = useCallback(async () => {
     try {
       const supabase = getSupabaseBrowserClient();
       const { data, error } = await supabase
@@ -127,7 +122,13 @@ export function EbaBackfillManager() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [toast]);
+
+  // Load employers without EBA records
+  useEffect(() => {
+    loadEmployersWithoutEba();
+  }, []);
+
 
   const searchEbaForEmployer = async (employer: EmployerWithoutEba) => {
     setSearchStates(prev => ({

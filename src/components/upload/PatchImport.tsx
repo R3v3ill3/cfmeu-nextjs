@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -128,6 +128,15 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
     return Array.from(set);
   }, [normalizedRows]);
 
+  const findOrganiserId = useCallback((value: any): string | null => {
+    if (!value) return null;
+    const target = String(value).trim().toLowerCase();
+    const exact = organisers.find((o) => (o.full_name || "").toLowerCase() === target || (o.email || "").toLowerCase() === target);
+    if (exact) return exact.id;
+    const loose = organisers.find((o) => (o.full_name || "").toLowerCase().includes(target));
+    return loose ? loose.id : null;
+  }, [organisers]);
+
   // Pre-resolve obvious matches
   useEffect(() => {
     const map: Record<string, string> = {};
@@ -238,15 +247,7 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
     }
   };
 
-  const findOrganiserId = (value: any): string | null => {
-    if (!value) return null;
-    const target = String(value).trim().toLowerCase();
-    const exact = organisers.find((o) => (o.full_name || "").toLowerCase() === target || (o.email || "").toLowerCase() === target);
-    if (exact) return exact.id;
-    // Loose contains match on name if no exact match
-    const loose = organisers.find((o) => (o.full_name || "").toLowerCase().includes(target));
-    return loose ? loose.id : null;
-  };
+  
 
   const upsertOrganiserLink = async (organiserId: string, patchId: string) => {
     try {

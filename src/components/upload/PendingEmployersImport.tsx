@@ -109,12 +109,7 @@ export default function PendingEmployersImport() {
     
     const { toast } = useToast();
 
-  // Load pending employers on mount and when filter changes
-  useEffect(() => {
-    loadPendingEmployers();
-  }, [showProcessedEmployers, loadPendingEmployers]);
-
-  const loadPendingEmployers = async () => {
+  const loadPendingEmployers = useCallback(async () => {
     try {
       const supabase = getSupabaseBrowserClient();
       let query = supabase
@@ -153,7 +148,12 @@ export default function PendingEmployersImport() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [projectLinkingMode, showProcessedEmployers]);
+
+  // Load pending employers on mount and when filter changes
+  useEffect(() => {
+    loadPendingEmployers();
+  }, [showProcessedEmployers, loadPendingEmployers]);
 
   const createEmployer = async (pendingEmployer: PendingEmployer): Promise<string> => {
     const supabase = getSupabaseBrowserClient();
