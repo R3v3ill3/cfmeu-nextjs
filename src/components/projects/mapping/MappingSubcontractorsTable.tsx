@@ -52,7 +52,7 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
       employer_id: tc.employerId,
       employer_name: tc.employerName,
       id: tc.id.startsWith('project_trade:') ? tc.id.replace('project_trade:', '') : tc.id,
-      eba: tc.ebaStatus,
+      eba: tc.ebaStatus ?? null,
       isSkeleton: false,
     }));
 
