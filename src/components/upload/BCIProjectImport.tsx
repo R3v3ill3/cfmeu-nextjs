@@ -68,7 +68,7 @@ interface CompanyClassification {
   companyName: string;
   csvRole: string;
   ourRole: 'builder' | 'head_contractor' | 'subcontractor' | 'skip';
-  roleCode?: string; // optional contractor role code for assign_contractor_role
+  roleCode?: string; // contractor_role_types.code when applicable
   tradeType?: TradeType;
   tradeTypes?: TradeType[]; // Support for multiple trade types
   employerId?: string;
@@ -77,7 +77,6 @@ interface CompanyClassification {
   suggestedMatches?: Array<{id: string, name: string, address: string}>;
   userConfirmed: boolean;
   userExcluded: boolean;
-  sourceRow?: BCICsvRow; // original CSV row reference for export
 }
 
 interface EmployerMatchResult {
@@ -246,10 +245,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
       const classification = classifyCompany(row.roleOnProject, row.companyName);
       
       if (classification.shouldImport) {
-        project.companies.push({ ...classification, sourceRow: row });
-      } else {
-        // Still keep reference to source row for skipped export
-        project.companies.push({ ...classification, sourceRow: row });
+        project.companies.push(classification);
       }
     });
 
@@ -311,15 +307,13 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
     return result.length > 0 ? result : ['general_construction'];
   };
 
-  // Map BCI main-contractor style role labels to our internal role + optional contractor_role_types.code
+  // Map BCI main-contractor style role labels to our internal role and optional contractor role code
   const mapBciMainContractorRole = (csvRole: string): {
     ourRole: 'builder' | 'head_contractor' | 'subcontractor' | 'skip';
     roleCode?: string;
     tradeType?: TradeType;
   } | null => {
     const r = (csvRole || '').toLowerCase();
-
-    // Ignored categories
     if (
       r.includes('architectural contractor') ||
       r.includes('epc contractor') ||
@@ -329,43 +323,17 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
       r.includes('procurement office') ||
       r.includes('reclamation contractor') ||
       r.includes('show-unit contractor')
-    ) {
-      return { ourRole: 'skip' };
-    }
-
-    // Builder class
-    if (r.includes('builder / main contractor') || r.includes('building contractor')) {
-      return { ourRole: 'builder' };
-    }
-
-    // Project manager family mapped to specific role codes
-    if (r.includes('construction manager') || r.includes('project manager')) {
-      return { ourRole: 'head_contractor', roleCode: 'construction_manager' };
-    }
-    if (r.includes('managing contractor')) {
-      return { ourRole: 'head_contractor', roleCode: 'managing_contractor' };
-    }
-    if (r.includes('turnkey contractor')) {
-      return { ourRole: 'head_contractor', roleCode: 'turnkey_contractor' };
-    }
-
-    // Head contractor style
+    ) return { ourRole: 'skip' };
+    if (r.includes('builder / main contractor') || r.includes('building contractor')) return { ourRole: 'builder' };
     if (
-      r === 'contractor' ||
-      r.includes('maintenance contractor') ||
-      r.includes('piling & foundation contractor') ||
-      r.includes('road work contractor') ||
-      r.includes('site formation contractor') ||
-      r.includes('superstructure contractor')
-    ) {
-      return { ourRole: 'head_contractor', roleCode: 'head_contractor' };
-    }
-
-    // Site Office treated as subcontractor in general construction
-    if (r.includes('site office')) {
-      return { ourRole: 'subcontractor', tradeType: 'general_construction' };
-    }
-
+      r.includes('construction manager') || r.includes('project manager')
+    ) return { ourRole: 'head_contractor', roleCode: 'construction_manager' };
+    if (r.includes('managing contractor')) return { ourRole: 'head_contractor', roleCode: 'managing_contractor' };
+    if (r.includes('turnkey contractor')) return { ourRole: 'head_contractor', roleCode: 'turnkey_contractor' };
+    if (
+      r === 'contractor' || r.includes('maintenance contractor') || r.includes('piling & foundation contractor') || r.includes('road work contractor') || r.includes('site formation contractor') || r.includes('superstructure contractor')
+    ) return { ourRole: 'head_contractor', roleCode: 'head_contractor' };
+    if (r.includes('site office')) return { ourRole: 'subcontractor', tradeType: 'general_construction' };
     return null;
   };
 
@@ -2917,13 +2885,6 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
                           Auto-Confirm {exactMatches} Exact
                         </>
                       )}
-                    </Button>
-                    <Button 
-                      size="sm" 
-                      variant="outline"
-                      onClick={() => downloadSkippedEmployersCsv()}
-                    >
-                      Download Skipped Employers
                     </Button>
                     <Button 
                       size="sm" 
