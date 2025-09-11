@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { ManageTradeCompanyDialog } from "@/components/projects/mapping/ManageTradeCompanyDialog";
 import { AddEmployerToTradeDialog } from "@/components/projects/mapping/AddEmployerToTradeDialog";
 import { getTradeOptionsByStage, getStageLabel, getTradeLabel, getAllStages, type TradeStage } from "@/utils/tradeUtils";
+import { useMappingSheetData } from "@/hooks/useMappingSheetData";
 
 type Row = {
   key: string; // stage|trade value
@@ -32,58 +33,55 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
   const [activeRow, setActiveRow] = useState<Row | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [addDefaults, setAddDefaults] = useState<{ stage: TradeStage; trade_value: string; trade_label: string; action: "replace" | "add_new" }>({ stage: "other", trade_value: "", trade_label: "", action: "replace" });
+  
+  // Get unified mapping data which includes trade contractors
+  const { data: mappingData, isLoading } = useMappingSheetData(projectId);
 
   useEffect(() => {
-    const load = async () => {
-      // 1. Get all trades grouped by the canonical stages
-      const tradesByStage = getTradeOptionsByStage();
-      
-      // 2. Load all existing assignments for this project
-      const { data } = await (supabase as any)
-        .from("project_contractor_trades")
-        .select("id, employer_id, stage, trade_type, employers(name, enterprise_agreement_status)")
-        .eq("project_id", projectId);
-      
-      const assignments: Row[] = (data || []).map((r: any) => ({
-        key: `${r.stage || 'other'}|${r.trade_type}|${r.id}`,
-        stage: (r.stage as TradeStage) || 'other',
-        trade_value: r.trade_type,
-        trade_label: getTradeLabel(r.trade_type),
-        employer_id: r.employer_id,
-        employer_name: r.employers?.name || r.employer_id,
-        eba: r.employers?.enterprise_agreement_status ?? null,
-        id: r.id,
-        isSkeleton: false,
-      }));
+    if (!mappingData) return;
+    
+    // 1. Get all trades grouped by the canonical stages
+    const tradesByStage = getTradeOptionsByStage();
+    
+    // 2. Convert trade contractors from unified data to Row format
+    const assignments: Row[] = mappingData.tradeContractors.map((tc) => ({
+      key: `${tc.stage}|${tc.tradeType}|${tc.id}`,
+      stage: tc.stage,
+      trade_value: tc.tradeType,
+      trade_label: tc.tradeLabel,
+      employer_id: tc.employerId,
+      employer_name: tc.employerName,
+      id: tc.id.startsWith('project_trade:') ? tc.id.replace('project_trade:', '') : tc.id,
+      eba: tc.ebaStatus,
+      isSkeleton: false,
+    }));
 
-      // 3. Build the rows, ensuring at least one (skeleton) row per trade
-      const newRowsByTrade: Record<string, Row[]> = {};
-      
-      getAllStages().forEach(stage => {
-        tradesByStage[stage].forEach(trade => {
-          const tradeAssignments = assignments.filter(a => a.trade_value === trade.value);
-          if (tradeAssignments.length > 0) {
-            newRowsByTrade[trade.value] = tradeAssignments;
-          } else {
-            // Add a skeleton row if no assignments exist for this trade
-            newRowsByTrade[trade.value] = [{
-              key: `${stage}|${trade.value}|skeleton`,
-              stage,
-              trade_value: trade.value,
-              trade_label: trade.label,
-              employer_id: null,
-              employer_name: null,
-              eba: null,
-              isSkeleton: true,
-            }];
-          }
-        });
+    // 3. Build the rows, ensuring at least one (skeleton) row per trade
+    const newRowsByTrade: Record<string, Row[]> = {};
+    
+    getAllStages().forEach(stage => {
+      tradesByStage[stage].forEach(trade => {
+        const tradeAssignments = assignments.filter(a => a.trade_value === trade.value);
+        if (tradeAssignments.length > 0) {
+          newRowsByTrade[trade.value] = tradeAssignments;
+        } else {
+          // Add a skeleton row if no assignments exist for this trade
+          newRowsByTrade[trade.value] = [{
+            key: `${stage}|${trade.value}|skeleton`,
+            stage,
+            trade_value: trade.value,
+            trade_label: trade.label,
+            employer_id: null,
+            employer_name: null,
+            eba: null,
+            isSkeleton: true,
+          }];
+        }
       });
-      
-      setRowsByTrade(newRowsByTrade);
-    };
-    load();
-  }, [projectId]);
+    });
+    
+    setRowsByTrade(newRowsByTrade);
+  }, [mappingData]);
 
   const upsertRow = async (r: Row, stage: TradeStage, employerId: string, employerName: string) => {
     try {
@@ -192,6 +190,20 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
 
   const renderSection = (title: string, stage: TradeStage) => {
     const tradesForStage = getTradeOptionsByStage()[stage] || [];
+    
+    if (isLoading) {
+      return (
+        <>
+          <tr><td colSpan={3} className="font-semibold pt-3">{title}</td></tr>
+          <TableRow>
+            <TableCell colSpan={3} className="text-center py-4 text-muted-foreground">
+              Loading {title.toLowerCase()} assignments...
+            </TableCell>
+          </TableRow>
+        </>
+      );
+    }
+    
     return (
       <>
         <tr><td colSpan={3} className="font-semibold pt-3">{title}</td></tr>

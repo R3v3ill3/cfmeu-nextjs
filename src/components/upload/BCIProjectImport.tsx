@@ -68,6 +68,7 @@ interface CompanyClassification {
   companyName: string;
   csvRole: string;
   ourRole: 'builder' | 'head_contractor' | 'subcontractor' | 'skip';
+  roleCode?: string; // optional contractor role code for assign_contractor_role
   tradeType?: TradeType;
   tradeTypes?: TradeType[]; // Support for multiple trade types
   employerId?: string;
@@ -306,6 +307,64 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
     return result.length > 0 ? result : ['general_construction'];
   };
 
+  // Map BCI main-contractor style role labels to our internal role + optional contractor_role_types.code
+  const mapBciMainContractorRole = (csvRole: string): {
+    ourRole: 'builder' | 'head_contractor' | 'subcontractor' | 'skip';
+    roleCode?: string;
+    tradeType?: TradeType;
+  } | null => {
+    const r = (csvRole || '').toLowerCase();
+
+    // Ignored categories
+    if (
+      r.includes('architectural contractor') ||
+      r.includes('epc contractor') ||
+      r.includes('epcm contractor') ||
+      r.includes('fitout contractor') ||
+      r.includes('land development contractor') ||
+      r.includes('procurement office') ||
+      r.includes('reclamation contractor') ||
+      r.includes('show-unit contractor')
+    ) {
+      return { ourRole: 'skip' };
+    }
+
+    // Builder class
+    if (r.includes('builder / main contractor') || r.includes('building contractor')) {
+      return { ourRole: 'builder' };
+    }
+
+    // Project manager family mapped to specific role codes
+    if (r.includes('construction manager') || r.includes('project manager')) {
+      return { ourRole: 'head_contractor', roleCode: 'construction_manager' };
+    }
+    if (r.includes('managing contractor')) {
+      return { ourRole: 'head_contractor', roleCode: 'managing_contractor' };
+    }
+    if (r.includes('turnkey contractor')) {
+      return { ourRole: 'head_contractor', roleCode: 'turnkey_contractor' };
+    }
+
+    // Head contractor style
+    if (
+      r === 'contractor' ||
+      r.includes('maintenance contractor') ||
+      r.includes('piling & foundation contractor') ||
+      r.includes('road work contractor') ||
+      r.includes('site formation contractor') ||
+      r.includes('superstructure contractor')
+    ) {
+      return { ourRole: 'head_contractor', roleCode: 'head_contractor' };
+    }
+
+    // Site Office treated as subcontractor in general construction
+    if (r.includes('site office')) {
+      return { ourRole: 'subcontractor', tradeType: 'general_construction' };
+    }
+
+    return null;
+  };
+
   // Enhanced company classification - prefer CSV Role, then fallback to name
   const classifyCompany = (csvRole: string, companyName: string): CompanyClassification => {
     const role = (csvRole || '').toLowerCase().trim();
@@ -337,12 +396,67 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
       };
     }
     
-    // Head contractor mapping from CSV role (e.g., Project Manager, Project Coordinator, Head Contractor)
-    if (role.includes('project manager') || role.includes('project coordinator') || role.includes('head contractor') || role.includes('principal contractor')) {
-      return { 
-        companyName, 
-        csvRole, 
-        ourRole: 'head_contractor', 
+    // First try explicit BCI main-contractor mapping
+    const mapped = mapBciMainContractorRole(csvRole);
+    if (mapped) {
+      if (mapped.ourRole === 'skip') {
+        return {
+          companyName,
+          csvRole,
+          ourRole: 'skip',
+          shouldImport: false,
+          userConfirmed: false,
+          userExcluded: false
+        };
+      }
+      if (mapped.ourRole === 'builder') {
+        return {
+          companyName,
+          csvRole,
+          ourRole: 'builder',
+          shouldImport: true,
+          userConfirmed: false,
+          userExcluded: false
+        };
+      }
+      if (mapped.ourRole === 'head_contractor') {
+        return {
+          companyName,
+          csvRole,
+          ourRole: 'head_contractor',
+          roleCode: mapped.roleCode || 'head_contractor',
+          shouldImport: true,
+          userConfirmed: false,
+          userExcluded: false
+        };
+      }
+      if (mapped.ourRole === 'subcontractor') {
+        const tt = mapped.tradeType || 'general_construction';
+        return {
+          companyName,
+          csvRole,
+          ourRole: 'subcontractor',
+          shouldImport: true,
+          tradeType: tt,
+          tradeTypes: [tt],
+          userConfirmed: false,
+          userExcluded: false
+        };
+      }
+    }
+
+    // Head contractor mapping from generic CSV role keywords
+    if (
+      role.includes('project manager') ||
+      role.includes('project coordinator') ||
+      role.includes('head contractor') ||
+      role.includes('principal contractor')
+    ) {
+      return {
+        companyName,
+        csvRole,
+        ourRole: 'head_contractor',
+        roleCode: 'head_contractor',
         shouldImport: true,
         userConfirmed: false,
         userExcluded: false
@@ -1450,7 +1564,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
                 const { data: hcResult, error: hcError } = await supabase.rpc('assign_contractor_role', {
                   p_project_id: projectId,
                   p_employer_id: employerId,
-                  p_role_code: 'head_contractor',
+                  p_role_code: company.roleCode || 'head_contractor',
                   p_company_name: company.companyName,
                   p_is_primary: false
                 });
@@ -1596,7 +1710,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
               const { data: hcRes, error: hcErr } = await supabase.rpc('assign_contractor_role', {
                 p_project_id: existingProject.id,
                 p_employer_id: employerId,
-                p_role_code: 'head_contractor',
+                p_role_code: company.roleCode || 'head_contractor',
                 p_company_name: company.companyName,
                 p_is_primary: false
               });

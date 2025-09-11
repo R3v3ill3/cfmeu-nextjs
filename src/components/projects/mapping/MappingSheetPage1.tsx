@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { MappingSiteContactsTable } from "./MappingSiteContactsTable";
 import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { useMappingSheetData } from "@/hooks/useMappingSheetData";
 
 type ProjectData = {
   id: string;
@@ -44,6 +45,9 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
   const [saveStatus, setSaveStatus] = useState<'idle' | 'dirty' | 'saving' | 'saved'>('idle');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedMessageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  // Get unified contractor data
+  const { data: mappingData, isLoading: isLoadingContractors } = useMappingSheetData(projectData.id);
 
   const scheduleUpdate = (patch: Partial<ProjectData>) => {
     setSaveStatus('dirty');
@@ -152,20 +156,79 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
           <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={projectData.address || ""} onChange={(e) => saveAddress(e.target.value)} placeholder="" />
         </div>
 
-        {/* Row 3 */}
-        <div className="md:col-span-2">
-          <label className="text-sm font-semibold">Builder</label>
-          <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={projectData.builderName || "—"} readOnly disabled />
-        </div>
-        <div>
-          <label className="text-sm font-semibold">EBA with CFMEU</label>
-          <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={
-            projectData.builderName === "—" ? "—" : (projectData.builderHasEba === null ? "—" : (projectData.builderHasEba ? "Yes" : "No"))
-          } readOnly disabled />
-        </div>
+        {/* Row 3 - Dynamic Contractor Roles */}
+        {isLoadingContractors ? (
+          <div className="md:col-span-3 text-sm text-muted-foreground">Loading contractor information...</div>
+        ) : (
+          <>
+            {mappingData?.contractorRoles.slice(0, 2).map((contractor, index) => (
+              <div key={contractor.id} className={index === 0 ? "md:col-span-2" : ""}>
+                <label className="text-sm font-semibold">{contractor.roleLabel}</label>
+                <Input 
+                  className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" 
+                  value={contractor.employerName || "—"} 
+                  readOnly 
+                  disabled 
+                />
+              </div>
+            ))}
+            {mappingData?.contractorRoles.length === 0 && (
+              <>
+                <div className="md:col-span-2">
+                  <label className="text-sm font-semibold">Builder</label>
+                  <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={projectData.builderName || "—"} readOnly disabled />
+                </div>
+                <div>
+                  <label className="text-sm font-semibold">EBA with CFMEU</label>
+                  <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={
+                    projectData.builderName === "—" ? "—" : (projectData.builderHasEba === null ? "—" : (projectData.builderHasEba ? "Yes" : "No"))
+                  } readOnly disabled />
+                </div>
+              </>
+            )}
+            {mappingData?.contractorRoles.length === 1 && (
+              <div>
+                <label className="text-sm font-semibold">EBA with CFMEU</label>
+                <Input 
+                  className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" 
+                  value={mappingData.contractorRoles[0].ebaStatus === null ? "—" : (mappingData.contractorRoles[0].ebaStatus ? "Yes" : "No")} 
+                  readOnly 
+                  disabled 
+                />
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       <Accordion type="single" collapsible className="w-full mt-4">
+        {/* Additional Contractor Roles Section */}
+        {mappingData && mappingData.contractorRoles.length > 2 && (
+          <AccordionItem value="additional-contractors">
+            <AccordionTrigger className="text-sm font-semibold">Additional Contractor Roles</AccordionTrigger>
+            <AccordionContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 pt-2">
+                {mappingData.contractorRoles.slice(2).map((contractor) => (
+                  <div key={contractor.id}>
+                    <label className="text-sm font-semibold">{contractor.roleLabel}</label>
+                    <div className="flex items-center gap-2">
+                      <Input 
+                        className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0 flex-1" 
+                        value={contractor.employerName || "—"} 
+                        readOnly 
+                        disabled 
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        EBA: {contractor.ebaStatus === null ? "—" : (contractor.ebaStatus ? "Yes" : "No")}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        )}
+        
         <AccordionItem value="project-details">
           <AccordionTrigger className="text-sm font-semibold">Project Details</AccordionTrigger>
           <AccordionContent>

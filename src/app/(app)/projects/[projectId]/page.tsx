@@ -24,6 +24,8 @@ import { Input } from "@/components/ui/input"
 import { usePatchOrganiserLabels } from "@/hooks/usePatchOrganiserLabels"
 import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
 import { useUnifiedContractors } from "@/hooks/useUnifiedContractors"
+import { useProjectSubsetStats } from "@/hooks/useProjectSubsetStats"
+import { SubsetEbaStats } from "@/components/projects/SubsetEbaStats"
 
 function SiteContactsSummary({ projectId, siteIds }: { projectId: string; siteIds: string[] }) {
   const [delegates, setDelegates] = useState<string[]>([])
@@ -378,6 +380,9 @@ export default function ProjectDetailPage() {
     }
   })
 
+  // Get subset EBA stats for this project
+  const { data: subsetStats } = useProjectSubsetStats(projectId)
+
   // Fetch EBA employer ids for fast lookup and make EBA badge actionable
   const stableContractorEmployerIds = useMemo(
     () => Array.from(new Set(((contractorRows as any[]) || []).map((r: any) => r.employerId).filter(Boolean))).sort(),
@@ -581,6 +586,22 @@ export default function ProjectDetailPage() {
         )}
       </div>
 
+      {/* Key Contractor EBA Overview */}
+      {subsetStats && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Key Contractor EBA Status</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <SubsetEbaStats 
+              stats={subsetStats}
+              variant="detailed"
+              onClick={() => setTab('contractors')}
+            />
+          </CardContent>
+        </Card>
+      )}
+
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           {/* Sites tab trigger hidden; accessible via Overview 'Sites' link */}
@@ -609,6 +630,7 @@ export default function ProjectDetailPage() {
                       organisers: (patchOrganisers as any[]).join(', '),
                       workerTotals,
                       ebaStats,
+                      subsetStats,
                       lastVisit,
                       patches: projectPatches,
                     }

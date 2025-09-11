@@ -34,11 +34,13 @@ type ProjectSummary = {
 export function ProjectTable({ 
   rows, 
   summaries, 
+  subsetStats = {},
   onRowClick, 
   onOpenEmployer 
 }: { 
   rows: ProjectRow[]
   summaries: Record<string, ProjectSummary>
+  subsetStats?: Record<string, any>
   onRowClick: (id: string) => void
   onOpenEmployer: (id: string) => void
 }) {
@@ -56,6 +58,7 @@ export function ProjectTable({
           <TableHead className="text-right">Members</TableHead>
           <TableHead>Delegate</TableHead>
           <TableHead className="text-right">EBA Coverage</TableHead>
+          <TableHead className="text-right">Key EBA</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -174,6 +177,27 @@ export function ProjectTable({
                 ) : (
                   <span className="text-muted-foreground">—</span>
                 )}
+              </TableCell>
+              <TableCell className="text-right">
+                {(() => {
+                  const projectSubsetStats = subsetStats[project.id]
+                  if (!projectSubsetStats || projectSubsetStats.known_employer_count === 0) {
+                    return <span className="text-muted-foreground">—</span>
+                  }
+                  
+                  const { known_employer_count, eba_active_count, eba_percentage } = projectSubsetStats
+                  return (
+                    <div className="flex items-center justify-end gap-2">
+                      <span className="text-xs text-muted-foreground">{eba_active_count}/{known_employer_count}</span>
+                      <Badge 
+                        variant={eba_percentage > 50 ? "default" : "destructive"} 
+                        className="text-xs"
+                      >
+                        {eba_percentage}%
+                      </Badge>
+                    </div>
+                  )
+                })()}
               </TableCell>
             </TableRow>
           )

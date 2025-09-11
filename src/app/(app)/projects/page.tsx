@@ -25,6 +25,8 @@ import { PROJECT_TIER_LABELS, ProjectTier } from "@/components/projects/types"
 import { ProjectTable } from "@/components/projects/ProjectTable"
 import DuplicateEmployerManager from "@/components/admin/DuplicateEmployerManager"
 import ProjectsMapView from "@/components/projects/ProjectsMapView"
+import { useMultipleProjectSubsetStats } from "@/hooks/useProjectSubsetStats"
+import { SubsetEbaStats } from "@/components/projects/SubsetEbaStats"
 
 type ProjectWithRoles = {
   id: string
@@ -272,7 +274,7 @@ function EbaPercentBar({ active, total, onClick }: { active: number; total: numb
   )
 }
 
-function ProjectListCard({ p, summary, onOpenEmployer }: { p: ProjectWithRoles; summary?: ProjectSummary; onOpenEmployer: (id: string) => void }) {
+function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: ProjectWithRoles; summary?: ProjectSummary; subsetStats?: any; onOpenEmployer: (id: string) => void }) {
   const builderNames = useMemo(() => {
     // Get all contractor role assignments as potential builders
     const contractors = (p.project_assignments || []).filter((a) => 
@@ -317,6 +319,9 @@ function ProjectListCard({ p, summary, onOpenEmployer }: { p: ProjectWithRoles; 
               {p.name}
             </Link>
             <div className="flex items-center gap-2">
+              {p.tier && (
+                <ProjectTierBadge tier={p.tier as any} />
+              )}
               {('stage_class' in p && (p as any).stage_class) && (
                 <Badge variant="secondary" className="text-[10px] capitalize">{String((p as any).stage_class).replace('_',' ')}</Badge>
               )}
@@ -384,6 +389,13 @@ function ProjectListCard({ p, summary, onOpenEmployer }: { p: ProjectWithRoles; 
             total={engaged}
             onClick={() => { window.location.href = `/projects/${p.id}?tab=contractors` }}
           />
+          {subsetStats && (
+            <SubsetEbaStats
+              stats={subsetStats}
+              variant="compact"
+              onClick={() => { window.location.href = `/projects/${p.id}?tab=contractors` }}
+            />
+          )}
         </div>
         
         {/* Employer Count Display */}
@@ -585,6 +597,10 @@ export default function ProjectsPage() {
   const allProjects = projectsData?.projects || []
   const summaries = projectsData?.summaries || {}
   
+  // Get subset EBA stats for all projects
+  const projectIds = allProjects.map(p => p.id)
+  const { data: subsetStats = {} } = useMultipleProjectSubsetStats(projectIds)
+  
   // Apply client-side filtering and sorting
   const filteredAndSortedProjects = useMemo(() => {
     let filtered = allProjects.slice()
@@ -767,6 +783,7 @@ export default function ProjectsPage() {
           <ProjectTable
             rows={projects as any[]}
             summaries={summaries}
+            subsetStats={subsetStats}
             onRowClick={(id) => {
               window.location.href = `/projects/${id}`
             }}
@@ -795,6 +812,7 @@ export default function ProjectsPage() {
               key={p.id}
               p={p}
               summary={summaries[p.id]}
+              subsetStats={subsetStats[p.id]}
               onOpenEmployer={(id) => { setSelectedEmployerId(id); setIsEmployerOpen(true) }}
             />
           ))}
