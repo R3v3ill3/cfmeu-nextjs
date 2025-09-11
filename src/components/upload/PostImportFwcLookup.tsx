@@ -66,7 +66,7 @@ export function PostImportFwcLookup({
   // Analyze eligible employers on mount
   useEffect(() => {
     analyzeEligibleEmployers();
-  }, [importResults]);
+  }, [importResults, analyzeEligibleEmployers]);
 
   // Poll job status if running
   useEffect(() => {
@@ -101,7 +101,7 @@ export function PostImportFwcLookup({
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [currentJob, isJobRunning, onComplete]);
+  }, [currentJob, isJobRunning, onComplete, fwcService]);
 
   const analyzeEligibleEmployers = async () => {
     setIsAnalyzing(true);

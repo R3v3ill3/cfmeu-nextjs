@@ -82,7 +82,7 @@ export function EbaBackfillManager() {
   // Load employers without EBA records
   useEffect(() => {
     loadEmployersWithoutEba();
-  }, []);
+  }, [loadEmployersWithoutEba]);
 
   const loadEmployersWithoutEba = async () => {
     try {

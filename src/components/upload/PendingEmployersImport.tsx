@@ -112,7 +112,7 @@ export default function PendingEmployersImport() {
   // Load pending employers on mount and when filter changes
   useEffect(() => {
     loadPendingEmployers();
-  }, [showProcessedEmployers]);
+  }, [showProcessedEmployers, loadPendingEmployers]);
 
   const loadPendingEmployers = async () => {
     try {

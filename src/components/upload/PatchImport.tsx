@@ -136,7 +136,7 @@ export default function PatchImport({ csvData, onImportComplete, onBack }: Patch
       if (id) map[name] = id;
     });
     setNameToOrganiserId((prev) => ({ ...map, ...prev }));
-  }, [uniqueOrganiserNames]);
+  }, [uniqueOrganiserNames, findOrganiserId]);
 
   const unresolvedOrganiserNames = useMemo(() => {
     // Consider entries resolved only if matched to existing (nameToOrganiserId) or a draft was actually created

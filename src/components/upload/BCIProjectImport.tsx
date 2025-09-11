@@ -77,6 +77,7 @@ interface CompanyClassification {
   suggestedMatches?: Array<{id: string, name: string, address: string}>;
   userConfirmed: boolean;
   userExcluded: boolean;
+  sourceRow?: BCICsvRow; // original CSV row reference for export
 }
 
 interface EmployerMatchResult {
@@ -245,7 +246,10 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
       const classification = classifyCompany(row.roleOnProject, row.companyName);
       
       if (classification.shouldImport) {
-        project.companies.push(classification);
+        project.companies.push({ ...classification, sourceRow: row });
+      } else {
+        // Still keep reference to source row for skipped export
+        project.companies.push({ ...classification, sourceRow: row });
       }
     });
 
@@ -2916,6 +2920,13 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
                     </Button>
                     <Button 
                       size="sm" 
+                      variant="outline"
+                      onClick={() => downloadSkippedEmployersCsv()}
+                    >
+                      Download Skipped Employers
+                    </Button>
+                    <Button 
+                      size="sm" 
                       variant="outline" 
                       onClick={() => setUseConsolidatedView(false)}
                     >
@@ -3652,6 +3663,52 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
       </Dialog>
     </div>
     );
+  };
+
+  // Download skipped employers as CSV (original headers/rows)
+  const downloadSkippedEmployersCsv = () => {
+    try {
+      const headers = Object.keys(csvData[0] || {});
+      const skippedRows: BCICsvRow[] = [];
+      processedData.forEach(project => {
+        project.companies.forEach(company => {
+          const mk = `${project.projectId}-${company.companyName}-${company.csvRole}`;
+          const match = employerMatches[mk];
+          const skippedByRule = company.shouldImport === false || company.ourRole === 'skip';
+          const skippedByUser = match?.action === 'skip';
+          const row = (company as any).sourceRow as BCICsvRow | undefined;
+          if ((skippedByRule || skippedByUser) && row) {
+            skippedRows.push(row);
+          }
+        });
+      });
+
+      if (skippedRows.length === 0) {
+        alert('No skipped employers to export.');
+        return;
+      }
+
+      const csvLines: string[] = [];
+      csvLines.push(headers.join(','));
+      for (const r of skippedRows) {
+        const line = headers.map(h => {
+          const v = (r as any)[h] ?? '';
+          const s = String(v).replace(/"/g, '""');
+          return `"${s}"`;
+        }).join(',');
+        csvLines.push(line);
+      }
+
+      const blob = new Blob([csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `bci-skipped-employers-${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+    } catch (e) {
+      console.error('Failed to export skipped employers CSV', e);
+      alert('Failed to export skipped employers CSV.');
+    }
   };
 
   // Render trade type confirmation step

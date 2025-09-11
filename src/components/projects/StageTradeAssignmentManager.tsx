@@ -68,7 +68,7 @@ export default function StageTradeAssignmentManager({ projectId }: { projectId: 
     setAvailability(map);
   };
 
-  useEffect(() => { loadStageData(stage); }, [stage, projectId]);
+  useEffect(() => { loadStageData(stage); }, [stage, projectId, loadStageData]);
 
   const toggleNA = async (trade: string) => {
     try {
