@@ -1932,32 +1932,24 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
           } else if (company.ourRole === 'subcontractor') {
             const finalTradeType = company.tradeType || 'general_construction';
             try {
-              // Check if this exact assignment already exists
-              const { data: existingAssignment } = await supabase
-                .from('project_contractor_trades')
-                .select('id')
-                .eq('project_id', existingProject.id)
-                .eq('employer_id', employerId)
-                .eq('trade_type', finalTradeType)
-                .maybeSingle();
+              // Use corrected RPC function that allows multiple trades per employer
+              const { data: tradeResult, error: tradeError } = await supabase.rpc('assign_contractor_trade', {
+                p_project_id: existingProject.id,
+                p_employer_id: employerId,
+                p_trade_type: finalTradeType,
+                p_company_name: company.companyName
+              });
 
-              if (!existingAssignment) {
-                const { error: tradeError } = await supabase
-                  .from('project_contractor_trades')
-                  .insert({
-                    project_id: existingProject.id,
-                    employer_id: employerId,
-                    trade_type: finalTradeType
-                  });
-
-                if (tradeError) {
-                  console.error(`Trade assignment failed for ${company.companyName}:`, tradeError);
-                  results.errors.push(`Failed to assign trade ${finalTradeType} to ${company.companyName}: ${tradeError.message}`);
-                } else {
-                  console.log(`✓ Assigned ${finalTradeType} trade to ${company.companyName} for ${project.projectName}`);
-                }
+              if (tradeError) {
+                console.error(`Trade assignment failed for ${company.companyName}:`, tradeError);
+                results.errors.push(`Failed to assign trade ${finalTradeType} to ${company.companyName}: ${tradeError.message}`);
               } else {
-                console.log(`⚠️  Trade assignment already exists for ${company.companyName} (${finalTradeType}) on ${project.projectName}`);
+                const result = tradeResult?.[0];
+                if (result?.success) {
+                  console.log(`✓ ${result.message}`);
+                } else {
+                  console.log(`⚠️  Trade assignment issue for ${company.companyName}: ${result?.message || 'Unknown response'}`);
+                }
               }
             } catch (e) {
               console.error('Trade assignment error:', e);
