@@ -81,21 +81,20 @@ export function EditProjectDialog({
   const loadRelations = async () => {
     setLoadingRelations(true);
     try {
-      // Load from project_assignments instead of legacy project_employer_roles
-      const { data: assignments, error: assignmentsErr } = await supabase
-        .from("project_assignments")
-        .select("assignment_type, employer_id, contractor_role_types(code)")
-        .eq("project_id", project.id)
-        .eq("assignment_type", "contractor_role");
-      if (assignmentsErr) throw assignmentsErr;
+      // Load roles from the unified view for consistency
+      const { data: roles, error: rolesErr } = await supabase
+        .from("v_unified_project_contractors")
+        .select("role, employer_id")
+        .eq("project_id", project.id);
+      if (rolesErr) throw rolesErr;
 
-      const builders = (assignments || [])
-        .filter((a: any) => a.contractor_role_types?.code === "builder")
-        .map((a: any) => a.employer_id)
+      const builders = (roles || [])
+        .filter((r: any) => r.role === "builder")
+        .map((r: any) => r.employer_id)
         .filter(Boolean) as string[];
       setBuilderIds(builders);
 
-      const head = (assignments || []).find((a: any) => a.contractor_role_types?.code === "head_contractor");
+      const head = (roles || []).find((r: any) => r.role === "head_contractor");
       setHeadContractorId((head?.employer_id as string) || "");
 
       const { data: jv, error: jvErr } = await supabase
@@ -210,7 +209,7 @@ export function EditProjectDialog({
 
   const updateMutation = useMutation({
     mutationFn: async () => {
-      // 1) Update base project fields (keep legacy builder_id in sync)
+      // 1) Update base project fields
       const payload = {
         name: name.trim(),
         value: value ? parseFloat(value) : null,
@@ -222,7 +221,6 @@ export function EditProjectDialog({
         project_type: projectType || null,
         state_funding: stateFunding ? Number(stateFunding.replace(/[^0-9.]/g, "")) : 0,
         federal_funding: federalFunding ? Number(federalFunding.replace(/[^0-9.]/g, "")) : 0,
-        builder_id: builderIds[0] || null,
       } as const;
 
       const { error: updErr } = await supabase

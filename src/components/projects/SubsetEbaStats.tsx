@@ -17,7 +17,8 @@ interface SubsetEbaStatsProps {
 /**
  * Component to display EBA statistics for the subset of key employers/trades:
  * - Builders and Project Managers
- * - Demolition, Piling, Concrete, Scaffolding, Form Work, Tower Crane, Mobile Crane
+ * - Demolition, Piling, Concrete, Scaffolding, Form Work, Tower Crane, Mobile Crane, 
+ *   Labour Hire, Earthworks, Traffic Control
  */
 export function SubsetEbaStats({ 
   stats, 

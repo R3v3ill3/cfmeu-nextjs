@@ -11,6 +11,7 @@ import { MappingSiteContactsTable } from "./MappingSiteContactsTable";
 import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useMappingSheetData } from "@/hooks/useMappingSheetData";
+import { AutoMatchIndicator } from "@/components/projects/mapping/AutoMatchIndicator";
 
 type ProjectData = {
   id: string;
@@ -164,12 +165,28 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
             {mappingData?.contractorRoles.slice(0, 2).map((contractor, index) => (
               <div key={contractor.id} className={index === 0 ? "md:col-span-2" : ""}>
                 <label className="text-sm font-semibold">{contractor.roleLabel}</label>
-                <Input 
-                  className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" 
-                  value={contractor.employerName || "—"} 
-                  readOnly 
-                  disabled 
-                />
+                <div className="flex items-center gap-2">
+                  <Input 
+                    className={`rounded-none border-0 border-b border-black focus-visible:ring-0 px-0 flex-1 ${
+                      contractor.matchStatus === 'auto_matched' 
+                        ? 'italic text-gray-500' 
+                        : ''
+                    }`}
+                    value={contractor.employerName || "—"} 
+                    readOnly 
+                    disabled 
+                  />
+                  {/* Show auto-match indicator */}
+                  {contractor.employerName && (
+                    <AutoMatchIndicator
+                      matchStatus={contractor.matchStatus}
+                      dataSource={contractor.dataSource}
+                      matchConfidence={contractor.matchConfidence}
+                      matchNotes={contractor.matchNotes}
+                      className="text-xs ml-1"
+                    />
+                  )}
+                </div>
               </div>
             ))}
             {mappingData?.contractorRoles.length === 0 && (
@@ -213,7 +230,11 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
                     <label className="text-sm font-semibold">{contractor.roleLabel}</label>
                     <div className="flex items-center gap-2">
                       <Input 
-                        className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0 flex-1" 
+                        className={`rounded-none border-0 border-b border-black focus-visible:ring-0 px-0 flex-1 ${
+                          contractor.matchStatus === 'auto_matched' 
+                            ? 'italic text-gray-500' 
+                            : ''
+                        }`}
                         value={contractor.employerName || "—"} 
                         readOnly 
                         disabled 
@@ -221,6 +242,16 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
                       <span className="text-xs text-muted-foreground">
                         EBA: {contractor.ebaStatus === null ? "—" : (contractor.ebaStatus ? "Yes" : "No")}
                       </span>
+                      {/* Show auto-match indicator */}
+                      {contractor.employerName && (
+                        <AutoMatchIndicator
+                          matchStatus={contractor.matchStatus}
+                          dataSource={contractor.dataSource}
+                          matchConfidence={contractor.matchConfidence}
+                          matchNotes={contractor.matchNotes}
+                          className="text-xs ml-1"
+                        />
+                      )}
                     </div>
                   </div>
                 ))}

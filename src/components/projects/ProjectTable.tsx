@@ -2,6 +2,7 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
+import { CfmeuEbaBadge, getProjectEbaStatus } from "@/components/ui/CfmeuEbaBadge"
 import Link from "next/link"
 import { useMemo } from "react"
 
@@ -16,7 +17,11 @@ type ProjectRow = {
   project_assignments?: Array<{
     assignment_type: string
     employer_id: string
-    employers?: { name: string | null } | null
+    contractor_role_types?: { code: string } | null
+    employers?: { 
+      name: string | null
+      enterprise_agreement_status?: boolean | null
+    } | null
   }>
 }
 
@@ -124,6 +129,17 @@ export function ProjectTable({
               </TableCell>
               <TableCell>
                 <div className="flex items-center gap-2">
+                  {(() => {
+                    const ebaStatus = getProjectEbaStatus(project)
+                    return (
+                      <CfmeuEbaBadge 
+                        hasActiveEba={ebaStatus.hasActiveEba} 
+                        builderName={ebaStatus.builderName}
+                        size="sm"
+                        showText={false}
+                      />
+                    )
+                  })()}
                   {project.stage_class && (
                     <Badge variant="secondary" className="text-[10px] capitalize">{String(project.stage_class).replace('_',' ')}</Badge>
                   )}

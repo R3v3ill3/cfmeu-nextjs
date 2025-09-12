@@ -9,7 +9,14 @@ export interface ContractorRole {
   role: 'builder' | 'head_contractor' | 'project_manager' | 'site_manager' | 'other';
   roleLabel: string;
   ebaStatus?: boolean | null;
-  source: 'project_employer_roles' | 'legacy_builder_id' | 'project_assignments';
+  source: 'project_employer_roles' | 'legacy_builder_id' | 'project_assignments' | 'v_unified_project_contractors';
+  // Auto-match tracking fields
+  dataSource?: 'manual' | 'bci_import' | 'other_import';
+  matchStatus?: 'auto_matched' | 'confirmed' | 'needs_review';
+  matchConfidence?: number;
+  matchedAt?: string;
+  confirmedAt?: string;
+  matchNotes?: string;
 }
 
 export interface TradeContractor {
@@ -22,6 +29,13 @@ export interface TradeContractor {
   estimatedWorkforce?: number | null;
   ebaStatus?: boolean | null;
   source: 'project_contractor_trades' | 'site_contractor_trades';
+  // Auto-match tracking fields
+  dataSource?: 'manual' | 'bci_import' | 'other_import';
+  matchStatus?: 'auto_matched' | 'confirmed' | 'needs_review';
+  matchConfidence?: number;
+  matchedAt?: string;
+  confirmedAt?: string;
+  matchNotes?: string;
 }
 
 export interface MappingSheetData {
@@ -49,13 +63,12 @@ export function useMappingSheetData(projectId: string) {
     queryFn: async (): Promise<MappingSheetData> => {
       if (!projectId) throw new Error("Project ID required");
 
-      const contractorRoles: ContractorRole[] = [];
       const tradeContractors: TradeContractor[] = [];
 
-      // 1. Get project basic info including legacy builder_id
+      // 1. Get project basic info
       const { data: project } = await supabase
         .from("projects")
-        .select("id, name, builder_id")
+        .select("id, name, builder_id") // Keep builder_id for legacy info if needed
         .eq("id", projectId)
         .single();
 
@@ -67,109 +80,115 @@ export function useMappingSheetData(projectId: string) {
         legacyBuilderId: project.builder_id,
       };
 
-      // 2. Get contractor roles from project_employer_roles (new system)
-      const { data: roles } = await supabase
-        .from("project_employer_roles")
-        .select("id, role, employer_id, employers(name, enterprise_agreement_status)")
-        .eq("project_id", projectId);
+      // 2. Get all contractor roles from project_assignments
+      const { data: roleAssignments, error: rolesError } = await supabase
+        .from("project_assignments")
+        .select(`
+          id,
+          employer_id,
+          source,
+          match_status,
+          match_confidence,
+          matched_at,
+          confirmed_at,
+          match_notes,
+          employers(name, enterprise_agreement_status),
+          contractor_role_types(code, name)
+        `)
+        .eq('project_id', projectId)
+        .eq('assignment_type', 'contractor_role');
 
-      (roles || []).forEach((r: any) => {
-        if (!r.employer_id) return;
+      if (rolesError) throw rolesError;
+
+      const contractorRoles: ContractorRole[] = (roleAssignments || []).map((r: any) => {
+        const roleCode = r.contractor_role_types?.code || 'other';
+        const roleLabel = r.contractor_role_types?.name || 'Other';
         
-        const roleLabel = r.role === 'builder' ? 'Builder' : 
-                         r.role === 'head_contractor' ? 'Head Contractor' :
-                         r.role === 'project_manager' ? 'Project Manager' :
-                         r.role === 'site_manager' ? 'Site Manager' : 
-                         r.role;
-
-        contractorRoles.push({
-          id: `role:${r.id}`,
+        return {
+          id: `role_assignment:${r.id}`,
           employerId: r.employer_id,
           employerName: r.employers?.name || r.employer_id,
-          role: r.role,
+          role: roleCode as any,
           roleLabel,
           ebaStatus: r.employers?.enterprise_agreement_status !== 'no_eba',
-          source: 'project_employer_roles'
-        });
+          source: 'project_employer_roles',
+          dataSource: r.source,
+          matchStatus: r.match_status,
+          matchConfidence: r.match_confidence,
+          matchedAt: r.matched_at,
+          confirmedAt: r.confirmed_at,
+          matchNotes: r.match_notes,
+        };
       });
 
-      // 3. Get contractor roles from project_assignments (newer assignment system)
-      const { data: assignments } = await supabase
-        .from("project_assignments")
-        .select("id, assignment_type, employer_id, role_details, employers(name, enterprise_agreement_status)")
-        .eq("project_id", projectId)
-        .eq("assignment_type", "contractor_role");
-
-      (assignments || []).forEach((a: any) => {
-        if (!a.employer_id) return;
-        
-        // Avoid duplicates from project_employer_roles
-        const existingRole = contractorRoles.find(r => r.employerId === a.employer_id);
-        if (existingRole) return;
-
-        const roleDetails = a.role_details || {};
-        const role = roleDetails.role_code || 'other';
-        const roleLabel = roleDetails.company_name || 
-                         (role === 'builder' ? 'Builder' : 
-                          role === 'head_contractor' ? 'Head Contractor' :
-                          role === 'project_manager' ? 'Project Manager' :
-                          role === 'site_manager' ? 'Site Manager' : 
-                          'Contractor');
-
-        contractorRoles.push({
-          id: `assignment:${a.id}`,
-          employerId: a.employer_id,
-          employerName: a.employers?.name || a.employer_id,
-          role: role as any,
-          roleLabel,
-          ebaStatus: a.employers?.enterprise_agreement_status !== 'no_eba',
-          source: 'project_assignments'
-        });
-      });
-
-      // 4. Handle legacy builder_id if not covered by new systems
-      if (project.builder_id) {
-        const hasBuilderRole = contractorRoles.some(r => 
-          r.employerId === project.builder_id && 
-          (r.role === 'builder' || r.roleLabel.toLowerCase().includes('builder'))
-        );
-
-        if (!hasBuilderRole) {
-          // Get builder info from legacy system
-          const { data: builder } = await supabase
-            .from("employers")
-            .select("name, enterprise_agreement_status")
-            .eq("id", project.builder_id)
-            .single();
-
-          if (builder) {
-            contractorRoles.push({
-              id: `legacy:${project.builder_id}`,
-              employerId: project.builder_id,
-              employerName: builder.name || project.builder_id,
-              role: 'builder',
-              roleLabel: 'Builder',
-              ebaStatus: builder.enterprise_agreement_status !== 'no_eba',
-              source: 'legacy_builder_id'
-            });
-
-            projectInfo = {
-              ...projectInfo,
-              builderName: builder.name,
-              builderHasEba: builder.enterprise_agreement_status !== 'no_eba'
-            };
-          }
-        }
+      // Populate projectInfo with builder info from the unified roles
+      const builder = contractorRoles.find(r => r.role === 'builder');
+      if (builder) {
+        projectInfo = {
+          ...projectInfo,
+          builderName: builder.employerName,
+          builderHasEba: builder.ebaStatus,
+        };
       }
 
-      // 5. Get trade contractors from project_contractor_trades
+      // 3. Get trade contractors from project_assignments (the new system)
+      const { data: tradeAssignments, error: tradeAssignmentsError } = await supabase
+        .from("project_assignments")
+        .select(`
+          id,
+          employer_id,
+          source,
+          match_status,
+          match_confidence,
+          matched_at,
+          confirmed_at,
+          match_notes,
+          employers(name, enterprise_agreement_status),
+          trade_types(code, name)
+        `)
+        .eq("project_id", projectId)
+        .eq("assignment_type", "trade_work");
+
+      if (tradeAssignmentsError) throw tradeAssignmentsError;
+
+      (tradeAssignments || []).forEach((t: any) => {
+        if (!t.employer_id || !t.trade_types?.code) return;
+
+        const tradeType = t.trade_types.code; // Use code instead of name
+        const tradeLabel = getTradeLabel(tradeType);
+        const stage = getTradeStage(tradeType);
+
+        tradeContractors.push({
+          id: `assignment_trade:${t.id}`,
+          employerId: t.employer_id,
+          employerName: t.employers?.name || t.employer_id,
+          tradeType,
+          tradeLabel,
+          stage,
+          ebaStatus: t.employers?.enterprise_agreement_status !== 'no_eba',
+          source: 'project_contractor_trades', // Consider this the same source type for UI
+          dataSource: t.source,
+          matchStatus: t.match_status,
+          matchConfidence: t.match_confidence,
+          matchedAt: t.matched_at,
+          confirmedAt: t.confirmed_at,
+          matchNotes: t.match_notes,
+        });
+      });
+
+
+      // 4. Get trade contractors from project_contractor_trades (legacy)
       const { data: projectTrades } = await supabase
         .from("project_contractor_trades")
-        .select("id, employer_id, trade_type, stage, estimated_project_workforce, employers(name, enterprise_agreement_status)")
+        .select("id, employer_id, trade_type, stage, estimated_project_workforce, source, match_status, match_confidence, matched_at, confirmed_at, match_notes, employers(name, enterprise_agreement_status)")
         .eq("project_id", projectId);
 
       (projectTrades || []).forEach((t: any) => {
         if (!t.employer_id) return;
+        
+        // Avoid duplicates from the new trade assignment system
+        const existing = tradeContractors.find(tc => tc.employerId === t.employer_id && tc.tradeType === t.trade_type);
+        if (existing) return;
 
         const tradeLabel = getTradeLabel(t.trade_type);
         const stage = t.stage || getTradeStage(t.trade_type);
@@ -183,11 +202,17 @@ export function useMappingSheetData(projectId: string) {
           stage,
           estimatedWorkforce: t.estimated_project_workforce,
           ebaStatus: t.employers?.enterprise_agreement_status !== 'no_eba',
-          source: 'project_contractor_trades'
+          source: 'project_contractor_trades',
+          dataSource: t.source,
+          matchStatus: t.match_status,
+          matchConfidence: t.match_confidence,
+          matchedAt: t.matched_at,
+          confirmedAt: t.confirmed_at,
+          matchNotes: t.match_notes
         });
       });
 
-      // 6. Get trade contractors from site_contractor_trades (if main site exists)
+      // 5. Get trade contractors from site_contractor_trades (legacy, if main site exists)
       const { data: mainSite } = await supabase
         .from("projects")
         .select("main_job_site_id")

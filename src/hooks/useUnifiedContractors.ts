@@ -11,7 +11,7 @@ export interface UnifiedContractorRow {
   tradeType: string;
   tradeLabel: string;
   tradeStage: 'early_works' | 'structure' | 'finishing' | 'other';
-  source: 'project_role' | 'site_contractor' | 'project_contractor';
+  source: 'project_role' | 'site_contractor' | 'project_contractor' | 'v_unified_project_contractors';
   estimatedWorkforce?: number | null;
   ebaStatus?: boolean | null;
 }
@@ -59,25 +59,28 @@ export function useUnifiedContractors(projectId: string, options: UnifiedContrac
       
       const rows: UnifiedContractorRow[] = [];
 
-      // 1) Project roles: builders and head contractors
-      const { data: roles } = await supabase
-        .from("project_employer_roles")
-        .select("role, employer_id, employers(name, enterprise_agreement_status)")
+      // 1) Project roles from the unified view
+      const { data: roles, error: rolesError } = await supabase
+        .from("v_unified_project_contractors")
+        .select("role, employer_id, source, employers(name, enterprise_agreement_status)")
         .eq("project_id", projectId);
+
+      if (rolesError) throw rolesError;
 
       (roles || []).forEach((r: any, idx: number) => {
         if (!r.employer_id) return;
-        const tradeType = r.role === 'builder' ? 'general_construction' : 'general_construction'; // Map roles to trade types
+        const roleLabel = (r.role || 'other').replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
+        
         rows.push({
           id: `role:${r.role}:${r.employer_id}:${idx}`,
           employerId: r.employer_id,
           employerName: r.employers?.name || r.employer_id,
-          siteName: r.role === 'builder' ? 'Builder' : r.role === 'head_contractor' ? 'Head Contractor' : r.role,
+          siteName: roleLabel,
           siteId: null,
-          tradeType,
-          tradeLabel: r.role === 'builder' ? 'Builder' : r.role === 'head_contractor' ? 'Head Contractor' : r.role,
+          tradeType: r.role || 'other',
+          tradeLabel: roleLabel,
           tradeStage: 'other',
-          source: 'project_role',
+          source: 'v_unified_project_contractors',
           ebaStatus: r.employers?.enterprise_agreement_status !== 'no_eba',
         });
       });

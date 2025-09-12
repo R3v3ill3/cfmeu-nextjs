@@ -27,6 +27,7 @@ import DuplicateEmployerManager from "@/components/admin/DuplicateEmployerManage
 import ProjectsMapView from "@/components/projects/ProjectsMapView"
 import { useMultipleProjectSubsetStats } from "@/hooks/useProjectSubsetStats"
 import { SubsetEbaStats } from "@/components/projects/SubsetEbaStats"
+import { CfmeuEbaBadge, getProjectEbaStatus } from "@/components/ui/CfmeuEbaBadge"
 
 type ProjectWithRoles = {
   id: string
@@ -313,15 +314,46 @@ function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: Proje
   return (
     <Card className="transition-colors hover:bg-accent/40 h-full flex flex-col">
       <CardHeader className="p-4 pb-2">
-        <CardTitle className="text-base font-medium truncate">
-          <div className="flex items-center justify-between gap-2">
-            <Link href={`/projects/${p.id}`} className="hover:underline inline-block rounded border border-dashed border-transparent hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 px-1">
-              {p.name}
-            </Link>
-            <div className="flex items-center gap-2">
+        <CardTitle className="text-base font-medium">
+          <div className="space-y-2">
+            {/* Project name and mapping sheets button */}
+            <div className="flex items-center justify-between gap-2">
+              <Link href={`/projects/${p.id}`} className="hover:underline inline-block rounded border border-dashed border-transparent hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 px-1 truncate min-w-0 flex-1">
+                {p.name}
+              </Link>
+              <button
+                type="button"
+                className="text-xs text-primary hover:underline whitespace-nowrap flex-shrink-0"
+                onClick={() => {
+                  try {
+                    const ua = navigator.userAgent.toLowerCase()
+                    const isMobile = /iphone|ipad|ipod|android/.test(ua)
+                    const href = isMobile ? `/projects/${p.id}/mappingsheets-mobile` : `/projects/${p.id}?tab=mappingsheets`
+                    window.location.href = href
+                  } catch {
+                    window.location.href = `/projects/${p.id}?tab=mappingsheets`
+                  }
+                }}
+              >
+                Mapping Sheets
+              </button>
+            </div>
+            {/* Badges row - always visible */}
+            <div className="flex items-center gap-2 flex-wrap">
               {p.tier && (
                 <ProjectTierBadge tier={p.tier as any} />
               )}
+              {(() => {
+                const ebaStatus = getProjectEbaStatus(p)
+                return (
+                  <CfmeuEbaBadge 
+                    hasActiveEba={ebaStatus.hasActiveEba} 
+                    builderName={ebaStatus.builderName}
+                    size="sm"
+                    showText={false}
+                  />
+                )
+              })()}
               {('stage_class' in p && (p as any).stage_class) && (
                 <Badge variant="secondary" className="text-[10px] capitalize">{String((p as any).stage_class).replace('_',' ')}</Badge>
               )}
@@ -329,22 +361,6 @@ function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: Proje
                 <Badge variant="outline" className="text-[10px] capitalize">{String((p as any).organising_universe)}</Badge>
               )}
             </div>
-            <button
-              type="button"
-              className="text-xs text-primary hover:underline whitespace-nowrap"
-              onClick={() => {
-                try {
-                  const ua = navigator.userAgent.toLowerCase()
-                  const isMobile = /iphone|ipad|ipod|android/.test(ua)
-                  const href = isMobile ? `/projects/${p.id}/mappingsheets-mobile` : `/projects/${p.id}?tab=mappingsheets`
-                  window.location.href = href
-                } catch {
-                  window.location.href = `/projects/${p.id}?tab=mappingsheets`
-                }
-              }}
-            >
-              Mapping Sheets
-            </button>
           </div>
         </CardTitle>
         <div className="mt-1 flex items-center gap-2 text-sm">
@@ -441,6 +457,7 @@ export default function ProjectsPage() {
   const workersFilter = sp.get("workers") || "all" // all, zero, nonzero
   const universeFilter = sp.get("universe") || sp.get("universeFilter") || "all"
   const stageFilter = sp.get("stage") || sp.get("stageFilter") || "all"
+  const specialFilter = sp.get("special") || "all"
   const page = Math.max(1, parseInt(sp.get('page') || '1', 10) || 1)
   const PAGE_SIZE = 24
 
@@ -471,18 +488,74 @@ export default function ProjectsPage() {
     staleTime: 30000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      const { data } = await (supabase as any)
+      console.log("🎯 Patch filtering debug:", { patchIds })
+      
+      // First, let's check if there are any patch_job_sites records at all for these patches
+      const { data: allPatchSites, error: allError } = await supabase
         .from("patch_job_sites")
-        .select("job_sites:job_site_id(project_id), patch_id")
+        .select("patch_id, job_site_id")
         .is("effective_to", null)
         .in("patch_id", patchIds)
-      const projIds = new Set<string>()
-      ;((data as any[]) || []).forEach((row: any) => {
-        const js = Array.isArray(row.job_sites) ? row.job_sites[0] : row.job_sites
-        const pid = js?.project_id as string | undefined
-        if (pid) projIds.add(pid)
-      })
-      return Array.from(projIds)
+      
+      console.log("🔍 Raw patch_job_sites check:", { allPatchSites, allError, count: allPatchSites?.length })
+      
+      // Let's also try the alternative approach using job_sites.patch_id directly
+      const { data: altData, error: altError } = await supabase
+        .from("job_sites")
+        .select("id, project_id, patch_id")
+        .in("patch_id", patchIds)
+        .not("project_id", "is", null)
+      
+      console.log("🔄 Alternative job_sites query:", { altData, altError, count: altData?.length })
+      
+      // Original query with more detailed logging
+      const { data, error } = await supabase
+        .from("patch_job_sites")
+        .select(`
+          patch_id,
+          job_sites:job_site_id(project_id)
+        `)
+        .is("effective_to", null)
+        .in("patch_id", patchIds)
+      
+      console.log("📊 Patch query result:", { data, error, count: data?.length })
+      
+      if (error) {
+        console.error("❌ Patch query error:", error)
+        throw error
+      }
+      
+      // Use alternative data if main query returns empty but alt query has results
+      let projectIds: string[] = []
+      
+      if (data && data.length > 0) {
+        console.log("✅ Using main query results")
+        const projIds = new Set<string>()
+        ;((data as any[]) || []).forEach((row: any) => {
+          console.log("🔍 Processing row:", row)
+          const js = row.job_sites
+          const pid = js?.project_id as string | undefined
+          if (pid) {
+            console.log("✅ Found project ID:", pid)
+            projIds.add(pid)
+          } else {
+            console.log("❌ No project_id found in:", js)
+          }
+        })
+        projectIds = Array.from(projIds)
+      } else if (altData && altData.length > 0) {
+        console.log("🔄 Using alternative query results")
+        const projIds = new Set<string>()
+        altData.forEach((row: any) => {
+          if (row.project_id) {
+            projIds.add(row.project_id)
+          }
+        })
+        projectIds = Array.from(projIds)
+      }
+      
+      console.log("🎯 Final project IDs:", projectIds)
+      return projectIds
     }
   })
 
@@ -554,7 +627,8 @@ export default function ProjectsPage() {
             project_id,
             assignment_type,
             employer_id,
-            employers(name)
+            contractor_role_types(code),
+            employers(name, enterprise_agreement_status)
           `)
           .in('project_id', projectIds);
         
@@ -596,6 +670,21 @@ export default function ProjectsPage() {
 
   const allProjects = projectsData?.projects || []
   const summaries = projectsData?.summaries || {}
+
+  // Efficiently check which projects have a builder using the new RPC function
+  const projectIdsWithBuilderQuery = useQuery({
+    queryKey: ["projects-with-builder", allProjects.map(p => p.id)],
+    enabled: allProjects.length > 0,
+    staleTime: 60000, // Cache for 1 minute
+    queryFn: async () => {
+      const projectIds = allProjects.map(p => p.id);
+      const { data, error } = await supabase.rpc('get_projects_with_builder', { project_ids: projectIds });
+      if (error) throw error;
+      return new Set((data || []).map((row: any) => row.project_id));
+    }
+  });
+
+  const projectsWithBuilder = projectIdsWithBuilderQuery.data || new Set<string>();
   
   // Get subset EBA stats for all projects
   const projectIds = allProjects.map(p => p.id)
@@ -611,6 +700,15 @@ export default function ProjectsPage() {
         const summary = summaries[p.id]
         const workerCount = summary?.total_workers || 0
         return workersFilter === "zero" ? workerCount === 0 : workerCount > 0
+      })
+    }
+    
+    if (specialFilter === "noBuilderWithEmployers") {
+      filtered = filtered.filter(p => {
+        const summary = summaries[p.id]
+        const employerCount = summary?.engaged_employer_count || 0
+        const hasBuilder = projectsWithBuilder.has(p.id);
+        return employerCount > 0 && !hasBuilder
       })
     }
     
@@ -653,7 +751,7 @@ export default function ProjectsPage() {
     }
     
     return filtered
-  }, [allProjects, summaries, workersFilter, sort, dir])
+  }, [allProjects, summaries, workersFilter, specialFilter, projectsWithBuilder, sort, dir])
   
   // Apply pagination
   const totalProjects = filteredAndSortedProjects.length
@@ -736,6 +834,18 @@ export default function ProjectsPage() {
                 <SelectItem value="all">All Projects</SelectItem>
                 <SelectItem value="nonzero">Has Workers</SelectItem>
                 <SelectItem value="zero">No Workers</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="w-48">
+            <div className="text-xs text-muted-foreground mb-1">Advanced Filters</div>
+            <Select value={specialFilter} onValueChange={(value) => setParam("special", value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Filter by..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="noBuilderWithEmployers">No Builder, Has Employers</SelectItem>
               </SelectContent>
             </Select>
           </div>

@@ -26,6 +26,7 @@ import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
 import { useUnifiedContractors } from "@/hooks/useUnifiedContractors"
 import { useProjectSubsetStats } from "@/hooks/useProjectSubsetStats"
 import { SubsetEbaStats } from "@/components/projects/SubsetEbaStats"
+import SelectiveEbaSearchManager from "@/components/projects/SelectiveEbaSearchManager"
 
 function SiteContactsSummary({ projectId, siteIds }: { projectId: string; siteIds: string[] }) {
   const [delegates, setDelegates] = useState<string[]>([])
@@ -72,6 +73,7 @@ function SiteContactsSummary({ projectId, siteIds }: { projectId: string; siteId
 
 import { getEbaCategory } from "@/components/employers/ebaHelpers"
 import { format } from "date-fns"
+import { CfmeuEbaBadge, getProjectEbaStatus } from "@/components/ui/CfmeuEbaBadge"
 
 export default function ProjectDetailPage() {
   const params = useParams()
@@ -97,7 +99,16 @@ export default function ProjectDetailPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("projects")
-        .select("id, name, main_job_site_id, value, tier, organising_universe, stage_class, proposed_start_date, proposed_finish_date, roe_email, project_type, state_funding, federal_funding, builder_id")
+        .select(`
+          id, name, main_job_site_id, value, tier, organising_universe, stage_class, 
+          proposed_start_date, proposed_finish_date, roe_email, project_type, 
+          state_funding, federal_funding, builder_id,
+          project_assignments(
+            assignment_type,
+            contractor_role_types(code),
+            employers(name, enterprise_agreement_status)
+          )
+        `)
         .eq("id", projectId)
         .maybeSingle()
       if (error) throw error
@@ -563,7 +574,18 @@ export default function ProjectDetailPage() {
         <div className="space-y-2">
           <h1 className="text-3xl font-bold">{project?.name}</h1>
           <div className="flex items-center gap-3">
-                            <ProjectTierBadge tier={project?.tier || null} size="lg" />
+            <ProjectTierBadge tier={project?.tier || null} size="lg" />
+            {project && (() => {
+              const ebaStatus = getProjectEbaStatus(project)
+              return (
+                <CfmeuEbaBadge 
+                  hasActiveEba={ebaStatus.hasActiveEba} 
+                  builderName={ebaStatus.builderName}
+                  size="lg"
+                  showText={true}
+                />
+              )
+            })()}
             {project?.stage_class && (
               <Badge variant="secondary" className="capitalize">{String(project.stage_class).replace('_',' ')}</Badge>
             )}
@@ -607,6 +629,7 @@ export default function ProjectDetailPage() {
           {/* Sites tab trigger hidden; accessible via Overview 'Sites' link */}
           <TabsTrigger value="mappingsheets">Mapping Sheets</TabsTrigger>
           <TabsTrigger value="wallcharts">Wallcharts</TabsTrigger>
+          <TabsTrigger value="eba-search">EBA Search</TabsTrigger>
         </TabsList>
 
         <TabsContent value="mappingsheets">
@@ -683,6 +706,10 @@ export default function ProjectDetailPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="eba-search">
+          <SelectiveEbaSearchManager projectId={projectId} />
         </TabsContent>
       </Tabs>
 
