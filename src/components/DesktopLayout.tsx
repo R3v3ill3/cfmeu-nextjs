@@ -74,18 +74,6 @@ function useVisibleNavItems(userRole: string | null): NavItem[] {
     if (siteVisitsIndex > -1) items.splice(siteVisitsIndex, 1)
   }
   
-  // Add Data Upload based on role
-  if (userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") {
-    items.push({ 
-      path: "/upload", 
-      label: "Data Upload", 
-      icon: Upload, 
-      description: userRole === "organiser" 
-        ? "Import worker data" 
-        : "Import workers, projects, and other data" 
-    })
-  }
-  
   // Add Campaigns for organisers and above
   if (userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") {
     items.push({ path: "/campaigns", label: "Campaigns", icon: BarChart3, description: "Campaign activities and tracking" })

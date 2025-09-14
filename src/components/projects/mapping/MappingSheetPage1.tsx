@@ -197,21 +197,34 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
                 </div>
                 <div>
                   <label className="text-sm font-semibold">EBA with CFMEU</label>
-                  <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={
-                    projectData.builderName === "—" ? "—" : (projectData.builderHasEba === null ? "—" : (projectData.builderHasEba ? "Yes" : "No"))
-                  } readOnly disabled />
+                  <div className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0 py-2 flex items-center gap-2">
+                    {projectData.builderName === "—" ? "—" : (
+                      projectData.builderHasEba === null ? "—" : (
+                        projectData.builderHasEba ? (
+                          <>
+                            <span>Yes</span>
+                            <Image src="/eurekaflag.gif" alt="Eureka Flag" width={20} height={12} className="inline-block" />
+                          </>
+                        ) : "No"
+                      )
+                    )}
+                  </div>
                 </div>
               </>
             )}
             {mappingData?.contractorRoles.length === 1 && (
               <div>
                 <label className="text-sm font-semibold">EBA with CFMEU</label>
-                <Input 
-                  className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" 
-                  value={mappingData.contractorRoles[0].ebaStatus === null ? "—" : (mappingData.contractorRoles[0].ebaStatus ? "Yes" : "No")} 
-                  readOnly 
-                  disabled 
-                />
+                <div className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0 py-2 flex items-center gap-2">
+                  {mappingData.contractorRoles[0].ebaStatus === null ? "—" : (
+                    mappingData.contractorRoles[0].ebaStatus ? (
+                      <>
+                        <span>Yes</span>
+                        <Image src="/eurekaflag.gif" alt="Eureka Flag" width={20} height={12} className="inline-block" />
+                      </>
+                    ) : "No"
+                  )}
+                </div>
               </div>
             )}
           </>
@@ -239,8 +252,16 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
                         readOnly 
                         disabled 
                       />
-                      <span className="text-xs text-muted-foreground">
-                        EBA: {contractor.ebaStatus === null ? "—" : (contractor.ebaStatus ? "Yes" : "No")}
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <span>EBA:</span>
+                        {contractor.ebaStatus === null ? "—" : (
+                          contractor.ebaStatus ? (
+                            <span className="flex items-center gap-1">
+                              <span>Yes</span>
+                              <Image src="/eurekaflag.gif" alt="Eureka Flag" width={16} height={10} className="inline-block" />
+                            </span>
+                          ) : "No"
+                        )}
                       </span>
                       {/* Show auto-match indicator */}
                       {contractor.employerName && (

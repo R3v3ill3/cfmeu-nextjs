@@ -1,7 +1,7 @@
 "use client"
 export const dynamic = 'force-dynamic'
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useEffect } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -13,11 +13,11 @@ import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal"
 import { WorkerDetailModal } from "@/components/workers/WorkerDetailModal"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import AddressLookupDialog from "@/components/AddressLookupDialog"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { ArrowUp, ArrowDown, LayoutGrid, List as ListIcon, MapPin } from "lucide-react"
+import { ArrowUp, ArrowDown, LayoutGrid, List as ListIcon, MapPin, Filter, X, ChevronDown, ChevronUp } from "lucide-react"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import CreateProjectDialog from "@/components/projects/CreateProjectDialog"
 import { usePatchOrganiserLabels } from "@/hooks/usePatchOrganiserLabels"
 import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
@@ -38,7 +38,12 @@ type ProjectWithRoles = {
   project_assignments?: Array<{
     assignment_type: string
     employer_id: string
-    employers?: { name: string | null } | null
+    contractor_role_types?: { code: string } | null
+    trade_types?: { code: string } | null
+    employers?: { 
+      name: string | null
+      enterprise_agreement_status?: boolean | null
+    } | null
   }>
 }
 
@@ -239,17 +244,21 @@ function GradientBar({ percent, baseRgb }: { percent: number; baseRgb: string })
   )
 }
 
-function CompactStatBar({ label, value, of, onClick }: { label: string; value: number; of: number; onClick?: () => void }) {
+function CompactStatBar({ label, value, of, onClick, color = '222,27,18' }: { 
+  label: string; 
+  value: number; 
+  of: number; 
+  onClick?: () => void; 
+  color?: string;
+}) {
   const pct = of > 0 ? (value / of) * 100 : 0
-  // Member red from worker color coding (rgb values)
-  const memberRedRgb = '222,27,18'
   return (
     <button type="button" onClick={onClick} className="w-full text-left rounded border border-dashed border-muted-foreground/30 hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 px-2 py-1 transition">
       <div className="flex items-center justify-between text-[11px] text-muted-foreground">
         <span>{label}</span>
-        <span className="sr-only">{Math.round(pct)}%</span>
+        <span className="font-medium">{value}/{of} ({Math.round(pct)}%)</span>
       </div>
-      <GradientBar percent={pct} baseRgb={memberRedRgb} />
+      <GradientBar percent={pct} baseRgb={color} />
     </button>
   )
 }
@@ -300,11 +309,65 @@ function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: Proje
     return trades.map((a) => ({ id: a.employer_id, name: a.employers?.name || `Employer ${a.employer_id.slice(0, 8)}` }))
   }, [p.project_assignments])
 
+  // Calculate key contractor mapping metrics
+  // Key contractors are critical roles and trades that significantly impact project success
+  const keyContractorMetrics = useMemo(() => {
+    const KEY_CONTRACTOR_TRADES = new Set([
+      'demolition', 'piling', 'concrete', 'scaffolding', 'form_work',
+      'tower_crane', 'mobile_crane', 'labour_hire', 'earthworks', 'traffic_control'
+    ]);
+    const KEY_CONTRACTOR_ROLES = new Set(['builder', 'project_manager']);
+    
+    // Total key categories (10 critical trades + 2 key roles = 12)
+    const totalKeyCategories = KEY_CONTRACTOR_TRADES.size + KEY_CONTRACTOR_ROLES.size;
+    
+    // Count mapped key contractor categories
+    const mappedKeyRoles = new Set();
+    const mappedKeyTrades = new Set();
+    let keyContractorsWithEba = 0;
+    let totalKeyContractors = 0;
+
+    (p.project_assignments || []).forEach((assignment) => {
+      if (assignment.assignment_type === 'contractor_role' && assignment.contractor_role_types) {
+        const roleCode = assignment.contractor_role_types.code;
+        if (KEY_CONTRACTOR_ROLES.has(roleCode)) {
+          mappedKeyRoles.add(roleCode);
+          totalKeyContractors++;
+          if (assignment.employers?.enterprise_agreement_status === true) {
+            keyContractorsWithEba++;
+          }
+        }
+      }
+      
+      if (assignment.assignment_type === 'trade_work' && assignment.trade_types) {
+        const tradeCode = assignment.trade_types.code;
+        if (KEY_CONTRACTOR_TRADES.has(tradeCode)) {
+          mappedKeyTrades.add(tradeCode);
+          totalKeyContractors++;
+          if (assignment.employers?.enterprise_agreement_status === true) {
+            keyContractorsWithEba++;
+          }
+        }
+      }
+    });
+
+    const mappedCategories = mappedKeyRoles.size + mappedKeyTrades.size;
+    const mappingPercentage = totalKeyCategories > 0 ? Math.round((mappedCategories / totalKeyCategories) * 100) : 0;
+    const ebaPercentage = totalKeyContractors > 0 ? Math.round((keyContractorsWithEba / totalKeyContractors) * 100) : 0;
+
+    return {
+      mappedCategories,
+      totalKeyCategories,
+      mappingPercentage,
+      keyContractorsWithEba,
+      totalKeyContractors,
+      ebaPercentage
+    };
+  }, [p.project_assignments]);
+
   const primary = builderNames[0] || head
   const secondary = head && primary && head.id !== primary.id ? head : null
 
-  const members = summary?.total_members || 0
-  const estimated = summary?.estimated_total || 0
   const ebaActive = summary?.eba_active_employer_count || 0
   const engaged = summary?.engaged_employer_count || 0
   const delegateName = summary?.delegate_name || null
@@ -358,21 +421,34 @@ function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: Proje
                 <Badge variant="secondary" className="text-[10px] capitalize">{String((p as any).stage_class).replace('_',' ')}</Badge>
               )}
               {('organising_universe' in p && (p as any).organising_universe) && (
-                <Badge variant="outline" className="text-[10px] capitalize">{String((p as any).organising_universe)}</Badge>
+                <Badge 
+                  variant="outline" 
+                  className={`text-[10px] capitalize border-2 font-medium ${
+                    (p as any).organising_universe === 'active' 
+                      ? 'bg-green-50 text-green-800 border-green-300 hover:bg-green-100'
+                      : (p as any).organising_universe === 'potential'
+                      ? 'bg-blue-50 text-blue-800 border-blue-300 hover:bg-blue-100'
+                      : (p as any).organising_universe === 'excluded'
+                      ? 'bg-red-50 text-red-800 border-red-300 hover:bg-red-100'
+                      : 'bg-gray-50 text-gray-800 border-gray-300 hover:bg-gray-100'
+                  }`}
+                >
+                  {String((p as any).organising_universe)}
+                </Badge>
               )}
             </div>
           </div>
         </CardTitle>
         <div className="mt-1 flex items-center gap-2 text-sm">
           {primary && (
-            <button type="button" className="text-primary hover:underline truncate rounded border border-dashed border-transparent hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 px-1" onClick={() => onOpenEmployer(primary.id)} title={primary.name}>
+            <button type="button" className="text-primary/80 hover:text-primary hover:underline truncate rounded border border-dashed border-transparent hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 px-1" onClick={() => onOpenEmployer(primary.id)} title={primary.name}>
               {primary.name}
             </button>
           )}
           {secondary && (
             <>
               <span className="text-muted-foreground">·</span>
-              <button type="button" className="text-primary hover:underline truncate rounded border border-dashed border-transparent hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 px-1" onClick={() => onOpenEmployer(secondary.id)} title={secondary.name}>
+              <button type="button" className="text-primary/80 hover:text-primary hover:underline truncate rounded border border-dashed border-transparent hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 px-1" onClick={() => onOpenEmployer(secondary.id)} title={secondary.name}>
                 {secondary.name}
               </button>
             </>
@@ -395,9 +471,17 @@ function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: Proje
       <CardContent className="px-4 pb-4 pt-0 space-y-2 flex-1 flex flex-col">
         <div className="space-y-2">
           <CompactStatBar
-            label="Members vs Est. Workers"
-            value={members}
-            of={estimated}
+            label="Key Contractor Coverage"
+            value={keyContractorMetrics.mappedCategories}
+            of={keyContractorMetrics.totalKeyCategories}
+            color="59,130,246" // Blue for mapping coverage
+            onClick={() => { window.location.href = `/projects/${p.id}?tab=contractors` }}
+          />
+          <CompactStatBar
+            label="Key Contractor EBA Active"
+            value={keyContractorMetrics.keyContractorsWithEba}
+            of={keyContractorMetrics.totalKeyContractors}
+            color="34,197,94" // Green for EBA status
             onClick={() => { window.location.href = `/projects/${p.id}?tab=contractors` }}
           />
           <EbaPercentBar
@@ -442,11 +526,47 @@ function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: Proje
   )
 }
 
+// State persistence key
+const PROJECTS_STATE_KEY = 'projects-page-state'
+
+// Save state to sessionStorage
+const saveProjectsState = (params: URLSearchParams) => {
+  try {
+    const state = {
+      q: params.get('q') || '',
+      patch: params.get('patch') || '',
+      tier: params.get('tier') || 'all',
+      sort: params.get('sort') || 'name',
+      dir: params.get('dir') || 'asc',
+      view: params.get('view') || 'card',
+      workers: params.get('workers') || 'all',
+      universe: params.get('universe') || 'all',
+      stage: params.get('stage') || 'all',
+      special: params.get('special') || 'all',
+      eba: params.get('eba') || 'all',
+      page: params.get('page') || '1'
+    }
+    sessionStorage.setItem(PROJECTS_STATE_KEY, JSON.stringify(state))
+  } catch (e) {
+    // Silent fail if sessionStorage unavailable
+  }
+}
+
+// Load state from sessionStorage
+const loadProjectsState = () => {
+  try {
+    const saved = sessionStorage.getItem(PROJECTS_STATE_KEY)
+    return saved ? JSON.parse(saved) : null
+  } catch (e) {
+    return null
+  }
+}
+
 export default function ProjectsPage() {
   const router = useRouter()
   const pathname = usePathname()
   const sp = useSearchParams()
-  const [lookupOpen, setLookupOpen] = useState(false)
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const q = (sp.get("q") || "").toLowerCase()
   const patchParam = sp.get("patch") || ""
   const patchIds = patchParam.split(",").map(s => s.trim()).filter(Boolean)
@@ -458,6 +578,7 @@ export default function ProjectsPage() {
   const universeFilter = sp.get("universe") || sp.get("universeFilter") || "all"
   const stageFilter = sp.get("stage") || sp.get("stageFilter") || "all"
   const specialFilter = sp.get("special") || "all"
+  const ebaFilter = sp.get("eba") || "all"
   const page = Math.max(1, parseInt(sp.get('page') || '1', 10) || 1)
   const PAGE_SIZE = 24
 
@@ -465,6 +586,30 @@ export default function ProjectsPage() {
   const [isEmployerOpen, setIsEmployerOpen] = useState(false)
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null)
   const [isWorkerOpen, setIsWorkerOpen] = useState(false)
+
+  // Enhanced state persistence
+  useEffect(() => {
+    // Save current state whenever search params change
+    saveProjectsState(sp)
+  }, [sp])
+
+  // Restore state on mount if no params in URL
+  useEffect(() => {
+    if (sp.toString() === '') {
+      const savedState = loadProjectsState()
+      if (savedState) {
+        const params = new URLSearchParams()
+        Object.entries(savedState).forEach(([key, value]) => {
+          if (value && value !== 'all' && value !== '1') {
+            params.set(key, String(value))
+          }
+        })
+        if (params.toString()) {
+          router.replace(`${pathname}?${params.toString()}`)
+        }
+      }
+    }
+  }, []) // Only run on mount
 
   const setParam = (key: string, value?: string) => {
     const params = new URLSearchParams(sp.toString())
@@ -480,6 +625,31 @@ export default function ProjectsPage() {
     const qs = params.toString()
     router.replace(qs ? `${pathname}?${qs}` : pathname)
   }
+  
+  // Clear all filters
+  const clearAllFilters = () => {
+    router.replace(pathname)
+  }
+  
+  // Get active filters for display
+  const activeFilters = useMemo(() => {
+    const filters = []
+    if (q) filters.push({ key: 'q', value: q, label: `Search: ${q}` })
+    if (tierFilter !== 'all') filters.push({ key: 'tier', value: tierFilter, label: `Tier: ${PROJECT_TIER_LABELS[tierFilter as ProjectTier] || tierFilter}` })
+    if (universeFilter !== 'all') filters.push({ key: 'universe', value: universeFilter, label: `Universe: ${universeFilter}` })
+    if (stageFilter !== 'all') filters.push({ key: 'stage', value: stageFilter, label: `Stage: ${stageFilter.replace('_', ' ')}` })
+    if (workersFilter !== 'all') filters.push({ key: 'workers', value: workersFilter, label: `Workers: ${workersFilter === 'zero' ? 'None' : 'Has workers'}` })
+    if (specialFilter !== 'all') filters.push({ key: 'special', value: specialFilter, label: 'No Builder, Has Employers' })
+    if (ebaFilter !== 'all') {
+      const ebaLabels = {
+        'eba_active': 'EBA: Builder Active',
+        'eba_inactive': 'EBA: Builder Known, Inactive', 
+        'builder_unknown': 'EBA: Builder Unknown'
+      }
+      filters.push({ key: 'eba', value: ebaFilter, label: ebaLabels[ebaFilter as keyof typeof ebaLabels] || `EBA: ${ebaFilter}` })
+    }
+    return filters
+  }, [q, tierFilter, universeFilter, stageFilter, workersFilter, specialFilter, ebaFilter])
 
   // If a patch is selected, compute project ids that have at least one site linked to these patches
   const { data: patchProjectIds = [], isFetching: fetchingPatchProjects } = useQuery<string[]>({
@@ -560,7 +730,7 @@ export default function ProjectsPage() {
   })
 
   const { data: projectsData, isLoading } = useQuery<{ projects: ProjectWithRoles[]; summaries: Record<string, ProjectSummary> }>({
-    queryKey: ["projects-list+summary", patchIds, patchProjectIds, tierFilter, universeFilter, stageFilter, q],
+    queryKey: ["projects-list+summary", patchIds, patchProjectIds, tierFilter, universeFilter, stageFilter, ebaFilter, q],
     staleTime: 30000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
@@ -628,6 +798,7 @@ export default function ProjectsPage() {
             assignment_type,
             employer_id,
             contractor_role_types(code),
+            trade_types(code),
             employers(name, enterprise_agreement_status)
           `)
           .in('project_id', projectIds);
@@ -712,6 +883,29 @@ export default function ProjectsPage() {
       })
     }
     
+    // Apply EBA site filter
+    if (ebaFilter !== "all") {
+      filtered = filtered.filter(p => {
+        const hasBuilder = projectsWithBuilder.has(p.id);
+        const builderAssignments = (p.project_assignments || []).filter((a) => 
+          a.assignment_type === 'contractor_role'
+        )
+        const builderEbaStatus = builderAssignments.some(a => a.employers?.enterprise_agreement_status === true)
+        
+        if (ebaFilter === "eba_active") {
+          // Builder/Main contractor EBA = active
+          return hasBuilder && builderEbaStatus
+        } else if (ebaFilter === "eba_inactive") {
+          // Builder/Main Contractor known, EBA status not active
+          return hasBuilder && !builderEbaStatus
+        } else if (ebaFilter === "builder_unknown") {
+          // Builder/Main Contractor unknown
+          return !hasBuilder
+        }
+        return true
+      })
+    }
+    
     // Employers filter removed
     
     // Apply client-side sorting for summary-based fields
@@ -773,86 +967,39 @@ export default function ProjectsPage() {
   return (
     <div className="p-6 space-y-4">
       <h1 className="text-2xl font-semibold">Projects</h1>
-      <div className="sticky top-0 z-30 -mx-6 px-6 py-3 bg-background/40 backdrop-blur supports-[backdrop-filter]:bg-background/30 border-b">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="min-w-[240px] flex-1">
-            <div className="text-xs text-muted-foreground mb-1">Search</div>
-            <Input placeholder="Search projects…" value={sp.get("q") || ""} onChange={(e) => setParam("q", e.target.value)} />
+      {/* Improved Header with Search and Quick Actions */}
+      <div className="sticky top-0 z-30 -mx-6 px-6 py-3 bg-background/40 backdrop-blur supports-[backdrop-filter]:bg-background/30 border-b space-y-3">
+        {/* Top Row: Search, Actions, and View Toggle */}
+        <div className="flex items-center gap-3">
+          <div className="flex-1 max-w-md">
+            <Input 
+              placeholder="Search projects…" 
+              value={sp.get("q") || ""} 
+              onChange={(e) => setParam("q", e.target.value)}
+              className="h-9"
+            />
           </div>
-          <div className="w-48">
-            <div className="text-xs text-muted-foreground mb-1">Tier</div>
-            <Select value={tierFilter} onValueChange={(value) => setParam("tier", value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Filter by tier" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Tiers</SelectItem>
-                {Object.entries(PROJECT_TIER_LABELS).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="w-44">
-            <div className="text-xs text-muted-foreground mb-1">Universe</div>
-            <Select value={universeFilter} onValueChange={(value) => setParam("universe", value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Filter by universe" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="potential">Potential</SelectItem>
-                <SelectItem value="excluded">Excluded</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="w-56">
-            <div className="text-xs text-muted-foreground mb-1">Stage</div>
-            <Select value={stageFilter} onValueChange={(value) => setParam("stage", value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Filter by stage" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="future">Future</SelectItem>
-                <SelectItem value="pre_construction">Pre-construction</SelectItem>
-                <SelectItem value="construction">Construction</SelectItem>
-                <SelectItem value="archived">Archived</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="w-40">
-            <div className="text-xs text-muted-foreground mb-1">Workers</div>
-            <Select value={workersFilter} onValueChange={(value) => setParam("workers", value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Filter by workers" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Projects</SelectItem>
-                <SelectItem value="nonzero">Has Workers</SelectItem>
-                <SelectItem value="zero">No Workers</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="w-48">
-            <div className="text-xs text-muted-foreground mb-1">Advanced Filters</div>
-            <Select value={specialFilter} onValueChange={(value) => setParam("special", value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Filter by..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="noBuilderWithEmployers">No Builder, Has Employers</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="w-48">
-            <div className="text-xs text-muted-foreground mb-1">Sort by</div>
+          
+          {/* Filter Toggle */}
+          <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
+            <CollapsibleTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Filter className="h-4 w-4" />
+                Filters
+                {activeFilters.length > 0 && (
+                  <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
+                    {activeFilters.length}
+                  </Badge>
+                )}
+                {filtersOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </Button>
+            </CollapsibleTrigger>
+          </Collapsible>
+          
+          {/* Sort Controls */}
+          <div className="flex items-center gap-2">
             <Select value={sort} onValueChange={(v) => setParam("sort", v)}>
-              <SelectTrigger>
+              <SelectTrigger className="w-40 h-9">
                 <SelectValue placeholder="Sort by" />
               </SelectTrigger>
               <SelectContent>
@@ -866,24 +1013,148 @@ export default function ProjectsPage() {
                 <SelectItem value="eba_coverage">EBA Coverage</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Order</span>
             <ToggleGroup type="single" variant="outline" size="sm" value={dir} onValueChange={(v) => v && setParam("dir", v)}>
               <ToggleGroupItem value="asc" aria-label="Ascending"><ArrowUp className="h-4 w-4" /></ToggleGroupItem>
               <ToggleGroupItem value="desc" aria-label="Descending"><ArrowDown className="h-4 w-4" /></ToggleGroupItem>
             </ToggleGroup>
           </div>
+          
+          {/* Action Buttons */}
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setLookupOpen(true)}>Address Lookup</Button>
             <CreateProjectDialog />
           </div>
+          
+          {/* View Toggle */}
           <ToggleGroup type="single" variant="outline" size="sm" value={view} onValueChange={(v) => v && setParam("view", v)}>
             <ToggleGroupItem value="card" aria-label="Card view" className="gap-1"><LayoutGrid className="h-4 w-4" /> Card</ToggleGroupItem>
             <ToggleGroupItem value="list" aria-label="List view" className="gap-1"><ListIcon className="h-4 w-4" /> List</ToggleGroupItem>
             <ToggleGroupItem value="map" aria-label="Map view" className="gap-1"><MapPin className="h-4 w-4" /> Map</ToggleGroupItem>
           </ToggleGroup>
         </div>
+        
+        {/* Active Filters Pills */}
+        {activeFilters.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-muted-foreground">Active filters:</span>
+            {activeFilters.map((filter) => (
+              <Badge 
+                key={filter.key} 
+                variant="secondary" 
+                className="gap-1 pr-1"
+              >
+                {filter.label}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-4 w-4 p-0 hover:bg-transparent"
+                  onClick={() => setParam(filter.key, 'all')}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </Badge>
+            ))}
+            <Button variant="ghost" size="sm" onClick={clearAllFilters} className="text-xs h-6">
+              Clear all
+            </Button>
+          </div>
+        )}
+        
+        {/* Collapsible Filters Panel */}
+        <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
+          <CollapsibleContent className="space-y-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Tier</div>
+                <Select value={tierFilter} onValueChange={(value) => setParam("tier", value)}>
+                  <SelectTrigger className="h-8">
+                    <SelectValue placeholder="All Tiers" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Tiers</SelectItem>
+                    {Object.entries(PROJECT_TIER_LABELS).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Universe</div>
+                <Select value={universeFilter} onValueChange={(value) => setParam("universe", value)}>
+                  <SelectTrigger className="h-8">
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="potential">Potential</SelectItem>
+                    <SelectItem value="excluded">Excluded</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Stage</div>
+                <Select value={stageFilter} onValueChange={(value) => setParam("stage", value)}>
+                  <SelectTrigger className="h-8">
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="future">Future</SelectItem>
+                    <SelectItem value="pre_construction">Pre-construction</SelectItem>
+                    <SelectItem value="construction">Construction</SelectItem>
+                    <SelectItem value="archived">Archived</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">EBA Site</div>
+                <Select value={ebaFilter} onValueChange={(value) => setParam("eba", value)}>
+                  <SelectTrigger className="h-8">
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="eba_active">Builder EBA Active</SelectItem>
+                    <SelectItem value="eba_inactive">Builder Known, EBA Inactive</SelectItem>
+                    <SelectItem value="builder_unknown">Builder Unknown</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Workers</div>
+                <Select value={workersFilter} onValueChange={(value) => setParam("workers", value)}>
+                  <SelectTrigger className="h-8">
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Projects</SelectItem>
+                    <SelectItem value="nonzero">Has Workers</SelectItem>
+                    <SelectItem value="zero">No Workers</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Advanced</div>
+                <Select value={specialFilter} onValueChange={(value) => setParam("special", value)}>
+                  <SelectTrigger className="h-8">
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="noBuilderWithEmployers">No Builder, Has Employers</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       </div>
       {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
       {(projects as any[]).length === 0 && !isLoading ? (
@@ -964,7 +1235,6 @@ export default function ProjectsPage() {
         onClose={() => setIsWorkerOpen(false)}
       />
 
-      <AddressLookupDialog open={lookupOpen} onOpenChange={setLookupOpen} />
     </div>
   )
 }

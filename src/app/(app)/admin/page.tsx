@@ -16,9 +16,8 @@ import { OrganiserScopeManager } from "@/components/admin/OrganiserScopeManager"
 import PatchManager from "@/components/admin/PatchManager"
 import SpatialAssignmentTool from "@/components/admin/SpatialAssignmentTool"
 import AddressLookupDialog from "@/components/AddressLookupDialog"
-import { BackfillProjectCoordinates } from "@/components/admin/BackfillProjectCoordinates"
 import DuplicateEmployerManager from "@/components/admin/DuplicateEmployerManager"
-import { EbaBackfillManager } from "@/components/admin/EbaBackfillManager"
+import DataUploadTab from "@/components/admin/DataUploadTab"
 
 export default function AdminPage() {
   const [open, setOpen] = useState(false)
@@ -44,8 +43,7 @@ export default function AdminPage() {
             <TabsTrigger value="spatial">Spatial Assignment</TabsTrigger>
             <TabsTrigger value="scoping">Scoping</TabsTrigger>
             <TabsTrigger value="duplicates">Duplicate Employers</TabsTrigger>
-            <TabsTrigger value="backfill">Project Backfill</TabsTrigger>
-            <TabsTrigger value="eba-backfill">EBA Backfill</TabsTrigger>
+            <TabsTrigger value="data-upload">Data Upload</TabsTrigger>
           </TabsList>
           <TabsContent value="users">
             <UsersTable />
@@ -72,11 +70,8 @@ export default function AdminPage() {
           <TabsContent value="duplicates">
             <DuplicateEmployerManager />
           </TabsContent>
-          <TabsContent value="backfill">
-            <BackfillProjectCoordinates />
-          </TabsContent>
-          <TabsContent value="eba-backfill">
-            <EbaBackfillManager />
+          <TabsContent value="data-upload">
+            <DataUploadTab />
           </TabsContent>
         </Tabs>
         <InviteUserDialog open={open} onOpenChange={setOpen} onSuccess={() => {}} />

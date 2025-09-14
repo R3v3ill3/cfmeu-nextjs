@@ -66,11 +66,6 @@ const Layout = ({ children }: LayoutProps) => {
       }
     }
     
-    // Add Data Upload based on role
-    if (userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") {
-      items.push({ path: "/upload", label: "Data Upload", icon: Upload });
-    }
-    
     // Add campaigns for organisers and above
     if (userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") {
       items.push({ path: "/campaigns", label: "Campaigns", icon: BarChart3 });
