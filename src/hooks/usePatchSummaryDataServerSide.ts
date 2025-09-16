@@ -136,7 +136,7 @@ export function useLeadOrganizerSummariesServerSide(leadOrganizerId: string, fil
     queryKey: ["lead-organizer-summaries-server", leadOrganizerId, filters],
     enabled: !!user?.id && !!leadOrganizerId,
     staleTime: 90 * 1000,
-    cacheTime: 5 * 60 * 1000,
+    gcTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
       if (!user?.id) throw new Error('User ID required')
