@@ -155,13 +155,17 @@ export function IncolinkImport({ csvData, onImportComplete, onBack }: IncolinkIm
       setMatchingResults(matchResults)
       
       // Process results and add to processed data
-      const dataWithMatches = processedIncolinkData.map(data => ({
-        ...data,
-        matchResult: matchResults[data.employer_name],
-        decision: matchResults[data.employer_name]?.match?.confidence === 'exact' 
-          ? 'use_existing' 
-          : undefined
-      }))
+      const dataWithMatches = processedIncolinkData.map(data => {
+        const decision: 'use_existing' | undefined = 
+          matchResults[data.employer_name]?.match?.confidence === 'exact' 
+            ? 'use_existing' 
+            : undefined
+        return {
+          ...data,
+          matchResult: matchResults[data.employer_name],
+          decision,
+        }
+      })
       
       setProcessedData(dataWithMatches)
       setShowMatchingDetails(true)
