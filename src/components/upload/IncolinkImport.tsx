@@ -491,11 +491,12 @@ export function IncolinkImport({ csvData, onImportComplete, onBack }: IncolinkIm
                                 value={record.decision || ''}
                                 onChange={(e) => {
                                   const newData = [...processedData]
+                                  const value = e.target.value as 'use_existing' | 'create_new' | 'skip' | ''
                                   newData[index] = {
                                     ...newData[index],
-                                    decision: e.target.value as any,
-                                    selectedEmployerId: e.target.value === 'use_existing' ? match?.id : undefined,
-                                    selectedEmployerName: e.target.value === 'use_existing' ? match?.name : undefined
+                                    decision: value === '' ? undefined : value,
+                                    selectedEmployerId: value === 'use_existing' ? match?.id : undefined,
+                                    selectedEmployerName: value === 'use_existing' ? match?.name : undefined
                                   }
                                   setProcessedData(newData)
                                 }}
