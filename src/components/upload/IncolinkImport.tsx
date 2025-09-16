@@ -348,7 +348,7 @@ export function IncolinkImport({ csvData, onImportComplete, onBack }: IncolinkIm
         // Group duplicates by their selected primary employer
         for (const recordIndex of selectedDuplicates) {
           const record = processedData.find(d => d.row_index === Number(recordIndex))
-          if (record?.selectedEmployerId && record.matchResult?.candidates.length > 0) {
+          if (record?.selectedEmployerId && record.matchResult && record.matchResult.candidates && record.matchResult.candidates.length > 0) {
             const candidates = record.matchResult.candidates.map(c => c.id)
             duplicateGroups.set(record.selectedEmployerId, candidates)
           }
