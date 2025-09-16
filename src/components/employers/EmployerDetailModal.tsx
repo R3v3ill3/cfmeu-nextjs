@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Building, Phone, Mail, FileText, ExternalLink, MapPin, Users, Briefcase, Upload as UploadIcon } from "lucide-react";
+import { Building, Phone, Mail, FileText, ExternalLink, MapPin, Users, Briefcase, Upload as UploadIcon, Download } from "lucide-react";
 import { getEbaStatusInfo } from "./ebaHelpers";
 import { EmployerWorkersList } from "../workers/EmployerWorkersList";
 import EmployerEditForm from "./EmployerEditForm";
@@ -452,25 +452,54 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
 
 <TabsContent value="workers" className="space-y-4">
   {employer && canEdit && (
-    <div className="flex justify-end">
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button size="sm">
-            <UploadIcon className="h-4 w-4 mr-2" />
-            Upload workers
+    <div className="flex items-center justify-between">
+      <div />
+      <div className="flex items-center gap-2">
+        {!!(employer as any).incolink_id && (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={async () => {
+              try {
+                const res = await fetch('/api/incolink/import-workers', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ employerId })
+                })
+                const data = await res.json()
+                if (!res.ok) throw new Error(data?.error || 'Import failed')
+                queryClient.invalidateQueries({ queryKey: ["employer-workers", employerId] })
+                queryClient.invalidateQueries({ queryKey: ["employer-detail", employerId] })
+                alert(`Imported from Incolink invoice ${data.invoiceNumber}. Created ${data.counts.createdWorkers}, matched ${data.counts.matchedWorkers}, placements ${data.counts.placementsCreated}/${data.counts.totalParsed}`)
+              } catch (e) {
+                alert(`Incolink import failed: ${(e as Error).message}`)
+              }
+            }}
+            title="Import workers from Incolink invoice using employer Incolink ID"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Import from Incolink
           </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => setIsManualWorkerOpen(true)}>
-            Manually enter worker details
-          </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <Link href={`/upload?employerId=${employer.id}&employerName=${encodeURIComponent(employer.name)}`}>
-              Upload list
-            </Link>
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+        )}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm">
+              <UploadIcon className="h-4 w-4 mr-2" />
+              Upload workers
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => setIsManualWorkerOpen(true)}>
+              Manually enter worker details
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href={`/upload?employerId=${employer.id}&employerName=${encodeURIComponent(employer.name)}`}>
+                Upload list
+              </Link>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </div>
   )}
   <EmployerWorkersList employerId={employerId!} />

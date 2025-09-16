@@ -54,6 +54,14 @@ export const WorkerCard = ({ worker, variant, onEdit, onUpdate, onClick }: Worke
               {worker?.member_number && (
                 <div className="text-xs text-muted-foreground">Member #: {worker.member_number}</div>
               )}
+              {worker?.incolink_member_id && (
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge variant="secondary">Incolink</Badge>
+                  {worker?.last_incolink_payment && (
+                    <span className="text-[10px] text-muted-foreground">Last payment: {new Date(worker.last_incolink_payment).toLocaleDateString()}</span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </TableCell>
@@ -107,6 +115,14 @@ export const WorkerCard = ({ worker, variant, onEdit, onUpdate, onClick }: Worke
               {formatUnionStatus(worker?.union_membership_status)}
             </Badge>
           </div>
+          {worker?.incolink_member_id && (
+            <div className="mt-1 flex items-center gap-2">
+              <Badge variant="secondary">Incolink</Badge>
+              {worker?.last_incolink_payment && (
+                <span className="text-[10px] text-muted-foreground">Last payment: {new Date(worker.last_incolink_payment).toLocaleDateString()}</span>
+              )}
+            </div>
+          )}
           <div className="mt-2 text-sm text-muted-foreground space-y-1">
             {worker?.email && (
               <div className="flex items-center gap-1"><Mail className="h-3 w-3" />{worker.email}</div>

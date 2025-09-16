@@ -9,11 +9,12 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { 
   CheckCircle, 
   AlertCircle, 
   Info, 
- 
   Building2, 
   Search, 
   ExternalLink, 
@@ -21,10 +22,31 @@ import {
   AlertTriangle,
   RefreshCw,
   Eye,
-  Download
+  Download,
+  Filter,
+  Users,
+  HardHat,
+  X,
+  Plus
 } from 'lucide-react';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+
+// Define key contractor roles and trades based on existing EbaProjectSearch definitions
+const KEY_CONTRACTOR_TRADES = new Set([
+  'demolition',
+  'piling', 
+  'concrete',
+  'scaffolding',
+  'form_work',
+  'tower_crane',
+  'mobile_crane',
+  'labour_hire',
+  'earthworks',
+  'traffic_control'
+]);
+
+const KEY_CONTRACTOR_ROLES = new Set(['builder', 'project_manager']);
 
 interface EmployerWithoutEba {
   id: string;
@@ -34,6 +56,21 @@ interface EmployerWithoutEba {
   suburb?: string;
   state?: string;
   created_at: string;
+  project_assignments?: Array<{
+    assignment_type: string;
+    contractor_role_types?: { code: string };
+    trade_types?: { code: string };
+  }>;
+  project_count?: number;
+  is_builder?: boolean;
+  is_key_contractor?: boolean;
+}
+
+type FilterType = 'all' | 'builders' | 'key_contractors';
+
+interface FilterState {
+  type: FilterType;
+  showAdvanced: boolean;
 }
 
 interface FWCSearchResult {
@@ -55,6 +92,7 @@ interface EbaSearchState {
   error?: string;
   selectedResult?: FWCSearchResult;
   manualSearchUrl?: string;
+  reviewed?: boolean;
 }
 
 interface BackfillResults {
@@ -65,13 +103,32 @@ interface BackfillResults {
   errors: string[];
 }
 
+interface PendingMatch {
+  employerId: string;
+  employerName: string;
+  result: FWCSearchResult;
+}
+
+interface ManualSearchState {
+  employerId: string;
+  employerName: string;
+  isSearching: boolean;
+  customSearchTerm: string;
+}
+
 export function EbaBackfillManager() {
   const { toast } = useToast();
   const [employers, setEmployers] = useState<EmployerWithoutEba[]>([]);
+  const [filteredEmployers, setFilteredEmployers] = useState<EmployerWithoutEba[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [filterState, setFilterState] = useState<FilterState>({ type: 'builders', showAdvanced: false });
   const [selectedEmployers, setSelectedEmployers] = useState<Set<string>>(new Set());
   const [searchStates, setSearchStates] = useState<Record<string, EbaSearchState>>({});
+  const [pendingMatches, setPendingMatches] = useState<PendingMatch[]>([]);
+  const [showMatchReview, setShowMatchReview] = useState(false);
   const [showEbaDialog, setShowEbaDialog] = useState(false);
+  const [showManualSearch, setShowManualSearch] = useState(false);
+  const [manualSearchState, setManualSearchState] = useState<ManualSearchState | null>(null);
   const [currentEbaData, setCurrentEbaData] = useState<{
     employerId: string;
     result: FWCSearchResult;
@@ -81,8 +138,11 @@ export function EbaBackfillManager() {
 
   const loadEmployersWithoutEba = useCallback(async () => {
     try {
+      setIsLoading(true);
       const supabase = getSupabaseBrowserClient();
-      const { data, error } = await supabase
+      
+      // Get all employers without EBA records first
+      const { data: baseEmployers, error } = await supabase
         .from('employers')
         .select(`
           id, 
@@ -95,23 +155,78 @@ export function EbaBackfillManager() {
           company_eba_records!left(id)
         `)
         .is('company_eba_records.id', null)
-        .order('created_at', { ascending: false })
-        .limit(100);
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      const employersWithoutEba = (data || []).map((emp: any) => ({
-        id: emp.id,
-        name: emp.name,
-        employer_type: emp.employer_type,
-        address_line_1: emp.address_line_1,
-        suburb: emp.suburb,
-        state: emp.state,
-        created_at: emp.created_at
-      }));
+      if (!baseEmployers || baseEmployers.length === 0) {
+        setEmployers([]);
+        setFilteredEmployers([]);
+        setSelectedEmployers(new Set());
+        return;
+      }
+
+      const employerIds = baseEmployers.map(emp => emp.id);
+
+      // Get project assignments to determine roles and trades
+      const { data: assignments, error: assignmentError } = await supabase
+        .from('project_assignments')
+        .select(`
+          employer_id,
+          assignment_type,
+          contractor_role_types(code),
+          trade_types(code),
+          projects(id, name)
+        `)
+        .in('employer_id', employerIds);
+
+      if (assignmentError) throw assignmentError;
+
+      // Build employer data with role/trade information
+      const employersWithoutEba: EmployerWithoutEba[] = baseEmployers.map((emp: any) => {
+        const empAssignments = (assignments || []).filter((a: any) => a.employer_id === emp.id);
+        
+        // Determine if builder (has builder role or builder contractor role)
+        const isBuilder = empAssignments.some((a: any) => 
+          a.assignment_type === 'contractor_role' && 
+          (a.contractor_role_types?.code === 'builder' || 
+           a.contractor_role_types?.code === 'building_contractor' ||
+           a.contractor_role_types?.code === 'construction_manager' ||
+           a.contractor_role_types?.code === 'managing_contractor')
+        );
+
+        // Determine if key contractor (has key roles or key trades)
+        const hasKeyRole = empAssignments.some((a: any) => 
+          a.assignment_type === 'contractor_role' && 
+          KEY_CONTRACTOR_ROLES.has(a.contractor_role_types?.code)
+        );
+        const hasKeyTrade = empAssignments.some((a: any) => 
+          a.assignment_type === 'trade_work' && 
+          KEY_CONTRACTOR_TRADES.has(a.trade_types?.code)
+        );
+        const isKeyContractor = hasKeyRole || hasKeyTrade;
+
+        // Get unique project count
+        const uniqueProjects = new Set(empAssignments.map((a: any) => a.projects?.id).filter(Boolean));
+
+        return {
+          id: emp.id,
+          name: emp.name,
+          employer_type: emp.employer_type,
+          address_line_1: emp.address_line_1,
+          suburb: emp.suburb,
+          state: emp.state,
+          created_at: emp.created_at,
+          project_assignments: empAssignments,
+          project_count: uniqueProjects.size,
+          is_builder: isBuilder,
+          is_key_contractor: isKeyContractor
+        };
+      });
 
       setEmployers(employersWithoutEba);
-      setSelectedEmployers(new Set(employersWithoutEba.map(emp => emp.id)));
+      applyFilters(employersWithoutEba, filterState.type);
+      
     } catch (error) {
       console.error('Error loading employers:', error);
       toast({
@@ -122,7 +237,34 @@ export function EbaBackfillManager() {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, [toast, filterState.type]);
+
+  // Apply filters to employer list
+  const applyFilters = useCallback((employerList: EmployerWithoutEba[], filterType: FilterType) => {
+    let filtered = employerList;
+    
+    switch (filterType) {
+      case 'builders':
+        filtered = employerList.filter(emp => emp.is_builder);
+        break;
+      case 'key_contractors':
+        filtered = employerList.filter(emp => emp.is_key_contractor);
+        break;
+      case 'all':
+      default:
+        filtered = employerList;
+        break;
+    }
+    
+    setFilteredEmployers(filtered);
+    setSelectedEmployers(new Set(filtered.map(emp => emp.id)));
+  }, []);
+
+  // Handle filter changes
+  const handleFilterChange = useCallback((newFilterType: FilterType) => {
+    setFilterState(prev => ({ ...prev, type: newFilterType }));
+    applyFilters(employers, newFilterType);
+  }, [employers, applyFilters]);
 
   // Load employers without EBA records
   useEffect(() => {
@@ -130,22 +272,24 @@ export function EbaBackfillManager() {
   }, []);
 
 
-  const searchEbaForEmployer = async (employer: EmployerWithoutEba) => {
+  const searchEbaForEmployer = async (employer: EmployerWithoutEba, customSearchTerm?: string) => {
     setSearchStates(prev => ({
       ...prev,
       [employer.id]: {
         employerId: employer.id,
         employerName: employer.name,
         isSearching: true,
-        results: []
+        results: [],
+        reviewed: false
       }
     }));
 
     try {
+      const searchTerm = customSearchTerm || employer.name;
       const response = await fetch('/api/fwc-search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyName: employer.name })
+        body: JSON.stringify({ companyName: searchTerm })
       });
 
       const data = await response.json();
@@ -160,7 +304,8 @@ export function EbaBackfillManager() {
           ...prev[employer.id],
           isSearching: false,
           results: data.results || [],
-          error: data.results?.length === 0 ? 'No EBA results found' : undefined
+          error: data.results?.length === 0 ? 'No EBA results found' : undefined,
+          reviewed: false
         }
       }));
 
@@ -169,6 +314,19 @@ export function EbaBackfillManager() {
           title: "EBA search completed",
           description: `Found ${data.results.length} potential EBA matches for ${employer.name}`,
         });
+        
+        // Auto-add high-confidence matches to pending review
+        const highConfidenceMatches = data.results.slice(0, 1); // Take the top result
+        if (highConfidenceMatches.length > 0) {
+          setPendingMatches(prev => [
+            ...prev.filter(m => m.employerId !== employer.id), // Remove any existing match for this employer
+            ...highConfidenceMatches.map((result: FWCSearchResult) => ({
+              employerId: employer.id,
+              employerName: employer.name,
+              result
+            }))
+          ]);
+        }
       }
 
     } catch (error) {
@@ -179,7 +337,8 @@ export function EbaBackfillManager() {
           ...prev[employer.id],
           isSearching: false,
           results: [],
-          error: error instanceof Error ? error.message : 'Search failed'
+          error: error instanceof Error ? error.message : 'Search failed',
+          reviewed: false
         }
       }));
 
@@ -191,26 +350,57 @@ export function EbaBackfillManager() {
     }
   };
 
-  const openManualSearch = async (employer: EmployerWithoutEba) => {
+  const openManualSearch = (employer: EmployerWithoutEba) => {
+    setManualSearchState({
+      employerId: employer.id,
+      employerName: employer.name,
+      isSearching: false,
+      customSearchTerm: employer.name
+    });
+    setShowManualSearch(true);
+  };
+
+  const performManualSearch = async () => {
+    if (!manualSearchState) return;
+    
+    const employer = filteredEmployers.find(e => e.id === manualSearchState.employerId);
+    if (!employer) return;
+
+    setManualSearchState(prev => prev ? { ...prev, isSearching: true } : null);
+    
     try {
-      const response = await fetch(`/api/fwc-search?company=${encodeURIComponent(employer.name)}`);
-      const data = await response.json();
-      
-      if (data.manualSearchUrl) {
-        window.open(data.manualSearchUrl, '_blank');
-        toast({
-          title: "Manual search opened",
-          description: `Opened FWC search for ${employer.name} in new tab`,
-        });
-      }
+      await searchEbaForEmployer(employer, manualSearchState.customSearchTerm);
+      setShowManualSearch(false);
+      setManualSearchState(null);
     } catch (error) {
-      console.error('Error opening manual search:', error);
+      console.error('Manual search failed:', error);
+    } finally {
+      setManualSearchState(prev => prev ? { ...prev, isSearching: false } : null);
     }
   };
 
   const selectEbaResult = (employerId: string, result: FWCSearchResult) => {
     setCurrentEbaData({ employerId, result });
     setShowEbaDialog(true);
+  };
+
+  const addToPendingMatches = (employerId: string, result: FWCSearchResult) => {
+    const employer = filteredEmployers.find(e => e.id === employerId);
+    if (!employer) return;
+    
+    setPendingMatches(prev => [
+      ...prev.filter(m => m.employerId !== employerId),
+      { employerId, employerName: employer.name, result }
+    ]);
+    
+    toast({
+      title: "Added to review queue",
+      description: `Added EBA match for ${employer.name} to review queue`,
+    });
+  };
+
+  const removePendingMatch = (employerId: string) => {
+    setPendingMatches(prev => prev.filter(m => m.employerId !== employerId));
   };
 
   const saveEbaRecord = async (ebaData: {
@@ -252,8 +442,12 @@ export function EbaBackfillManager() {
       setShowEbaDialog(false);
       setCurrentEbaData(null);
       
-      // Remove employer from list
+      // Remove from pending matches if it was there
+      setPendingMatches(prev => prev.filter(m => m.employerId !== currentEbaData.employerId));
+      
+      // Remove employer from lists
       setEmployers(prev => prev.filter(emp => emp.id !== currentEbaData.employerId));
+      setFilteredEmployers(prev => prev.filter(emp => emp.id !== currentEbaData.employerId));
       setSelectedEmployers(prev => {
         const updated = new Set(prev);
         updated.delete(currentEbaData.employerId);
@@ -272,6 +466,8 @@ export function EbaBackfillManager() {
 
   const batchSearchEbas = async () => {
     setIsProcessingBatch(true);
+    setPendingMatches([]); // Clear existing pending matches
+    
     const results: BackfillResults = {
       processed: 0,
       successful: 0,
@@ -280,7 +476,7 @@ export function EbaBackfillManager() {
       errors: []
     };
 
-    const selectedEmployersList = employers.filter(emp => selectedEmployers.has(emp.id));
+    const selectedEmployersList = filteredEmployers.filter(emp => selectedEmployers.has(emp.id));
 
     for (const employer of selectedEmployersList) {
       results.processed++;
@@ -290,7 +486,7 @@ export function EbaBackfillManager() {
         results.successful++;
         
         // Add delay to avoid overwhelming the server
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 1500));
         
       } catch (error) {
         results.failed++;
@@ -298,13 +494,19 @@ export function EbaBackfillManager() {
       }
     }
 
-    setBackfillResults(results);
     setIsProcessingBatch(false);
 
     toast({
       title: "Batch EBA search completed",
       description: `Processed ${results.processed} employers. ${results.successful} successful, ${results.failed} failed.`,
     });
+
+    // Show match review if we have pending matches
+    if (pendingMatches.length > 0) {
+      setShowMatchReview(true);
+    } else {
+      setBackfillResults(results);
+    }
   };
 
   const toggleEmployerSelection = (employerId: string) => {
@@ -320,7 +522,7 @@ export function EbaBackfillManager() {
   };
 
   const selectAll = () => {
-    setSelectedEmployers(new Set(employers.map(emp => emp.id)));
+    setSelectedEmployers(new Set(filteredEmployers.map(emp => emp.id)));
   };
 
   const selectNone = () => {
@@ -334,6 +536,26 @@ export function EbaBackfillManager() {
         <h2 className="text-xl font-semibold">Loading Employers...</h2>
         <p className="text-gray-600">Finding employers without EBA records</p>
       </div>
+    );
+  }
+
+  if (showMatchReview) {
+    return (
+      <MatchReviewInterface
+        pendingMatches={pendingMatches}
+        onApproveMatch={(match) => selectEbaResult(match.employerId, match.result)}
+        onRejectMatch={removePendingMatch}
+        onComplete={() => {
+          setShowMatchReview(false);
+          setBackfillResults({
+            processed: pendingMatches.length,
+            successful: 0,
+            failed: 0,
+            skipped: 0,
+            errors: []
+          });
+        }}
+      />
     );
   }
 
@@ -417,13 +639,68 @@ export function EbaBackfillManager() {
         </p>
       </div>
 
-      {employers.length === 0 ? (
+      {/* Filter Controls */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Filter className="h-5 w-5" />
+            Filter Employers
+          </CardTitle>
+          <CardDescription>
+            Choose which types of employers to search for EBAs
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-4 items-center">
+            <Label htmlFor="filter-select">Filter by role:</Label>
+            <Select value={filterState.type} onValueChange={handleFilterChange}>
+              <SelectTrigger className="w-60">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Employers ({employers.length})</SelectItem>
+                <SelectItem value="builders">
+                  <div className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4" />
+                    Builders/Major Contractors ({employers.filter(e => e.is_builder).length})
+                  </div>
+                </SelectItem>
+                <SelectItem value="key_contractors">
+                  <div className="flex items-center gap-2">
+                    <HardHat className="h-4 w-4" />
+                    Key Contractors ({employers.filter(e => e.is_key_contractor).length})
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            
+            {pendingMatches.length > 0 && (
+              <Button 
+                variant="outline" 
+                onClick={() => setShowMatchReview(true)}
+                className="ml-auto"
+              >
+                <Eye className="h-4 w-4 mr-2" />
+                Review {pendingMatches.length} Pending Matches
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {filteredEmployers.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center">
             <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
-            <h3 className="text-lg font-medium mb-2">All Employers Have EBA Records</h3>
+            <h3 className="text-lg font-medium mb-2">
+              {filterState.type === 'all' 
+                ? 'All Employers Have EBA Records' 
+                : `No ${filterState.type.replace('_', ' ')} Found Without EBA Records`}
+            </h3>
             <p className="text-gray-600">
-              All employers in the database have associated EBA records.
+              {filterState.type === 'all' 
+                ? 'All employers in the database have associated EBA records.'
+                : `All ${filterState.type.replace('_', ' ')} already have EBA records or are not assigned to projects.`}
             </p>
             <Button onClick={loadEmployersWithoutEba} className="mt-4">
               <RefreshCw className="h-4 w-4 mr-2" />
@@ -437,7 +714,8 @@ export function EbaBackfillManager() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Building2 className="h-5 w-5" />
-                {employers.length} Employers Without EBA Records
+                {filteredEmployers.length} {filterState.type === 'builders' ? 'Builders/Major Contractors' : 
+                                          filterState.type === 'key_contractors' ? 'Key Contractors' : 'Employers'} Without EBA Records
               </CardTitle>
               <CardDescription>
                 Search FWC database for Enterprise Bargaining Agreements
@@ -452,13 +730,15 @@ export function EbaBackfillManager() {
                   Select None
                 </Button>
                 <div className="text-sm text-gray-600 flex items-center ml-auto">
-                  {selectedEmployers.size} of {employers.length} selected
+                  {selectedEmployers.size} of {filteredEmployers.length} selected
                 </div>
               </div>
 
               <div className="space-y-3 max-h-96 overflow-y-auto">
-                {employers.map((employer) => {
+                {filteredEmployers.map((employer) => {
                   const searchState = searchStates[employer.id];
+                  const hasPendingMatch = pendingMatches.some(m => m.employerId === employer.id);
+                  
                   return (
                     <div key={employer.id} className="border rounded-lg p-4">
                       <div className="flex items-center justify-between mb-2">
@@ -470,9 +750,15 @@ export function EbaBackfillManager() {
                             className="w-4 h-4"
                           />
                           <div>
-                            <h4 className="font-medium">{employer.name}</h4>
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-medium">{employer.name}</h4>
+                              {employer.is_builder && <Badge variant="secondary" className="text-xs">Builder</Badge>}
+                              {employer.is_key_contractor && <Badge variant="outline" className="text-xs">Key Contractor</Badge>}
+                              {hasPendingMatch && <Badge className="text-xs bg-orange-100 text-orange-800">Pending Review</Badge>}
+                            </div>
                             <p className="text-sm text-gray-600">
                               {employer.employer_type} • {employer.suburb}, {employer.state}
+                              {employer.project_count && employer.project_count > 0 && ` • ${employer.project_count} projects`}
                             </p>
                           </div>
                         </div>
@@ -494,7 +780,7 @@ export function EbaBackfillManager() {
                             size="sm"
                             onClick={() => openManualSearch(employer)}
                           >
-                            <ExternalLink className="h-4 w-4" />
+                            <Plus className="h-4 w-4" />
                           </Button>
                         </div>
                       </div>
@@ -535,13 +821,23 @@ export function EbaBackfillManager() {
                                         )}
                                       </div>
                                     </div>
-                                    <Button
-                                      size="sm"
-                                      onClick={() => selectEbaResult(employer.id, result)}
-                                    >
-                                      <FileText className="h-4 w-4 mr-1" />
-                                      Select
-                                    </Button>
+                                    <div className="flex gap-1">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => addToPendingMatches(employer.id, result)}
+                                      >
+                                        <Plus className="h-4 w-4 mr-1" />
+                                        Add to Review
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        onClick={() => selectEbaResult(employer.id, result)}
+                                      >
+                                        <FileText className="h-4 w-4 mr-1" />
+                                        Save Now
+                                      </Button>
+                                    </div>
                                   </div>
                                 </div>
                               ))}
@@ -583,14 +879,198 @@ export function EbaBackfillManager() {
         </>
       )}
 
-      {/* EBA Selection Dialog */}
+      {/* Dialogs */}
       <EbaSelectionDialog
         open={showEbaDialog}
         onOpenChange={setShowEbaDialog}
         ebaData={currentEbaData}
         onSave={saveEbaRecord}
       />
+      
+      <ManualSearchDialog
+        open={showManualSearch}
+        onOpenChange={setShowManualSearch}
+        searchState={manualSearchState}
+        onSearchTermChange={(term) => 
+          setManualSearchState(prev => prev ? { ...prev, customSearchTerm: term } : null)
+        }
+        onSearch={performManualSearch}
+      />
     </div>
+  );
+}
+
+// Match Review Interface Component
+interface MatchReviewInterfaceProps {
+  pendingMatches: PendingMatch[];
+  onApproveMatch: (match: PendingMatch) => void;
+  onRejectMatch: (employerId: string) => void;
+  onComplete: () => void;
+}
+
+function MatchReviewInterface({ pendingMatches, onApproveMatch, onRejectMatch, onComplete }: MatchReviewInterfaceProps) {
+  const [reviewedMatches, setReviewedMatches] = useState<Set<string>>(new Set());
+
+  const handleApprove = (match: PendingMatch) => {
+    onApproveMatch(match);
+    setReviewedMatches(prev => new Set([...prev, match.employerId]));
+  };
+
+  const handleReject = (employerId: string) => {
+    onRejectMatch(employerId);
+    setReviewedMatches(prev => new Set([...prev, employerId]));
+  };
+
+  const remainingMatches = pendingMatches.filter(m => !reviewedMatches.has(m.employerId));
+
+  return (
+    <div className="space-y-6">
+      <div className="text-center">
+        <h2 className="text-xl font-semibold mb-2">Review EBA Matches</h2>
+        <p className="text-gray-600">
+          Review and approve the following potential EBA matches before saving
+        </p>
+        <div className="mt-2">
+          <Badge variant="outline" className="text-sm">
+            {remainingMatches.length} pending • {reviewedMatches.size} reviewed
+          </Badge>
+        </div>
+      </div>
+
+      {remainingMatches.length === 0 ? (
+        <Card>
+          <CardContent className="p-8 text-center">
+            <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
+            <h3 className="text-lg font-medium mb-2">All Matches Reviewed</h3>
+            <p className="text-gray-600">
+              You have reviewed all pending EBA matches.
+            </p>
+            <Button onClick={onComplete} className="mt-4">
+              Complete Review
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          <div className="space-y-4">
+            {remainingMatches.map((match) => (
+              <Card key={match.employerId} className="border-orange-200">
+                <CardHeader>
+                  <CardTitle className="text-lg">{match.employerName}</CardTitle>
+                  <CardDescription>
+                    Review this potential EBA match
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="bg-blue-50 p-4 rounded border">
+                    <h4 className="font-medium mb-2">Proposed EBA Match:</h4>
+                    <p className="font-medium">{match.result.title}</p>
+                    <div className="flex gap-2 mt-2">
+                      <Badge variant="outline">{match.result.status}</Badge>
+                      <Badge variant="outline">{match.result.agreementType}</Badge>
+                      {match.result.approvedDate && (
+                        <Badge variant="outline">Approved: {match.result.approvedDate}</Badge>
+                      )}
+                      {match.result.expiryDate && (
+                        <Badge variant="outline">Expires: {match.result.expiryDate}</Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 justify-end">
+                    <Button
+                      variant="destructive"
+                      onClick={() => handleReject(match.employerId)}
+                    >
+                      <X className="h-4 w-4 mr-2" />
+                      Reject Match
+                    </Button>
+                    <Button
+                      onClick={() => handleApprove(match)}
+                    >
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Approve & Save
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          <div className="flex justify-center gap-2">
+            <Button variant="outline" onClick={onComplete}>
+              Skip Review & Complete
+            </Button>
+            <Button 
+              disabled={remainingMatches.length > 0}
+              onClick={onComplete}
+            >
+              Complete Review ({reviewedMatches.size} processed)
+            </Button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Manual Search Dialog Component
+interface ManualSearchDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  searchState: ManualSearchState | null;
+  onSearchTermChange: (term: string) => void;
+  onSearch: () => void;
+}
+
+function ManualSearchDialog({ open, onOpenChange, searchState, onSearchTermChange, onSearch }: ManualSearchDialogProps) {
+  if (!searchState) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Manual EBA Search</DialogTitle>
+          <DialogDescription>
+            Search for EBAs using a custom company name for {searchState.employerName}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="search-term">Company Name to Search</Label>
+            <Input
+              id="search-term"
+              value={searchState.customSearchTerm}
+              onChange={(e) => onSearchTermChange(e.target.value)}
+              placeholder="Enter alternative company name to search"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={onSearch}
+              disabled={searchState.isSearching || !searchState.customSearchTerm.trim()}
+            >
+              {searchState.isSearching ? (
+                <>
+                  <img src="/spinner.gif" alt="Loading" className="w-4 h-4 mr-2" />
+                  Searching...
+                </>
+              ) : (
+                <>
+                  <Search className="w-4 h-4 mr-2" />
+                  Search EBAs
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

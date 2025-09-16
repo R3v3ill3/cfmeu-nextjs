@@ -45,3 +45,32 @@ Run the following SQL files on your Supabase/Postgres instance in order:
 - `sql/003_patches_backfill.sql`: optional backfill from legacy `job_sites.patch`
 
 After running, the Patch page and admin Patch Manager will populate from the new schema. The UI falls back to legacy fields until migrations are applied.
+
+## Incolink Export Probe (local validation)
+
+To validate the automated Incolink export flow locally:
+
+1. Create a `.env` file with:
+```
+INCOLINK_EMAIL=your_email
+INCOLINK_PASSWORD=your_password
+```
+2. Run the probe script:
+```
+npm run probe:incolink
+```
+Or pass a specific employer number:
+```
+npx tsx scripts/incolink_probe.ts 7125150
+```
+
+### Incolink Invoice Members CSV API
+
+Once dev server is running (`npm run dev`), you can fetch members as CSV by posting an employer number (and optional invoice number). The endpoint will log in, open the first non-zero invoice (or the provided one), extract members from the first column, and return a CSV file.
+
+```
+curl -X POST http://localhost:3000/api/incolink/invoice-members \
+  -H 'Content-Type: application/json' \
+  -d '{"incolinkNumber":"7125150"}' -o invoice-members.csv
+```
+

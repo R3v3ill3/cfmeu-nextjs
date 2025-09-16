@@ -118,7 +118,7 @@ export const EmployerCard = ({ employer, onClick }: EmployerCardProps) => {
           <div className="flex items-start gap-2">
             {getEmployerTypeIcon(employer.employer_type)}
             <div className="min-w-0 flex-1">
-              <CardTitle className="text-lg truncate">{employer.name}</CardTitle>
+              <CardTitle className="text-lg w-full truncate" title={employer.name}>{employer.name}</CardTitle>
               {employer.abn && (
                 <CardDescription className="text-sm">
                   ABN: {employer.abn}

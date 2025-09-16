@@ -12,6 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Mail, Phone, MapPin } from "lucide-react";
 import { getWorkerColorCoding } from "@/utils/workerColorCoding";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
 
 interface WorkerDetailModalProps {
   workerId: string | null;
@@ -122,15 +124,30 @@ export const WorkerDetailModal = ({ workerId, isOpen, onClose, onUpdate }: Worke
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
         <DialogHeader className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <DialogTitle>Worker Details</DialogTitle>
             {worker && (
-              <Badge 
-                className={getUnionStatusColor(worker.union_membership_status)}
-                style={{ ...getWorkerColorCoding(worker.union_membership_status || null).badgeStyle, ...getWorkerColorCoding(worker.union_membership_status || null).borderStyle }}
-              >
-                {formatUnionStatus(worker.union_membership_status)}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge 
+                  className={getUnionStatusColor(worker.union_membership_status)}
+                  style={{ ...getWorkerColorCoding(worker.union_membership_status || null).badgeStyle, ...getWorkerColorCoding(worker.union_membership_status || null).borderStyle }}
+                >
+                  {formatUnionStatus(worker.union_membership_status)}
+                </Badge>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="xs" variant="outline">Change</Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {(["member","non_member","potential","declined"] as const).map((opt) => (
+                      <DropdownMenuItem key={opt} onClick={async () => {
+                        await supabase.from('workers').update({ union_membership_status: opt }).eq('id', workerId)
+                        queryClient.invalidateQueries({ queryKey: ["worker-detail", workerId] })
+                      }}>{formatUnionStatus(opt)}</DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             )}
           </div>
           
@@ -178,10 +195,7 @@ export const WorkerDetailModal = ({ workerId, isOpen, onClose, onUpdate }: Worke
                 {activeUnionRoles && activeUnionRoles.length > 0 && (
                   <div className="flex gap-1 mt-2">
                     {activeUnionRoles.map((role: WorkerUnionRole & { id: string; name: string; is_senior?: boolean }) => (
-                      <Badge key={role.id} variant="secondary" className="text-xs">
-                        {role.name}
-                        {role.is_senior && " (Senior)"}
-                      </Badge>
+                      <Badge key={role.id} variant="outline">{role.name}</Badge>
                     ))}
                   </div>
                 )}
@@ -190,40 +204,30 @@ export const WorkerDetailModal = ({ workerId, isOpen, onClose, onUpdate }: Worke
           )}
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 overflow-hidden">
-          <TabsList className="grid grid-cols-5 w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-2">
+          <TabsList>
             <TabsTrigger value="personal">Personal</TabsTrigger>
             <TabsTrigger value="placements">Placements</TabsTrigger>
             <TabsTrigger value="roles">Union Roles</TabsTrigger>
-            <TabsTrigger value="activities">Activities</TabsTrigger>
+            <TabsTrigger value="activity">Activity</TabsTrigger>
             <TabsTrigger value="ratings">Ratings</TabsTrigger>
           </TabsList>
-
-          <div className="mt-4 overflow-hidden flex-1">
-            <TabsContent value="personal" className="h-full overflow-auto">
-              {worker ? (
-                <WorkerForm worker={worker} onSuccess={handleWorkerUpdate} hideUnionSection={true} />
-              ) : (
-                <div className="text-center text-muted-foreground">Loading worker details...</div>
-              )}
-            </TabsContent>
-
-            <TabsContent value="placements" className="h-full overflow-auto">
-              <WorkerPlacementsTab workerId={workerId} onUpdate={handleWorkerUpdate} />
-            </TabsContent>
-
-            <TabsContent value="roles" className="h-full overflow-auto">
-              <WorkerUnionRolesTab workerId={workerId} onUpdate={handleWorkerUpdate} />
-            </TabsContent>
-
-            <TabsContent value="activities" className="h-full overflow-auto">
-              <WorkerActivitiesTab workerId={workerId} onUpdate={handleWorkerUpdate} />
-            </TabsContent>
-
-            <TabsContent value="ratings" className="h-full overflow-auto">
-              <WorkerRatingsTab workerId={workerId} onUpdate={handleWorkerUpdate} />
-            </TabsContent>
-          </div>
+          
+          <TabsContent value="personal" className="p-2">
+            <WorkerForm worker={worker} onSuccess={handleWorkerUpdate} />
+          </TabsContent>
+          <TabsContent value="placements" className="p-2">
+            <WorkerPlacementsTab worker={worker} onUpdate={handleWorkerUpdate} />
+          </TabsContent>
+          <TabsContent value="roles" className="p-2">
+            <WorkerUnionRolesTab worker={worker} onUpdate={handleWorkerUpdate} />
+          </TabsContent>
+          <TabsContent value="activity" className="p-2">
+            <WorkerActivitiesTab worker={worker} />
+          </TabsContent>
+          <TabsContent value="ratings" className="p-2">
+            <WorkerRatingsTab worker={worker} />
+          </TabsContent>
         </Tabs>
       </DialogContent>
     </Dialog>

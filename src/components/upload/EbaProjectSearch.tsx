@@ -69,14 +69,19 @@ const KEY_CONTRACTOR_TRADES = new Set([
 
 const KEY_CONTRACTOR_ROLES = new Set(['builder', 'project_manager']);
 
-const FILTER_OPTIONS = [
+const ROLE_FILTER_OPTIONS = [
   { value: 'all', label: 'All Employers' },
-  { value: 'missing_only', label: 'Missing EBA Only' },
   { value: 'builder', label: 'Builders' },
   { value: 'head_contractor', label: 'Head Contractors' }, 
   { value: 'project_manager', label: 'Project Managers' },
   { value: 'key_contractors', label: 'Key Contractors' },
   { value: 'advanced', label: 'Advanced Filters...' },
+];
+
+const EBA_STATUS_FILTER_OPTIONS = [
+  { value: 'all', label: 'All EBA Statuses' },
+  { value: 'missing_only', label: 'Missing EBA Only' },
+  { value: 'has_eba', label: 'Has EBA Only' },
 ];
 
 interface EbaCoverageSummary {
@@ -97,7 +102,8 @@ export default function EbaProjectSearch() {
   const [expandedResults, setExpandedResults] = useState<Set<string>>(new Set());
   const [employersToDismiss, setEmployersToDismiss] = useState<Set<string>>(new Set());
   const [processedEmployers, setProcessedEmployers] = useState<Set<string>>(new Set());
-  const [filterBy, setFilterBy] = useState('missing_only');
+  const [roleFilter, setRoleFilter] = useState('all');
+  const [ebaStatusFilter, setEbaStatusFilter] = useState('missing_only');
   
   // Advanced filters state
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -118,20 +124,20 @@ export default function EbaProjectSearch() {
   // Load EBA coverage summary for all project employers
   const loadEbaCoverageSummary = useCallback(async () => {
     try {
-      // Get ALL project employers (not just those without EBA records)
-      const { data: allEmployers } = await supabase
-        .from('employers')
-        .select(`
-          id,
-          name,
-          enterprise_agreement_status,
-          company_eba_records!left(id),
-          project_assignments!inner(
-            assignment_type,
-            contractor_role_types(code),
-            trade_types(code)
-          )
-        `);
+       // Get ALL project employers (not just those without EBA records)
+       const { data: allEmployers } = await supabase
+         .from('employers')
+         .select(`
+           id,
+           name,
+           enterprise_agreement_status,
+           company_eba_records!left(id),
+           project_assignments!inner(
+             assignment_type,
+             contractor_role_types(code),
+             projects(id, name)
+           )
+         `);
 
       if (!allEmployers) return;
 
@@ -141,40 +147,54 @@ export default function EbaProjectSearch() {
       const projectManagers = new Set<string>();
       const keyContractors = new Set<string>();
 
-      allEmployers.forEach((emp: any) => {
-        const hasEbaRecord = emp.company_eba_records?.length > 0;
-        const hasKnownStatus = emp.enterprise_agreement_status !== null;
-        const hasEbaInfo = hasEbaRecord || hasKnownStatus;
+       allEmployers.forEach((emp: any) => {
+         // Categorize by roles from project_assignments
+         emp.project_assignments?.forEach((pa: any) => {
+           if (pa.assignment_type === 'contractor_role' && pa.contractor_role_types) {
+             const roleCode = pa.contractor_role_types.code;
+             if (roleCode === 'builder') {
+               builders.add(emp.id);
+               keyContractors.add(emp.id); // Builders are key contractors
+             }
+             if (roleCode === 'head_contractor') headContractors.add(emp.id);
+             if (roleCode === 'project_manager') {
+               projectManagers.add(emp.id);
+               keyContractors.add(emp.id); // Project managers are key contractors
+             }
+           }
+         });
+       });
 
-        emp.project_assignments?.forEach((pa: any) => {
-          if (pa.assignment_type === 'contractor_role' && pa.contractor_role_types) {
-            const roleCode = pa.contractor_role_types.code;
-            if (roleCode === 'builder') builders.add(emp.id);
-            if (roleCode === 'head_contractor') headContractors.add(emp.id);
-            if (roleCode === 'project_manager') projectManagers.add(emp.id);
-          }
-          
-          if (pa.assignment_type === 'trade_work' && pa.trade_types) {
-            const tradeCode = pa.trade_types.code;
-            if (KEY_CONTRACTOR_TRADES.has(tradeCode)) keyContractors.add(emp.id);
-          }
-        });
+       // Also add employers with key trades by checking existing project/site trades
+       try {
+         const { data: keyTradeEmployers } = await supabase
+           .from('project_contractor_trades')
+           .select('employer_id, trade_type')
+           .in('trade_type', Array.from(KEY_CONTRACTOR_TRADES));
+         
+         keyTradeEmployers?.forEach((te: any) => {
+           keyContractors.add(te.employer_id);
+         });
 
-        // Also check roles for key contractor status
-        const hasKeyRole = emp.project_assignments?.some((pa: any) => 
-          pa.assignment_type === 'contractor_role' && 
-          pa.contractor_role_types && 
-          KEY_CONTRACTOR_ROLES.has(pa.contractor_role_types.code)
-        );
-        if (hasKeyRole) keyContractors.add(emp.id);
-      });
+         const { data: siteKeyTradeEmployers } = await supabase
+           .from('site_contractor_trades')  
+           .select('employer_id, trade_type')
+           .in('trade_type', Array.from(KEY_CONTRACTOR_TRADES));
+         
+         siteKeyTradeEmployers?.forEach((te: any) => {
+           keyContractors.add(te.employer_id);
+         });
+       } catch (tradeError) {
+         console.warn('Failed to load key trade employers:', tradeError);
+       }
 
-      // Count those needing EBA search (no EBA record and unknown status)
-      const employersNeedingSearch = allEmployers.filter((emp: any) => {
-        const hasEbaRecord = emp.company_eba_records?.length > 0;
-        const hasKnownStatus = emp.enterprise_agreement_status !== null;
-        return !hasEbaRecord && !hasKnownStatus;
-      });
+       // Count those needing EBA search (no EBA record OR status is null/no)
+       const employersNeedingSearch = allEmployers.filter((emp: any) => {
+         const hasEbaRecord = emp.company_eba_records?.length > 0;
+         const ebaStatus = emp.enterprise_agreement_status;
+         // Need search if: no EBA record AND (status is null OR status is explicitly 'no')
+         return !hasEbaRecord && (ebaStatus === null || ebaStatus === false || ebaStatus === 'no');
+       });
 
       const needsSearchIds = new Set(employersNeedingSearch.map((e: any) => e.id));
 
@@ -227,23 +247,21 @@ export default function EbaProjectSearch() {
     try {
       setIsLoading(true);
       
-      // Query employers with project assignments from the new table structure
-      const { data: employers, error } = await supabase
-        .from('employers')
-        .select(`
-          id,
-          name,
-          enterprise_agreement_status,
-          company_eba_records!left(id, employer_id),
-          project_assignments!inner(
-            project_id,
-            assignment_type,
-            projects!inner(id, name),
-            contractor_role_types(code, name),
-            trade_types(code, name)
-          )
-        `)
-        .is('company_eba_records.id', null); // No EBA records = unknown status
+        // Query ALL employers with project assignments (don't filter by EBA status here)
+        const { data: employers, error } = await supabase
+          .from('employers')
+          .select(`
+            id,
+            name,
+            enterprise_agreement_status,
+            company_eba_records!left(id, employer_id),
+            project_assignments!inner(
+              project_id,
+              assignment_type,
+              projects!inner(id, name),
+              contractor_role_types(code, name)
+            )
+          `);
 
       if (error) throw error;
 
@@ -286,11 +304,25 @@ export default function EbaProjectSearch() {
         const hasKeyRole = roles.some((r: any) => KEY_CONTRACTOR_ROLES.has(r.roleType));
         const hasKeyTrade = tradesFromAssignments.some((t: any) => KEY_CONTRACTOR_TRADES.has(t.tradeType));
 
+        // Determine EBA status properly
+        const hasEbaRecord = emp.company_eba_records?.length > 0;
+        let ebaStatus: 'yes' | 'no' | 'pending' | null = null;
+        
+        if (hasEbaRecord) {
+          ebaStatus = 'yes'; // Has EBA record
+        } else if (emp.enterprise_agreement_status === true || emp.enterprise_agreement_status === 'active') {
+          ebaStatus = 'yes'; // Status indicates active EBA
+        } else if (emp.enterprise_agreement_status === false || emp.enterprise_agreement_status === 'no') {
+          ebaStatus = 'no'; // Status indicates no EBA
+        } else {
+          ebaStatus = null; // Unknown status
+        }
+
         return {
           id: emp.id,
           name: emp.name,
           project_count: projects.length,
-          eba_status: emp.enterprise_agreement_status ? 'yes' : (emp.enterprise_agreement_status === false ? 'no' : null),
+          eba_status: ebaStatus,
           projects: projects,
           roles: roles,
           trades: tradesFromAssignments, // Start with just the new assignments data
@@ -374,15 +406,26 @@ export default function EbaProjectSearch() {
   }, [supabase, toast]);
 
 
-  // Apply filters
+  // Apply filters - combine role filter AND EBA status filter
   useEffect(() => {
     let filtered = projectEmployers;
 
-    // Apply basic filter
-    switch (filterBy) {
+    // Apply EBA status filter first
+    switch (ebaStatusFilter) {
       case 'missing_only':
         filtered = filtered.filter(emp => emp.eba_status === 'no' || emp.eba_status === null);
         break;
+      case 'has_eba':
+        filtered = filtered.filter(emp => emp.eba_status === 'yes' || emp.eba_status === 'pending');
+        break;
+      case 'all':
+      default:
+        // No EBA status filtering
+        break;
+    }
+
+    // Then apply role filter
+    switch (roleFilter) {
       case 'builder':
         filtered = filtered.filter(emp => emp.roles.some(role => role.roleType === 'builder'));
         break;
@@ -416,12 +459,12 @@ export default function EbaProjectSearch() {
         break;
       case 'all':
       default:
-        // Show all employers, no filtering
+        // No role filtering
         break;
     }
 
     setFilteredEmployers(filtered);
-  }, [projectEmployers, filterBy, advancedFilters]);
+  }, [projectEmployers, roleFilter, ebaStatusFilter, advancedFilters]);
 
   // Load employers connected to projects
   useEffect(() => {
@@ -784,23 +827,41 @@ export default function EbaProjectSearch() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            <div className="flex items-center gap-4">
-              <Label className="text-sm font-medium">Show:</Label>
-              <Select value={filterBy} onValueChange={(value) => {
-                setFilterBy(value);
-                setShowAdvancedFilters(value === 'advanced');
-              }}>
-                <SelectTrigger className="w-64">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {FILTER_OPTIONS.map(option => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Employer Role:</Label>
+                <Select value={roleFilter} onValueChange={(value) => {
+                  setRoleFilter(value);
+                  setShowAdvancedFilters(value === 'advanced');
+                }}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ROLE_FILTER_OPTIONS.map(option => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div>
+                <Label className="text-sm font-medium mb-2 block">EBA Status:</Label>
+                <Select value={ebaStatusFilter} onValueChange={setEbaStatusFilter}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EBA_STATUS_FILTER_OPTIONS.map(option => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             {/* Advanced Filters */}
@@ -893,10 +954,19 @@ export default function EbaProjectSearch() {
             <CardTitle className="flex items-center gap-2">
               <Building2 className="h-5 w-5" />
               {filteredEmployers.length} Employers Match Criteria
-              {filterBy !== 'all' && filterBy !== 'missing_only' && (
-                <Badge variant="outline">
-                  {FILTER_OPTIONS.find(f => f.value === filterBy)?.label || 'Filtered'}
-                </Badge>
+              {(roleFilter !== 'all' || ebaStatusFilter !== 'all') && (
+                <div className="flex gap-1">
+                  {roleFilter !== 'all' && (
+                    <Badge variant="outline">
+                      {ROLE_FILTER_OPTIONS.find(f => f.value === roleFilter)?.label || 'Role Filtered'}
+                    </Badge>
+                  )}
+                  {ebaStatusFilter !== 'all' && (
+                    <Badge variant="outline">
+                      {EBA_STATUS_FILTER_OPTIONS.find(f => f.value === ebaStatusFilter)?.label || 'EBA Filtered'}
+                    </Badge>
+                  )}
+                </div>
               )}
             </CardTitle>
             <CardDescription>

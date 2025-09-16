@@ -9,6 +9,7 @@
     "lint": "next lint",
     "migrate-trades": "tsx scripts/migrateTrades.ts",
     "refresh-views": "node scripts/daily-refresh.js",
+    "probe:incolink": "tsx scripts/incolink_probe.ts 7125150",
     "check-view-staleness": "curl -s ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}/api/admin/refresh-views | jq '.views'"
   },
   "engines": {
@@ -88,6 +89,7 @@
     "react-dom": "^18.3.1",
     "tailwindcss": "^4",
     "tsx": "^4.20.5",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "dotenv": "^16.4.5"
   }
 }
