@@ -3,14 +3,26 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Activity, AlertTriangle, CheckCircle } from "lucide-react"
 import { useNewDashboardData } from "@/hooks/useNewDashboardData"
+import { useSearchParams } from "next/navigation"
+import { DashboardFiltersBar } from "@/components/dashboard/DashboardFiltersBar"
 import { ProjectMetricsSection } from "@/components/dashboard/ProjectMetricsSection"
 import { ActiveConstructionMetricsComponent } from "@/components/dashboard/ActiveConstructionMetrics"
 import { PreConstructionMetricsComponent } from "@/components/dashboard/PreConstructionMetrics"
+import { RoleBasedDashboard } from "@/components/dashboard/RoleBasedDashboard"
+import { DashboardModeCompact } from "@/components/dashboard/DashboardFeatureFlagIndicator"
+import { DashboardDebugInfo } from "@/components/dashboard/DashboardDebugInfo"
+import { ComplianceAlertsCard } from "@/components/dashboard/ComplianceAlertsCard"
 
 export const dynamic = 'force-dynamic'
 
 export default function DashboardPage() {
-  const { data, isLoading } = useNewDashboardData()
+  const sp = useSearchParams()
+  const patchParam = sp.get("patch") || ""
+  const patchIds = patchParam.split(",").map(s => s.trim()).filter(Boolean)
+  const tier = sp.get("tier") || undefined
+  const stage = sp.get("stage") || undefined
+  const universe = sp.get("universe") || undefined
+  const { data, isLoading } = useNewDashboardData({ patchIds, tier, stage, universe })
 
   if (isLoading) {
     return (
@@ -65,9 +77,16 @@ export default function DashboardPage() {
               <Activity className="h-3 w-3 mr-1" />
               Real-time Updates
             </Badge>
+            <DashboardModeCompact />
           </div>
         </div>
       </div>
+
+      {/* Filters ribbon */}
+      <DashboardFiltersBar compact={true} />
+
+      {/* Compliance Alerts */}
+      <ComplianceAlertsCard />
 
       {/* Project Overview Section */}
       <ProjectMetricsSection 
@@ -81,7 +100,31 @@ export default function DashboardPage() {
         errors={data?.errors}
       />
 
-      {/* Active Construction Metrics */}
+      {/* Active Pre-Construction Metrics */}
+      <PreConstructionMetricsComponent 
+        data={data?.active_pre_construction || {
+          total_projects: 0, total_builders: 0, eba_builders: 0, eba_builder_percentage: 0,
+          total_employers: 0, eba_employers: 0, eba_employer_percentage: 0,
+          avg_estimated_workers: 0, avg_assigned_workers: 0, avg_members: 0
+        }} 
+        isLoading={isLoading} 
+      />
+
+      {/* Debug Info (Development Only) */}
+      <DashboardDebugInfo />
+
+      {/* Role-Based Dashboard - Organizing Universe Summary */}
+      <div className="lg:bg-white lg:border lg:border-gray-300 lg:rounded-lg lg:shadow-md">
+        <div className="lg:p-6">
+          <div className="mb-4">
+            <h2 className="text-2xl font-bold text-gray-900 lg:text-3xl">Organizing Universe Summary</h2>
+            <p className="text-gray-700 mt-1 lg:text-lg">Role-based project organizing metrics and patch summaries</p>
+          </div>
+          <RoleBasedDashboard />
+        </div>
+      </div>
+
+      {/* Active Construction Metrics (moved to bottom) */}
       <ActiveConstructionMetricsComponent 
         data={data?.active_construction || {
           total_projects: 0, total_builders: 0, eba_builders: 0, eba_builder_percentage: 0,
@@ -90,16 +133,6 @@ export default function DashboardPage() {
           projects_with_site_delegates: 0, projects_with_company_delegates: 0, projects_with_hsrs: 0,
           projects_with_hsr_chair_delegate: 0, projects_with_full_hs_committee: 0,
           avg_estimated_workers: 0, avg_assigned_workers: 0, avg_members: 0, financial_audit_activities: 0
-        }} 
-        isLoading={isLoading} 
-      />
-
-      {/* Active Pre-Construction Metrics */}
-      <PreConstructionMetricsComponent 
-        data={data?.active_pre_construction || {
-          total_projects: 0, total_builders: 0, eba_builders: 0, eba_builder_percentage: 0,
-          total_employers: 0, eba_employers: 0, eba_employer_percentage: 0,
-          avg_estimated_workers: 0, avg_assigned_workers: 0, avg_members: 0
         }} 
         isLoading={isLoading} 
       />

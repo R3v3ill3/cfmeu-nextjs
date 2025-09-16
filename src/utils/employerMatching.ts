@@ -144,11 +144,9 @@ export async function matchEmployerAdvanced(
   const normalizedQuery = normalizeCompanyName(companyName);
   
   try {
-    // First, try exact match on normalized names
+    // Use a dedicated RPC call for the exact match to handle special characters safely.
     const { data: exactMatches, error: exactError } = await supabase
-      .from('employers')
-      .select('id, name, address_line_1, suburb, state')
-      .ilike('name', companyName.trim());
+      .rpc('search_employers_by_exact_name', { name_query: companyName.trim() });
 
     if (exactError) {
       console.error('Exact match query failed:', exactError);

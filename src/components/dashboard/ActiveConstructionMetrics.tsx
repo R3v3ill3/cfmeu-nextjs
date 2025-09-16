@@ -2,6 +2,13 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart"
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
+import { MultiSeriesGauge } from "@/components/charts/MultiSeriesGauge"
+import { useOrganizingUniverseMetrics } from "@/hooks/useOrganizingUniverseMetrics"
+import type { OrganizingUniverseMetrics } from "@/hooks/useOrganizingUniverseMetrics"
+import { useOrganizingUniverseMetricsServerSideCompatible } from "@/hooks/useOrganizingUniverseMetricsServerSide"
 import { 
   Building, 
   Users, 
@@ -13,6 +20,8 @@ import {
   AlertTriangle
 } from "lucide-react"
 import { ActiveConstructionMetrics } from "@/hooks/useNewDashboardData"
+import { useSearchParams } from "next/navigation"
+import { useKeyContractorTradeMetrics } from "@/hooks/useKeyContractorTradeMetrics"
 
 interface ActiveConstructionMetricsProps {
   data: ActiveConstructionMetrics;
@@ -20,6 +29,19 @@ interface ActiveConstructionMetricsProps {
 }
 
 export function ActiveConstructionMetricsComponent({ data, isLoading }: ActiveConstructionMetricsProps) {
+  const sp = useSearchParams()
+  const patchParam = sp.get('patch') || ''
+  const patchIds = patchParam.split(',').map(s => s.trim()).filter(Boolean)
+  const tier = sp.get('tier') || undefined
+  const stage = sp.get('stage') || undefined
+  const universe = sp.get('universe') || undefined
+  // Organizing universe metrics (active construction) for gauges
+  const { data: clientOUMetrics } = useOrganizingUniverseMetrics({ universe: universe || 'active', stage: stage || 'construction' })
+  const { data: serverOUMetrics } = useOrganizingUniverseMetricsServerSideCompatible({ universe: universe || 'active', stage: stage || 'construction', patchIds })
+  const ouMetrics = (serverOUMetrics ?? clientOUMetrics) as OrganizingUniverseMetrics | undefined
+
+  const { data: tradeMetrics } = useKeyContractorTradeMetrics({ patchIds, tier, stage, universe })
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -117,30 +139,51 @@ export function ActiveConstructionMetricsComponent({ data, isLoading }: ActiveCo
             </Badge>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <MetricCard
-              icon={Building}
-              label="Total Projects"
-              value={data.total_projects}
-              color="green"
-              description="Projects in construction"
-            />
-            <MetricCard
-              icon={Users}
-              label="Avg Workers/Project"
-              value={data.avg_assigned_workers}
-              color="blue"
-              description="Average assigned workers"
-            />
-            <MetricCard
-              icon={Award}
-              label="Avg Members/Project"
-              value={data.avg_members}
-              color="purple"
-              description="Average union members"
-            />
-          </div>
+        <CardContent className="space-y-4">
+          <Table variant="desktop">
+            <TableHeader variant="desktop">
+              <TableRow variant="desktop">
+                <TableHead variant="desktop">Metric</TableHead>
+                <TableHead variant="desktop">Value</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody variant="desktop">
+              <TableRow variant="desktop">
+                <TableCell variant="desktop" className="font-medium">Total projects</TableCell>
+                <TableCell variant="desktop">{data.total_projects}</TableCell>
+              </TableRow>
+              <TableRow variant="desktop">
+                <TableCell variant="desktop" className="font-medium">Avg workers / project</TableCell>
+                <TableCell variant="desktop">{data.avg_assigned_workers}</TableCell>
+              </TableRow>
+              <TableRow variant="desktop">
+                <TableCell variant="desktop" className="font-medium">Avg members / project</TableCell>
+                <TableCell variant="desktop">{data.avg_members}</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+
+          {((data.avg_assigned_workers || 0) > 0 || (data.avg_members || 0) > 0) ? (
+            <ChartContainer
+              config={{
+                value: { label: "Value", color: "hsl(var(--chart-1, 221 83% 53%))" },
+              }}
+            >
+              <BarChart data={[
+                { metric: "Avg workers", value: data.avg_assigned_workers },
+                { metric: "Avg members", value: data.avg_members },
+              ]}>
+                <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                <XAxis dataKey="metric" tickLine={false} axisLine={false} />
+                <YAxis allowDecimals={false} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <ChartLegend content={<ChartLegendContent />} />
+                <Bar dataKey="value" fill="var(--color-value)" radius={[4,4,0,0]} />
+              </BarChart>
+            </ChartContainer>
+          ) : (
+            <div className="text-sm text-muted-foreground">No chart data to display.</div>
+          )}
         </CardContent>
       </Card>
 
@@ -156,93 +199,118 @@ export function ActiveConstructionMetricsComponent({ data, isLoading }: ActiveCo
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Builder EBA Coverage */}
-              <div className="space-y-3">
-                <h4 className="font-medium text-gray-900">Project Builders</h4>
-                <MetricCard
-                  icon={Building}
-                  label="Builders with EBA"
-                  value={data.total_builders > 0 ? data.eba_builders : "Loading..."}
-                  total={data.total_builders > 0 ? data.total_builders : undefined}
-                  percentage={data.total_builders > 0 ? data.eba_builder_percentage : undefined}
-                  color="blue"
-                  description="Primary contractors and builders"
-                />
-              </div>
-
-            {/* All Employer EBA Coverage */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="space-y-3">
-              <h4 className="font-medium text-gray-900">All Linked Employers</h4>
-              <MetricCard
-                icon={Users}
-                label="Employers with EBA"
-                value={data.eba_employers}
-                total={data.total_employers}
-                percentage={data.eba_employer_percentage}
-                color="green"
-                description="Builders, head contractors, subcontractors"
-              />
+              <h4 className="font-medium text-gray-900">Builders on Active Construction</h4>
+              {ouMetrics ? (
+                <MultiSeriesGauge
+                  series={[
+                    { label: "Known builders", value: ouMetrics.knownBuilderCount, max: Math.max(ouMetrics.totalActiveProjects, 1), color: "hsl(142 71% 45%)" },
+                    { label: "Builders with EBA", value: ouMetrics.ebaProjectsCount, max: Math.max(ouMetrics.totalActiveProjects, 1), color: "hsl(221 83% 53%)" },
+                  ]}
+                  height={220}
+                />
+              ) : (
+                <div className="h-[220px] bg-gray-50 border border-gray-200 rounded" />
+              )}
             </div>
+
+            <div className="space-y-3">
+              <h4 className="font-medium text-gray-900">Key Contractor Coverage</h4>
+              {ouMetrics ? (
+                <MultiSeriesGauge
+                  series={[
+                    { label: "Known key contractors", value: ouMetrics.mappedKeyContractors, max: Math.max(ouMetrics.totalKeyContractorSlots, 1), color: "hsl(142 71% 45%)" },
+                    { label: "Key contractors with EBA", value: ouMetrics.keyContractorsWithEba, max: Math.max(ouMetrics.totalKeyContractorSlots, 1), color: "hsl(221 83% 53%)" },
+                  ]}
+                  height={220}
+                />
+              ) : (
+                <div className="h-[220px] bg-gray-50 border border-gray-200 rounded" />
+              )}
+            </div>
+          </div>
+          {/* Additional: Key contractors on EBA builder projects */}
+          <div className="mt-6">
+            <h4 className="font-medium text-gray-900 mb-3">Key Contractors on EBA Builder Projects</h4>
+            {ouMetrics && ouMetrics.totalKeyContractorsOnEbaBuilderProjects > 0 ? (
+              <MultiSeriesGauge
+                series={[
+                  { label: "Known key contractors (EBA builder)", value: ouMetrics.totalKeyContractorsOnEbaBuilderProjects, max: Math.max(ouMetrics.totalKeyContractorsOnEbaBuilderProjects, 1), color: "hsl(142 71% 45%)" },
+                  { label: "Key contractors with EBA (EBA builder)", value: ouMetrics.keyContractorsOnEbaBuilderProjects, max: Math.max(ouMetrics.totalKeyContractorsOnEbaBuilderProjects, 1), color: "hsl(221 83% 53%)" },
+                ]}
+                height={200}
+              />
+            ) : (
+              <div className="text-sm text-muted-foreground">No projects with EBA builders yet.</div>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Core CFMEU Trades */}
+      {/* Core CFMEU Trades (Key Contractors) */}
       <Card className="lg:bg-white lg:border-gray-300 lg:shadow-md">
         <CardHeader>
           <div className="flex items-center space-x-2">
             <Award className="h-5 w-5 text-orange-600" />
             <div>
-              <CardTitle>Core CFMEU Trades</CardTitle>
-              <CardDescription>Employer count by key trade categories</CardDescription>
+              <CardTitle>Key Contractor Trades</CardTitle>
+              <CardDescription>Totals by trade: projects, known employers, EBA employers</CardDescription>
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <MetricCard
-              icon={AlertTriangle}
-              label="Demolition"
-              value={data.core_trades.demolition}
-              color="red"
-              description="Demolition contractors"
-            />
-            <MetricCard
-              icon={TrendingUp}
-              label="Piling"
-              value={data.core_trades.piling}
-              color="blue"
-              description="Foundation piling"
-            />
-            <MetricCard
-              icon={Building}
-              label="Concreting"
-              value={data.core_trades.concreting}
-              color="green"
-              description="Concrete contractors"
-            />
-            <MetricCard
-              icon={Shield}
-              label="Form Work"
-              value={data.core_trades.formwork}
-              color="purple"
-              description="Formwork specialists"
-            />
-            <MetricCard
-              icon={Users}
-              label="Scaffold"
-              value={data.core_trades.scaffold}
-              color="orange"
-              description="Scaffolding contractors"
-            />
-            <MetricCard
-              icon={TrendingUp}
-              label="Cranes"
-              value={data.core_trades.cranes}
-              color="blue"
-              description="Tower & mobile cranes"
-            />
+          <div className="space-y-4">
+            {/* Grouped bar chart per trade */}
+            {tradeMetrics && tradeMetrics.trades.length > 0 ? (
+              <ChartContainer
+                config={{
+                  projects: { label: 'Total projects', color: 'hsl(215 16% 47%)' },
+                  known: { label: 'Known employers', color: 'hsl(142 71% 45%)' },
+                  eba: { label: 'EBA employers', color: 'hsl(221 83% 53%)' },
+                }}
+              >
+                <BarChart data={tradeMetrics.trades.map(t => ({
+                  trade: t.label,
+                  projects: t.totalProjects,
+                  known: t.knownEmployers,
+                  eba: t.ebaEmployers,
+                }))}>
+                  <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                  <XAxis dataKey="trade" tickLine={false} axisLine={false} />
+                  <YAxis allowDecimals={false} />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <ChartLegend content={<ChartLegendContent />} />
+                  <Bar dataKey="projects" fill="var(--color-projects)" radius={[4,4,0,0]} />
+                  <Bar dataKey="known" fill="var(--color-known)" radius={[4,4,0,0]} />
+                  <Bar dataKey="eba" fill="var(--color-eba)" radius={[4,4,0,0]} />
+                </BarChart>
+              </ChartContainer>
+            ) : (
+              <div className="text-sm text-muted-foreground">No trade metrics available for current filters.</div>
+            )}
+
+            {/* Summary table */}
+            <Table variant="desktop">
+              <TableHeader variant="desktop">
+                <TableRow variant="desktop">
+                  <TableHead variant="desktop">Trade</TableHead>
+                  <TableHead variant="desktop">Total projects</TableHead>
+                  <TableHead variant="desktop">Known employers</TableHead>
+                  <TableHead variant="desktop">EBA employers</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody variant="desktop">
+                {(tradeMetrics?.trades || []).map(t => (
+                  <TableRow key={t.code} variant="desktop">
+                    <TableCell variant="desktop" className="font-medium">{t.label}</TableCell>
+                    <TableCell variant="desktop">{t.totalProjects}</TableCell>
+                    <TableCell variant="desktop">{t.knownEmployers}</TableCell>
+                    <TableCell variant="desktop">{t.ebaEmployers}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
         </CardContent>
       </Card>

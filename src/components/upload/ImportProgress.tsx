@@ -21,6 +21,7 @@ type ValidationIssue = { row: number; column: string; message: string; value?: a
 type ValidationResult = { isValid: boolean; errors: ValidationIssue[]; warnings: ValidationIssue[] };
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { conditionalRefreshMaterializedViews, getRefreshScopeForTable } from '@/utils/refreshMaterializedViews';
 
 interface ImportProgressProps {
   parsedCSV: ParsedCSV;
@@ -171,6 +172,10 @@ const ImportProgress = ({
         status: 'completed',
         results 
       }));
+      
+      // Refresh materialized views based on the table being imported
+      const refreshScope = getRefreshScopeForTable(selectedTable);
+      await conditionalRefreshMaterializedViews(refreshScope, toast);
       
       onComplete(results);
       

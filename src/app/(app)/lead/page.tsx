@@ -9,7 +9,7 @@ export default function LeadOverviewPage() {
   return (
     <RoleGuard allow={["lead_organiser", "admin"]}>
       <div className="p-6 space-y-6">
-        <h1 className="text-2xl font-semibold">Lead organiser overview</h1>
+        <h1 className="text-2xl font-semibold">Co-ordinator overview</h1>
         <Card>
           <CardHeader>
             <CardTitle>Organisers roll-up</CardTitle>

@@ -5,8 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ArrowLeft, Upload, Users, AlertTriangle, Download } from 'lucide-react';
-import { getMatchingStatistics, EmployerMatchResult } from '@/utils/employerMatching';
+import { ArrowLeft, Upload, Users, AlertTriangle, Download, ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
+import { getMatchingStatistics, EmployerMatchResult, EmployerMatch } from '@/utils/employerMatching';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/hooks/use-toast';
+import { Input } from '@/components/ui/input';
 
 interface ProcessedEbaDataWithMatch {
   company_name: string;
@@ -22,7 +25,7 @@ interface ProcessedEbaDataWithMatch {
   fwc_certified_date?: string;
   fwc_document_url?: string;
   employerMatch?: EmployerMatchResult;
-  userSelectedEmployerId?: string | null;
+  userSelectedEmployer?: { id: string; name: string } | null;
   shouldCreateNew?: boolean;
   rowIndex: number;
 }
@@ -40,7 +43,7 @@ interface EbaImportPreviewProps {
   matchingResults: Record<string, EmployerMatchResult>;
   onBack: () => void;
   onImport: () => void;
-  onEmployerSelection: (recordIndex: number, employerId: string | null, createNew?: boolean) => void;
+  onEmployerSelection: (recordIndex: number, employer: { id: string; name: string } | null, createNew?: boolean) => void;
   onDownloadUnmatched: (unmatchedEmployers: ProcessedEbaDataWithMatch[]) => void;
   isImporting: boolean;
 }
@@ -56,12 +59,69 @@ export function EbaImportPreview({
   isImporting
 }: EbaImportPreviewProps) {
   const [showMatchingDetails, setShowMatchingDetails] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [manualSearch, setManualSearch] = useState<Record<number, { term: string; results: Array<{id: string, name: string}>; isLoading: boolean }>>({});
+  const itemsPerPage = 10;
+
+  const paginatedData = previewData.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+  const totalPages = Math.ceil(previewData.length / itemsPerPage);
+
+  const handleManualSearch = async (rowIndex: number, searchTerm: string) => {
+    setManualSearch(prev => ({
+      ...prev,
+      [rowIndex]: { ...(prev[rowIndex] || { results: [] }), term: searchTerm, isLoading: true }
+    }));
+
+    if (searchTerm.length < 3) {
+      setManualSearch(prev => ({
+        ...prev,
+        [rowIndex]: { ...prev[rowIndex], results: [], isLoading: false }
+      }));
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .rpc('search_employers_by_name_fuzzy', { search_term: searchTerm });
+      
+      if (error) throw error;
+
+      setManualSearch(prev => ({
+        ...prev,
+        [rowIndex]: { ...prev[rowIndex], results: data || [], isLoading: false }
+      }));
+    } catch (error) {
+      console.error("Manual employer search failed:", error);
+      toast({
+        title: "Search Failed",
+        description: "Could not fetch employer search results.",
+        variant: "destructive",
+      });
+      setManualSearch(prev => ({
+        ...prev,
+        [rowIndex]: { ...prev[rowIndex], isLoading: false }
+      }));
+    }
+  };
+
+  const selectManualSearchResult = (rowIndex: number, employer: { id: string; name: string }) => {
+    onEmployerSelection(rowIndex, employer);
+    setManualSearch(prev => ({
+      ...prev,
+      [rowIndex]: { term: '', results: [], isLoading: false }
+    }));
+  };
 
   // Component to show import results summary
   const ImportResultsSummary = () => {
     const matchingStats = getMatchingStatistics(matchingResults);
     const unmatchedCount = previewData.filter(r => 
-      !r.employerMatch?.match || r.employerMatch.match.score < importSettings.confidenceThreshold
+      (!r.employerMatch?.match || r.employerMatch.match.score < importSettings.confidenceThreshold) &&
+      !r.userSelectedEmployer && 
+      !r.shouldCreateNew
     ).length;
     
     return (
@@ -99,7 +159,7 @@ export function EbaImportPreview({
           <Alert>
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription className="flex items-center justify-between">
-              <span>{unmatchedCount} employers could not be matched with sufficient confidence.</span>
+              <span>{unmatchedCount} employers have no confident match.</span>
               <Button 
                 variant="outline" 
                 size="sm" 
@@ -109,7 +169,7 @@ export function EbaImportPreview({
                 className="ml-4"
               >
                 <Download className="h-4 w-4 mr-2" />
-                Download Unmatched CSV
+                Download Unmatched
               </Button>
             </AlertDescription>
           </Alert>
@@ -117,6 +177,13 @@ export function EbaImportPreview({
       </div>
     );
   };
+  
+  const recordsToImportCount = previewData.filter(r => 
+    (r.employerMatch?.match && r.employerMatch.match.score >= importSettings.confidenceThreshold) || 
+    r.userSelectedEmployer || 
+    r.shouldCreateNew
+  ).length;
+  const recordsToSkipCount = previewData.length - recordsToImportCount;
 
   return (
     <div className="space-y-6">
@@ -129,7 +196,7 @@ export function EbaImportPreview({
           <div>
             <h2 className="text-2xl font-bold">EBA Data Preview</h2>
             <p className="text-muted-foreground">
-              {previewData.length} EBA records with employer matching
+              Review {previewData.length} records and their matches before importing.
             </p>
           </div>
         </div>
@@ -152,7 +219,7 @@ export function EbaImportPreview({
             ) : (
               <>
                 <Upload className="h-4 w-4" />
-                Import EBA Records
+                Import {recordsToImportCount} Records
               </>
             )}
           </Button>
@@ -162,25 +229,37 @@ export function EbaImportPreview({
       {/* Import Results Summary */}
       <ImportResultsSummary />
 
+      <Alert>
+        <AlertTriangle className="h-4 w-4" />
+        <AlertDescription>
+          Based on current selections, <strong>{recordsToImportCount}</strong> records will be imported or updated. <strong>{recordsToSkipCount}</strong> records will be skipped. Skipped records can be downloaded in a report after the import is complete.
+        </AlertDescription>
+      </Alert>
+
       <div className="grid gap-4">
-        {previewData.slice(0, 10).map((record, index) => {
+        {paginatedData.map((record, index) => {
+          const originalIndex = (currentPage - 1) * itemsPerPage + index;
           const match = record.employerMatch?.match;
           const hasMatch = match && match.score >= importSettings.confidenceThreshold;
           const confidence = match ? Math.round(match.score * 100) : 0;
           
           return (
-            <Card key={index} className={!hasMatch ? 'border-yellow-200 bg-yellow-50/50' : ''}>
+            <Card key={originalIndex} className={!hasMatch && !record.userSelectedEmployer && !record.shouldCreateNew ? 'border-yellow-200 bg-yellow-50/50' : ''}>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <CardTitle className="text-lg">{record.company_name}</CardTitle>
-                    {hasMatch ? (
+                    {record.userSelectedEmployer ? (
+                      <Badge variant="default" className="bg-blue-100 text-blue-800">Selected</Badge>
+                    ) : record.shouldCreateNew ? (
+                      <Badge variant="default" className="bg-blue-100 text-blue-800">New</Badge>
+                    ) : hasMatch ? (
                       <Badge variant="default" className="bg-green-100 text-green-800">
                         {confidence}% match
                       </Badge>
                     ) : (
                       <Badge variant="destructive">
-                        {match ? `${confidence}% - Below threshold` : 'No match'}
+                        {match ? `${confidence}% - Needs Review` : 'No match'}
                       </Badge>
                     )}
                   </div>
@@ -192,34 +271,63 @@ export function EbaImportPreview({
                 
                 {/* Employer matching info */}
                 {showMatchingDetails && (
-                  <div className="space-y-2">
-                    {hasMatch ? (
-                      <div className="text-sm text-green-700">
-                        ✓ Matched to: <strong>{match.name}</strong> ({confidence}% confidence)
+                  <div className="text-sm mt-2 p-2 bg-slate-50 rounded space-y-2">
+                    {record.userSelectedEmployer ? (
+                      <div className="flex items-center justify-between font-semibold text-blue-600">
+                        <span>Selected: {record.userSelectedEmployer.name}</span>
+                        <Button variant="link" size="sm" onClick={() => onEmployerSelection(originalIndex, null)}>Change</Button>
+                      </div>
+                    ) : record.shouldCreateNew ? (
+                      <div className="flex items-center justify-between font-semibold text-blue-600">
+                        <span>Action: Create New Employer</span>
+                        <Button variant="link" size="sm" onClick={() => onEmployerSelection(originalIndex, null, false)}>Change</Button>
+                      </div>
+                    ) : hasMatch ? (
+                      <div className="flex items-center justify-between text-green-700">
+                        <span>✓ Matched to: <strong>{match.name}</strong> ({confidence}% confidence)</span>
+                        <Button variant="link" size="sm" onClick={() => onEmployerSelection(originalIndex, null)}>Change</Button>
                       </div>
                     ) : (
-                      <div className="space-y-2">
-                        <div className="text-sm text-yellow-700">
-                          ⚠️ No confident match found. Suggestions:
-                        </div>
-                        {record.employerMatch?.candidates.slice(0, 3).map((candidate, idx) => (
-                          <div key={idx} className="flex items-center justify-between text-sm">
-                            <span>{candidate.name} ({Math.round(candidate.score * 100)}%)</span>
+                      <div>
+                        <div className="text-yellow-700 font-medium">⚠️ No match found. Please search or create a new employer:</div>
+                        
+                        {/* Manual Search Input */}
+                        <div className="relative mt-2">
+                          <Input
+                            placeholder="Search for an employer..."
+                            value={manualSearch[originalIndex]?.term || ''}
+                            onChange={(e) => handleManualSearch(originalIndex, e.target.value)}
+                          />
+                          {manualSearch[originalIndex]?.term && (
                             <Button 
+                              variant="ghost" 
                               size="sm" 
-                              variant="outline"
-                              onClick={() => onEmployerSelection(index, candidate.id)}
+                              className="absolute right-1 top-1/2 -translate-y-1/2 h-7"
+                              onClick={() => handleManualSearch(originalIndex, '')}
                             >
-                              Select
+                              <X className="h-4 w-4" />
                             </Button>
+                          )}
+                        </div>
+
+                        {/* Search Results */}
+                        {manualSearch[originalIndex]?.isLoading && <div className="text-sm text-muted-foreground p-2">Searching...</div>}
+                        {manualSearch[originalIndex]?.results.length > 0 && (
+                          <div className="border rounded-md mt-1 max-h-32 overflow-y-auto">
+                            {manualSearch[originalIndex].results.map(result => (
+                              <div 
+                                key={result.id}
+                                className="p-2 hover:bg-slate-100 cursor-pointer text-sm"
+                                onClick={() => selectManualSearchResult(originalIndex, result)}
+                              >
+                                {result.name}
+                              </div>
+                            ))}
                           </div>
-                        ))}
+                        )}
+                        
                         <div className="flex gap-2 mt-2">
-                          <Button 
-                            size="sm" 
-                            variant="outline"
-                            onClick={() => onEmployerSelection(index, null, true)}
-                          >
+                          <Button size="sm" variant="outline" onClick={() => onEmployerSelection(originalIndex, null, true)}>
                             Create New Employer
                           </Button>
                         </div>
@@ -229,7 +337,7 @@ export function EbaImportPreview({
                 )}
                 
                 {record.contact_name && (
-                  <CardDescription>
+                  <CardDescription className="pt-2">
                     Contact: {record.contact_name}
                     {record.contact_phone && ` • ${record.contact_phone}`}
                     {record.contact_email && ` • ${record.contact_email}`}
@@ -277,19 +385,30 @@ export function EbaImportPreview({
           );
         })}
         
-        {previewData.length > 10 && (
-          <Card>
-            <CardContent className="flex items-center justify-center py-8">
-              <div className="text-center space-y-2">
-                <p className="text-muted-foreground">
-                  ... and {previewData.length - 10} more records
-                </p>
-                <div className="text-sm text-muted-foreground">
-                  {getMatchingStatistics(matchingResults).matchedTotal} of {previewData.length} employers matched
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center space-x-2 pt-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+            >
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              Previous
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              Page {currentPage} of {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages}
+            >
+              Next
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
         )}
       </div>
     </div>

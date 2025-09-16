@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { toast } from "sonner"
 import { Checkbox } from "@/components/ui/checkbox"
 import DateInput from "@/components/ui/date-input"
+import { useUpsertEmployerCompliance } from "@/components/projects/compliance/hooks/useEmployerCompliance"
 
 type SiteVisit = {
   id?: string
@@ -34,6 +35,9 @@ export function SiteVisitForm({ open, onOpenChange, initial }: { open: boolean; 
   const [notes, setNotes] = useState<string>(initial?.notes || "")
   const [actions, setActions] = useState<string>(initial?.actions_taken || "")
   const [selectedEmployerIds, setSelectedEmployerIds] = useState<string[]>(initial?.employer_id ? [initial.employer_id] : [])
+  
+  // Compliance integration
+  const upsertCompliance = useUpsertEmployerCompliance(projectId || "")
 
   const isEditing = Boolean(initial?.id)
 
@@ -384,9 +388,39 @@ export function SiteVisitForm({ open, onOpenChange, initial }: { open: boolean; 
       const { error } = await (supabase as any).from("site_visit").insert(rows)
       if (error) throw error
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success("Saved site visit")
       qc.invalidateQueries({ queryKey: ["site-visits"] })
+      
+      // If creating new visits with employers and project, create compliance check prompts
+      if (!isEditing && projectId && selectedEmployerIds.length > 0) {
+        // Create basic compliance records for each employer
+        for (const empId of selectedEmployerIds) {
+          try {
+            await upsertCompliance.mutateAsync({
+              employerId: empId,
+              updates: {
+                // Just mark that a site visit was conducted
+                // The compliance details can be filled in later via the compliance tab
+                site_visit_id: null, // Will be linked in future when we get the created visit IDs
+                cbus_check_date: visitDate,
+                incolink_check_date: visitDate,
+                cbus_checked_by: ['organiser'],
+                incolink_checked_by: ['organiser'],
+                cbus_notes: `Site visit conducted on ${visitDate}`,
+                incolink_notes: `Site visit conducted on ${visitDate}`
+              }
+            });
+          } catch (error) {
+            console.error(`Failed to create compliance check for employer ${empId}:`, error);
+          }
+        }
+        
+        if (selectedEmployerIds.length > 0) {
+          toast.info("Compliance checks created. Please update compliance details in the Audit & Compliance tab.");
+        }
+      }
+      
       onOpenChange(false)
     },
     onError: (e) => toast.error((e as Error).message)

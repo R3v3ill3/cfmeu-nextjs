@@ -17,6 +17,7 @@ import {
   EmployerMatch,
   OrganiserMatch
 } from "@/utils/workerDataProcessor";
+import { conditionalRefreshMaterializedViews } from '@/utils/refreshMaterializedViews';
 
 interface WorkerImportProps {
   csvData: any[];
@@ -305,6 +306,9 @@ export default function WorkerImport({ csvData, selectedEmployer, onImportComple
         });
       }
 
+      // Refresh materialized views so uploaded workers appear immediately
+      await conditionalRefreshMaterializedViews('workers', toast);
+      
       onImportComplete(results);
     } catch (error: any) {
       toast({

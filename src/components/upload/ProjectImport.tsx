@@ -9,6 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { calculateProjectTier } from "@/components/projects/types"
 import { geocodeAddress } from "@/utils/geocoding"
+import { conditionalRefreshMaterializedViews } from '@/utils/refreshMaterializedViews'
 
 export type ProjectImportResults = {
   successful: number;
@@ -169,6 +170,7 @@ export default function ProjectImport({ csvData, onImportComplete, onBack }: Pro
               state_funding: row.state_funding ?? 0,
               federal_funding: row.federal_funding ?? 0,
               builder_id: employerId || null,
+              // Note: organising_universe will be auto-assigned by trigger based on tier/EBA/patch rules
             })
             .select("id")
             .single();
@@ -231,6 +233,9 @@ export default function ProjectImport({ csvData, onImportComplete, onBack }: Pro
         toast.success(`Imported ${results.successful} projects with patch matching enabled`);
       }
 
+      // Refresh materialized views so uploaded projects appear immediately
+      await conditionalRefreshMaterializedViews('projects', (msg) => toast.info(msg.description));
+      
       onImportComplete(results);
     } catch (e: any) {
       toast.error(e?.message || 'Import failed');

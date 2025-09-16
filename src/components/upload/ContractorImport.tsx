@@ -9,6 +9,7 @@ import { CheckCircle, AlertCircle, Upload } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { processContractorData, ProcessedContractorData } from "@/utils/contractorDataProcessor";
+import { conditionalRefreshMaterializedViews } from '@/utils/refreshMaterializedViews';
 
 interface ContractorImportProps {
   csvData: any[];
@@ -116,6 +117,9 @@ export default function ContractorImport({ csvData, onImportComplete, onBack }: 
         title: "Import completed",
         description: `Successfully imported ${results.successful} contractors`,
       });
+
+      // Refresh materialized views so uploaded contractors appear immediately
+      await conditionalRefreshMaterializedViews('employers', toast);
 
       onImportComplete(results);
     } catch (error: any) {

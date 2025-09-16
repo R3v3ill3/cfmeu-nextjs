@@ -18,6 +18,7 @@ import SpatialAssignmentTool from "@/components/admin/SpatialAssignmentTool"
 import AddressLookupDialog from "@/components/AddressLookupDialog"
 import DuplicateEmployerManager from "@/components/admin/DuplicateEmployerManager"
 import DataUploadTab from "@/components/admin/DataUploadTab"
+import { NavigationVisibilityManager } from "@/components/admin/NavigationVisibilityManager"
 
 export default function AdminPage() {
   const [open, setOpen] = useState(false)
@@ -44,6 +45,7 @@ export default function AdminPage() {
             <TabsTrigger value="scoping">Scoping</TabsTrigger>
             <TabsTrigger value="duplicates">Duplicate Employers</TabsTrigger>
             <TabsTrigger value="data-upload">Data Upload</TabsTrigger>
+            <TabsTrigger value="navigation">Navigation</TabsTrigger>
           </TabsList>
           <TabsContent value="users">
             <UsersTable />
@@ -72,6 +74,9 @@ export default function AdminPage() {
           </TabsContent>
           <TabsContent value="data-upload">
             <DataUploadTab />
+          </TabsContent>
+          <TabsContent value="navigation">
+            <NavigationVisibilityManager />
           </TabsContent>
         </Tabs>
         <InviteUserDialog open={open} onOpenChange={setOpen} onSuccess={() => {}} />

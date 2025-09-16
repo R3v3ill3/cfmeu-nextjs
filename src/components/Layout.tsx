@@ -9,6 +9,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { supabase } from "@/integrations/supabase/client";
 import AdminPatchSelector from "@/components/admin/AdminPatchSelector";
+import { useNavigationVisibility } from "@/hooks/useNavigationVisibility";
 // Fallback to generic icon from public since original assets are not present
 const cfmeuLogoLight = "/favicon.svg" as unknown as string;
 const cfmeuLogoDark = "/favicon.svg" as unknown as string;
@@ -30,6 +31,7 @@ const Layout = ({ children }: LayoutProps) => {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const { visibility } = useNavigationVisibility();
 
   useEffect(() => {
     const checkUserRole = async () => {
@@ -48,30 +50,42 @@ const Layout = ({ children }: LayoutProps) => {
   }, [user]);
 
   const getVisibleNavItems = () => {
-    const items = [...navItems];
+    const items = [];
     
-    // Insert organiser-focused workspace
-    if (userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") {
-      items.splice(1, 0, { path: "/patch", label: "Patch", icon: Users });
+    // Always show Projects
+    items.push({ path: "/projects", label: "Projects", icon: FolderOpen });
+    
+    // Patch - check role and visibility
+    if ((userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") && visibility.patch) {
+      items.push({ path: "/patch", label: "Patch", icon: Users });
     }
     
-    // Show site visits for organizers and above
-    if (userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") {
-      // Site visits already in navItems, just filter it for these roles
-    } else {
-      // Remove site visits for delegates and viewers
-      const siteVisitsIndex = items.findIndex(item => item.path === "/site-visits");
-      if (siteVisitsIndex > -1) {
-        items.splice(siteVisitsIndex, 1);
-      }
+    // Employers - check visibility
+    if (visibility.employers) {
+      items.push({ path: "/employers", label: "Employers", icon: Building });
     }
     
-    // Add campaigns for organisers and above
-    if (userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") {
+    // Workers - check visibility
+    if (visibility.workers) {
+      items.push({ path: "/workers", label: "Workers", icon: Users });
+    }
+    
+    // Map - check visibility
+    if (visibility.map) {
+      items.push({ path: "/map", label: "Map", icon: MapPin });
+    }
+    
+    // Site Visits - check role and visibility
+    if ((userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") && visibility.site_visits) {
+      items.push({ path: "/site-visits", label: "Site Visits", icon: FileCheck });
+    }
+    
+    // Campaigns - check role and visibility
+    if ((userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") && visibility.campaigns) {
       items.push({ path: "/campaigns", label: "Campaigns", icon: BarChart3 });
     }
     
-    // Add admin for admins only
+    // Administration - always show for admins
     if (userRole === "admin") {
       items.push({ path: "/admin", label: "Administration", icon: Shield });
     }

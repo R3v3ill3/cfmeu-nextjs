@@ -115,7 +115,7 @@ export const InviteUserDialog = ({ open, onOpenChange, onSuccess }: InviteUserDi
               <SelectContent>
                 <SelectItem value="viewer">Viewer</SelectItem>
                 <SelectItem value="organiser">Organiser</SelectItem>
-                <SelectItem value="lead_organiser">Lead Organiser</SelectItem>
+                <SelectItem value="lead_organiser">Co-ordinator</SelectItem>
                 <SelectItem value="delegate">Delegate</SelectItem>
                 <SelectItem value="admin">Administrator</SelectItem>
               </SelectContent>

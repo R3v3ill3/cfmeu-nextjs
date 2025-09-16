@@ -10,6 +10,8 @@ import { ManageTradeCompanyDialog } from "@/components/projects/mapping/ManageTr
 import { AddEmployerToTradeDialog } from "@/components/projects/mapping/AddEmployerToTradeDialog";
 import { AutoMatchIndicator } from "@/components/projects/mapping/AutoMatchIndicator";
 import { AutoMatchActionsDialog } from "@/components/projects/mapping/AutoMatchActionsDialog";
+import { ComplianceIndicator } from "@/components/projects/compliance/ComplianceIndicator";
+import { useEmployerCompliance } from "@/components/projects/compliance/hooks/useEmployerCompliance";
 import { getTradeOptionsByStage, getStageLabel, getTradeLabel, getAllStages, type TradeStage } from "@/utils/tradeUtils";
 import { useMappingSheetData } from "@/hooks/useMappingSheetData";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -66,6 +68,9 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
   
   // Get unified mapping data which includes trade contractors
   const { data: mappingData, isLoading } = useMappingSheetData(projectId);
+  
+  // Get compliance data
+  const { data: complianceData = [] } = useEmployerCompliance(projectId);
 
   useEffect(() => {
     if (!mappingData) return;
@@ -321,9 +326,9 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
     if (isLoading) {
       return (
         <>
-          <tr><td colSpan={3} className="font-semibold pt-3">{title}</td></tr>
+          <tr><td colSpan={4} className="font-semibold pt-3">{title}</td></tr>
           <TableRow>
-            <TableCell colSpan={3} className="text-center py-4 text-muted-foreground">
+            <TableCell colSpan={4} className="text-center py-4 text-muted-foreground">
               Loading {title.toLowerCase()} assignments...
             </TableCell>
           </TableRow>
@@ -338,7 +343,7 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
     
     return (
       <>
-        <tr><td colSpan={3} className="font-semibold pt-3">{title}</td></tr>
+        <tr><td colSpan={4} className="font-semibold pt-3">{title}</td></tr>
         {tradesForStage.map(trade => {
           const assignments = rowsByTrade[trade.value] || [];
           return assignments.map((row, index) => (
@@ -350,6 +355,15 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
                 {companyCell(row)}
               </TableCell>
               <TableCell className="w-40">{ebaCell(row)}</TableCell>
+              <TableCell className="w-20 text-center">
+                {row.employer_id && (
+                  <ComplianceIndicator
+                    projectId={projectId}
+                    employerId={row.employer_id}
+                    complianceData={complianceData}
+                  />
+                )}
+              </TableCell>
             </TableRow>
           ));
         })}
@@ -379,6 +393,7 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
               <TableHead className="w-56">Trade</TableHead>
               <TableHead>Company</TableHead>
               <TableHead className="w-40">EBA (Y/N)</TableHead>
+              <TableHead className="w-20 text-center">Compliance</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

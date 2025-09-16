@@ -130,7 +130,7 @@ export const RoleHierarchyManager = ({ users }: RoleHierarchyManagerProps) => {
         assigned_by: assignedBy,
       } as any);
       if (error) throw error;
-      toast({ title: "Linked", description: "Lead organiser linked to organiser" });
+      toast({ title: "Linked", description: "Co-ordinator linked to organiser" });
       setLeadId("");
       setOrganiserId("");
       const today = new Date().toISOString().slice(0, 10);
@@ -179,7 +179,7 @@ export const RoleHierarchyManager = ({ users }: RoleHierarchyManagerProps) => {
         assigned_by: assignedBy,
       } as any);
       if (error) throw error;
-      toast({ title: "Draft linked", description: "Lead organiser linked to draft organiser" });
+      toast({ title: "Draft linked", description: "Co-ordinator linked to draft organiser" });
       setDraftLeadId("");
       setDraftPendingId("");
       const today = new Date().toISOString().slice(0, 10);
@@ -274,16 +274,16 @@ export const RoleHierarchyManager = ({ users }: RoleHierarchyManagerProps) => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Lead Organiser ↔ Organiser Links</CardTitle>
-        <CardDescription>Assign lead organisers to manage organisers</CardDescription>
+        <CardTitle>Co-ordinator ↔ Organiser Links</CardTitle>
+        <CardDescription>Assign co-ordinators to manage organisers</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
-            <div className="text-sm mb-2">Lead Organiser</div>
+            <div className="text-sm mb-2">Co-ordinator</div>
             <Select value={leadId} onValueChange={setLeadId}>
               <SelectTrigger>
-                <SelectValue placeholder="Select lead organiser" />
+                <SelectValue placeholder="Select co-ordinator" />
               </SelectTrigger>
               <SelectContent>
                 {leads.map(l => (
@@ -317,7 +317,7 @@ export const RoleHierarchyManager = ({ users }: RoleHierarchyManagerProps) => {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Lead Organiser</TableHead>
+                <TableHead>Co-ordinator</TableHead>
                 <TableHead>Organiser</TableHead>
                 <TableHead></TableHead>
               </TableRow>
@@ -339,14 +339,14 @@ export const RoleHierarchyManager = ({ users }: RoleHierarchyManagerProps) => {
         </div>
 
         <div className="pt-6">
-          <CardTitle>Lead Organiser ↔ Draft Organiser Links</CardTitle>
+          <CardTitle>Co-ordinator ↔ Draft Organiser Links</CardTitle>
           <CardDescription>Plan relationships before inviting users</CardDescription>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
             <div>
-              <div className="text-sm mb-2">Lead Organiser</div>
+              <div className="text-sm mb-2">Co-ordinator</div>
               <Select value={draftLeadId} onValueChange={setDraftLeadId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select lead organiser" />
+                  <SelectValue placeholder="Select co-ordinator" />
                 </SelectTrigger>
                 <SelectContent>
                   {leads.map(l => (
@@ -379,7 +379,7 @@ export const RoleHierarchyManager = ({ users }: RoleHierarchyManagerProps) => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Lead Organiser</TableHead>
+                  <TableHead>Co-ordinator</TableHead>
                   <TableHead>Draft Organiser</TableHead>
                   <TableHead></TableHead>
                 </TableRow>

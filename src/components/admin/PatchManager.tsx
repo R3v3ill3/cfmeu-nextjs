@@ -484,12 +484,12 @@ export default function PatchManager() {
                 </div>
 
                 <div>
-                  <div className="text-sm font-medium mb-2">Lead organisers</div>
+                  <div className="text-sm font-medium mb-2">Co-ordinators</div>
                   <div className="rounded border">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Lead organiser</TableHead>
+                          <TableHead>Co-ordinator</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead className="text-right">Assigned</TableHead>
                         </TableRow>

@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "migrate-trades": "tsx scripts/migrateTrades.ts"
+    "migrate-trades": "tsx scripts/migrateTrades.ts",
+    "refresh-views": "node scripts/daily-refresh.js",
+    "check-view-staleness": "curl -s ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}/api/admin/refresh-views | jq '.views'"
   },
   "engines": {
     "node": ">=18.18"

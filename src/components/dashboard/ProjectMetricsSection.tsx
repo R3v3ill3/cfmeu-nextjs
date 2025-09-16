@@ -2,7 +2,10 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { FolderOpen, TrendingUp, AlertTriangle, CheckCircle } from "lucide-react"
+import { Table, TableBody, TableCell, TableCaption, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
+import { FolderOpen, CheckCircle } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { DashboardProjectCounts } from "@/hooks/useNewDashboardData"
 
@@ -24,40 +27,34 @@ export function ProjectMetricsSection({ data, isLoading }: ProjectMetricsSection
     router.push(url);
   };
 
-  const MetricButton = ({ 
-    label, 
-    value, 
-    onClick, 
-    variant = "default",
-    description 
-  }: { 
-    label: string; 
-    value: number; 
-    onClick: () => void;
-    variant?: "default" | "primary" | "success" | "warning";
-    description?: string;
-  }) => (
-    <Button
-      variant="ghost"
-      className={`h-auto p-4 flex flex-col items-start space-y-2 hover:bg-gray-50 border ${
-        variant === "primary" ? "border-blue-200 bg-blue-50" :
-        variant === "success" ? "border-green-200 bg-green-50" :
-        variant === "warning" ? "border-orange-200 bg-orange-50" :
-        "border-gray-200"
-      }`}
-      onClick={onClick}
-    >
-      <div className="flex items-center justify-between w-full">
-        <span className="text-sm font-medium text-gray-700">{label}</span>
-        <Badge variant="secondary" className="ml-2">
-          {value}
-        </Badge>
-      </div>
-      {description && (
-        <span className="text-xs text-gray-500 text-left">{description}</span>
-      )}
-    </Button>
-  );
+  type StageKey = 'construction' | 'pre_construction' | 'future' | 'archived'
+  const stages: Array<{ key: StageKey; label: string }> = [
+    { key: 'construction', label: 'Construction' },
+    { key: 'pre_construction', label: 'Pre-construction' },
+    { key: 'future', label: 'Future' },
+    { key: 'archived', label: 'Archived' }
+  ]
+
+  const getCount = (universe: 'active' | 'potential' | 'excluded', stage: StageKey): number => {
+    const key = `${universe}_${stage}` as keyof DashboardProjectCounts
+    return (data[key] as number) || 0
+  }
+
+  const chartData = stages.map(s => ({
+    stage: s.label,
+    active: getCount('active', s.key),
+    potential: getCount('potential', s.key),
+    excluded: getCount('excluded', s.key),
+  }))
+
+  const filteredStages = stages.filter((s) => {
+    const a = getCount('active', s.key)
+    const p = getCount('potential', s.key)
+    const e = getCount('excluded', s.key)
+    return a + p + e > 0
+  })
+
+  const filteredChartData = chartData.filter((d) => (d.active + d.potential + d.excluded) > 0)
 
   if (isLoading) {
     return (
@@ -71,11 +68,8 @@ export function ProjectMetricsSection({ data, isLoading }: ProjectMetricsSection
         </CardHeader>
         <CardContent>
           <div className="animate-pulse space-y-4">
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-              {Array.from({ length: 10 }).map((_, i) => (
-                <div key={i} className="h-20 bg-gray-200 rounded"></div>
-              ))}
-            </div>
+            <div className="h-40 bg-gray-200 rounded" />
+            <div className="h-64 bg-gray-200 rounded" />
           </div>
         </CardContent>
       </Card>
@@ -90,7 +84,7 @@ export function ProjectMetricsSection({ data, isLoading }: ProjectMetricsSection
             <FolderOpen className="h-5 w-5 text-blue-600" />
             <div>
               <CardTitle>Project Overview</CardTitle>
-              <CardDescription>Click any number to view filtered projects</CardDescription>
+              <CardDescription>Summary by stage and universe. Click any number to drill in.</CardDescription>
             </div>
           </div>
           <div className="flex items-center space-x-2">
@@ -102,100 +96,94 @@ export function ProjectMetricsSection({ data, isLoading }: ProjectMetricsSection
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Active Universe */}
-        <div>
-          <div className="flex items-center space-x-2 mb-3">
-            <TrendingUp className="h-4 w-4 text-green-600" />
-            <h3 className="font-semibold text-green-800">Active Projects</h3>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <MetricButton
-              label="Construction"
-              value={data.active_construction}
-              variant="primary"
-              description="Currently under construction"
-              onClick={() => navigateToProjects('active', 'construction')}
-            />
-            <MetricButton
-              label="Pre-Construction"
-              value={data.active_pre_construction}
-              variant="success"
-              description="Planning and preparation"
-              onClick={() => navigateToProjects('active', 'pre_construction')}
-            />
-          </div>
+        <div className="space-y-3">
+          <Table variant="desktop">
+            <TableHeader variant="desktop">
+              <TableRow variant="desktop">
+                <TableHead variant="desktop">Stage</TableHead>
+                <TableHead variant="desktop">Active</TableHead>
+                <TableHead variant="desktop">Potential</TableHead>
+                <TableHead variant="desktop">Excluded</TableHead>
+                <TableHead variant="desktop">Total</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody variant="desktop">
+              {filteredStages.map((s) => {
+                const a = getCount('active', s.key)
+                const p = getCount('potential', s.key)
+                const e = getCount('excluded', s.key)
+                const total = a + p + e
+                return (
+                  <TableRow key={s.key} variant="desktop-hover">
+                    <TableCell variant="desktop" className="font-medium">{s.label}</TableCell>
+                    <TableCell variant="desktop">
+                      <button
+                        className="text-blue-700 hover:underline"
+                        onClick={() => navigateToProjects('active', s.key)}
+                      >
+                        {a}
+                      </button>
+                    </TableCell>
+                    <TableCell variant="desktop">
+                      <button
+                        className="text-blue-700 hover:underline"
+                        onClick={() => navigateToProjects('potential', s.key)}
+                      >
+                        {p}
+                      </button>
+                    </TableCell>
+                    <TableCell variant="desktop">
+                      <button
+                        className="text-blue-700 hover:underline"
+                        onClick={() => navigateToProjects('excluded', s.key)}
+                      >
+                        {e}
+                      </button>
+                    </TableCell>
+                    <TableCell variant="desktop">
+                      <button
+                        className="text-gray-900 hover:underline"
+                        onClick={() => navigateToProjects(undefined, s.key)}
+                      >
+                        {total}
+                      </button>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+            {filteredStages.length === 0 && (
+              <TableCaption variant="desktop">No data to display yet.</TableCaption>
+            )}
+          </Table>
         </div>
 
-        {/* Potential Universe */}
-        <div>
-          <div className="flex items-center space-x-2 mb-3">
-            <AlertTriangle className="h-4 w-4 text-orange-600" />
-            <h3 className="font-semibold text-orange-800">Potential Projects</h3>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <MetricButton
-              label="Construction"
-              value={data.potential_construction}
-              description="Potential active construction"
-              onClick={() => navigateToProjects('potential', 'construction')}
-            />
-            <MetricButton
-              label="Pre-Construction"
-              value={data.potential_pre_construction}
-              description="Potential planning stage"
-              onClick={() => navigateToProjects('potential', 'pre_construction')}
-            />
-            <MetricButton
-              label="Future"
-              value={data.potential_future}
-              description="Future opportunities"
-              onClick={() => navigateToProjects('potential', 'future')}
-            />
-            <MetricButton
-              label="Archived"
-              value={data.potential_archived}
-              description="Completed potentials"
-              onClick={() => navigateToProjects('potential', 'archived')}
-            />
-          </div>
+        <div className="pt-2">
+          {filteredChartData.length > 0 ? (
+            <ChartContainer
+              config={{
+                active: { label: "Active", color: "hsl(var(--chart-1, 221 83% 53%))" },
+                potential: { label: "Potential", color: "hsl(var(--chart-2, 39 89% 49%))" },
+                excluded: { label: "Excluded", color: "hsl(var(--chart-3, 215 16% 47%))" },
+              }}
+            >
+              <BarChart data={filteredChartData}>
+                <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                <XAxis dataKey="stage" tickLine={false} axisLine={false} />
+                <YAxis allowDecimals={false} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <ChartLegend content={<ChartLegendContent />} />
+                <Bar dataKey="active" fill="var(--color-active)" radius={[4,4,0,0]} />
+                <Bar dataKey="potential" fill="var(--color-potential)" radius={[4,4,0,0]} />
+                <Bar dataKey="excluded" fill="var(--color-excluded)" radius={[4,4,0,0]} />
+              </BarChart>
+            </ChartContainer>
+          ) : (
+            <div className="text-sm text-muted-foreground px-2">No chart data to display.</div>
+          )}
         </div>
 
-        {/* Excluded Universe */}
-        <div>
-          <div className="flex items-center space-x-2 mb-3">
-            <div className="h-4 w-4 bg-gray-400 rounded-full" />
-            <h3 className="font-semibold text-gray-800">Excluded Projects</h3>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <MetricButton
-              label="Construction"
-              value={data.excluded_construction}
-              description="Excluded from organizing"
-              onClick={() => navigateToProjects('excluded', 'construction')}
-            />
-            <MetricButton
-              label="Pre-Construction"
-              value={data.excluded_pre_construction}
-              description="Excluded planning"
-              onClick={() => navigateToProjects('excluded', 'pre_construction')}
-            />
-            <MetricButton
-              label="Future"
-              value={data.excluded_future}
-              description="Excluded future"
-              onClick={() => navigateToProjects('excluded', 'future')}
-            />
-            <MetricButton
-              label="Archived"
-              value={data.excluded_archived}
-              description="Excluded archived"
-              onClick={() => navigateToProjects('excluded', 'archived')}
-            />
-          </div>
-        </div>
-
-        {/* Quick Navigation */}
-        <div className="pt-4 border-t">
+        <div className="pt-2">
           <Button 
             variant="outline" 
             className="w-full"

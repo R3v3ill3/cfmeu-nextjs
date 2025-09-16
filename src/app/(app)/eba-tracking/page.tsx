@@ -12,14 +12,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { getEbaStatusInfo } from "@/components/employers/ebaHelpers"
 import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal"
 import { Button } from "@/components/ui/button"
+import { useEbaTrackingServerSideCompatible } from "@/hooks/useEbaTrackingServerSide"
 
 export default function EbaTrackingPage() {
 	const [query, setQuery] = useState("")
 	const [status, setStatus] = useState<string>("all")
 	const [sector, setSector] = useState<string>("all")
 	const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null)
+	
+	// Feature flag for server-side processing
+	const USE_SERVER_SIDE = process.env.NEXT_PUBLIC_USE_SERVER_SIDE_EBA_TRACKING === 'true'
 
-	const { data: rows = [], isFetching } = useQuery({
+	// CLIENT-SIDE DATA FETCHING (Original implementation)
+	const { data: clientRows = [], isFetching: clientFetching } = useQuery({
 		queryKey: ["eba-tracking", query, status, sector],
 		queryFn: async () => {
 			let q = supabase
@@ -29,40 +34,80 @@ export default function EbaTrackingPage() {
 			const { data, error } = await q
 			if (error) throw error
 			return data || []
-		}
+		},
+		enabled: !USE_SERVER_SIDE // Only run when server-side is disabled
 	})
 
+	// SERVER-SIDE DATA FETCHING (New implementation)
+	const serverSideResult = useEbaTrackingServerSideCompatible({
+		page: 1,
+		pageSize: 1000, // Large page size to get all results for now
+		sort: 'name',
+		dir: 'asc',
+		q: query || undefined,
+		status: status as any,
+		sector: sector !== 'all' ? sector : undefined,
+	})
+
+	// Conditional data selection based on feature flag
+	const rows = USE_SERVER_SIDE ? serverSideResult.data : clientRows
+	const isFetching = USE_SERVER_SIDE ? serverSideResult.isFetching : clientFetching
+
 	const filtered = useMemo(() => {
-		const q = query.trim().toLowerCase()
-		return (rows as any[])
-			.filter((r) => !q || String(r.name).toLowerCase().includes(q))
-			.filter((r) => {
-				const rec = r.company_eba_records?.[0]
-				if (!rec) return status === "all" || status === "none"
-				const info = getEbaStatusInfo(rec)
-				if (status === "all") return true
-				if (status === "none") return info.status === "no_eba"
-				return info.status === status
-			})
-			.filter((r) => {
-				if (sector === "all") return true
-				const rec = r.company_eba_records?.[0]
-				return rec?.sector === sector
-			})
-	}, [rows, query, status, sector])
+		if (USE_SERVER_SIDE) {
+			// SERVER-SIDE: Data is already filtered
+			return rows
+		} else {
+			// CLIENT-SIDE: Apply original filtering logic
+			const q = query.trim().toLowerCase()
+			return (rows as any[])
+				.filter((r) => !q || String(r.name).toLowerCase().includes(q))
+				.filter((r) => {
+					const rec = r.company_eba_records?.[0]
+					if (!rec) return status === "all" || status === "none"
+					const info = getEbaStatusInfo(rec)
+					if (status === "all") return true
+					if (status === "none") return info.status === "no_eba"
+					return info.status === status
+				})
+				.filter((r) => {
+					if (sector === "all") return true
+					const rec = r.company_eba_records?.[0]
+					return rec?.sector === sector
+				})
+		}
+	}, [USE_SERVER_SIDE, rows, query, status, sector])
 
 	const sectors = useMemo(() => {
-		const s = new Set<string>()
-		;(rows as any[]).forEach(r => {
-			const sec = r.company_eba_records?.[0]?.sector
-			if (sec) s.add(sec)
-		})
-		return Array.from(s).sort()
-	}, [rows])
+		if (USE_SERVER_SIDE) {
+			// SERVER-SIDE: Use sectors from API response
+			return serverSideResult.sectors || []
+		} else {
+			// CLIENT-SIDE: Compute sectors from data
+			const s = new Set<string>()
+			;(rows as any[]).forEach(r => {
+				const sec = r.company_eba_records?.[0]?.sector
+				if (sec) s.add(sec)
+			})
+			return Array.from(s).sort()
+		}
+	}, [USE_SERVER_SIDE, rows, serverSideResult.sectors])
 
 	return (
 		<div className="p-6 space-y-4">
-			<h1 className="text-2xl font-semibold">EBA Tracking</h1>
+			<div className="flex items-center justify-between">
+				<h1 className="text-2xl font-semibold">EBA Tracking</h1>
+				{/* Development indicator for which implementation is active */}
+				{process.env.NODE_ENV === 'development' && (
+					<div className="text-xs px-2 py-1 rounded border">
+						{USE_SERVER_SIDE ? (
+							<span className="text-green-600">🚀 EBA Server-side {serverSideResult.debug?.queryTime ? `(${serverSideResult.debug.queryTime}ms)` : ''}</span>
+						) : (
+							<span className="text-blue-600">💻 EBA Client-side</span>
+						)}
+					</div>
+				)}
+			</div>
 			<Card>
 				<CardHeader>
 					<CardTitle>Employers</CardTitle>
@@ -90,7 +135,7 @@ export default function EbaTrackingPage() {
 							</SelectTrigger>
 							<SelectContent>
 								<SelectItem value="all">All sectors</SelectItem>
-								{sectors.map(sec => (
+                                                                {sectors.map((sec: string) => (
 									<SelectItem key={sec} value={sec}>{sec}</SelectItem>
 								))}
 							</SelectContent>

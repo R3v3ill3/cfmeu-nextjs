@@ -4,10 +4,12 @@ export const dynamic = 'force-dynamic'
 import { useMemo, useState, useEffect } from "react"
 import { useParams, useSearchParams, useRouter, usePathname } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
+import { format } from "date-fns"
 import { supabase } from "@/integrations/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { CfmeuEbaBadge, getProjectEbaStatus } from "@/components/ui/CfmeuEbaBadge"
 import JobSitesManager from "@/components/projects/JobSitesManager"
 import EditProjectDialog from "@/components/projects/EditProjectDialog"
 import DeleteProjectDialog from "@/components/projects/DeleteProjectDialog"
@@ -19,6 +21,7 @@ import SiteContactsEditor from "@/components/projects/SiteContactsEditor"
 import { UnifiedContractorAssignmentModal } from "@/components/projects/UnifiedContractorAssignmentModal"
 import { EmployerWorkerChart } from "@/components/patchwall/EmployerWorkerChart"
 import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal"
+import { getEbaCategory } from "@/components/employers/ebaHelpers"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { usePatchOrganiserLabels } from "@/hooks/usePatchOrganiserLabels"
@@ -27,6 +30,10 @@ import { useUnifiedContractors } from "@/hooks/useUnifiedContractors"
 import { useProjectSubsetStats } from "@/hooks/useProjectSubsetStats"
 import { SubsetEbaStats } from "@/components/projects/SubsetEbaStats"
 import SelectiveEbaSearchManager from "@/components/projects/SelectiveEbaSearchManager"
+import { getOrganisingUniverseBadgeVariant } from "@/utils/organisingUniverse"
+import { useIsMobile } from "@/hooks/use-mobile"
+import { ComplianceDesktopView } from "@/components/projects/compliance/ComplianceDesktopView"
+import { ComplianceMobileView } from "@/components/projects/compliance/ComplianceMobileView"
 
 function SiteContactsSummary({ projectId, siteIds }: { projectId: string; siteIds: string[] }) {
   const [delegates, setDelegates] = useState<string[]>([])
@@ -71,16 +78,13 @@ function SiteContactsSummary({ projectId, siteIds }: { projectId: string; siteId
   )
 }
 
-import { getEbaCategory } from "@/components/employers/ebaHelpers"
-import { format } from "date-fns"
-import { CfmeuEbaBadge, getProjectEbaStatus } from "@/components/ui/CfmeuEbaBadge"
-
 export default function ProjectDetailPage() {
   const params = useParams()
   const sp = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
   const projectId = params?.projectId as string
+  const isMobile = useIsMobile()
   const [tab, setTab] = useState(sp.get("tab") || "mappingsheets")
   const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null)
   const [showEbaForEmployerId, setShowEbaForEmployerId] = useState<string | null>(null)
@@ -590,7 +594,7 @@ export default function ProjectDetailPage() {
               <Badge variant="secondary" className="capitalize">{String(project.stage_class).replace('_',' ')}</Badge>
             )}
             {project?.organising_universe && (
-              <Badge variant="outline" className="capitalize">{String(project.organising_universe)}</Badge>
+              <Badge variant={getOrganisingUniverseBadgeVariant(project.organising_universe)} className="capitalize">{String(project.organising_universe)}</Badge>
             )}
             {project?.value && (
               <span className="text-lg text-muted-foreground">
@@ -630,6 +634,7 @@ export default function ProjectDetailPage() {
           <TabsTrigger value="mappingsheets">Mapping Sheets</TabsTrigger>
           <TabsTrigger value="wallcharts">Wallcharts</TabsTrigger>
           <TabsTrigger value="eba-search">EBA Search</TabsTrigger>
+          <TabsTrigger value="audit-compliance">Audit & Compliance</TabsTrigger>
         </TabsList>
 
         <TabsContent value="mappingsheets">
@@ -710,6 +715,14 @@ export default function ProjectDetailPage() {
 
         <TabsContent value="eba-search">
           <SelectiveEbaSearchManager projectId={projectId} />
+        </TabsContent>
+
+        <TabsContent value="audit-compliance">
+          {isMobile ? (
+            <ComplianceMobileView projectId={projectId} />
+          ) : (
+            <ComplianceDesktopView projectId={projectId} />
+          )}
         </TabsContent>
       </Tabs>
 

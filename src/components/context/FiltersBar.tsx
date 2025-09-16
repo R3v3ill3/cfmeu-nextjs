@@ -63,10 +63,9 @@ export function FiltersBar({ patchOptions, statusOptions }: FiltersBarProps) {
         if (role === "admin") {
           const { data } = await (supabase as any)
             .from("patches")
-            .select("id, name")
-            .eq("type", "geo")
+            .select("id, name, type")
+            .in("type", ["geo", "fallback"])
             .eq("status", "active")
-            .not("geom", "is", null)
             .order("name")
           patchRows = (data as any[]) || []
         } else if (role === "lead_organiser") {
@@ -89,7 +88,7 @@ export function FiltersBar({ patchOptions, statusOptions }: FiltersBarProps) {
           // De-dupe by id
           const seen = new Set<string>()
           patchRows = list
-            .filter((p: any) => p && p.id && p.type === "geo" && p.status === "active" && p.geom)
+            .filter((p: any) => p && p.id && (p.type === "geo" || p.type === "fallback") && p.status === "active" && (p.geom || p.type === "fallback"))
             .filter((p: any) => (p?.id && !seen.has(p.id) && seen.add(p.id)))
         } else if (role === "organiser") {
           const { data } = await (supabase as any)
@@ -99,7 +98,7 @@ export function FiltersBar({ patchOptions, statusOptions }: FiltersBarProps) {
             .eq("organiser_id", userId)
           patchRows = ((data as any[]) || [])
             .map((r: any) => r.patches)
-            .filter((p: any) => p && p.type === "geo" && p.status === "active" && p.geom)
+            .filter((p: any) => p && (p.type === "geo" || p.type === "fallback") && p.status === "active" && (p.geom || p.type === "fallback"))
         }
 
         // If we have rows, return them as options

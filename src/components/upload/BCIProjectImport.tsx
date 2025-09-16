@@ -1351,10 +1351,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
             project_status: project.projectStatus,
             last_update_date: project.lastUpdateDate,
             stage_class: mapBciStageToStageClass(project.projectStage, project.projectStatus),
-            organising_universe: defaultOrganisingUniverseFor(
-              mapBciStageToStageClass(project.projectStage, project.projectStatus),
-              project.localValue
-            )
+            federal_funding: 0 // Not in BCI data
           })
           .select('id')
           .single();

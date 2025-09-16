@@ -14,6 +14,7 @@ export interface UnifiedContractorRow {
   source: 'project_role' | 'site_contractor' | 'project_contractor' | 'v_unified_project_contractors';
   estimatedWorkforce?: number | null;
   ebaStatus?: boolean | null;
+  hasEba?: boolean | null; // Alias for ebaStatus for backwards compatibility
 }
 
 export interface UnifiedContractorsOptions {
@@ -82,6 +83,7 @@ export function useUnifiedContractors(projectId: string, options: UnifiedContrac
           tradeStage: 'other',
           source: 'v_unified_project_contractors',
           ebaStatus: r.employers?.enterprise_agreement_status !== 'no_eba',
+          hasEba: r.employers?.enterprise_agreement_status !== 'no_eba',
         });
       });
 
@@ -107,6 +109,7 @@ export function useUnifiedContractors(projectId: string, options: UnifiedContrac
             tradeStage,
             source: 'site_contractor',
             ebaStatus: r.eba_status ?? (r.employers?.enterprise_agreement_status !== 'no_eba'),
+            hasEba: r.eba_status ?? (r.employers?.enterprise_agreement_status !== 'no_eba'),
           });
         });
       }
@@ -133,6 +136,7 @@ export function useUnifiedContractors(projectId: string, options: UnifiedContrac
           source: 'project_contractor',
           estimatedWorkforce: r.estimated_project_workforce,
           ebaStatus: r.employers?.enterprise_agreement_status !== 'no_eba',
+          hasEba: r.employers?.enterprise_agreement_status !== 'no_eba',
         });
       });
 

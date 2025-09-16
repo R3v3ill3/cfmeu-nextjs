@@ -116,7 +116,9 @@ const DATABASE_TABLES = {
       state: { type: "text", required: false, description: "State" },
       postcode: { type: "text", required: false, description: "Postcode" },
       website: { type: "text", required: false, description: "Website URL" },
-      contact_notes: { type: "text", required: false, description: "Additional contact information" }
+      contact_notes: { type: "text", required: false, description: "Additional contact information" },
+      incolink_id: { type: "text", required: false, description: "Incolink ID (unique identifier from Incolink system)" },
+      incolink_last_matched: { type: "date", required: false, description: "Date when employer was last matched with Incolink data" }
     }
   },
   contractors: {
@@ -184,6 +186,19 @@ const DATABASE_TABLES = {
       jv_label: { type: "text", required: false, description: "JV label (if status yes)" },
       organising_universe: { type: "enum", required: false, description: "Organising universe classification", options: ["active","potential","excluded"] },
       stage_class: { type: "enum", required: false, description: "Project stage classification", options: ["future","pre_construction","construction","archived"] }
+    }
+  },
+  incolink: {
+    label: "Incolink Data",
+    columns: {
+      employer_name: { type: "text", required: true, description: "Employer name for matching (maps to 'company name' in CSV)" },
+      incolink_id: { type: "text", required: true, description: "Unique Incolink identifier" },
+      contact_name: { type: "text", required: false, description: "Contact person name" },
+      contact_phone: { type: "text", required: false, description: "Contact phone number" },
+      contact_email: { type: "email", required: false, description: "Contact email address" },
+      abn: { type: "text", required: false, description: "Australian Business Number" },
+      address: { type: "text", required: false, description: "Business address" },
+      notes: { type: "text", required: false, description: "Additional notes or comments" }
     }
   },
   

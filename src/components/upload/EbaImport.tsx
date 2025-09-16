@@ -16,6 +16,7 @@ import { toast } from '@/hooks/use-toast';
 import { EbaImportPreview } from './EbaImportPreview';
 import { PostImportFwcLookup } from './PostImportFwcLookup';
 import { FwcLookupJobSummary } from '@/types/fwcLookup';
+import { conditionalRefreshMaterializedViews } from '@/utils/refreshMaterializedViews';
 
 interface EbaImportProps {
   csvData: any[];
@@ -46,7 +47,7 @@ interface ImportProgress {
 
 interface ProcessedEbaDataWithMatch extends ProcessedEbaData {
   employerMatch?: EmployerMatchResult;
-  userSelectedEmployerId?: string | null;
+  userSelectedEmployer?: { id: string; name: string } | null; // Changed to store name for UI
   shouldCreateNew?: boolean;
   rowIndex: number;
 }
@@ -185,14 +186,14 @@ export function EbaImport({ csvData, onImportComplete, onBack }: EbaImportProps)
   };
 
   // Function to handle user selection of employer match
-  const handleEmployerSelection = (recordIndex: number, employerId: string | null, createNew: boolean = false) => {
+  const handleEmployerSelection = (recordIndex: number, employer: { id: string; name: string } | null, createNew: boolean = false) => {
     setPreviewData(prev => prev.map((record, index) => {
       if (index === recordIndex) {
         return {
           ...record,
-          userSelectedEmployerId: employerId,
+          userSelectedEmployer: employer,
           shouldCreateNew: createNew
-        } as ProcessedEbaDataWithMatch;
+        };
       }
       return record;
     }));
@@ -305,9 +306,9 @@ export function EbaImport({ csvData, onImportComplete, onBack }: EbaImportProps)
           let employerId: string | null = null;
           
           // Handle employer matching/creation based on match results
-          if (record.userSelectedEmployerId) {
+          if (record.userSelectedEmployer) {
             // User manually selected an employer
-            employerId = record.userSelectedEmployerId;
+            employerId = record.userSelectedEmployer.id;
           } else if (record.shouldCreateNew) {
             // User chose to create new employer
             employerId = await createNewEmployer(record);
@@ -459,6 +460,8 @@ export function EbaImport({ csvData, onImportComplete, onBack }: EbaImportProps)
     if (results.successful.length > 0) {
       setShowFwcLookup(true);
     } else {
+      // Refresh materialized views before completing (when no FWC lookup needed)
+      await conditionalRefreshMaterializedViews('employers', toast);
       onImportComplete(results);
     }
   };
@@ -720,9 +723,11 @@ export function EbaImport({ csvData, onImportComplete, onBack }: EbaImportProps)
     });
   };
 
-  const handleFwcLookupClose = () => {
+  const handleFwcLookupClose = async () => {
     setShowFwcLookup(false);
     if (completedImportResults) {
+      // Refresh materialized views after FWC lookup is complete
+      await conditionalRefreshMaterializedViews('employers', toast);
       onImportComplete(completedImportResults);
     }
   };

@@ -22,12 +22,14 @@ import CreateProjectDialog from "@/components/projects/CreateProjectDialog"
 import { usePatchOrganiserLabels } from "@/hooks/usePatchOrganiserLabels"
 import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
 import { PROJECT_TIER_LABELS, ProjectTier } from "@/components/projects/types"
+import { useProjectsServerSideCompatible } from "@/hooks/useProjectsServerSide"
 import { ProjectTable } from "@/components/projects/ProjectTable"
 import DuplicateEmployerManager from "@/components/admin/DuplicateEmployerManager"
 import ProjectsMapView from "@/components/projects/ProjectsMapView"
 import { useMultipleProjectSubsetStats } from "@/hooks/useProjectSubsetStats"
 import { SubsetEbaStats } from "@/components/projects/SubsetEbaStats"
 import { CfmeuEbaBadge, getProjectEbaStatus } from "@/components/ui/CfmeuEbaBadge"
+import { getOrganisingUniverseBadgeVariant } from "@/utils/organisingUniverse";
 
 type ProjectWithRoles = {
   id: string
@@ -56,6 +58,7 @@ type ProjectSummary = {
   estimated_total: number
   delegate_name: string | null
   first_patch_name: string | null
+  organiser_names: string | null
 }
 
 function useProjectStats(projectId: string) {
@@ -466,6 +469,14 @@ function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: Proje
           <span>
             Patch: {patchName}
           </span>
+          {summary?.organiser_names && (
+            <>
+              <span className="text-muted-foreground">•</span>
+              <span>
+                Organiser{summary.organiser_names.includes(',') ? 's' : ''}: {summary.organiser_names}
+              </span>
+            </>
+          )}
         </div>
       </CardHeader>
       <CardContent className="px-4 pb-4 pt-0 space-y-2 flex-1 flex flex-col">
@@ -582,6 +593,9 @@ export default function ProjectsPage() {
   const page = Math.max(1, parseInt(sp.get('page') || '1', 10) || 1)
   const PAGE_SIZE = 24
 
+  // Feature flag for server-side processing
+  const USE_SERVER_SIDE = process.env.NEXT_PUBLIC_USE_SERVER_SIDE_PROJECTS === 'true'
+
   const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null)
   const [isEmployerOpen, setIsEmployerOpen] = useState(false)
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null)
@@ -658,81 +672,52 @@ export default function ProjectsPage() {
     staleTime: 30000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      console.log("🎯 Patch filtering debug:", { patchIds })
+      console.log("🎯 Patch filtering for patches:", { patchIds })
       
-      // First, let's check if there are any patch_job_sites records at all for these patches
-      const { data: allPatchSites, error: allError } = await supabase
-        .from("patch_job_sites")
-        .select("patch_id, job_site_id")
-        .is("effective_to", null)
-        .in("patch_id", patchIds)
-      
-      console.log("🔍 Raw patch_job_sites check:", { allPatchSites, allError, count: allPatchSites?.length })
-      
-      // Let's also try the alternative approach using job_sites.patch_id directly
-      const { data: altData, error: altError } = await supabase
+      // Use simple direct query - job_sites.patch_id is properly synced
+      const { data, error } = await supabase
         .from("job_sites")
-        .select("id, project_id, patch_id")
+        .select("project_id")
         .in("patch_id", patchIds)
         .not("project_id", "is", null)
       
-      console.log("🔄 Alternative job_sites query:", { altData, altError, count: altData?.length })
-      
-      // Original query with more detailed logging
-      const { data, error } = await supabase
-        .from("patch_job_sites")
-        .select(`
-          patch_id,
-          job_sites:job_site_id(project_id)
-        `)
-        .is("effective_to", null)
-        .in("patch_id", patchIds)
-      
-      console.log("📊 Patch query result:", { data, error, count: data?.length })
-      
       if (error) {
-        console.error("❌ Patch query error:", error)
+        console.error("❌ Patch filtering error:", error)
         throw error
       }
       
-      // Use alternative data if main query returns empty but alt query has results
-      let projectIds: string[] = []
+      // Extract unique project IDs
+      const projectIds = Array.from(
+        new Set(((data as any[]) || []).map((row: any) => row.project_id).filter(Boolean))
+      )
       
-      if (data && data.length > 0) {
-        console.log("✅ Using main query results")
-        const projIds = new Set<string>()
-        ;((data as any[]) || []).forEach((row: any) => {
-          console.log("🔍 Processing row:", row)
-          const js = row.job_sites
-          const pid = js?.project_id as string | undefined
-          if (pid) {
-            console.log("✅ Found project ID:", pid)
-            projIds.add(pid)
-          } else {
-            console.log("❌ No project_id found in:", js)
-          }
-        })
-        projectIds = Array.from(projIds)
-      } else if (altData && altData.length > 0) {
-        console.log("🔄 Using alternative query results")
-        const projIds = new Set<string>()
-        altData.forEach((row: any) => {
-          if (row.project_id) {
-            projIds.add(row.project_id)
-          }
-        })
-        projectIds = Array.from(projIds)
-      }
-      
-      console.log("🎯 Final project IDs:", projectIds)
+      console.log("🎯 Found projects for patches:", { patchIds, projectIds, count: projectIds.length })
       return projectIds
     }
   })
 
-  const { data: projectsData, isLoading } = useQuery<{ projects: ProjectWithRoles[]; summaries: Record<string, ProjectSummary> }>({
+  // SERVER-SIDE DATA FETCHING (New implementation)
+  const serverSideResult = useProjectsServerSideCompatible({
+    page,
+    pageSize: PAGE_SIZE,
+    sort: sort as any,
+    dir: dir as 'asc' | 'desc',
+    q: q || undefined,
+    patch: patchParam || undefined,
+    tier: tierFilter as any,
+    universe: universeFilter,
+    stage: stageFilter,
+    workers: workersFilter as any,
+    special: specialFilter as any,
+    eba: ebaFilter as any,
+  })
+
+  // CLIENT-SIDE DATA FETCHING (Original implementation)
+  const { data: clientProjectsData, isLoading: clientIsLoading } = useQuery<{ projects: ProjectWithRoles[]; summaries: Record<string, ProjectSummary> }>({
     queryKey: ["projects-list+summary", patchIds, patchProjectIds, tierFilter, universeFilter, stageFilter, ebaFilter, q],
     staleTime: 30000,
     refetchOnWindowFocus: false,
+    enabled: !USE_SERVER_SIDE, // Only run when server-side is disabled
     queryFn: async () => {
       // Load projects first
       let qy: any = supabase
@@ -839,8 +824,10 @@ export default function ProjectsPage() {
     }
   })
 
-  const allProjects = projectsData?.projects || []
-  const summaries = projectsData?.summaries || {}
+  // Conditional data selection based on feature flag
+  const allProjects = USE_SERVER_SIDE ? serverSideResult.projects : (clientProjectsData?.projects || [])
+  const summaries = USE_SERVER_SIDE ? serverSideResult.summaries : (clientProjectsData?.summaries || {})
+  const isLoading = USE_SERVER_SIDE ? serverSideResult.isLoading : clientIsLoading
 
   // Efficiently check which projects have a builder using the new RPC function
   const projectIdsWithBuilderQuery = useQuery({
@@ -861,99 +848,101 @@ export default function ProjectsPage() {
   const projectIds = allProjects.map(p => p.id)
   const { data: subsetStats = {} } = useMultipleProjectSubsetStats(projectIds)
   
-  // Apply client-side filtering and sorting
+  // Apply client-side filtering and sorting (only for client-side mode)
   const filteredAndSortedProjects = useMemo(() => {
-    let filtered = allProjects.slice()
-    
-    // Apply workers filter
-    if (workersFilter !== "all") {
-      filtered = filtered.filter((p: any) => {
-        const summary = summaries[p.id]
-        const workerCount = summary?.total_workers || 0
-        return workersFilter === "zero" ? workerCount === 0 : workerCount > 0
-      })
+    if (USE_SERVER_SIDE) {
+      // SERVER-SIDE: Data is already filtered and sorted
+      return allProjects
+    } else {
+      // CLIENT-SIDE: Apply original filtering and sorting logic
+      let filtered = allProjects.slice()
+      
+      // Apply workers filter
+      if (workersFilter !== "all") {
+        filtered = filtered.filter((p: any) => {
+          const summary = summaries[p.id]
+          const workerCount = summary?.total_workers || 0
+          return workersFilter === "zero" ? workerCount === 0 : workerCount > 0
+        })
+      }
+      
+      if (specialFilter === "noBuilderWithEmployers") {
+        filtered = filtered.filter(p => {
+          const summary = summaries[p.id]
+          const employerCount = summary?.engaged_employer_count || 0
+          const hasBuilder = projectsWithBuilder.has(p.id);
+          return employerCount > 0 && !hasBuilder
+        })
+      }
+      
+      // Apply EBA site filter
+      if (ebaFilter !== "all") {
+        filtered = filtered.filter(p => {
+          const hasBuilder = projectsWithBuilder.has(p.id);
+          const builderAssignments = (p.project_assignments || []).filter((a) => 
+            a.assignment_type === 'contractor_role'
+          )
+          const builderEbaStatus = builderAssignments.some(a => a.employers?.enterprise_agreement_status === true)
+          
+          if (ebaFilter === "eba_active") {
+            // Builder/Main contractor EBA = active
+            return hasBuilder && builderEbaStatus
+          } else if (ebaFilter === "eba_inactive") {
+            // Builder/Main Contractor known, EBA status not active
+            return hasBuilder && !builderEbaStatus
+          } else if (ebaFilter === "builder_unknown") {
+            // Builder/Main Contractor unknown
+            return !hasBuilder
+          }
+          return true
+        })
+      }
+      
+      // Apply client-side sorting for summary-based fields
+      const needsClientSorting = ["workers", "members", "delegates", "eba_coverage", "employers"].includes(sort)
+      if (needsClientSorting) {
+        const ascending = dir === "asc"
+        filtered.sort((a: any, b: any) => {
+          const summaryA = summaries[a.id]
+          const summaryB = summaries[b.id]
+          
+          let valueA = 0
+          let valueB = 0
+          
+          if (sort === "workers") {
+            valueA = summaryA?.total_workers || 0
+            valueB = summaryB?.total_workers || 0
+          } else if (sort === "members") {
+            valueA = summaryA?.total_members || 0
+            valueB = summaryB?.total_members || 0
+          } else if (sort === "employers") {
+            valueA = summaryA?.engaged_employer_count || 0
+            valueB = summaryB?.engaged_employer_count || 0
+          } else if (sort === "delegates") {
+            valueA = summaryA?.delegate_name ? 1 : 0
+            valueB = summaryB?.delegate_name ? 1 : 0
+          } else if (sort === "eba_coverage") {
+            const ebaA = summaryA?.eba_active_employer_count || 0
+            const engagedA = summaryA?.engaged_employer_count || 0
+            const ebaB = summaryB?.eba_active_employer_count || 0
+            const engagedB = summaryB?.engaged_employer_count || 0
+            valueA = engagedA > 0 ? (ebaA / engagedA) * 100 : 0
+            valueB = engagedB > 0 ? (ebaB / engagedB) * 100 : 0
+          }
+          
+          return ascending ? valueA - valueB : valueB - valueA
+        })
+      }
+      
+      return filtered
     }
-    
-    if (specialFilter === "noBuilderWithEmployers") {
-      filtered = filtered.filter(p => {
-        const summary = summaries[p.id]
-        const employerCount = summary?.engaged_employer_count || 0
-        const hasBuilder = projectsWithBuilder.has(p.id);
-        return employerCount > 0 && !hasBuilder
-      })
-    }
-    
-    // Apply EBA site filter
-    if (ebaFilter !== "all") {
-      filtered = filtered.filter(p => {
-        const hasBuilder = projectsWithBuilder.has(p.id);
-        const builderAssignments = (p.project_assignments || []).filter((a) => 
-          a.assignment_type === 'contractor_role'
-        )
-        const builderEbaStatus = builderAssignments.some(a => a.employers?.enterprise_agreement_status === true)
-        
-        if (ebaFilter === "eba_active") {
-          // Builder/Main contractor EBA = active
-          return hasBuilder && builderEbaStatus
-        } else if (ebaFilter === "eba_inactive") {
-          // Builder/Main Contractor known, EBA status not active
-          return hasBuilder && !builderEbaStatus
-        } else if (ebaFilter === "builder_unknown") {
-          // Builder/Main Contractor unknown
-          return !hasBuilder
-        }
-        return true
-      })
-    }
-    
-    // Employers filter removed
-    
-    // Apply client-side sorting for summary-based fields
-    const needsClientSorting = ["workers", "members", "delegates", "eba_coverage", "employers"].includes(sort)
-    if (needsClientSorting) {
-      const ascending = dir === "asc"
-      filtered.sort((a: any, b: any) => {
-        const summaryA = summaries[a.id]
-        const summaryB = summaries[b.id]
-        
-        let valueA = 0
-        let valueB = 0
-        
-        if (sort === "workers") {
-          valueA = summaryA?.total_workers || 0
-          valueB = summaryB?.total_workers || 0
-        } else if (sort === "members") {
-          valueA = summaryA?.total_members || 0
-          valueB = summaryB?.total_members || 0
-        } else if (sort === "employers") {
-          valueA = summaryA?.engaged_employer_count || 0
-          valueB = summaryB?.engaged_employer_count || 0
-        } else if (sort === "delegates") {
-          valueA = summaryA?.delegate_name ? 1 : 0
-          valueB = summaryB?.delegate_name ? 1 : 0
-        } else if (sort === "eba_coverage") {
-          const ebaA = summaryA?.eba_active_employer_count || 0
-          const engagedA = summaryA?.engaged_employer_count || 0
-          const ebaB = summaryB?.eba_active_employer_count || 0
-          const engagedB = summaryB?.engaged_employer_count || 0
-          valueA = engagedA > 0 ? (ebaA / engagedA) * 100 : 0
-          valueB = engagedB > 0 ? (ebaB / engagedB) * 100 : 0
-        }
-        
-        return ascending ? valueA - valueB : valueB - valueA
-      })
-    }
-    
-    return filtered
-  }, [allProjects, summaries, workersFilter, specialFilter, projectsWithBuilder, sort, dir])
+  }, [USE_SERVER_SIDE, allProjects, summaries, workersFilter, specialFilter, projectsWithBuilder, sort, dir])
   
-  // Apply pagination
-  const totalProjects = filteredAndSortedProjects.length
-  const from = (page - 1) * PAGE_SIZE
-  const to = from + PAGE_SIZE
-  const projects = filteredAndSortedProjects.slice(from, to)
-  const hasNext = to < totalProjects
-  const hasPrev = page > 1
+  // Apply pagination (conditional based on implementation)
+  const totalProjects = USE_SERVER_SIDE ? serverSideResult.totalCount : filteredAndSortedProjects.length
+  const projects = USE_SERVER_SIDE ? filteredAndSortedProjects : filteredAndSortedProjects.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const hasNext = USE_SERVER_SIDE ? serverSideResult.hasNext : ((page - 1) * PAGE_SIZE + PAGE_SIZE) < totalProjects
+  const hasPrev = USE_SERVER_SIDE ? serverSideResult.hasPrev : page > 1
 
   if (isLoading) {
     return (
@@ -966,7 +955,19 @@ export default function ProjectsPage() {
 
   return (
     <div className="p-6 space-y-4">
-      <h1 className="text-2xl font-semibold">Projects</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Projects</h1>
+        {/* Development indicator for which implementation is active */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="text-xs px-2 py-1 rounded border">
+            {USE_SERVER_SIDE ? (
+              <span className="text-green-600">🚀 Projects Server-side {serverSideResult.debug?.queryTime ? `(${serverSideResult.debug.queryTime}ms)` : ''}</span>
+            ) : (
+              <span className="text-blue-600">💻 Projects Client-side</span>
+            )}
+          </div>
+        )}
+      </div>
       {/* Improved Header with Search and Quick Actions */}
       <div className="sticky top-0 z-30 -mx-6 px-6 py-3 bg-background/40 backdrop-blur supports-[backdrop-filter]:bg-background/30 border-b space-y-3">
         {/* Top Row: Search, Actions, and View Toggle */}
@@ -1203,7 +1204,7 @@ export default function ProjectsPage() {
       {view !== 'map' && (
         <div className="flex items-center justify-between">
           <div className="text-sm text-muted-foreground">
-            Showing {from + 1}-{Math.min(to, totalProjects)} of {totalProjects} projects
+            Showing {((page - 1) * PAGE_SIZE) + 1}-{Math.min(page * PAGE_SIZE, totalProjects)} of {totalProjects} projects
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" disabled={!hasPrev} onClick={() => setParam('page', String(page - 1))}>

@@ -33,6 +33,8 @@ BEGIN
     st := COALESCE(lower(NEW.project_status), '');
     IF st ~ '(cancel|complete|abandon|defer|hold)' OR s ~ '(complete|cancel|abandon|defer|hold)' THEN
       NEW.stage_class := 'archived';
+    ELSIF s LIKE '%pre-construction%' THEN
+      NEW.stage_class := 'pre_construction';
     ELSIF s LIKE '%construction%' THEN
       NEW.stage_class := 'construction';
     ELSIF s LIKE '%future%' THEN

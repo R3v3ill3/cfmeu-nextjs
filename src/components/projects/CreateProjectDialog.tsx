@@ -52,6 +52,7 @@ export default function CreateProjectDialog() {
         state_funding: stateFunding ? Number(stateFunding.replace(/[^0-9.]/g, "")) : 0,
         federal_funding: federalFunding ? Number(federalFunding.replace(/[^0-9.]/g, "")) : 0,
         builder_id: builderId || null,
+        // Note: organising_universe will be auto-assigned by trigger based on tier/EBA/patch rules
       };
       const { data: proj, error: projErr } = await supabase
         .from("projects")

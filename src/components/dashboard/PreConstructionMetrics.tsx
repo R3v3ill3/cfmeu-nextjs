@@ -2,6 +2,9 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart"
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
 import { 
   Building, 
   Users, 
@@ -111,29 +114,52 @@ export function PreConstructionMetricsComponent({ data, isLoading }: PreConstruc
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Overview Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <MetricCard
-            icon={Building}
-            label="Total Projects"
-            value={data.total_projects}
-            color="orange"
-            description="Projects in planning"
-          />
-          <MetricCard
-            icon={Users}
-            label="Avg Workers/Project"
-            value={data.avg_assigned_workers}
-            color="blue"
-            description="Average assigned workers"
-          />
-          <MetricCard
-            icon={TrendingUp}
-            label="Avg Members/Project"
-            value={data.avg_members}
-            color="purple"
-            description="Average union members"
-          />
+        {/* Overview Metrics (Table + Chart) */}
+        <div className="space-y-4">
+          <Table variant="desktop">
+            <TableHeader variant="desktop">
+              <TableRow variant="desktop">
+                <TableHead variant="desktop">Metric</TableHead>
+                <TableHead variant="desktop">Value</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody variant="desktop">
+              <TableRow variant="desktop">
+                <TableCell variant="desktop" className="font-medium">Total projects</TableCell>
+                <TableCell variant="desktop">{data.total_projects}</TableCell>
+              </TableRow>
+              <TableRow variant="desktop">
+                <TableCell variant="desktop" className="font-medium">Avg workers / project</TableCell>
+                <TableCell variant="desktop">{data.avg_assigned_workers}</TableCell>
+              </TableRow>
+              <TableRow variant="desktop">
+                <TableCell variant="desktop" className="font-medium">Avg members / project</TableCell>
+                <TableCell variant="desktop">{data.avg_members}</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+
+          {((data.avg_assigned_workers || 0) > 0 || (data.avg_members || 0) > 0) ? (
+            <ChartContainer
+              config={{
+                value: { label: "Value", color: "hsl(var(--chart-1, 221 83% 53%))" },
+              }}
+            >
+              <BarChart data={[
+                { metric: "Avg workers", value: data.avg_assigned_workers },
+                { metric: "Avg members", value: data.avg_members },
+              ]}>
+                <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                <XAxis dataKey="metric" tickLine={false} axisLine={false} />
+                <YAxis allowDecimals={false} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <ChartLegend content={<ChartLegendContent />} />
+                <Bar dataKey="value" fill="var(--color-value)" radius={[4,4,0,0]} />
+              </BarChart>
+            </ChartContainer>
+          ) : (
+            <div className="text-sm text-muted-foreground">No chart data to display.</div>
+          )}
         </div>
 
         {/* EBA Coverage */}

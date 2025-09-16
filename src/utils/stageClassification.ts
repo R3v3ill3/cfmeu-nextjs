@@ -13,9 +13,9 @@ export function mapBciStageToStageClass(stage?: string | null, status?: string |
 }
 
 export function defaultOrganisingUniverseFor(stageClass: StageClass, value?: number | null): OrganisingUniverse {
-  // Extra rule: Active if value > $20M and stage is construction
-  if (value != null && Number.isFinite(value) && value > 20000000 && stageClass === 'construction') return 'active';
-  if (stageClass === 'construction') return 'active';
+  // This function is deprecated. The database trigger `handle_project_organising_universe_auto_assignment`
+  // is now the source of truth for this logic.
+  // We will return a safe default but client-side assignment should be removed.
   if (stageClass === 'archived') return 'excluded';
   return 'potential';
 }

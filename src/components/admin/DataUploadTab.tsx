@@ -11,7 +11,7 @@ import ContractorImport from "@/components/upload/ContractorImport"
 import { EbaImport } from "@/components/upload/EbaImport"
 import { Button } from "@/components/ui/button"
 import PatchImport from "@/components/upload/PatchImport"
-import { ArrowLeft, Users, Building, FileText, Map, FolderOpen, Database, UserPlus, RefreshCw, BarChart3 } from "lucide-react"
+import { ArrowLeft, Users, Building, FileText, Map, FolderOpen, Database, UserPlus, RefreshCw, BarChart3, Link } from "lucide-react"
 import ProjectImport from "@/components/upload/ProjectImport"
 import BCICsvParser from "@/components/upload/BCICsvParser"
 import BCIProjectImport from "@/components/upload/BCIProjectImport"
@@ -21,8 +21,9 @@ import { useAuth } from "@/hooks/useAuth"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 import { BackfillProjectCoordinates } from "@/components/admin/BackfillProjectCoordinates"
 import { EbaBackfillManager } from "@/components/admin/EbaBackfillManager"
+import { IncolinkImport } from "@/components/upload/IncolinkImport"
 
-type ImportType = "workers" | "contractors" | "eba" | "patches" | "projects" | "bci-projects" | "project-backfill" | "eba-backfill" | "employers"
+type ImportType = "workers" | "contractors" | "eba" | "patches" | "projects" | "bci-projects" | "project-backfill" | "eba-backfill" | "employers" | "incolink"
 type ParsedCSV = { headers: string[]; rows: Record<string, any>[]; filename?: string }
 
 interface ImportOption {
@@ -84,6 +85,13 @@ const importOptions: ImportOption[] = [
     category: "data"
   },
   {
+    type: "incolink",
+    title: "Import Incolink Data",
+    description: "Upload Incolink employer data with fuzzy name matching",
+    icon: Link,
+    category: "data"
+  },
+  {
     type: "project-backfill",
     title: "Project Backfill",
     description: "Backfill missing coordinates and geocoding data for projects",
@@ -139,7 +147,7 @@ export default function DataUploadTab() {
     if (userRole === "organiser") {
       return ["workers"]
     } else if (userRole === "lead_organiser" || userRole === "admin") {
-      return ["workers", "contractors", "eba", "patches", "projects", "bci-projects", "employers", "project-backfill", "eba-backfill"]
+      return ["workers", "contractors", "eba", "patches", "projects", "bci-projects", "employers", "incolink", "project-backfill", "eba-backfill"]
     }
     
     return []
@@ -418,6 +426,13 @@ export default function DataUploadTab() {
                     csvData={bciData}
                     mode={bciMode}
                     onImportComplete={() => setStep("choose")}
+                  />
+                )}
+                {importType === "incolink" && csv && (
+                  <IncolinkImport
+                    csvData={mappedRows.length > 0 ? mappedRows : csv.rows}
+                    onImportComplete={() => setStep("choose")}
+                    onBack={() => setStep("map")}
                   />
                 )}
               </CardContent>

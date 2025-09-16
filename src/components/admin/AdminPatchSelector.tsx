@@ -40,10 +40,9 @@ export default function AdminPatchSelector() {
 		const load = async () => {
 			const { data } = await (supabase as any)
 				.from("patches")
-				.select("id, name")
-				.eq("type", "geo")
+				.select("id, name, type")
+				.in("type", ["geo", "fallback"])
 				.eq("status", "active")
-				.not("geom", "is", null)
 				.order("name")
 			setAllPatches(((data as any[]) || []).map(r => ({ id: r.id, name: r.name || r.id })))
 		}
@@ -182,7 +181,7 @@ export default function AdminPatchSelector() {
 							<div className="flex flex-wrap items-center gap-4 min-w-0">
 								<Select value={selectedLead} onValueChange={setSelectedLead}>
 									<SelectTrigger className="w-64 md:w-80 max-w-full h-12 px-4 py-3 text-gray-900 bg-white border-gray-300 focus:border-blue-500 focus:ring-blue-500">
-										<SelectValue placeholder="Select lead organiser (live or draft)" />
+										<SelectValue placeholder="Select co-ordinator (live or draft)" />
 									</SelectTrigger>
 									<SelectContent>
 										{leadOptions.map(l => (

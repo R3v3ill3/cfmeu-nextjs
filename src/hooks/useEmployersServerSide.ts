@@ -1,0 +1,150 @@
+import { useQuery } from '@tanstack/react-query';
+
+// Types matching the API endpoint
+export interface EmployersParams {
+  page: number;
+  pageSize: number;
+  sort: 'name' | 'estimated' | 'eba_recency';
+  dir: 'asc' | 'desc';
+  q?: string;
+  engaged?: boolean;
+  eba?: 'all' | 'active' | 'lodged' | 'pending' | 'no';
+  type?: 'all' | 'builder' | 'principal_contractor' | 'large_contractor' | 'small_contractor' | 'individual';
+}
+
+export interface EmployerRecord {
+  id: string;
+  name: string;
+  abn: string | null;
+  employer_type: string;
+  website: string | null;
+  email: string | null;
+  phone: string | null;
+  estimated_worker_count: number | null;
+  company_eba_records: any[];
+  worker_placements: { id: string }[];
+  project_assignments: { id: string }[];
+}
+
+export interface EmployersResponse {
+  employers: EmployerRecord[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    totalCount: number;
+    totalPages: number;
+  };
+  debug?: {
+    queryTime: number;
+    cacheHit: boolean;
+    appliedFilters: Record<string, any>;
+  };
+}
+
+/**
+ * Server-side hook for fetching employers with optimized database queries
+ * This replaces client-side filtering/sorting with server-side processing
+ */
+export function useEmployersServerSide(params: EmployersParams) {
+  return useQuery<EmployersResponse>({
+    queryKey: ['employers-server-side', params],
+    queryFn: async () => {
+      // Build URL parameters, only including non-default values to keep URLs clean
+      const searchParams = new URLSearchParams();
+      
+      searchParams.set('page', params.page.toString());
+      searchParams.set('pageSize', params.pageSize.toString());
+      searchParams.set('sort', params.sort);
+      searchParams.set('dir', params.dir);
+      
+      if (params.q) {
+        searchParams.set('q', params.q);
+      }
+      
+      if (params.engaged !== undefined) {
+        searchParams.set('engaged', params.engaged ? '1' : '0');
+      }
+      
+      if (params.eba && params.eba !== 'all') {
+        searchParams.set('eba', params.eba);
+      }
+      
+      if (params.type && params.type !== 'all') {
+        searchParams.set('type', params.type);
+      }
+
+      const url = `/api/employers?${searchParams.toString()}`;
+      console.log('🔄 Fetching employers from server:', url);
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to fetch employers: ${response.status} ${errorText}`);
+      }
+
+      const data = await response.json();
+      
+      // Log performance metrics for monitoring
+      if (data.debug) {
+        console.log(`📊 Server-side query completed in ${data.debug.queryTime}ms`);
+        if (data.debug.queryTime > 1000) {
+          console.warn('⚠️ Slow query detected:', data.debug);
+        }
+      }
+
+      return data;
+    },
+    
+    // Aggressive caching for better performance
+    staleTime: 2 * 60 * 1000, // 2 minutes - data is fresh
+    gcTime: 10 * 60 * 1000, // 10 minutes - keep in memory
+    
+    // Retry failed requests
+    retry: (failureCount, error) => {
+      // Don't retry 4xx errors (client errors)
+      if (error instanceof Error && error.message.includes('4')) {
+        return false;
+      }
+      // Retry up to 2 times for server errors
+      return failureCount < 2;
+    },
+    
+    // Background refetch to keep data fresh
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    
+    // Enable this for real-time updates in the future
+    refetchInterval: false, // Could be set to 5 minutes for auto-refresh
+  });
+}
+
+/**
+ * Compatibility layer - provides the same interface as the original client-side hook
+ * This allows for easy migration without changing the component logic
+ */
+export function useEmployersServerSideCompatible(params: EmployersParams) {
+  const query = useEmployersServerSide(params);
+  
+  return {
+    // Transform to match existing client-side hook interface
+    data: query.data?.employers || [],
+    isFetching: query.isFetching,
+    error: query.error,
+    refetch: query.refetch,
+    
+    // Additional server-side specific data
+    pagination: query.data?.pagination,
+    debug: query.data?.debug,
+    
+    // Computed values that components expect
+    totalCount: query.data?.pagination?.totalCount || 0,
+    totalPages: query.data?.pagination?.totalPages || 0,
+    currentPage: query.data?.pagination?.page || 1,
+  };
+}

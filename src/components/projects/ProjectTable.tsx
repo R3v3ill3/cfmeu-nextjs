@@ -5,6 +5,7 @@ import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
 import { CfmeuEbaBadge, getProjectEbaStatus } from "@/components/ui/CfmeuEbaBadge"
 import Link from "next/link"
 import { useMemo } from "react"
+import { getOrganisingUniverseBadgeVariant } from "@/utils/organisingUniverse"
 
 type ProjectRow = {
   id: string
@@ -34,6 +35,7 @@ type ProjectSummary = {
   estimated_total: number
   delegate_name: string | null
   first_patch_name: string | null
+  organiser_names: string | null
 }
 
 export function ProjectTable({ 
@@ -58,6 +60,7 @@ export function ProjectTable({
           <TableHead>Tier</TableHead>
           <TableHead>Classifications</TableHead>
           <TableHead>Patch</TableHead>
+          <TableHead>Organiser</TableHead>
           <TableHead className="text-right">Employers</TableHead>
           <TableHead className="text-right">Workers</TableHead>
           <TableHead className="text-right">Members</TableHead>
@@ -83,6 +86,7 @@ export function ProjectTable({
           const engaged = summary?.engaged_employer_count || 0
           const delegateName = summary?.delegate_name || null
           const patchName = summary?.first_patch_name || '—'
+          const organiserNames = summary?.organiser_names || '—'
           
           const ebaPercentage = engaged > 0 ? Math.round((ebaActive / engaged) * 100) : 0
 
@@ -144,12 +148,17 @@ export function ProjectTable({
                     <Badge variant="secondary" className="text-[10px] capitalize">{String(project.stage_class).replace('_',' ')}</Badge>
                   )}
                   {project.organising_universe && (
-                    <Badge variant="outline" className="text-[10px] capitalize">{String(project.organising_universe)}</Badge>
+                    <Badge variant={getOrganisingUniverseBadgeVariant(project.organising_universe as any)} className="text-[10px] capitalize">{String(project.organising_universe)}</Badge>
                   )}
                 </div>
               </TableCell>
               <TableCell>
                 <span className="text-sm">{patchName}</span>
+              </TableCell>
+              <TableCell>
+                <span className="text-sm truncate" title={organiserNames}>
+                  {organiserNames.length > 20 ? `${organiserNames.substring(0, 20)}...` : organiserNames}
+                </span>
               </TableCell>
               <TableCell className="text-right">
                 <Badge variant="outline" className="text-xs border-gray-800 text-black bg-white">
