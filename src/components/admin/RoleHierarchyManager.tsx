@@ -29,7 +29,7 @@ export const RoleHierarchyManager = ({ users }: RoleHierarchyManagerProps) => {
   const [draftLeadToPendingId, setDraftLeadToPendingId] = useState<string>("");
   const [draftLeadLinks, setDraftLeadLinks] = useState<Array<{ id: string; draft_lead_pending_user_id: string; organiser_user_id: string | null; organiser_pending_user_id: string | null }>>([]);
 
-  const leads = useMemo(() => users.filter(u => u.role === "lead_organiser"), [users]);
+  const leads = useMemo(() => users.filter(u => u.role === "lead_organiser" || u.role === "admin"), [users]);
   const organisers = useMemo(() => users.filter(u => u.role === "organiser"), [users]);
 
   const getName = (id: string) => users.find(u => u.id === id)?.full_name || users.find(u => u.id === id)?.email || id;
@@ -77,7 +77,7 @@ export const RoleHierarchyManager = ({ users }: RoleHierarchyManagerProps) => {
         supabase
           .from("pending_users")
           .select("id,email,full_name,status")
-          .eq("role", "lead_organiser")
+          .in("role", ["lead_organiser", "admin"]) 
           .in("status", ["draft", "invited"]) 
           .order("created_at", { ascending: false }),
         supabase

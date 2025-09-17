@@ -49,12 +49,12 @@ export default function AdminPatchSelector() {
 		load()
 	}, [])
 
-	// Load live and draft lead organisers for the special selection
+	// Load live and draft co-ordinators (lead organisers) and admins for the special selection
 	useEffect(() => {
 		const loadLeads = async () => {
 			const [live, draft] = await Promise.all([
-				(supabase as any).from("profiles").select("id, full_name, email, role").eq("role", "lead_organiser"),
-				(supabase as any).from("pending_users").select("id, full_name, email, role, status").eq("role", "lead_organiser").in("status", ["draft", "invited"]) ,
+				(supabase as any).from("profiles").select("id, full_name, email, role").in("role", ["lead_organiser", "admin"]),
+				(supabase as any).from("pending_users").select("id, full_name, email, role, status").in("role", ["lead_organiser", "admin"]).in("status", ["draft", "invited"]) ,
 			])
 			const lives = (((live as any)?.data as any[]) || []).map((r: any) => ({ id: String(r.id), label: r.full_name || r.email || r.id, kind: "live" as const }))
 			const drafts = (((draft as any)?.data as any[]) || []).map((r: any) => ({ id: String(r.id), label: (r.full_name || r.email || r.id) + " (draft)", kind: "draft" as const }))
