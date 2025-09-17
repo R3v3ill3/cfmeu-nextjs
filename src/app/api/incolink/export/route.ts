@@ -103,7 +103,7 @@ async function findFirstNonZeroInvoice(page: any): Promise<string | null> {
       })
     )
     for (const r of rows) {
-      const amountCell = r.text.find((t) => /\$/.test(t))
+      const amountCell = r.text.find((t: string) => /\$/.test(t))
       const amount = amountCell ? Number(amountCell.replace(/[^0-9.-]/g, '')) : 0
       if (r.linkText && amount > 0) {
         return r.linkText
@@ -124,7 +124,7 @@ async function findFirstNonZeroInvoice(page: any): Promise<string | null> {
         })
       )
       for (const r of rows) {
-        const amountCell = r.text.find((t) => /\$/.test(t))
+        const amountCell = r.text.find((t: string) => /\$/.test(t))
         const amount = amountCell ? Number(amountCell.replace(/[^0-9.-]/g, '')) : 0
         if (r.linkText && amount > 0) {
           return r.linkText
@@ -151,7 +151,7 @@ async function clickAnchorWithTextAnyFrame(page: any, exactText: string): Promis
   const all = [page, ...frames]
   for (const ctx of all) {
     try {
-      const handle = await ctx.evaluateHandle((needle) => {
+      const handle = await ctx.evaluateHandle((needle: string) => {
         const links = Array.from(document.querySelectorAll('a')) as HTMLAnchorElement[]
         return links.find((a) => (a.textContent || '').trim() === String(needle).trim()) || null
       }, exactText)
