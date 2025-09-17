@@ -300,7 +300,7 @@ export function EmployersDesktopView() {
               key={emp.id}
               employer={{
                 ...emp,
-                ebaCategory: getEbaCategory(emp.company_eba_records?.[0])
+                ebaCategory: emp.company_eba_records?.[0] ? getEbaCategory(emp.company_eba_records[0]) : { category: 'no', label: 'No EBA', variant: 'destructive' }
               }}
               onClick={() => {
                 setSelectedEmployerId(emp.id)

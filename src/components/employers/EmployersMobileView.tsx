@@ -113,7 +113,7 @@ export function EmployersMobileView() {
     employer_type: emp.employer_type,
     phone: emp.phone,
     email: emp.email,
-    ebaCategory: getEbaCategory(emp.company_eba_records?.[0]),
+    ebaCategory: emp.company_eba_records?.[0] ? getEbaCategory(emp.company_eba_records[0]) : { category: 'no', label: 'No EBA', variant: 'destructive' },
   }))
 
   return (

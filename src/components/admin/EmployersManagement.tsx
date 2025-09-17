@@ -11,6 +11,7 @@ import ContractorImport from '@/components/upload/ContractorImport'
 import { BackfillProjectCoordinates } from '@/components/admin/BackfillProjectCoordinates'
 import DuplicateEmployerManager from '@/components/admin/DuplicateEmployerManager'
 import { IncolinkImport } from '@/components/upload/IncolinkImport'
+import IncolinkScrape from '@/components/upload/IncolinkScrape'
 import FileUpload from '@/components/upload/FileUpload'
 
 type EmployerImportMode = 'bci-employers' | 'pending-employers' | 'csv-upload' | 'project-backfill' | 'duplicates' | 'incolink'
@@ -200,17 +201,7 @@ export default function EmployersManagement() {
                 </TabsContent>
                 
                 <TabsContent value="scrape" className="mt-4">
-                  <div className="space-y-4">
-                    <p className="text-sm text-muted-foreground">
-                      Select an employer with an Incolink ID to scrape their data automatically.
-                    </p>
-                    <div className="p-4 border rounded-lg bg-blue-50">
-                      <p className="text-sm">🚧 Incolink web scraping feature coming soon</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        This will allow automatic data collection from employers with existing Incolink IDs
-                      </p>
-                    </div>
-                  </div>
+                  <IncolinkScrape />
                 </TabsContent>
                 
                 {csvData.length > 0 && (

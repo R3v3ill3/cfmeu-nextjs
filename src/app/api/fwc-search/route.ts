@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as cheerio from 'cheerio';
-import puppeteer from 'puppeteer';
+
+export const runtime = 'nodejs';
 
 export interface FWCSearchResult {
   title: string;
@@ -39,18 +40,23 @@ function simplifyCompanyName(companyName: string): string {
 }
 
 async function getBrowser() {
-  // For local development, Puppeteer will download Chromium.
-  // For Vercel, we need to use a specific configuration.
-  if (process.env.VERCEL_ENV) {
-    const puppeteerCore = await import('puppeteer-core');
+  const isProd = process.env.NODE_ENV === 'production' || !!process.env.VERCEL_ENV;
+  if (isProd) {
+    const puppeteerCore = (await import('puppeteer-core')).default;
     const { default: chromium } = await import('@sparticuz/chromium');
+    const executablePath = await chromium.executablePath();
     return puppeteerCore.launch({
-      args: chromium.args,
-      executablePath: await chromium.executablePath(),
+      args: [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      executablePath,
       headless: chromium.headless,
     });
   } else {
-    return puppeteer.launch({ headless: true });
+    const puppeteer = (await import('puppeteer')).default;
+    return puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROME_PATH,
+    });
   }
 }
 
@@ -80,14 +86,15 @@ export async function POST(request: NextRequest) {
 
     browser = await getBrowser();
     const page = await browser.newPage();
+    page.setDefaultNavigationTimeout(60000);
     
     // Set a realistic user agent
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119 Safari/537.36');
 
     console.log('Navigating to FWC page...');
     await page.goto(searchUrl.toString(), {
       waitUntil: 'networkidle2', // Wait for network to be idle
-      timeout: 30000 // 30 second timeout
+      timeout: 45000
     });
     
     console.log('Page loaded. Waiting for results to render...');
@@ -95,7 +102,7 @@ export async function POST(request: NextRequest) {
     // It's good practice to wait for a selector that indicates results are loaded.
     // Based on manual inspection, the results are inside a div that gets populated.
     // We can wait for the presence of the result headings.
-    await page.waitForSelector('a h3', { timeout: 15000 });
+    await page.waitForSelector('a h3', { timeout: 30000 });
 
     console.log('Results selector found. Getting page content.');
     const html = await page.content();

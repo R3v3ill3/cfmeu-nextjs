@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Users, Link, Upload } from 'lucide-react'
 import WorkerImport from '@/components/upload/WorkerImport'
 import { IncolinkImport } from '@/components/upload/IncolinkImport'
+import IncolinkScrape from '@/components/upload/IncolinkScrape'
 import FileUpload from '@/components/upload/FileUpload'
 
 type WorkerImportMode = 'standard' | 'incolink'
@@ -122,17 +123,7 @@ export default function WorkersManagement() {
                   </TabsContent>
                   
                   <TabsContent value="scrape" className="mt-4">
-                    <div className="space-y-4">
-                      <p className="text-sm text-muted-foreground">
-                        Select an employer with an Incolink ID to automatically scrape worker data.
-                      </p>
-                      <div className="p-4 border rounded-lg bg-blue-50">
-                        <p className="text-sm">🚧 Incolink worker scraping feature coming soon</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          This will allow automatic worker data collection from employers with existing Incolink IDs
-                        </p>
-                      </div>
-                    </div>
+                    <IncolinkScrape />
                   </TabsContent>
                 </Tabs>
               )}

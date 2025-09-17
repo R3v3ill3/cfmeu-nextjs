@@ -56,6 +56,7 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
   const [activeTab, setActiveTab] = useState(initialTab);
   const [isEditing, setIsEditing] = useState(false);
   const [isManualWorkerOpen, setIsManualWorkerOpen] = useState(false);
+  const [isImportingIncolink, setIsImportingIncolink] = useState(false);
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
@@ -459,7 +460,10 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
           <Button
             size="sm"
             variant="secondary"
+                          disabled={isImportingIncolink}
+                          aria-busy={isImportingIncolink}
             onClick={async () => {
+                            setIsImportingIncolink(true);
               try {
                 const res = await fetch('/api/incolink/import-workers', {
                   method: 'POST',
@@ -473,12 +477,23 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
                 alert(`Imported from Incolink invoice ${data.invoiceNumber}. Created ${data.counts.createdWorkers}, matched ${data.counts.matchedWorkers}, placements ${data.counts.placementsCreated}/${data.counts.totalParsed}`)
               } catch (e) {
                 alert(`Incolink import failed: ${(e as Error).message}`)
+                            } finally {
+                              setIsImportingIncolink(false);
               }
             }}
             title="Import workers from Incolink invoice using employer Incolink ID"
           >
-            <Download className="h-4 w-4 mr-2" />
-            Import from Incolink
+                          {isImportingIncolink ? (
+                            <span className="inline-flex items-center">
+                              <img src="/spinner.gif" alt="Loading" className="h-4 w-4 mr-2" />
+                              Importing...
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center">
+                              <Download className="h-4 w-4 mr-2" />
+                              Import from Incolink
+                            </span>
+                          )}
           </Button>
         )}
         <DropdownMenu>
@@ -502,6 +517,12 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
       </div>
     </div>
   )}
+                {isImportingIncolink && (
+                  <div className="text-sm text-muted-foreground flex items-center gap-2">
+                    <img src="/spinner.gif" alt="Loading" className="h-4 w-4" />
+                    Importing from Incolink… this may take up to a minute.
+                  </div>
+                )}
   <EmployerWorkersList employerId={employerId!} />
   <Dialog open={isManualWorkerOpen} onOpenChange={setIsManualWorkerOpen}>
     <DialogContent className="max-w-2xl">

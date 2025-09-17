@@ -4,19 +4,21 @@ import { createServerSupabase } from '@/lib/supabase/server'
 export const runtime = 'nodejs'
 
 async function getBrowser() {
-  if (process.env.VERCEL_ENV) {
-    const puppeteerCore = await import('puppeteer-core')
+  const isProd = process.env.NODE_ENV === 'production' || !!process.env.VERCEL_ENV
+  if (isProd) {
+    const puppeteerCore = (await import('puppeteer-core')).default
     const { default: chromium } = await import('@sparticuz/chromium')
-    return puppeteerCore.default.launch({
-      args: chromium.args,
-      executablePath: await chromium.executablePath(),
+    const executablePath = await chromium.executablePath()
+    return puppeteerCore.launch({
+      args: [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      executablePath,
       headless: chromium.headless
     })
   } else {
     const puppeteer = (await import('puppeteer')).default
     return puppeteer.launch({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROME_PATH
     })
   }
