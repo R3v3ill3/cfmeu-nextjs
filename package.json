@@ -82,14 +82,16 @@
     "@types/papaparse": "^5.3.16",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19",
+    "dotenv": "^16.4.5",
     "eslint": "^8",
     "eslint-config-next": "14.2.32",
     "next": "^14.2.32",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "sharp": "^0.34.3",
     "tailwindcss": "^4",
+    "to-ico": "^1.1.5",
     "tsx": "^4.20.5",
-    "typescript": "^5.9.2",
-    "dotenv": "^16.4.5"
+    "typescript": "^5.9.2"
   }
 }
