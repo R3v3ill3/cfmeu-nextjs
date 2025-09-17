@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     
     // Create server-side Supabase client
-    want const supabase = await createServerSupabase();
+    const supabase = await createServerSupabase();
     
     // Parse parameters with exact same defaults as client-side
     const page = parseInt(searchParams.get('page') || '1');
