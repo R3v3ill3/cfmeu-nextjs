@@ -13,6 +13,12 @@ import WorkersManagement from "@/components/admin/WorkersManagement"
 
 type ImportType = "employers" | "projects" | "ebas" | "workers"
 
+type ParsedCSV = {
+  headers: string[];
+  rows: Array<Record<string, any>>;
+  filename?: string;
+}
+
 interface ImportOption {
   type: ImportType
   title: string
