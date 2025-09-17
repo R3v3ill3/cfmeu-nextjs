@@ -64,6 +64,8 @@ export interface ProjectsResponse {
     cacheHit: boolean;
     appliedFilters: Record<string, any>;
     patchProjectCount?: number;
+    patchFilteringUsed?: boolean;
+    patchFilteringMethod?: string;
   };
 }
 

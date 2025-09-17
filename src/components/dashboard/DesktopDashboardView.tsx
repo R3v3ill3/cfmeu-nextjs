@@ -12,6 +12,7 @@ import { DashboardDebugInfo } from "@/components/dashboard/DashboardDebugInfo"
 import { RoleBasedDashboard } from "@/components/dashboard/RoleBasedDashboard"
 import { DashboardModeCompact } from "@/components/dashboard/DashboardFeatureFlagIndicator"
 import { ActiveConstructionMetricsComponent } from "@/components/dashboard/ActiveConstructionMetrics"
+import { EbaCoverageSection } from "@/components/dashboard/EbaCoverageSection"
 
 export function DesktopDashboardView() {
   const sp = useSearchParams()
@@ -67,6 +68,9 @@ export function DesktopDashboardView() {
 
       {/* Compliance Alerts */}
       <ComplianceAlertsCard />
+
+      {/* EBA Coverage - Moved to top for visibility */}
+      <EbaCoverageSection />
 
       {/* Project Overview Section */}
       <ProjectMetricsSection

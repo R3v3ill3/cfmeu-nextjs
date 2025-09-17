@@ -6,6 +6,7 @@ import { CfmeuEbaBadge, getProjectEbaStatus } from "@/components/ui/CfmeuEbaBadg
 import Link from "next/link"
 import { useMemo } from "react"
 import { getOrganisingUniverseBadgeVariant } from "@/utils/organisingUniverse"
+import { useNavigationLoading } from "@/hooks/useNavigationLoading"
 
 type ProjectRow = {
   id: string
@@ -51,6 +52,8 @@ export function ProjectTable({
   onRowClick: (id: string) => void
   onOpenEmployer: (id: string) => void
 }) {
+  const { startNavigation } = useNavigationLoading()
+  
   return (
     <Table>
       <TableHeader>

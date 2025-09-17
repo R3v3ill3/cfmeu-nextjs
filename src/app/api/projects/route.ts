@@ -64,6 +64,8 @@ export interface ProjectsResponse {
     cacheHit: boolean;
     appliedFilters: Record<string, any>;
     patchProjectCount?: number;
+    patchFilteringUsed?: boolean;
+    patchFilteringMethod?: string;
   };
 }
 
@@ -98,17 +100,48 @@ export async function GET(request: NextRequest) {
 
     // Apply patch filtering first (most selective)
     let patchProjectCount = 0;
+    let patchFilteringMethod = 'none';
     if (patchIds.length > 0) {
-      // Use the patch mapping view for efficient filtering
-      const { data: patchProjects } = await supabase
+      // Primary: Use the patch mapping view for efficient filtering
+      let { data: patchProjects, error: viewError } = await supabase
         .from('patch_project_mapping_view')
         .select('project_id')
         .in('patch_id', patchIds);
       
+      let usedFallback = false;
+      
+      // Fallback: If materialized view is empty/stale, query job_sites directly
+      if (!patchProjects || patchProjects.length === 0) {
+        console.warn('⚠️ patch_project_mapping_view returned no results, falling back to job_sites query');
+        
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('job_sites')
+          .select('project_id')
+          .in('patch_id', patchIds)
+          .not('project_id', 'is', null);
+          
+        if (fallbackError) {
+          console.error('❌ Fallback patch filtering error:', fallbackError);
+          throw fallbackError;
+        }
+        
+        patchProjects = fallbackData;
+        usedFallback = true;
+        
+        // Auto-refresh the materialized view in the background for next time
+        try {
+          await supabase.rpc('refresh_patch_project_mapping_view');
+          console.log('🔄 Auto-refreshed patch_project_mapping_view after fallback');
+        } catch (refreshError) {
+          console.warn('⚠️ Failed to auto-refresh materialized view:', refreshError);
+        }
+      }
+      
       patchProjectCount = patchProjects?.length || 0;
+      patchFilteringMethod = usedFallback ? 'fallback_job_sites' : 'materialized_view';
       
       if (patchProjectCount === 0) {
-        // No projects match the patch filter
+        // No projects match the patch filter (verified with fallback)
         const response: ProjectsResponse = {
           projects: [],
           summaries: {},
@@ -117,6 +150,8 @@ export async function GET(request: NextRequest) {
             queryTime: Date.now() - startTime,
             cacheHit: false,
             appliedFilters: { patchIds, patchProjectCount: 0 },
+            patchFilteringUsed: true,
+            patchFilteringMethod
           }
         };
         return NextResponse.json(response);
@@ -262,23 +297,25 @@ export async function GET(request: NextRequest) {
         totalCount,
         totalPages
       },
-      debug: {
-        queryTime,
-        cacheHit: false,
-        appliedFilters: {
-          q,
-          patchIds,
-          tier,
-          universe,
-          stage,
-          workers,
-          special,
-          eba,
-          sort,
-          dir
-        },
-        patchProjectCount
-      }
+        debug: {
+          queryTime,
+          cacheHit: false,
+          appliedFilters: {
+            q,
+            patchIds,
+            tier,
+            universe,
+            stage,
+            workers,
+            special,
+            eba,
+            sort,
+            dir
+          },
+          patchProjectCount,
+          patchFilteringUsed: patchIds.length > 0,
+          patchFilteringMethod
+        }
     };
 
     // Add cache headers for CDN/browser caching

@@ -113,110 +113,119 @@ export function PreConstructionMetricsComponent({ data, isLoading }: PreConstruc
           </Badge>
         </div>
       </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Overview Metrics (Table + Chart) */}
-        <div className="space-y-4">
-          <Table variant="desktop">
-            <TableHeader variant="desktop">
-              <TableRow variant="desktop">
-                <TableHead variant="desktop">Metric</TableHead>
-                <TableHead variant="desktop">Value</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody variant="desktop">
-              <TableRow variant="desktop">
-                <TableCell variant="desktop" className="font-medium">Total projects</TableCell>
-                <TableCell variant="desktop">{data.total_projects}</TableCell>
-              </TableRow>
-              <TableRow variant="desktop">
-                <TableCell variant="desktop" className="font-medium">Avg workers / project</TableCell>
-                <TableCell variant="desktop">{data.avg_assigned_workers}</TableCell>
-              </TableRow>
-              <TableRow variant="desktop">
-                <TableCell variant="desktop" className="font-medium">Avg members / project</TableCell>
-                <TableCell variant="desktop">{data.avg_members}</TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
+      <CardContent className="space-y-4">
+        {/* Compact layout with metrics and chart side by side */}
+        <div className="grid lg:grid-cols-3 gap-4">
+          {/* Left: Quick stats */}
+          <div className="space-y-2">
+            <div className="grid grid-cols-1 gap-2">
+              <div className="bg-orange-50 border border-orange-200 rounded p-3">
+                <div className="text-2xl font-bold text-orange-800">{data.total_projects}</div>
+                <div className="text-xs text-orange-600">Total Projects</div>
+              </div>
+              <div className="bg-blue-50 border border-blue-200 rounded p-3">
+                <div className="text-xl font-bold text-blue-800">{data.avg_assigned_workers}</div>
+                <div className="text-xs text-blue-600">Avg Workers/Project</div>
+              </div>
+              <div className="bg-green-50 border border-green-200 rounded p-3">
+                <div className="text-xl font-bold text-green-800">{data.avg_members}</div>
+                <div className="text-xs text-green-600">Avg Members/Project</div>
+              </div>
+            </div>
+          </div>
 
-          {((data.avg_assigned_workers || 0) > 0 || (data.avg_members || 0) > 0) ? (
-            <ChartContainer
-              config={{
-                value: { label: "Value", color: "hsl(var(--chart-1, 221 83% 53%))" },
-              }}
-            >
-              <BarChart data={[
-                { metric: "Avg workers", value: data.avg_assigned_workers },
-                { metric: "Avg members", value: data.avg_members },
-              ]}>
-                <CartesianGrid vertical={false} strokeDasharray="3 3" />
-                <XAxis dataKey="metric" tickLine={false} axisLine={false} />
-                <YAxis allowDecimals={false} />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <ChartLegend content={<ChartLegendContent />} />
-                <Bar dataKey="value" fill="var(--color-value)" radius={[4,4,0,0]} />
-              </BarChart>
-            </ChartContainer>
-          ) : (
-            <div className="text-sm text-muted-foreground">No chart data to display.</div>
-          )}
-        </div>
+          {/* Center: EBA Coverage */}
+          <div>
+            <h4 className="font-medium text-gray-900 mb-2 text-sm">EBA Coverage</h4>
+            <div className="space-y-2">
+              {/* Builder EBA Coverage - Compact */}
+              <div className="bg-blue-50 border border-blue-200 rounded p-3">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center space-x-1">
+                    <Building className="h-3 w-3 text-blue-600" />
+                    <span className="text-xs font-medium text-blue-800">Builders</span>
+                  </div>
+                  <span className="text-sm font-bold text-blue-800">
+                    {data.eba_builders}/{data.total_builders}
+                  </span>
+                </div>
+                <Progress value={data.eba_builder_percentage} className="h-1.5" />
+                <span className="text-xs text-blue-600">{data.eba_builder_percentage}% with EBA</span>
+              </div>
 
-        {/* EBA Coverage */}
-        <div>
-          <h4 className="font-medium text-gray-900 mb-3">EBA Coverage</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Builder EBA Coverage */}
-            <MetricCard
-              icon={Building}
-              label="Builders with EBA"
-              value={data.eba_builders}
-              total={data.total_builders}
-              percentage={data.eba_builder_percentage}
-              color="blue"
-              description="Primary contractors and builders"
-            />
+              {/* All Employer EBA Coverage - Compact */}
+              <div className="bg-green-50 border border-green-200 rounded p-3">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center space-x-1">
+                    <Users className="h-3 w-3 text-green-600" />
+                    <span className="text-xs font-medium text-green-800">All Employers</span>
+                  </div>
+                  <span className="text-sm font-bold text-green-800">
+                    {data.eba_employers}/{data.total_employers}
+                  </span>
+                </div>
+                <Progress value={data.eba_employer_percentage} className="h-1.5" />
+                <span className="text-xs text-green-600">{data.eba_employer_percentage}% with EBA</span>
+              </div>
+            </div>
+          </div>
 
-            {/* All Employer EBA Coverage */}
-            <MetricCard
-              icon={Users}
-              label="Employers with EBA"
-              value={data.eba_employers}
-              total={data.total_employers}
-              percentage={data.eba_employer_percentage}
-              color="green"
-              description="All linked employers"
-            />
+          {/* Right: Compact chart or additional info */}
+          <div className="flex flex-col justify-center">
+            {((data.avg_assigned_workers || 0) > 0 || (data.avg_members || 0) > 0) ? (
+              <div className="h-32">
+                <ChartContainer
+                  config={{
+                    value: { label: "Value", color: "hsl(var(--chart-1, 221 83% 53%))" },
+                  }}
+                  className="h-full"
+                >
+                  <BarChart data={[
+                    { metric: "Workers", value: data.avg_assigned_workers },
+                    { metric: "Members", value: data.avg_members },
+                  ]}>
+                    <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                    <XAxis 
+                      dataKey="metric" 
+                      tickLine={false} 
+                      axisLine={false}
+                      tick={{ fontSize: 10 }}
+                    />
+                    <YAxis 
+                      allowDecimals={false}
+                      tick={{ fontSize: 10 }}
+                      width={25}
+                    />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Bar dataKey="value" fill="var(--color-value)" radius={[2,2,0,0]} />
+                  </BarChart>
+                </ChartContainer>
+              </div>
+            ) : (
+              <div className="text-xs text-muted-foreground text-center py-4">No chart data available</div>
+            )}
+            
+            {data.avg_estimated_workers > 0 && (
+              <div className="mt-2 bg-gray-50 border border-gray-200 rounded p-2">
+                <div className="text-sm font-bold text-gray-800">{data.avg_estimated_workers}</div>
+                <div className="text-xs text-gray-600">Projected Workers</div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Planning Phase Notice */}
-        <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-          <div className="flex items-start space-x-3">
-            <Clock className="h-5 w-5 text-orange-600 mt-0.5" />
+        {/* Compact planning phase notice */}
+        <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+          <div className="flex items-center space-x-2">
+            <Clock className="h-4 w-4 text-orange-600" />
             <div>
-              <h4 className="font-medium text-orange-800">Pre-Construction Phase</h4>
-              <p className="text-sm text-orange-700 mt-1">
-                These projects are in planning and preparation stages. Delegate and safety metrics 
-                will be more relevant once construction begins.
-              </p>
+              <span className="text-sm font-medium text-orange-800">Pre-Construction Phase</span>
+              <span className="text-xs text-orange-700 ml-2">
+                Planning stages - delegate metrics available post-construction
+              </span>
             </div>
           </div>
         </div>
-
-        {/* Estimated vs Assigned Workers */}
-        {data.avg_estimated_workers > 0 && (
-          <div>
-            <h4 className="font-medium text-gray-900 mb-3">Workforce Planning</h4>
-            <MetricCard
-              icon={Users}
-              label="Avg Estimated Workers"
-              value={data.avg_estimated_workers}
-              color="blue"
-              description="Projected workforce per project"
-            />
-          </div>
-        )}
       </CardContent>
     </Card>
   );

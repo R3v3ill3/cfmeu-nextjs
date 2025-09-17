@@ -100,43 +100,8 @@ export default function DataUploadTab() {
   const availableTypes = getAvailableImportTypes()
   const availableOptions = importOptions.filter(option => availableTypes.includes(option.type))
 
-  const onFileUploaded = (parsed: ParsedCSV) => {
-    setCsv(parsed)
-    setStep("map")
-  }
-
-  const onBciDataParsed = (data: any[]) => {
-    setBciData(data)
-    setStep("import")
-  }
-
-  const onMappingComplete = (table: string, mappings: any[]) => {
-    if (!csv) return
-    // Simple projection using mapped columns
-    const output = csv.rows.map((row) => {
-      const out: Record<string, any> = {}
-      mappings.forEach((m: any) => {
-        if (m.action !== 'skip' && m.dbColumn) {
-          out[m.dbColumn] = row[m.csvColumn]
-        }
-      })
-      return out
-    })
-    setMappedRows(output)
-    setStep("import")
-  }
-
   const reset = () => {
     setStep("choose")
-    setCsv(null)
-    setMappedRows([])
-    setBciData([])
-  }
-
-  const startImport = (type: ImportType) => {
-    setImportType(type)
-    // All main categories go straight to their interface
-    setStep("import")
   }
 
   // Don't render anything if user has no upload access

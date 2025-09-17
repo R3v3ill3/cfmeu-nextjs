@@ -95,103 +95,122 @@ export function ProjectMetricsSection({ data, isLoading }: ProjectMetricsSection
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="space-y-3">
-          <Table variant="desktop">
-            <TableHeader variant="desktop">
-              <TableRow variant="desktop">
-                <TableHead variant="desktop">Stage</TableHead>
-                <TableHead variant="desktop">Active</TableHead>
-                <TableHead variant="desktop">Potential</TableHead>
-                <TableHead variant="desktop">Excluded</TableHead>
-                <TableHead variant="desktop">Total</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody variant="desktop">
-              {filteredStages.map((s) => {
-                const a = getCount('active', s.key)
-                const p = getCount('potential', s.key)
-                const e = getCount('excluded', s.key)
-                const total = a + p + e
-                return (
-                  <TableRow key={s.key} variant="desktop-hover">
-                    <TableCell variant="desktop" className="font-medium">{s.label}</TableCell>
-                    <TableCell variant="desktop">
-                      <button
-                        className="text-blue-700 hover:underline"
-                        onClick={() => navigateToProjects('active', s.key)}
-                      >
-                        {a}
-                      </button>
-                    </TableCell>
-                    <TableCell variant="desktop">
-                      <button
-                        className="text-blue-700 hover:underline"
-                        onClick={() => navigateToProjects('potential', s.key)}
-                      >
-                        {p}
-                      </button>
-                    </TableCell>
-                    <TableCell variant="desktop">
-                      <button
-                        className="text-blue-700 hover:underline"
-                        onClick={() => navigateToProjects('excluded', s.key)}
-                      >
-                        {e}
-                      </button>
-                    </TableCell>
-                    <TableCell variant="desktop">
-                      <button
-                        className="text-gray-900 hover:underline"
-                        onClick={() => navigateToProjects(undefined, s.key)}
-                      >
-                        {total}
-                      </button>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-            {filteredStages.length === 0 && (
-              <TableCaption variant="desktop">No data to display yet.</TableCaption>
-            )}
-          </Table>
-        </div>
-
-        <div className="pt-2">
-          {filteredChartData.length > 0 ? (
-            <ChartContainer
-              config={{
-                active: { label: "Active", color: "hsl(var(--chart-1, 221 83% 53%))" },
-                potential: { label: "Potential", color: "hsl(var(--chart-2, 39 89% 49%))" },
-                excluded: { label: "Excluded", color: "hsl(var(--chart-3, 215 16% 47%))" },
-              }}
+      <CardContent className="space-y-4">
+        {/* Compact horizontal layout */}
+        <div className="grid lg:grid-cols-2 gap-4">
+          {/* Left side: Data table */}
+          <div className="space-y-3">
+            <Table variant="desktop">
+              <TableHeader variant="desktop">
+                <TableRow variant="desktop">
+                  <TableHead variant="desktop" className="py-2">Stage</TableHead>
+                  <TableHead variant="desktop" className="py-2">Active</TableHead>
+                  <TableHead variant="desktop" className="py-2">Potential</TableHead>
+                  <TableHead variant="desktop" className="py-2">Excluded</TableHead>
+                  <TableHead variant="desktop" className="py-2">Total</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody variant="desktop">
+                {filteredStages.map((s) => {
+                  const a = getCount('active', s.key)
+                  const p = getCount('potential', s.key)
+                  const e = getCount('excluded', s.key)
+                  const total = a + p + e
+                  return (
+                    <TableRow key={s.key} variant="desktop-hover">
+                      <TableCell variant="desktop" className="font-medium py-2">{s.label}</TableCell>
+                      <TableCell variant="desktop" className="py-2">
+                        <button
+                          className="text-blue-700 hover:underline"
+                          onClick={() => navigateToProjects('active', s.key)}
+                        >
+                          {a}
+                        </button>
+                      </TableCell>
+                      <TableCell variant="desktop" className="py-2">
+                        <button
+                          className="text-blue-700 hover:underline"
+                          onClick={() => navigateToProjects('potential', s.key)}
+                        >
+                          {p}
+                        </button>
+                      </TableCell>
+                      <TableCell variant="desktop" className="py-2">
+                        <button
+                          className="text-blue-700 hover:underline"
+                          onClick={() => navigateToProjects('excluded', s.key)}
+                        >
+                          {e}
+                        </button>
+                      </TableCell>
+                      <TableCell variant="desktop" className="py-2">
+                        <button
+                          className="text-gray-900 hover:underline"
+                          onClick={() => navigateToProjects(undefined, s.key)}
+                        >
+                          {total}
+                        </button>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+              {filteredStages.length === 0 && (
+                <TableCaption variant="desktop">No data to display yet.</TableCaption>
+              )}
+            </Table>
+            
+            <Button 
+              variant="outline" 
+              size="sm"
+              className="w-full"
+              onClick={() => navigateToProjects()}
             >
-              <BarChart data={filteredChartData}>
-                <CartesianGrid vertical={false} strokeDasharray="3 3" />
-                <XAxis dataKey="stage" tickLine={false} axisLine={false} />
-                <YAxis allowDecimals={false} />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <ChartLegend content={<ChartLegendContent />} />
-                <Bar dataKey="active" fill="var(--color-active)" radius={[4,4,0,0]} />
-                <Bar dataKey="potential" fill="var(--color-potential)" radius={[4,4,0,0]} />
-                <Bar dataKey="excluded" fill="var(--color-excluded)" radius={[4,4,0,0]} />
-              </BarChart>
-            </ChartContainer>
-          ) : (
-            <div className="text-sm text-muted-foreground px-2">No chart data to display.</div>
-          )}
-        </div>
+              <FolderOpen className="h-4 w-4 mr-2" />
+              View All Projects
+            </Button>
+          </div>
 
-        <div className="pt-2">
-          <Button 
-            variant="outline" 
-            className="w-full"
-            onClick={() => navigateToProjects()}
-          >
-            <FolderOpen className="h-4 w-4 mr-2" />
-            View All Projects
-          </Button>
+          {/* Right side: Compact chart */}
+          <div className="flex flex-col justify-center">
+            {filteredChartData.length > 0 ? (
+              <div className="h-48">
+                <ChartContainer
+                  config={{
+                    active: { label: "Active", color: "hsl(var(--chart-1, 221 83% 53%))" },
+                    potential: { label: "Potential", color: "hsl(var(--chart-2, 39 89% 49%))" },
+                    excluded: { label: "Excluded", color: "hsl(var(--chart-3, 215 16% 47%))" },
+                  }}
+                  className="h-full"
+                >
+                  <BarChart data={filteredChartData}>
+                    <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                    <XAxis 
+                      dataKey="stage" 
+                      tickLine={false} 
+                      axisLine={false}
+                      tick={{ fontSize: 12 }}
+                    />
+                    <YAxis 
+                      allowDecimals={false} 
+                      tick={{ fontSize: 12 }}
+                      width={30}
+                    />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <ChartLegend 
+                      content={<ChartLegendContent />}
+                      wrapperStyle={{ fontSize: '12px' }}
+                    />
+                    <Bar dataKey="active" fill="var(--color-active)" radius={[2,2,0,0]} />
+                    <Bar dataKey="potential" fill="var(--color-potential)" radius={[2,2,0,0]} />
+                    <Bar dataKey="excluded" fill="var(--color-excluded)" radius={[2,2,0,0]} />
+                  </BarChart>
+                </ChartContainer>
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground text-center py-8">No chart data to display.</div>
+            )}
+          </div>
         </div>
       </CardContent>
     </Card>

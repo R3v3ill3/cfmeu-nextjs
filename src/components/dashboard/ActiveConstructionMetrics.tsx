@@ -187,67 +187,6 @@ export function ActiveConstructionMetricsComponent({ data, isLoading }: ActiveCo
         </CardContent>
       </Card>
 
-      {/* EBA Coverage */}
-      <Card className="lg:bg-white lg:border-gray-300 lg:shadow-md">
-        <CardHeader>
-          <div className="flex items-center space-x-2">
-            <FileText className="h-5 w-5 text-blue-600" />
-            <div>
-              <CardTitle>EBA Coverage</CardTitle>
-              <CardDescription>Enterprise Bargaining Agreement coverage across employers</CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="space-y-3">
-              <h4 className="font-medium text-gray-900">Builders on Active Construction</h4>
-              {ouMetrics ? (
-                <MultiSeriesGauge
-                  series={[
-                    { label: "Known builders", value: ouMetrics.knownBuilderCount, max: Math.max(ouMetrics.totalActiveProjects, 1), color: "hsl(142 71% 45%)" },
-                    { label: "Builders with EBA", value: ouMetrics.ebaProjectsCount, max: Math.max(ouMetrics.totalActiveProjects, 1), color: "hsl(221 83% 53%)" },
-                  ]}
-                  height={220}
-                />
-              ) : (
-                <div className="h-[220px] bg-gray-50 border border-gray-200 rounded" />
-              )}
-            </div>
-
-            <div className="space-y-3">
-              <h4 className="font-medium text-gray-900">Key Contractor Coverage</h4>
-              {ouMetrics ? (
-                <MultiSeriesGauge
-                  series={[
-                    { label: "Known key contractors", value: ouMetrics.mappedKeyContractors, max: Math.max(ouMetrics.totalKeyContractorSlots, 1), color: "hsl(142 71% 45%)" },
-                    { label: "Key contractors with EBA", value: ouMetrics.keyContractorsWithEba, max: Math.max(ouMetrics.totalKeyContractorSlots, 1), color: "hsl(221 83% 53%)" },
-                  ]}
-                  height={220}
-                />
-              ) : (
-                <div className="h-[220px] bg-gray-50 border border-gray-200 rounded" />
-              )}
-            </div>
-          </div>
-          {/* Additional: Key contractors on EBA builder projects */}
-          <div className="mt-6">
-            <h4 className="font-medium text-gray-900 mb-3">Key Contractors on EBA Builder Projects</h4>
-            {ouMetrics && ouMetrics.totalKeyContractorsOnEbaBuilderProjects > 0 ? (
-              <MultiSeriesGauge
-                series={[
-                  { label: "Known key contractors (EBA builder)", value: ouMetrics.totalKeyContractorsOnEbaBuilderProjects, max: Math.max(ouMetrics.totalKeyContractorsOnEbaBuilderProjects, 1), color: "hsl(142 71% 45%)" },
-                  { label: "Key contractors with EBA (EBA builder)", value: ouMetrics.keyContractorsOnEbaBuilderProjects, max: Math.max(ouMetrics.totalKeyContractorsOnEbaBuilderProjects, 1), color: "hsl(221 83% 53%)" },
-                ]}
-                height={200}
-              />
-            ) : (
-              <div className="text-sm text-muted-foreground">No projects with EBA builders yet.</div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Core CFMEU Trades (Key Contractors) */}
       <Card className="lg:bg-white lg:border-gray-300 lg:shadow-md">
         <CardHeader>
@@ -259,58 +198,78 @@ export function ActiveConstructionMetricsComponent({ data, isLoading }: ActiveCo
             </div>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {/* Grouped bar chart per trade */}
-            {tradeMetrics && tradeMetrics.trades.length > 0 ? (
-              <ChartContainer
-                config={{
-                  projects: { label: 'Total projects', color: 'hsl(215 16% 47%)' },
-                  known: { label: 'Known employers', color: 'hsl(142 71% 45%)' },
-                  eba: { label: 'EBA employers', color: 'hsl(221 83% 53%)' },
-                }}
-              >
-                <BarChart data={tradeMetrics.trades.map(t => ({
-                  trade: t.label,
-                  projects: t.totalProjects,
-                  known: t.knownEmployers,
-                  eba: t.ebaEmployers,
-                }))}>
-                  <CartesianGrid vertical={false} strokeDasharray="3 3" />
-                  <XAxis dataKey="trade" tickLine={false} axisLine={false} />
-                  <YAxis allowDecimals={false} />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <ChartLegend content={<ChartLegendContent />} />
-                  <Bar dataKey="projects" fill="var(--color-projects)" radius={[4,4,0,0]} />
-                  <Bar dataKey="known" fill="var(--color-known)" radius={[4,4,0,0]} />
-                  <Bar dataKey="eba" fill="var(--color-eba)" radius={[4,4,0,0]} />
-                </BarChart>
-              </ChartContainer>
-            ) : (
-              <div className="text-sm text-muted-foreground">No trade metrics available for current filters.</div>
-            )}
-
-            {/* Summary table */}
-            <Table variant="desktop">
-              <TableHeader variant="desktop">
-                <TableRow variant="desktop">
-                  <TableHead variant="desktop">Trade</TableHead>
-                  <TableHead variant="desktop">Total projects</TableHead>
-                  <TableHead variant="desktop">Known employers</TableHead>
-                  <TableHead variant="desktop">EBA employers</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody variant="desktop">
-                {(tradeMetrics?.trades || []).map(t => (
-                  <TableRow key={t.code} variant="desktop">
-                    <TableCell variant="desktop" className="font-medium">{t.label}</TableCell>
-                    <TableCell variant="desktop">{t.totalProjects}</TableCell>
-                    <TableCell variant="desktop">{t.knownEmployers}</TableCell>
-                    <TableCell variant="desktop">{t.ebaEmployers}</TableCell>
+        <CardContent className="space-y-4">
+          {/* Compact horizontal layout - similar to ProjectMetricsSection */}
+          <div className="grid lg:grid-cols-2 gap-4">
+            {/* Left side: Data table */}
+            <div className="space-y-3">
+              <Table variant="desktop">
+                <TableHeader variant="desktop">
+                  <TableRow variant="desktop">
+                    <TableHead variant="desktop" className="py-2">Trade</TableHead>
+                    <TableHead variant="desktop" className="py-2">Projects</TableHead>
+                    <TableHead variant="desktop" className="py-2">Known</TableHead>
+                    <TableHead variant="desktop" className="py-2">EBA</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody variant="desktop">
+                  {(tradeMetrics?.trades || []).map(t => (
+                    <TableRow key={t.code} variant="desktop-hover">
+                      <TableCell variant="desktop" className="font-medium py-2">{t.label}</TableCell>
+                      <TableCell variant="desktop" className="py-2">{t.totalProjects}</TableCell>
+                      <TableCell variant="desktop" className="py-2">{t.knownEmployers}</TableCell>
+                      <TableCell variant="desktop" className="py-2">{t.ebaEmployers}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Right side: Compact chart */}
+            <div className="flex flex-col justify-center">
+              {tradeMetrics && tradeMetrics.trades.length > 0 ? (
+                <div className="h-48">
+                  <ChartContainer
+                    config={{
+                      projects: { label: 'Projects', color: 'hsl(215 16% 47%)' },
+                      known: { label: 'Known', color: 'hsl(142 71% 45%)' },
+                      eba: { label: 'EBA', color: 'hsl(221 83% 53%)' },
+                    }}
+                    className="h-full"
+                  >
+                    <BarChart data={tradeMetrics.trades.map(t => ({
+                      trade: t.label,
+                      projects: t.totalProjects,
+                      known: t.knownEmployers,
+                      eba: t.ebaEmployers,
+                    }))}>
+                      <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                      <XAxis 
+                        dataKey="trade" 
+                        tickLine={false} 
+                        axisLine={false}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis 
+                        allowDecimals={false}
+                        tick={{ fontSize: 12 }}
+                        width={30}
+                      />
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                      <ChartLegend 
+                        content={<ChartLegendContent />}
+                        wrapperStyle={{ fontSize: '12px' }}
+                      />
+                      <Bar dataKey="projects" fill="var(--color-projects)" radius={[2,2,0,0]} />
+                      <Bar dataKey="known" fill="var(--color-known)" radius={[2,2,0,0]} />
+                      <Bar dataKey="eba" fill="var(--color-eba)" radius={[2,2,0,0]} />
+                    </BarChart>
+                  </ChartContainer>
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground text-center py-8">No trade metrics available for current filters.</div>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>

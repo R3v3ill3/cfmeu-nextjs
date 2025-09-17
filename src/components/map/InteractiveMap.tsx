@@ -11,6 +11,7 @@ import Link from "next/link"
 import dynamic from "next/dynamic"
 import { usePatchOrganiserLabels } from "@/hooks/usePatchOrganiserLabels"
 import { getProjectColor } from "@/utils/projectColors"
+import { useNavigationLoading } from "@/hooks/useNavigationLoading"
 
 interface InteractiveMapProps {
   showJobSites: boolean
@@ -141,6 +142,7 @@ export default function InteractiveMap({
   labelMode = 'always',
   autoFocusPatches = false
 }: InteractiveMapProps) {
+  const { startNavigation } = useNavigationLoading()
   const [map, setMap] = useState<google.maps.Map | null>(null)
   const [selectedPatch, setSelectedPatch] = useState<PatchData | null>(null)
   const [selectedJobSite, setSelectedJobSite] = useState<JobSiteData | null>(null)
