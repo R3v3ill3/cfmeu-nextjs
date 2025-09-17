@@ -1,56 +1,55 @@
 "use client"
 export const dynamic = 'force-dynamic'
 
-import { useMemo, useState, useEffect } from "react"
+import { useState, useEffect } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { useSearchParams, usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { useProjectsServerSideCompatible } from "@/hooks/useProjectsServerSide"
-import { ProjectCard, ProjectCardData } from "./ProjectCard"
+import { useEmployersServerSideCompatible } from "@/hooks/useEmployersServerSide"
+import { EmployerCard, EmployerCardData } from "./EmployerCard"
+import { EmployerDetailModal } from "./EmployerDetailModal"
+import { getEbaCategory } from "./ebaHelpers"
 
-// State persistence key
-const PROJECTS_STATE_KEY = 'projects-page-state-mobile'
+const EMPLOYERS_STATE_KEY = 'employers-page-state-mobile'
 
-// Save state to sessionStorage
-const saveProjectsState = (params: URLSearchParams) => {
+const saveEmployersState = (params: URLSearchParams) => {
   try {
     const state = {
       q: params.get('q') || '',
       page: params.get('page') || '1'
     }
-    sessionStorage.setItem(PROJECTS_STATE_KEY, JSON.stringify(state))
-  } catch (e) {
-    // Silent fail
-  }
+    sessionStorage.setItem(EMPLOYERS_STATE_KEY, JSON.stringify(state))
+  } catch (e) {}
 }
 
-// Load state from sessionStorage
-const loadProjectsState = () => {
+const loadEmployersState = () => {
   try {
-    const saved = sessionStorage.getItem(PROJECTS_STATE_KEY)
+    const saved = sessionStorage.getItem(EMPLOYERS_STATE_KEY)
     return saved ? JSON.parse(saved) : null
   } catch (e) {
     return null
   }
 }
 
-export function ProjectsMobileView() {
+export function EmployersMobileView() {
   const router = useRouter()
   const pathname = usePathname()
   const sp = useSearchParams()
   const q = (sp.get("q") || "").toLowerCase()
   const page = Math.max(1, parseInt(sp.get('page') || '1', 10) || 1)
   const PAGE_SIZE = 10
+  const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null)
+  const [isDetailOpen, setIsDetailOpen] = useState(false)
 
   useEffect(() => {
-    saveProjectsState(sp)
+    saveEmployersState(sp)
   }, [sp])
 
   useEffect(() => {
     if (sp.toString() === '') {
-      const savedState = loadProjectsState()
+      const savedState = loadEmployersState()
       if (savedState) {
         const params = new URLSearchParams()
         if (savedState.q) params.set('q', savedState.q)
@@ -76,7 +75,7 @@ export function ProjectsMobileView() {
     router.replace(qs ? `${pathname}?${qs}` : pathname)
   }
 
-  const serverSideResult = useProjectsServerSideCompatible({
+  const serverSideResult = useEmployersServerSideCompatible({
     page,
     pageSize: PAGE_SIZE,
     sort: 'name',
@@ -84,13 +83,18 @@ export function ProjectsMobileView() {
     q: q || undefined,
   })
 
-  const { projects, totalCount, hasNext, hasPrev, isLoading } = serverSideResult
+  const { data, totalCount, hasNext, hasPrev, isFetching } = serverSideResult
 
-  if (isLoading && !projects.length) {
+  const handleCardClick = (employerId: string) => {
+    setSelectedEmployerId(employerId)
+    setIsDetailOpen(true)
+  }
+
+  if (isFetching && !data.length) {
     return (
       <div className="p-4 space-y-4">
-        <h1 className="text-2xl font-semibold">Projects</h1>
-        <Input placeholder="Search projects…" disabled />
+        <h1 className="text-2xl font-semibold">Employers</h1>
+        <Input placeholder="Search employers…" disabled />
         <div className="space-y-4">
           {[...Array(5)].map((_, i) => (
             <div key={i} className="bg-gray-100 rounded-lg h-32 animate-pulse" />
@@ -100,36 +104,34 @@ export function ProjectsMobileView() {
     )
   }
   
-  const cardData = projects.map(p => ({
-    id: p.id,
-    name: p.name,
-    tier: p.tier,
-    stage_class: p.stage_class,
-    organising_universe: p.organising_universe,
-    value: p.value,
-    builderName: p.builder_name,
-    full_address: p.full_address
+  const cardData: EmployerCardData[] = data.map((emp: any) => ({
+    id: emp.id,
+    name: emp.name,
+    abn: emp.abn,
+    employer_type: emp.employer_type,
+    phone: emp.phone,
+    email: emp.email,
+    ebaCategory: getEbaCategory(emp.company_eba_records?.[0]),
   }))
 
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Projects</h1>
-        {/* Potentially add a lightweight filter/sort button here */}
+        <h1 className="text-2xl font-semibold">Employers</h1>
       </div>
 
       <Input 
-        placeholder="Search projects…" 
+        placeholder="Search employers…" 
         value={sp.get("q") || ""} 
         onChange={(e) => setParam("q", e.target.value)}
       />
 
-      {projects.length === 0 && !isLoading ? (
-        <p className="text-center text-muted-foreground pt-8">No projects found.</p>
+      {data.length === 0 && !isFetching ? (
+        <p className="text-center text-muted-foreground pt-8">No employers found.</p>
       ) : (
         <div className="space-y-4">
-          {cardData.map((p: ProjectCardData) => (
-            <ProjectCard key={p.id} project={p} />
+          {cardData.map((emp) => (
+            <EmployerCard key={emp.id} employer={emp} onClick={() => handleCardClick(emp.id)} />
           ))}
         </div>
       )}
@@ -145,6 +147,13 @@ export function ProjectsMobileView() {
           Next
         </Button>
       </div>
+
+      <EmployerDetailModal
+        employerId={selectedEmployerId}
+        isOpen={isDetailOpen}
+        onClose={() => setIsDetailOpen(false)}
+        initialTab="overview"
+      />
     </div>
   )
 }

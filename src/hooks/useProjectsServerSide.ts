@@ -24,6 +24,8 @@ export interface ProjectRecord {
   tier: string | null;
   organising_universe: string | null;
   stage_class: string | null;
+  builder_name: string | null;
+  full_address: string | null;
   project_assignments: {
     assignment_type: string;
     employer_id: string;

@@ -25,6 +25,7 @@ export interface ProjectRecord {
   tier: string | null;
   organising_universe: string | null;
   stage_class: string | null;
+  full_address: string | null;
   project_assignments: {
     assignment_type: string;
     employer_id: string;
@@ -73,7 +74,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     
     // Create server-side Supabase client
-    const supabase = await createServerSupabase();
+    want const supabase = await createServerSupabase();
     
     // Parse parameters with exact same defaults as client-side
     const page = parseInt(searchParams.get('page') || '1');
@@ -226,6 +227,7 @@ export async function GET(request: NextRequest) {
       tier: row.tier,
       organising_universe: row.organising_universe,
       stage_class: row.stage_class,
+      full_address: row.full_address,
       
       // Transform project_assignments_data back to expected format
       project_assignments: row.project_assignments_data || [],

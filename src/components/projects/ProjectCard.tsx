@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
 import { FolderOpen } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 export type ProjectCardData = {
   id: string;
@@ -14,9 +15,14 @@ export type ProjectCardData = {
   organising_universe: string | null;
   value: number | null;
   builderName: string | null;
+  full_address: string | null;
 };
 
 export function ProjectCard({ project }: { project: ProjectCardData }) {
+  const handleActionClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+  };
+
   return (
     <Link href={`/projects/${project.id}`} className="block">
       <Card className="hover:shadow-lg transition-shadow duration-200">
@@ -48,6 +54,15 @@ export function ProjectCard({ project }: { project: ProjectCardData }) {
               <Badge variant="outline">{project.organising_universe}</Badge>
             )}
           </div>
+          {project.full_address && (
+            <div className="mt-4 pt-4 border-t">
+              <Button asChild variant="outline" size="sm" className="w-full" onClick={handleActionClick}>
+                <a href={`https://maps.apple.com/?q=${encodeURIComponent(project.full_address)}`} target="_blank" rel="noopener noreferrer">
+                  Get Directions
+                </a>
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
     </Link>

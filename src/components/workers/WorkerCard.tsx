@@ -1,149 +1,76 @@
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { TableCell, TableRow } from "@/components/ui/table";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Mail, Phone } from "lucide-react";
-import { getWorkerColorCoding } from "@/utils/workerColorCoding";
+"use client"
 
-interface WorkerCardProps {
-  worker: any;
-  variant: "table" | "card";
-  onEdit?: (worker: any) => void;
-  onUpdate?: () => void;
-  onClick?: () => void;
-}
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { User, Phone, MessageSquare, Mail } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
-const getInitials = (firstName?: string | null, surname?: string | null) => {
-  return `${(firstName?.[0] || "").toUpperCase()}${(surname?.[0] || "").toUpperCase()}`;
+export type WorkerCardData = {
+  id: string;
+  first_name: string | null;
+  surname: string | null;
+  member_number: string | null;
+  union_membership_status: string | null;
+  mobile_phone: string | null;
+  email: string | null;
 };
 
-const formatUnionStatus = (status?: string | null) => {
-  if (!status) return "";
-  return status.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
-};
+export function WorkerCard({ worker, onClick }: { worker: WorkerCardData, onClick: () => void }) {
+  const fullName = [worker.first_name, worker.surname].filter(Boolean).join(' ') || "Unnamed Worker"
 
-const CurrentPosition = ({ worker }: { worker: any }) => {
-  const placement = worker?.worker_placements?.[0];
-  if (!placement) return <span className="text-muted-foreground">—</span>;
-  const jobTitle = placement?.job_title || "—";
-  const employment = placement?.employment_status || "";
+  const handleActionClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+  };
+
   return (
-    <div className="space-y-0.5">
-      <div className="text-sm font-medium">{jobTitle}</div>
-      {employment && <div className="text-xs text-muted-foreground">{employment}</div>}
-    </div>
-  );
-};
-
-export const WorkerCard = ({ worker, variant, onEdit, onUpdate, onClick }: WorkerCardProps) => {
-  const fullName = `${worker?.first_name || ""} ${worker?.surname || ""}`.trim();
-  const colorInfo = getWorkerColorCoding(worker?.union_membership_status || null);
-
-  if (variant === "table") {
-    return (
-      <TableRow className="cursor-pointer" onClick={onClick}>
-        <TableCell>
-          <div className="flex items-center gap-3">
-            <Avatar className="h-10 w-10">
-              <AvatarFallback className={`${colorInfo.badgeClass} ${colorInfo.textColor} border`} style={{ ...colorInfo.badgeStyle, ...colorInfo.borderStyle }}>
-                {getInitials(worker?.first_name, worker?.surname)}
-              </AvatarFallback>
-            </Avatar>
-            <div className="space-y-0.5">
-              <div className="font-medium leading-none">{fullName || "Unnamed"}</div>
-              {worker?.member_number && (
-                <div className="text-xs text-muted-foreground">Member #: {worker.member_number}</div>
-              )}
-              {worker?.incolink_member_id && (
-                <div className="flex items-center gap-2 mt-1">
-                  <Badge variant="secondary">Incolink</Badge>
-                  {worker?.last_incolink_payment && (
-                    <span className="text-[10px] text-muted-foreground">Last payment: {new Date(worker.last_incolink_payment).toLocaleDateString()}</span>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </TableCell>
-        <TableCell>
-          <div className="space-y-1 text-sm text-muted-foreground">
-            {worker?.email && (
-              <div className="flex items-center gap-1"><Mail className="h-3 w-3" />{worker.email}</div>
-            )}
-            {worker?.mobile_phone && (
-              <div className="flex items-center gap-1"><Phone className="h-3 w-3" />{worker.mobile_phone}</div>
+    <Card className="hover:shadow-lg transition-shadow duration-200" onClick={onClick}>
+      <CardHeader>
+        <div className="flex items-start justify-between">
+          <div className="flex-1">
+            <CardTitle className="text-lg mb-2">{fullName}</CardTitle>
+            {worker.member_number && (
+              <p className="text-sm text-muted-foreground">Member #: {worker.member_number}</p>
             )}
           </div>
-        </TableCell>
-        <TableCell>
-          <Badge className={`${colorInfo.badgeClass} ${colorInfo.textColor} border`} style={{ ...colorInfo.badgeStyle, ...colorInfo.borderStyle }}>
-            {formatUnionStatus(worker?.union_membership_status)}
-          </Badge>
-        </TableCell>
-        <TableCell>
-          <CurrentPosition worker={worker} />
-        </TableCell>
-        <TableCell>
-          {onEdit && (
-            <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); onEdit(worker); }}>
-              Edit
-            </Button>
-          )}
-        </TableCell>
-      </TableRow>
-    );
-  }
-
-  // Card variant
-  return (
-    <div className="rounded-lg border bg-card p-4" onClick={onClick}>
-      <div className="flex items-start gap-3">
-        <Avatar className="h-12 w-12">
-          <AvatarFallback className={`${colorInfo.badgeClass} ${colorInfo.textColor} border`} style={{ ...colorInfo.badgeStyle, ...colorInfo.borderStyle }}>
-            {getInitials(worker?.first_name, worker?.surname)}
-          </AvatarFallback>
-        </Avatar>
-        <div className="flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <div className="font-medium">{fullName || "Unnamed"}</div>
-              {worker?.member_number && (
-                <div className="text-xs text-muted-foreground">Member #: {worker.member_number}</div>
-              )}
-            </div>
-            <Badge className={`${colorInfo.badgeClass} ${colorInfo.textColor} border`} style={{ ...colorInfo.badgeStyle, ...colorInfo.borderStyle }}>
-              {formatUnionStatus(worker?.union_membership_status)}
-            </Badge>
-          </div>
-          {worker?.incolink_member_id && (
-            <div className="mt-1 flex items-center gap-2">
-              <Badge variant="secondary">Incolink</Badge>
-              {worker?.last_incolink_payment && (
-                <span className="text-[10px] text-muted-foreground">Last payment: {new Date(worker.last_incolink_payment).toLocaleDateString()}</span>
-              )}
-            </div>
-          )}
-          <div className="mt-2 text-sm text-muted-foreground space-y-1">
-            {worker?.email && (
-              <div className="flex items-center gap-1"><Mail className="h-3 w-3" />{worker.email}</div>
-            )}
-            {worker?.mobile_phone && (
-              <div className="flex items-center gap-1"><Phone className="h-3 w-3" />{worker.mobile_phone}</div>
-            )}
-          </div>
-          <div className="mt-3">
-            <CurrentPosition worker={worker} />
-          </div>
-          {onEdit && (
-            <div className="mt-3">
-              <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); onEdit(worker); }}>
-                Edit
-              </Button>
-            </div>
-          )}
+          <User className="h-5 w-5 text-gray-400" />
         </div>
-      </div>
-    </div>
-  );
-};
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {worker.union_membership_status && (
+            <Badge 
+              variant={worker.union_membership_status === 'member' ? 'default' : 'secondary'}
+              className="capitalize"
+            >
+              {worker.union_membership_status.replace(/_/g, ' ')}
+            </Badge>
+          )}
+          <div className="flex items-center gap-2">
+            {worker.mobile_phone && (
+              <>
+                <Button asChild variant="outline" size="icon" onClick={handleActionClick}>
+                  <a href={`tel:${worker.mobile_phone}`}>
+                    <Phone className="h-4 w-4" />
+                  </a>
+                </Button>
+                <Button asChild variant="outline" size="icon" onClick={handleActionClick}>
+                  <a href={`sms:${worker.mobile_phone}`}>
+                    <MessageSquare className="h-4 w-4" />
+                  </a>
+                </Button>
+              </>
+            )}
+            {worker.email && (
+              <Button asChild variant="outline" size="icon" onClick={handleActionClick}>
+                <a href={`mailto:${worker.email}`}>
+                  <Mail className="h-4 w-4" />
+                </a>
+              </Button>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
 
