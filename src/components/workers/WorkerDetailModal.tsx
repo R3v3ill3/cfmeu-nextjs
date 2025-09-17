@@ -216,10 +216,10 @@ export const WorkerDetailModal = ({ workerId, isOpen, onClose, onUpdate }: Worke
             <WorkerUnionRolesTab workerId={worker.id} onUpdate={handleWorkerUpdate} />
           </TabsContent>
           <TabsContent value="activity" className="p-2">
-            <WorkerActivitiesTab workerId={worker.id} />
+            <WorkerActivitiesTab workerId={worker.id} onUpdate={handleWorkerUpdate} />
           </TabsContent>
           <TabsContent value="ratings" className="p-2">
-            <WorkerRatingsTab workerId={worker.id} />
+            <WorkerRatingsTab workerId={worker.id} onUpdate={handleWorkerUpdate} />
           </TabsContent>
         </Tabs>
       </DialogContent>

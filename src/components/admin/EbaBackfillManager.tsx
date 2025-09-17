@@ -58,8 +58,9 @@ interface EmployerWithoutEba {
   created_at: string;
   project_assignments?: Array<{
     assignment_type: string;
-    contractor_role_types?: { code: string };
-    trade_types?: { code: string };
+    contractor_role_types?: { code: string }[];
+    trade_types?: { code: string }[];
+    projects?: { id: string; name: string }[];
   }>;
   project_count?: number;
   is_builder?: boolean;
@@ -188,26 +189,36 @@ export function EbaBackfillManager() {
         
         // Determine if builder (has builder role or builder contractor role)
         const isBuilder = empAssignments.some((a: any) => 
-          a.assignment_type === 'contractor_role' && 
-          (a.contractor_role_types?.code === 'builder' || 
-           a.contractor_role_types?.code === 'building_contractor' ||
-           a.contractor_role_types?.code === 'construction_manager' ||
-           a.contractor_role_types?.code === 'managing_contractor')
+          a.assignment_type === 'contractor_role' &&
+          (Array.isArray(a.contractor_role_types) ? a.contractor_role_types : [])
+            .some((rt: any) => 
+              rt?.code === 'builder' ||
+              rt?.code === 'building_contractor' ||
+              rt?.code === 'construction_manager' ||
+              rt?.code === 'managing_contractor'
+            )
         );
 
         // Determine if key contractor (has key roles or key trades)
         const hasKeyRole = empAssignments.some((a: any) => 
-          a.assignment_type === 'contractor_role' && 
-          KEY_CONTRACTOR_ROLES.has(a.contractor_role_types?.code)
+          a.assignment_type === 'contractor_role' &&
+          (Array.isArray(a.contractor_role_types) ? a.contractor_role_types : [])
+            .some((rt: any) => rt?.code && KEY_CONTRACTOR_ROLES.has(rt.code))
         );
         const hasKeyTrade = empAssignments.some((a: any) => 
-          a.assignment_type === 'trade_work' && 
-          KEY_CONTRACTOR_TRADES.has(a.trade_types?.code)
+          a.assignment_type === 'trade_work' &&
+          (Array.isArray(a.trade_types) ? a.trade_types : [])
+            .some((tt: any) => tt?.code && KEY_CONTRACTOR_TRADES.has(tt.code))
         );
         const isKeyContractor = hasKeyRole || hasKeyTrade;
 
         // Get unique project count
-        const uniqueProjects = new Set(empAssignments.map((a: any) => a.projects?.id).filter(Boolean));
+        const uniqueProjects = new Set(
+          empAssignments
+            .flatMap((a: any) => (Array.isArray(a.projects) ? a.projects : []))
+            .map((p: any) => p?.id)
+            .filter(Boolean)
+        );
 
         return {
           id: emp.id,
