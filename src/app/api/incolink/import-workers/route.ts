@@ -101,7 +101,7 @@ async function fetchMembersFromIncolink(incolinkNumber: string, invoiceNumber?: 
       try {
         const rows = await page.$$eval('table tbody tr', (trs: any[]) =>
           trs.map((tr) => {
-            const tds = Array.from(tr.querySelectorAll('td'))
+            const tds = Array.from(tr.querySelectorAll('td')) as HTMLTableCellElement[]
             const text = tds.map((td) => (td.textContent || '').trim())
             const link = tr.querySelector('a')
             return { text, linkText: link ? (link.textContent || '').trim() : null }
