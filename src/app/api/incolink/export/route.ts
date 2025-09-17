@@ -58,7 +58,7 @@ async function clickByTextAnyFrame(page: any, text: string, timeoutMs = 15000) {
   while (Date.now() < deadline) {
     const frames = page.frames()
     for (const frame of frames) {
-      const handle = await frame.evaluateHandle((needle) => {
+      const handle = await frame.evaluateHandle((needle: string) => {
         const elements = Array.from(document.querySelectorAll('button, a, [role="button"]'))
         for (let i = 0; i < elements.length; i++) {
           const el = elements[i] as HTMLElement
