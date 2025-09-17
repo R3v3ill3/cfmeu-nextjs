@@ -136,9 +136,6 @@ export const WorkersList = ({ workers, loading, onWorkerUpdate }: WorkersListPro
                   <WorkerCard
                     key={worker.id}
                     worker={worker}
-                    variant="table"
-                    onEdit={setEditingWorker}
-                    onUpdate={onWorkerUpdate}
                     onClick={() => handleWorkerClick(worker.id)}
                   />
                 ))}
@@ -150,14 +147,11 @@ export const WorkersList = ({ workers, loading, onWorkerUpdate }: WorkersListPro
         {/* Mobile Card View */}
         <div className="md:hidden p-4 space-y-4">
           {workers.map((worker) => (
-            <WorkerCard
-              key={worker.id}
-              worker={worker}
-              variant="card"
-              onEdit={setEditingWorker}
-              onUpdate={onWorkerUpdate}
-              onClick={() => handleWorkerClick(worker.id)}
-            />
+              <WorkerCard
+                key={worker.id}
+                worker={worker}
+                onClick={() => handleWorkerClick(worker.id)}
+              />
           ))}
         </div>
       </ScrollArea>

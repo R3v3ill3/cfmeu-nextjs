@@ -226,9 +226,7 @@ export const EmployerWorkersList = ({ employerId }: EmployerWorkersListProps) =>
             <WorkerCard 
               key={worker.id} 
               worker={worker} 
-              variant="card"
               onClick={() => handleWorkerClick(worker.id)}
-              onUpdate={refetch}
             />
           ))}
         </div>
@@ -251,9 +249,7 @@ export const EmployerWorkersList = ({ employerId }: EmployerWorkersListProps) =>
             <WorkerCard 
               key={worker.id} 
               worker={worker} 
-              variant="card"
               onClick={() => handleWorkerClick(worker.id)}
-              onUpdate={refetch}
             />
           ))}
         </div>
@@ -282,9 +278,7 @@ export const EmployerWorkersList = ({ employerId }: EmployerWorkersListProps) =>
             <WorkerCard 
               key={worker.id} 
               worker={worker} 
-              variant="card"
               onClick={() => handleWorkerClick(worker.id)}
-              onUpdate={refetch}
             />
           ))}
           {(() => {

@@ -27,7 +27,8 @@ export interface WorkerColorInfo {
  */
 export function getWorkerColorCoding(
   membershipStatus: string | null,
-  roles: string[] = []
+  roles: string[] = [],
+  hasIncolinkId?: boolean
 ): WorkerColorInfo {
   // Colour definitions from brief (converted to RGB)
   // Delegate & HSR blue: CMYK 100-70-0-10 → rgb(0,69,230)
@@ -38,6 +39,10 @@ export function getWorkerColorCoding(
   const declinedYellowRgb = '255,255,222';
   // Non-union spring green: CMYK 60-0-80-0 → rgb(102,255,51)
   const springGreenRgb = '102,255,51';
+  // Incolink light blue: rgb(135,206,235) - sky blue to distinguish from union membership
+  const incolinkBlueRgb = '135,206,235';
+  // Unknown status gray: rgb(156,163,175) - neutral gray
+  const unknownGrayRgb = '156,163,175';
 
   const asFadedBg = (rgb: string, alpha: number) => `bg-[rgba(${rgb},${alpha})]`;
   const asFadedStyle = (rgb: string, alpha: number): CSSProperties => ({ backgroundColor: `rgba(${rgb},${alpha})` });

@@ -273,7 +273,7 @@ export async function POST(request: NextRequest) {
           .insert({
             first_name: firstName || '(unknown)',
             surname: surname || '(unknown)',
-            union_membership_status: 'non_member',
+            union_membership_status: 'unknown', // Incolink workers have unknown union status by default
             incolink_member_id: memberNo
           })
           .select('id')
@@ -282,7 +282,7 @@ export async function POST(request: NextRequest) {
         workerId = inserted?.id || null
         if (workerId) createdWorkers += 1
       } else {
-        // Ensure incolink_member_id filled when missing
+        // For existing workers, preserve their union status but ensure incolink_member_id is set
         if (memberNo) {
           await supabase.from('workers').update({ incolink_member_id: memberNo }).eq('id', workerId).is('incolink_member_id', null)
         }

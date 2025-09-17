@@ -80,7 +80,9 @@ export function WorkersMobileView() {
     q: q || undefined,
   })
 
-  const { data, totalCount, hasNext, hasPrev, isFetching } = serverSideResult
+  const { data, totalCount, totalPages, currentPage, isFetching } = serverSideResult
+  const hasNext = currentPage < totalPages
+  const hasPrev = currentPage > 1
 
   const handleCardClick = (workerId: string) => {
     setSelectedWorkerId(workerId)
