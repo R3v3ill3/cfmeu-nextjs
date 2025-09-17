@@ -58,7 +58,7 @@ export default function DataUploadTab() {
   const supabase = getSupabaseBrowserClient()
 
   const [step, setStep] = useState<"choose" | "import">("choose")
-  const [importType, setImportType] = useState<ImportType>("workers")
+  const [importType, setImportType] = useState<ImportType>("employers")
 
   // Get user role on component mount
   useEffect(() => {
@@ -93,11 +93,6 @@ export default function DataUploadTab() {
   
   const availableTypes = getAvailableImportTypes()
   const availableOptions = importOptions.filter(option => availableTypes.includes(option.type))
-
-  const selectedEmployer = useMemo(() => {
-    if (employerId && employerName) return { id: employerId, name: employerName }
-    return undefined
-  }, [employerId, employerName])
 
   const onFileUploaded = (parsed: ParsedCSV) => {
     setCsv(parsed)
