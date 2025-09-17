@@ -21,7 +21,7 @@ import {
   SidebarSeparator,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
-import { LogOut, Users, Building, FolderOpen, FileCheck, Shield, BarChart3, Settings, Home, Upload, MapPin } from "lucide-react"
+import { LogOut, Users, Building, FolderOpen, FileCheck, Shield, BarChart3, Settings, Home, Upload, MapPin, Crown } from "lucide-react"
 import AdminPatchSelector from "@/components/admin/AdminPatchSelector"
 import { supabase } from "@/integrations/supabase/client"
 import { desktopDesignSystem } from "@/lib/desktop-design-system"
@@ -101,9 +101,18 @@ function useVisibleNavItems(userRole: string | null): NavItem[] {
     items.push({ path: "/campaigns", label: "Campaigns", icon: BarChart3, description: "Campaign activities and tracking" })
   }
   
-  // Administration - always show for admins
-  if (userRole === "admin") {
-    items.push({ path: "/admin", label: "Administration", icon: Shield, description: "System administration and user management" })
+  // Lead Console - show for lead organisers and admins
+  if (userRole === "lead_organiser" || userRole === "admin") {
+    items.push({ path: "/lead", label: "Co-ordinator Console", icon: Crown, description: "Manage organisers and patch assignments" })
+  }
+  
+  // Administration - show for admins and lead organisers
+  if (userRole === "admin" || userRole === "lead_organiser") {
+    const label = userRole === "admin" ? "Administration" : "Management"
+    const description = userRole === "admin" 
+      ? "System administration and user management" 
+      : "Co-ordinator management and data operations"
+    items.push({ path: "/admin", label, icon: Shield, description })
   }
   
   return items

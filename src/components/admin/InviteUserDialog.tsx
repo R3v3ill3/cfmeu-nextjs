@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { Mail } from "lucide-react";
 
 interface InviteUserDialogProps {
@@ -18,7 +19,52 @@ export const InviteUserDialog = ({ open, onOpenChange, onSuccess }: InviteUserDi
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("viewer");
   const [loading, setLoading] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [inviterLeadId, setInviterLeadId] = useState<string | null>(null);
   const { toast } = useToast();
+  const { user } = useAuth();
+
+  // Get current user's role and lead organiser ID
+  useEffect(() => {
+    const checkUserRole = async () => {
+      if (!user) return;
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id, role")
+        .eq("id", user.id)
+        .single();
+      
+      if (profile) {
+        setUserRole(profile.role || null);
+        if (profile.role === "lead_organiser") {
+          setInviterLeadId(profile.id);
+        }
+      }
+    };
+    checkUserRole();
+  }, [user]);
+
+  // Get available roles based on current user's permissions
+  const getAvailableRoles = () => {
+    if (userRole === "admin") {
+      return [
+        { value: "viewer", label: "Viewer" },
+        { value: "delegate", label: "Delegate" },
+        { value: "organiser", label: "Organiser" },
+        { value: "lead_organiser", label: "Co-ordinator" },
+        { value: "admin", label: "Administrator" }
+      ];
+    } else if (userRole === "lead_organiser") {
+      return [
+        { value: "viewer", label: "Viewer" },
+        { value: "delegate", label: "Delegate" },
+        { value: "organiser", label: "Organiser" }
+      ];
+    }
+    return [{ value: "viewer", label: "Viewer" }];
+  };
+
+  const availableRoles = getAvailableRoles();
 
   const handleInvite = async () => {
     if (!email) {
@@ -69,8 +115,27 @@ export const InviteUserDialog = ({ open, onOpenChange, onSuccess }: InviteUserDi
             role,
             status: "invited",
             invited_at: new Date().toISOString(),
+            created_by: user?.id,
           } as any);
         if (insErr) throw insErr;
+      }
+
+      // If lead organiser inviting an organiser, automatically assign to their lead
+      if (userRole === "lead_organiser" && role === "organiser" && inviterLeadId) {
+        // This will be handled by a database trigger or we can add it to the user profile creation
+        // For now, we'll store the lead organiser reference in the pending user record
+        try {
+          await supabase
+            .from("pending_users")
+            .update({ 
+              notes: `Auto-assign to lead organiser: ${inviterLeadId}`,
+              created_by: inviterLeadId 
+            })
+            .eq("email", emailLower)
+            .eq("role", role);
+        } catch (err) {
+          console.warn("Failed to set lead organiser assignment note:", err);
+        }
       }
 
       toast({ title: "Success", description: `Invitation sent to ${emailLower}` });
@@ -113,11 +178,11 @@ export const InviteUserDialog = ({ open, onOpenChange, onSuccess }: InviteUserDi
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="viewer">Viewer</SelectItem>
-                <SelectItem value="organiser">Organiser</SelectItem>
-                <SelectItem value="lead_organiser">Co-ordinator</SelectItem>
-                <SelectItem value="delegate">Delegate</SelectItem>
-                <SelectItem value="admin">Administrator</SelectItem>
+                {availableRoles.map((roleOption) => (
+                  <SelectItem key={roleOption.value} value={roleOption.value}>
+                    {roleOption.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

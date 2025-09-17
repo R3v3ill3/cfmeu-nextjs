@@ -1,126 +1,64 @@
 "use client"
 
-import { useMemo, useState, useEffect } from "react"
-import { useSearchParams } from "next/navigation"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import FileUpload from "@/components/upload/FileUpload"
-import ColumnMapper from "@/components/upload/ColumnMapper"
-import WorkerImport from "@/components/upload/WorkerImport"
-import ContractorImport from "@/components/upload/ContractorImport"
-import { EbaImport } from "@/components/upload/EbaImport"
 import { Button } from "@/components/ui/button"
-import PatchImport from "@/components/upload/PatchImport"
-import { ArrowLeft, Users, Building, FileText, Map, FolderOpen, Database, UserPlus, RefreshCw, BarChart3, Link } from "lucide-react"
-import ProjectImport from "@/components/upload/ProjectImport"
-import BCICsvParser from "@/components/upload/BCICsvParser"
-import BCIProjectImport from "@/components/upload/BCIProjectImport"
-import PendingEmployersImport from "@/components/upload/PendingEmployersImport"
+import { ArrowLeft, Users, Building, FileText, FolderOpen } from "lucide-react"
 import EbaProjectSearch from "@/components/upload/EbaProjectSearch"
 import { useAuth } from "@/hooks/useAuth"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
-import { BackfillProjectCoordinates } from "@/components/admin/BackfillProjectCoordinates"
-import { EbaBackfillManager } from "@/components/admin/EbaBackfillManager"
-import { IncolinkImport } from "@/components/upload/IncolinkImport"
+import EmployersManagement from "@/components/admin/EmployersManagement"
+import ProjectsManagement from "@/components/admin/ProjectsManagement"
+import WorkersManagement from "@/components/admin/WorkersManagement"
 
-type ImportType = "workers" | "contractors" | "eba" | "patches" | "projects" | "bci-projects" | "project-backfill" | "eba-backfill" | "employers" | "incolink"
-type ParsedCSV = { headers: string[]; rows: Record<string, any>[]; filename?: string }
+type ImportType = "employers" | "projects" | "ebas" | "workers"
 
 interface ImportOption {
   type: ImportType
   title: string
   description: string
   icon: React.ComponentType<any>
-  category: "data" | "backfill"
+  category: "data"
 }
 
 const importOptions: ImportOption[] = [
   {
-    type: "workers",
-    title: "Import Workers",
-    description: "Upload worker data and membership information",
-    icon: Users,
-    category: "data"
-  },
-  {
-    type: "contractors", 
-    title: "Import Contractors",
-    description: "Upload contractor and employer information",
+    type: "employers",
+    title: "Employers",
+    description: "Manage employer records, BCI imports, duplicates, and Incolink data",
     icon: Building,
     category: "data"
   },
   {
-    type: "eba",
-    title: "Import EBA Data",
-    description: "Upload Enterprise Bargaining Agreement data or search existing projects",
-    icon: FileText,
-    category: "data"
-  },
-  {
-    type: "patches",
-    title: "Import Patches",
-    description: "Upload patch boundary and geographic data",
-    icon: Map,
-    category: "data"
-  },
-  {
-    type: "projects",
-    title: "Import Projects", 
-    description: "Upload construction project information",
+    type: "projects", 
+    title: "Projects",
+    description: "Import construction project data from various sources including BCI",
     icon: FolderOpen,
     category: "data"
   },
   {
-    type: "bci-projects",
-    title: "Import BCI Projects",
-    description: "Upload Building and Construction Industry project data",
-    icon: Database,
+    type: "ebas",
+    title: "EBAs",
+    description: "Search and manage Enterprise Bargaining Agreement data",
+    icon: FileText,
     category: "data"
   },
   {
-    type: "employers",
-    title: "Import Employers",
-    description: "Import pending employer records for processing",
-    icon: UserPlus,
+    type: "workers",
+    title: "Workers",
+    description: "Import worker and membership data including Incolink integration",
+    icon: Users,
     category: "data"
-  },
-  {
-    type: "incolink",
-    title: "Import Incolink Data",
-    description: "Upload Incolink employer data with fuzzy name matching",
-    icon: Link,
-    category: "data"
-  },
-  {
-    type: "project-backfill",
-    title: "Project Backfill",
-    description: "Backfill missing coordinates and geocoding data for projects",
-    icon: RefreshCw,
-    category: "backfill"
-  },
-  {
-    type: "eba-backfill",
-    title: "EBA Backfill",
-    description: "Search and backfill Enterprise Bargaining Agreements for employers",
-    icon: BarChart3,
-    category: "backfill"
   }
 ]
 
 export default function DataUploadTab() {
   const { user } = useAuth()
   const [userRole, setUserRole] = useState<string | null>(null)
-  const params = useSearchParams()
-  const employerId = params.get("employerId")
-  const employerName = params.get("employerName")
   const supabase = getSupabaseBrowserClient()
 
-  const [step, setStep] = useState<"choose" | "upload" | "map" | "import">("choose")
+  const [step, setStep] = useState<"choose" | "import">("choose")
   const [importType, setImportType] = useState<ImportType>("workers")
-  const [csv, setCsv] = useState<ParsedCSV | null>(null)
-  const [mappedRows, setMappedRows] = useState<Record<string, any>[]>([])
-  const [bciData, setBciData] = useState<any[]>([])
-  const [bciMode, setBciMode] = useState<'projects-and-employers' | 'projects-only' | 'employers-to-existing' | 'employers-to-existing-quick-match'>('projects-and-employers')
 
   // Get user role on component mount
   useEffect(() => {
@@ -147,7 +85,7 @@ export default function DataUploadTab() {
     if (userRole === "organiser") {
       return ["workers"]
     } else if (userRole === "lead_organiser" || userRole === "admin") {
-      return ["workers", "contractors", "eba", "patches", "projects", "bci-projects", "employers", "incolink", "project-backfill", "eba-backfill"]
+      return ["employers", "projects", "ebas", "workers"]
     }
     
     return []
@@ -196,12 +134,8 @@ export default function DataUploadTab() {
 
   const startImport = (type: ImportType) => {
     setImportType(type)
-    // Backfill types go straight to their interface, others need file upload
-    if (type === "project-backfill" || type === "eba-backfill") {
-      setStep("import")
-    } else {
-      setStep("upload")
-    }
+    // All main categories go straight to their interface
+    setStep("import")
   }
 
   // Don't render anything if user has no upload access
@@ -221,7 +155,7 @@ export default function DataUploadTab() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Data Upload</h2>
+        <h2 className="text-xl font-semibold">Data Management</h2>
         {step !== "choose" && (
           <Button variant="outline" onClick={reset}>
             <ArrowLeft className="h-4 w-4 mr-2" />
@@ -241,203 +175,44 @@ export default function DataUploadTab() {
             </div>
           )}
           
-          {/* Data Import Cards */}
-          <div>
-            <h3 className="text-lg font-medium mb-4">Data Import</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {availableOptions
-                .filter(option => option.category === "data")
-                .map((option) => {
-                  const Icon = option.icon
-                  return (
-                    <Card 
-                      key={option.type} 
-                      className="cursor-pointer transition-all hover:shadow-md hover:border-primary/50"
-                      onClick={() => startImport(option.type)}
-                    >
-                      <CardHeader className="pb-3">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 rounded-lg bg-primary/10">
-                            <Icon className="h-5 w-5 text-primary" />
-                          </div>
-                          <CardTitle className="text-base">{option.title}</CardTitle>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <CardDescription className="text-sm">
-                          {option.description}
-                        </CardDescription>
-                      </CardContent>
-                    </Card>
-                  )
-                })}
-            </div>
+          {/* Main Data Management Categories */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {availableOptions.map((option) => {
+              const Icon = option.icon
+              const isSelected = importType === option.type
+              return (
+                <Card 
+                  key={option.type} 
+                  className={`cursor-pointer transition-all hover:shadow-md ${isSelected ? 'ring-2 ring-primary shadow-md' : ''}`}
+                  onClick={() => {
+                    setImportType(option.type)
+                    setStep("import")
+                  }}
+                >
+                  <CardHeader className="pb-4">
+                    <div className="flex items-center justify-center mb-4">
+                      <div className="p-4 rounded-full bg-primary/10">
+                        <Icon className="h-8 w-8 text-primary" />
+                      </div>
+                    </div>
+                    <CardTitle className="text-lg text-center">{option.title}</CardTitle>
+                    <CardDescription className="text-sm text-center">{option.description}</CardDescription>
+                  </CardHeader>
+                </Card>
+              )
+            })}
           </div>
-
-          {/* Backfill Cards */}
-          {availableOptions.some(option => option.category === "backfill") && (
-            <div>
-              <h3 className="text-lg font-medium mb-4">Data Backfill & Maintenance</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {availableOptions
-                  .filter(option => option.category === "backfill")
-                  .map((option) => {
-                    const Icon = option.icon
-                    return (
-                      <Card 
-                        key={option.type} 
-                        className="cursor-pointer transition-all hover:shadow-md hover:border-orange-500/50"
-                        onClick={() => startImport(option.type)}
-                      >
-                        <CardHeader className="pb-3">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 rounded-lg bg-orange-100">
-                              <Icon className="h-5 w-5 text-orange-600" />
-                            </div>
-                            <CardTitle className="text-base">{option.title}</CardTitle>
-                          </div>
-                        </CardHeader>
-                        <CardContent>
-                          <CardDescription className="text-sm">
-                            {option.description}
-                          </CardDescription>
-                        </CardContent>
-                      </Card>
-                    )
-                  })}
-              </div>
-            </div>
-          )}
         </div>
       )}
 
-      {step === "upload" && (
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              {importOptions.find(opt => opt.type === importType)?.title || 'Upload Data'}
-            </CardTitle>
-            <CardDescription>
-              {importType === "eba" 
-                ? "Upload CSV files with EBA data or search for existing project employers" 
-                : `Select and upload your ${importType} CSV file to continue`
-              }
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {importType === "eba" ? (
-              <Tabs defaultValue="upload" className="w-full">
-                <TabsList>
-                  <TabsTrigger value="upload">Upload EBA CSV</TabsTrigger>
-                  <TabsTrigger value="search">Search Project Employers</TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value="upload" className="mt-4">
-                  <FileUpload onFileUploaded={onFileUploaded} />
-                </TabsContent>
-                
-                <TabsContent value="search" className="mt-4">
-                  <EbaProjectSearch />
-                </TabsContent>
-              </Tabs>
-            ) : importType === "bci-projects" ? (
-              <BCICsvParser 
-                onDataParsed={onBciDataParsed}
-                onError={(error) => console.error('BCI Parse Error:', error)}
-                onModeChange={(m) => setBciMode(m)}
-              />
-            ) : importType === "employers" ? (
-              <PendingEmployersImport />
-            ) : (
-              <FileUpload onFileUploaded={onFileUploaded} />
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {step === "map" && csv && (
-        <ColumnMapper
-          parsedCSV={csv}
-          onBack={() => setStep("choose")}
-          onMappingComplete={onMappingComplete}
-        />
-      )}
+      {/* Legacy upload and mapping steps removed - all handled in category components */}
 
       {step === "import" && (
         <div className="space-y-4">
-          {/* Backfill components render directly without cards */}
-          {importType === "project-backfill" && (
-            <BackfillProjectCoordinates />
-          )}
-          {importType === "eba-backfill" && (
-            <EbaBackfillManager />
-          )}
-          
-          {/* Regular import processes use cards */}
-          {importType !== "project-backfill" && importType !== "eba-backfill" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  {importOptions.find(opt => opt.type === importType)?.title || 'Import Data'}
-                </CardTitle>
-                <CardDescription>
-                  Review and process your {importType} data
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {importType === "workers" && csv && (
-                  <WorkerImport
-                    csvData={mappedRows.length > 0 ? mappedRows : csv.rows}
-                    selectedEmployer={selectedEmployer}
-                    onImportComplete={() => setStep("choose")}
-                    onBack={() => setStep("map")}
-                  />
-                )}
-                {importType === "contractors" && csv && (
-                  <ContractorImport
-                    csvData={mappedRows.length > 0 ? mappedRows : csv.rows}
-                    onImportComplete={() => setStep("choose")}
-                    onBack={() => setStep("map")}
-                  />
-                )}
-                {importType === "eba" && csv && (
-                  <EbaImport
-                    csvData={mappedRows.length > 0 ? mappedRows : csv.rows}
-                    onImportComplete={() => setStep("choose")}
-                    onBack={() => setStep("map")}
-                  />
-                )}
-                {importType === "patches" && csv && (
-                  <PatchImport
-                    csvData={mappedRows.length > 0 ? mappedRows : csv.rows}
-                    onImportComplete={() => setStep("choose")}
-                    onBack={() => setStep("map")}
-                  />
-                )}
-                {importType === "projects" && csv && (
-                  <ProjectImport
-                    csvData={mappedRows.length > 0 ? mappedRows : csv.rows}
-                    onImportComplete={() => setStep("choose")}
-                    onBack={() => setStep("map")}
-                  />
-                )}
-                {importType === "bci-projects" && bciData.length > 0 && (
-                  <BCIProjectImport
-                    csvData={bciData}
-                    mode={bciMode}
-                    onImportComplete={() => setStep("choose")}
-                  />
-                )}
-                {importType === "incolink" && csv && (
-                  <IncolinkImport
-                    csvData={mappedRows.length > 0 ? mappedRows : csv.rows}
-                    onImportComplete={() => setStep("choose")}
-                    onBack={() => setStep("map")}
-                  />
-                )}
-              </CardContent>
-            </Card>
-          )}
+          {importType === "employers" && <EmployersManagement />}
+          {importType === "projects" && <ProjectsManagement />}
+          {importType === "ebas" && <EbaProjectSearch />}
+          {importType === "workers" && <WorkersManagement />}
         </div>
       )}
     </div>

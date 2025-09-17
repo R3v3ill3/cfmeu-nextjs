@@ -70,11 +70,13 @@ const KEY_CONTRACTOR_TRADES = new Set([
 const KEY_CONTRACTOR_ROLES = new Set(['builder', 'project_manager']);
 
 const ROLE_FILTER_OPTIONS = [
-  { value: 'all', label: 'All Employers' },
+  { value: 'all', label: 'All Project Employers' },
   { value: 'builder', label: 'Builders' },
   { value: 'head_contractor', label: 'Head Contractors' }, 
   { value: 'project_manager', label: 'Project Managers' },
   { value: 'key_contractors', label: 'Key Contractors' },
+  { value: 'non_project', label: 'Non-Project Employers' },
+  { value: 'all_employers', label: 'All Employers (Project + Non-Project)' },
   { value: 'advanced', label: 'Advanced Filters...' },
 ];
 
@@ -104,6 +106,7 @@ export default function EbaProjectSearch() {
   const [processedEmployers, setProcessedEmployers] = useState<Set<string>>(new Set());
   const [roleFilter, setRoleFilter] = useState('all');
   const [ebaStatusFilter, setEbaStatusFilter] = useState('missing_only');
+  const [includeNonProjectEmployers, setIncludeNonProjectEmployers] = useState(false);
   
   // Advanced filters state
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -247,7 +250,40 @@ export default function EbaProjectSearch() {
     try {
       setIsLoading(true);
       
-        // Query ALL employers with project assignments (don't filter by EBA status here)
+      const shouldIncludeNonProject = roleFilter === 'non_project' || roleFilter === 'all_employers';
+      
+      if (shouldIncludeNonProject && roleFilter === 'non_project') {
+        // Load ONLY non-project employers
+        const { data: employers, error } = await supabase
+          .from('employers')
+          .select(`
+            id,
+            name,
+            enterprise_agreement_status,
+            company_eba_records!left(id, employer_id)
+          `)
+          .not('id', 'in', `(SELECT DISTINCT employer_id FROM project_assignments WHERE employer_id IS NOT NULL)`);
+        
+        if (error) throw error;
+        
+        // Transform non-project employers to match ProjectEmployer interface
+        const nonProjectEmployers: ProjectEmployer[] = (employers || []).map((emp: any) => ({
+          id: emp.id,
+          name: emp.name,
+          project_count: 0,
+          eba_status: emp.company_eba_records?.length > 0 ? 'yes' : 
+                     (emp.enterprise_agreement_status === true ? 'yes' : 
+                      emp.enterprise_agreement_status === false ? 'no' : null),
+          projects: [],
+          roles: [],
+          trades: [],
+          isKeyContractor: false
+        }));
+        
+        setProjectEmployers(nonProjectEmployers);
+        
+      } else {
+        // Original logic for project employers, with optional inclusion of non-project
         const { data: employers, error } = await supabase
           .from('employers')
           .select(`
@@ -255,7 +291,7 @@ export default function EbaProjectSearch() {
             name,
             enterprise_agreement_status,
             company_eba_records!left(id, employer_id),
-            project_assignments!inner(
+            project_assignments!${shouldIncludeNonProject && roleFilter === 'all_employers' ? 'left' : 'inner'}(
               project_id,
               assignment_type,
               projects!inner(id, name),
@@ -263,10 +299,37 @@ export default function EbaProjectSearch() {
             )
           `);
 
-      if (error) throw error;
+        if (error) throw error;
+        
+        // If including all employers, also fetch non-project employers
+        let nonProjectEmployers: any[] = [];
+        if (roleFilter === 'all_employers') {
+          const { data: nonProjectData } = await supabase
+            .from('employers')
+            .select(`
+              id,
+              name,
+              enterprise_agreement_status,
+              company_eba_records!left(id, employer_id)
+            `)
+            .not('id', 'in', `(SELECT DISTINCT employer_id FROM project_assignments WHERE employer_id IS NOT NULL)`);
+          
+          nonProjectEmployers = (nonProjectData || []).map((emp: any) => ({
+            id: emp.id,
+            name: emp.name,
+            enterprise_agreement_status: emp.enterprise_agreement_status,
+            company_eba_records: emp.company_eba_records,
+            project_assignments: []
+          }));
+        }
 
-      // Transform the data and enhance with role/trade information
-      const baseEmployers: ProjectEmployer[] = (employers || []).map((emp: any) => {
+        // Combine project and non-project employers if needed
+        const allEmployers = roleFilter === 'all_employers' 
+          ? [...(employers || []), ...nonProjectEmployers]
+          : (employers || []);
+
+        // Transform the data and enhance with role/trade information
+        const baseEmployers: ProjectEmployer[] = allEmployers.map((emp: any) => {
         // Get unique projects from assignments
         const uniqueProjects = Array.from(
           new Map(
@@ -280,15 +343,18 @@ export default function EbaProjectSearch() {
           id: project.id,
           name: project.name
         })) || [];
+        
+        // For non-project employers, set empty arrays
+        const hasProjectAssignments = emp.project_assignments && emp.project_assignments.length > 0;
 
         // Extract roles and trades from the already-fetched project_assignments data
-        const roleAssignments = emp.project_assignments?.filter((pa: any) => 
+        const roleAssignments = hasProjectAssignments ? emp.project_assignments?.filter((pa: any) => 
           pa.assignment_type === 'contractor_role' && pa.contractor_role_types
-        ) || [];
+        ) || [] : [];
         
-        const tradeAssignments = emp.project_assignments?.filter((pa: any) => 
+        const tradeAssignments = hasProjectAssignments ? emp.project_assignments?.filter((pa: any) => 
           pa.assignment_type === 'trade_work' && pa.trade_types
-        ) || [];
+        ) || [] : [];
 
         const roles = roleAssignments.map((ra: any) => ({
           roleType: ra.contractor_role_types.code as 'builder' | 'head_contractor' | 'project_manager',
@@ -391,8 +457,8 @@ export default function EbaProjectSearch() {
       }
 
       setProjectEmployers(baseEmployers);
-      console.log(`Loaded ${baseEmployers.length} project employers with unknown EBA status`);
-      
+      console.log(`Loaded ${baseEmployers.length} employers`);
+      }
     } catch (error) {
       console.error('Error loading project employers:', error);
       toast({
@@ -403,7 +469,7 @@ export default function EbaProjectSearch() {
     } finally {
       setIsLoading(false);
     }
-  }, [supabase, toast]);
+  }, [supabase, toast, roleFilter]);
 
 
   // Apply filters - combine role filter AND EBA status filter
@@ -438,6 +504,12 @@ export default function EbaProjectSearch() {
       case 'key_contractors':
         filtered = filtered.filter(emp => emp.isKeyContractor);
         break;
+      case 'non_project':
+        // This filter is already applied during data loading
+        break;
+      case 'all_employers':
+        // This filter is already applied during data loading  
+        break;
       case 'advanced':
         // Advanced filtering uses separate filter state
         if (advancedFilters.stages.size > 0 || advancedFilters.trades.size > 0 || advancedFilters.projects.size > 0) {
@@ -459,18 +531,18 @@ export default function EbaProjectSearch() {
         break;
       case 'all':
       default:
-        // No role filtering
+        // No role filtering for project employers
         break;
     }
 
     setFilteredEmployers(filtered);
   }, [projectEmployers, roleFilter, ebaStatusFilter, advancedFilters]);
 
-  // Load employers connected to projects
+  // Load employers connected to projects - reload when roleFilter changes to handle non-project employers
   useEffect(() => {
     loadProjectEmployers();
     loadEbaCoverageSummary();
-  }, [loadProjectEmployers, loadEbaCoverageSummary]);
+  }, [loadProjectEmployers, loadEbaCoverageSummary, roleFilter]);
 
   const searchEbaForEmployer = async (employer: ProjectEmployer) => {
     setSearchResults(prev => ({
@@ -756,9 +828,9 @@ export default function EbaProjectSearch() {
   return (
     <div className="space-y-6">
       <div className="text-center">
-        <h2 className="text-xl font-semibold mb-2">Enhanced EBA Search for Project Employers</h2>
+        <h2 className="text-xl font-semibold mb-2">Enhanced EBA Search for Employers</h2>
         <p className="text-gray-600">
-          Search for Enterprise Bargaining Agreements with role and trade filtering
+          Search for Enterprise Bargaining Agreements among project and non-project employers
         </p>
       </div>
 
@@ -1042,7 +1114,7 @@ export default function EbaProjectSearch() {
                               )}
                             </div>
                             <p className="text-sm text-gray-600">
-                              Connected to {employer.project_count} project{employer.project_count !== 1 ? 's' : ''}
+                              {employer.project_count > 0 ? `Connected to ${employer.project_count} project${employer.project_count !== 1 ? 's' : ''}` : 'No project assignments'}
                             </p>
                           </div>
                         </div>
