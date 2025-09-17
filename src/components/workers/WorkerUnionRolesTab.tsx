@@ -417,6 +417,7 @@ export const WorkerUnionRolesTab = ({ workerId, onUpdate }: WorkerUnionRolesTabP
                   <SelectItem value="non_member">Non-member</SelectItem>
                   <SelectItem value="potential">Potential</SelectItem>
                   <SelectItem value="declined">Declined</SelectItem>
+                  <SelectItem value="unknown">Unknown</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -73,7 +73,7 @@ export default function LeadConsole() {
           .eq('lead_organiser_id', me.id)
           .is('effective_to', null)
         
-        const leadPatchIds = leadPatches?.map(lp => lp.patch_id) || []
+        const leadPatchIds = leadPatches?.map((lp: { patch_id: string }) => lp.patch_id) || []
         return (data || []).filter((link: any) => leadPatchIds.includes(link.patch_id))
       }
       
@@ -87,8 +87,8 @@ export default function LeadConsole() {
     enabled: !!me && me.role === 'lead_organiser',
     queryFn: async () => {
       const { data, error } = await supabase.rpc('get_patch_summaries_for_user', {
-        p_user_id: me.id,
-        p_user_role: me.role,
+        p_user_id: me!.id,
+        p_user_role: me!.role,
         p_lead_organiser_id: null,
         p_filters: null
       })

@@ -34,6 +34,7 @@ type WorkerRecord = {
   member_number: string | null;
   union_membership_status: string;
   organiser_id: string | null;
+  incolink_member_id: string | null;
 }
 
 type Employer = { id: string; name: string }
@@ -72,7 +73,8 @@ export function WorkerAssignmentTabs({ selectedWorkers, onWorkersChange }: Worke
           surname,
           member_number,
           union_membership_status,
-          organiser_id
+          organiser_id,
+          incolink_member_id
         `)
         .order("first_name");
       
@@ -378,10 +380,10 @@ export function WorkerAssignmentTabs({ selectedWorkers, onWorkersChange }: Worke
                             </Badge>
                           )}
                           <Badge 
-                            className={`text-xs ${getWorkerColorCoding(worker.union_membership_status || null).badgeClass} ${getWorkerColorCoding(worker.union_membership_status || null).textColor} border`}
-                            style={{ ...getWorkerColorCoding(worker.union_membership_status || null).badgeStyle, ...getWorkerColorCoding(worker.union_membership_status || null).borderStyle }}
+                            className={`text-xs ${getWorkerColorCoding(worker.union_membership_status || null, [], !!worker.incolink_member_id).badgeClass} ${getWorkerColorCoding(worker.union_membership_status || null, [], !!worker.incolink_member_id).textColor} border`}
+                            style={{ ...getWorkerColorCoding(worker.union_membership_status || null, [], !!worker.incolink_member_id).badgeStyle, ...getWorkerColorCoding(worker.union_membership_status || null, [], !!worker.incolink_member_id).borderStyle }}
                           >
-                            {worker.union_membership_status}
+                            {(worker.union_membership_status === "unknown" || !worker.union_membership_status) && worker.incolink_member_id ? "incolink" : worker.union_membership_status}
                           </Badge>
                         </div>
                       </div>

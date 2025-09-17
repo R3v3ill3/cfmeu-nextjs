@@ -32,6 +32,7 @@ interface WorkerLite {
   first_name: string | null;
   surname: string | null;
   union_membership_status: string | null;
+  incolink_member_id: string | null;
 }
 
 interface WorkerRoleLite {
@@ -93,7 +94,7 @@ export const EmployerWorkerChart = ({
       // 2) Basic worker details
       const { data: wRows, error: wErr } = await supabase
         .from("workers")
-        .select("id, first_name, surname, union_membership_status")
+        .select("id, first_name, surname, union_membership_status, incolink_member_id")
         .in("id", workerIds);
       if (wErr) throw wErr;
 
@@ -269,11 +270,12 @@ export const EmployerWorkerChart = ({
   }, [data]);
 
   const formatName = (w: WorkerLite) => `${w.first_name ?? ""} ${w.surname ?? ""}`.trim() || "Unnamed";
-  const membershipBadge = (status: string | null) => {
-    const info = getWorkerColorCoding(status || null);
+  const membershipBadge = (status: string | null, hasIncolinkId?: boolean) => {
+    const info = getWorkerColorCoding(status || null, [], hasIncolinkId);
+    const displayText = (status === "unknown" || !status) && hasIncolinkId ? "incolink" : (status ? status.split("_").join(" ") : "unknown");
     return (
       <Badge className={`${info.badgeClass} ${info.textColor} border`} style={{ ...info.badgeStyle, ...info.borderStyle }}>
-        {status ? status.split("_").join(" ") : "unknown"}
+        {displayText}
       </Badge>
     );
   };
@@ -426,14 +428,14 @@ const roleBadge = (role: WorkerRoleLite) => (
               {filteredSortedWorkers.map((w) => {
                 const workerRoles = (data.roles[w.id] || []) as WorkerRoleLite[];
                 const roleNames = workerRoles.map(r => r.name);
-                const colorInfo = getWorkerColorCoding(w.union_membership_status || null, roleNames);
+                const colorInfo = getWorkerColorCoding(w.union_membership_status || null, roleNames, !!w.incolink_member_id);
                 return (
                   <Card key={w.id} className={`p-3 border ${colorInfo.bgFadedClass}`} style={colorInfo.bgStyle}>
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <div className="font-medium">{formatName(w)}</div>
                         <div className="mt-1 flex flex-wrap gap-1">
-                          {membershipBadge(w.union_membership_status)}
+                          {membershipBadge(w.union_membership_status, !!w.incolink_member_id)}
                           {workerRoles.map((r) => roleBadge(r))}
                         </div>
                       </div>

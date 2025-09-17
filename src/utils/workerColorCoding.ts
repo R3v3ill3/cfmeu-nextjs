@@ -109,6 +109,34 @@ export function getWorkerColorCoding(
         textColor: 'text-black',
         label: 'Declined Membership'
       };
+    case 'unknown':
+    case null:
+      // For unknown status, check if they have an Incolink ID to show Incolink membership
+      if (hasIncolinkId) {
+        return {
+          bgFadedClass: asFadedBg(incolinkBlueRgb, 0.15),
+          bgStyle: asFadedStyle(incolinkBlueRgb, 0.15),
+          badgeClass: `${asSolidBg(incolinkBlueRgb)} ${withBorder(incolinkBlueRgb, 0.3)}`,
+          badgeStyle: asSolidStyle(incolinkBlueRgb),
+          indicatorClass: asSolidBg(incolinkBlueRgb),
+          indicatorStyle: asSolidStyle(incolinkBlueRgb),
+          borderStyle: borderStyle(incolinkBlueRgb, 0.3),
+          textColor: 'text-black',
+          label: 'Incolink Member'
+        };
+      }
+      // Otherwise show as unknown status
+      return {
+        bgFadedClass: asFadedBg(unknownGrayRgb, 0.15),
+        bgStyle: asFadedStyle(unknownGrayRgb, 0.15),
+        badgeClass: `${asSolidBg(unknownGrayRgb)} ${withBorder(unknownGrayRgb, 0.3)}`,
+        badgeStyle: asSolidStyle(unknownGrayRgb),
+        indicatorClass: asSolidBg(unknownGrayRgb),
+        indicatorStyle: asSolidStyle(unknownGrayRgb),
+        borderStyle: borderStyle(unknownGrayRgb, 0.3),
+        textColor: 'text-white',
+        label: 'Unknown Status'
+      };
     case 'non_member':
     default:
       return {
@@ -140,6 +168,8 @@ export function getWorkerColorLegend(): Array<{
   const member = getWorkerColorCoding('member');
   const potential = getWorkerColorCoding('potential');
   const declined = getWorkerColorCoding('declined');
+  const incolink = getWorkerColorCoding('unknown', [], true);
+  const unknown = getWorkerColorCoding('unknown', [], false);
   const nonMember = getWorkerColorCoding('non_member');
 
   return [
@@ -170,6 +200,20 @@ export function getWorkerColorLegend(): Array<{
       label: 'Declined',
       description: 'Declined membership',
       style: declined.bgStyle
+    },
+    {
+      color: incolink.bgFadedClass,
+      textColor: incolink.textColor,
+      label: 'Incolink',
+      description: 'Incolink members (union status unknown)',
+      style: incolink.bgStyle
+    },
+    {
+      color: unknown.bgFadedClass,
+      textColor: unknown.textColor,
+      label: 'Unknown',
+      description: 'Unknown union status',
+      style: unknown.bgStyle
     },
     {
       color: nonMember.bgFadedClass,

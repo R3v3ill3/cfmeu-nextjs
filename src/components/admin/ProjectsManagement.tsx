@@ -178,7 +178,6 @@ export default function ProjectsManagement() {
                 csvData={bciData}
                 mode={selectedMode as any}
                 onImportComplete={resetToSelection}
-                onBack={resetToSelection}
               />
             ) : (
               <ProjectImport 

@@ -89,12 +89,15 @@ export const WorkerDetailModal = ({ workerId, isOpen, onClose, onUpdate }: Worke
     onUpdate?.();
   };
 
-  const getUnionStatusColor = (status: string) => {
-    const info = getWorkerColorCoding(status || null);
+  const getUnionStatusColor = (status: string, hasIncolinkId?: boolean) => {
+    const info = getWorkerColorCoding(status || null, [], hasIncolinkId);
     return `${info.badgeClass} ${info.textColor} border`;
   };
 
-  const formatUnionStatus = (status: string) => {
+  const formatUnionStatus = (status: string, hasIncolinkId?: boolean) => {
+    if ((status === "unknown" || !status) && hasIncolinkId) {
+      return "Incolink";
+    }
     switch (status) {
       case "member":
         return "Member";
@@ -104,8 +107,10 @@ export const WorkerDetailModal = ({ workerId, isOpen, onClose, onUpdate }: Worke
         return "Potential";
       case "declined":
         return "Declined";
+      case "unknown":
+        return "Unknown";
       default:
-        return status;
+        return status || "Unknown";
     }
   };
 
@@ -127,27 +132,12 @@ export const WorkerDetailModal = ({ workerId, isOpen, onClose, onUpdate }: Worke
           <div className="flex items-center justify-between gap-2">
             <DialogTitle>Worker Details</DialogTitle>
             {worker && (
-              <div className="flex items-center gap-2">
-                <Badge 
-                  className={getUnionStatusColor(worker.union_membership_status)}
-                  style={{ ...getWorkerColorCoding(worker.union_membership_status || null).badgeStyle, ...getWorkerColorCoding(worker.union_membership_status || null).borderStyle }}
-                >
-                  {formatUnionStatus(worker.union_membership_status)}
-                </Badge>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button size="xs" variant="outline">Change</Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    {(["member","non_member","potential","declined"] as const).map((opt) => (
-                      <DropdownMenuItem key={opt} onClick={async () => {
-                        await supabase.from('workers').update({ union_membership_status: opt }).eq('id', workerId)
-                        queryClient.invalidateQueries({ queryKey: ["worker-detail", workerId] })
-                      }}>{formatUnionStatus(opt)}</DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
+              <Badge 
+                className={getUnionStatusColor(worker.union_membership_status, !!worker.incolink_member_id)}
+                style={{ ...getWorkerColorCoding(worker.union_membership_status || null, [], !!worker.incolink_member_id).badgeStyle, ...getWorkerColorCoding(worker.union_membership_status || null, [], !!worker.incolink_member_id).borderStyle }}
+              >
+                {formatUnionStatus(worker.union_membership_status, !!worker.incolink_member_id)}
+              </Badge>
             )}
           </div>
           
@@ -155,8 +145,8 @@ export const WorkerDetailModal = ({ workerId, isOpen, onClose, onUpdate }: Worke
             <div className="flex items-center gap-4 p-4 bg-muted rounded-lg">
               <Avatar className="h-16 w-16">
                 <AvatarFallback 
-                  className={getUnionStatusColor(worker.union_membership_status)}
-                  style={{ ...getWorkerColorCoding(worker.union_membership_status || null).badgeStyle, ...getWorkerColorCoding(worker.union_membership_status || null).borderStyle }}
+                  className={getUnionStatusColor(worker.union_membership_status, !!worker.incolink_member_id)}
+                  style={{ ...getWorkerColorCoding(worker.union_membership_status || null, [], !!worker.incolink_member_id).badgeStyle, ...getWorkerColorCoding(worker.union_membership_status || null, [], !!worker.incolink_member_id).borderStyle }}
                 >
                   {getInitials(worker.first_name, worker.surname)}
                 </AvatarFallback>
@@ -168,7 +158,10 @@ export const WorkerDetailModal = ({ workerId, isOpen, onClose, onUpdate }: Worke
                   <p className="text-muted-foreground">"{worker.nickname}"</p>
                 )}
                 {worker.member_number && (
-                  <p className="text-sm text-muted-foreground">Member: {worker.member_number}</p>
+                  <p className="text-sm text-muted-foreground">Union Member: {worker.member_number}</p>
+                )}
+                {worker.incolink_member_id && !worker.member_number && (
+                  <p className="text-sm text-muted-foreground">Incolink ID: {worker.incolink_member_id}</p>
                 )}
                 
                 <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
@@ -217,16 +210,16 @@ export const WorkerDetailModal = ({ workerId, isOpen, onClose, onUpdate }: Worke
             <WorkerForm worker={worker} onSuccess={handleWorkerUpdate} />
           </TabsContent>
           <TabsContent value="placements" className="p-2">
-            <WorkerPlacementsTab worker={worker} onUpdate={handleWorkerUpdate} />
+            <WorkerPlacementsTab workerId={worker.id} onUpdate={handleWorkerUpdate} />
           </TabsContent>
           <TabsContent value="roles" className="p-2">
-            <WorkerUnionRolesTab worker={worker} onUpdate={handleWorkerUpdate} />
+            <WorkerUnionRolesTab workerId={worker.id} onUpdate={handleWorkerUpdate} />
           </TabsContent>
           <TabsContent value="activity" className="p-2">
-            <WorkerActivitiesTab worker={worker} />
+            <WorkerActivitiesTab workerId={worker.id} />
           </TabsContent>
           <TabsContent value="ratings" className="p-2">
-            <WorkerRatingsTab worker={worker} />
+            <WorkerRatingsTab workerId={worker.id} />
           </TabsContent>
         </Tabs>
       </DialogContent>
