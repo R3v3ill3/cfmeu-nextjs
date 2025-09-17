@@ -5,6 +5,7 @@ import Layout from '@/components/Layout'
 import DesktopLayout from '@/components/DesktopLayout'
 import { headers } from 'next/headers'
 import { isMobileOrTablet } from '@/lib/device'
+import { NavigationLoadingProvider, NavigationLoadingOverlay } from '@/hooks/useNavigationLoading'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,7 +26,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const isMobile = isMobileOrTablet(userAgent)
   return (
     <AuthProvider>
-      {isMobile ? <Layout>{children}</Layout> : <DesktopLayout>{children}</DesktopLayout>}
+      <NavigationLoadingProvider>
+        {isMobile ? <Layout>{children}</Layout> : <DesktopLayout>{children}</DesktopLayout>}
+        <NavigationLoadingOverlay />
+      </NavigationLoadingProvider>
     </AuthProvider>
   )
 }

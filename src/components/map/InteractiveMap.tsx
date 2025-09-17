@@ -849,14 +849,20 @@ export default function InteractiveMap({
                 </p>
               )}
               <div className="flex gap-2">
-                <Link href={`/projects/${selectedJobSite.project_id}`}>
+                <Link 
+                  href={`/projects/${selectedJobSite.project_id}`}
+                  onClick={() => startNavigation(`/projects/${selectedJobSite.project_id}`)}
+                >
                   <Button size="sm" variant="outline" className="flex items-center gap-2">
                     <Building className="h-3 w-3" />
                     View Project
                   </Button>
                 </Link>
                 {selectedJobSite.patch_id && (
-                  <Link href={`/patch?patch=${selectedJobSite.patch_id}`}>
+                  <Link 
+                    href={`/patch?patch=${selectedJobSite.patch_id}`}
+                    onClick={() => startNavigation(`/patch?patch=${selectedJobSite.patch_id}`)}
+                  >
                     <Button size="sm" variant="outline" className="flex items-center gap-2">
                       <Users className="h-3 w-3" />
                       View Patch

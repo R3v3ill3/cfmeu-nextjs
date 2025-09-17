@@ -10,6 +10,7 @@ import { usePathname } from "next/navigation";
 import { supabase } from "@/integrations/supabase/client";
 import AdminPatchSelector from "@/components/admin/AdminPatchSelector";
 import { useNavigationVisibility } from "@/hooks/useNavigationVisibility";
+import { useNavigationLoading } from "@/hooks/useNavigationLoading";
 // Fallback to generic icon from public since original assets are not present
 const cfmeuLogoLight = "/favicon.svg" as unknown as string;
 const cfmeuLogoDark = "/favicon.svg" as unknown as string;
@@ -32,6 +33,7 @@ const Layout = ({ children }: LayoutProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
   const { visibility } = useNavigationVisibility();
+  const { isNavigating, startNavigation } = useNavigationLoading();
 
   useEffect(() => {
     const checkUserRole = async () => {
@@ -99,15 +101,20 @@ const Layout = ({ children }: LayoutProps) => {
         const Icon = item.icon;
         const isActive = pathname === item.path;
         return (
-          <Link
+            <Link
             key={item.path}
             href={item.path}
-            onClick={() => mobile && setIsOpen(false)}
+            onClick={(e) => {
+              if (item.path !== pathname) {
+                startNavigation(item.path)
+              }
+              if (mobile) setIsOpen(false)
+            }}
             className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
               isActive
                 ? "bg-primary text-primary-foreground"
                 : "hover:bg-accent hover:text-accent-foreground"
-            }`}
+            } ${isNavigating ? 'opacity-50 pointer-events-none' : ''}`}
           >
             <Icon className="h-4 w-4" />
             {item.label}
@@ -197,7 +204,9 @@ const Layout = ({ children }: LayoutProps) => {
       </header>
 
       {/* Main content */}
-      <main className="flex-1 p-6">
+      <main className={`flex-1 p-6 transition-opacity duration-200 ${
+        isNavigating ? 'opacity-50 pointer-events-none' : 'opacity-100'
+      }`}>
         {children}
       </main>
     </div>

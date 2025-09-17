@@ -115,10 +115,10 @@ export const EmployerCard = ({ employer, onClick }: EmployerCardProps) => {
     <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={onClick}>
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
-          <div className="flex items-start gap-2">
+          <div className="flex items-start gap-2 flex-1 min-w-0">
             {getEmployerTypeIcon(employer.employer_type)}
             <div className="min-w-0 flex-1">
-              <CardTitle className="text-lg w-full truncate" title={employer.name}>{employer.name}</CardTitle>
+              <CardTitle className="text-lg block w-full max-w-full leading-tight whitespace-normal break-words break-all line-clamp-2 overflow-hidden min-h-[2.75rem]" title={employer.name}>{employer.name}</CardTitle>
               {employer.abn && (
                 <CardDescription className="text-sm">
                   ABN: {employer.abn}

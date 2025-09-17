@@ -97,7 +97,10 @@ export function ProjectTable({
                   <Link 
                     href={`/projects/${project.id}`} 
                     className="font-medium hover:underline text-primary"
-                    onClick={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      startNavigation(`/projects/${project.id}`)
+                    }}
                   >
                     {project.name}
                   </Link>

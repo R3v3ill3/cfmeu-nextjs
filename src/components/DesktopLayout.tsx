@@ -26,6 +26,7 @@ import AdminPatchSelector from "@/components/admin/AdminPatchSelector"
 import { supabase } from "@/integrations/supabase/client"
 import { desktopDesignSystem } from "@/lib/desktop-design-system"
 import { useNavigationVisibility } from "@/hooks/useNavigationVisibility"
+import { useNavigationLoading } from "@/hooks/useNavigationLoading"
 
 const cfmeuLogoLight = "/favicon.svg" as unknown as string
 const cfmeuLogoDark = "/favicon.svg" as unknown as string
@@ -123,6 +124,7 @@ export default function DesktopLayout({ children }: { children: React.ReactNode 
   const { user, signOut } = useAuth()
   const userRole = useUserRole()
   const items = useVisibleNavItems(userRole)
+  const { isNavigating, startNavigation } = useNavigationLoading()
 
   return (
     <SidebarProvider>
@@ -163,8 +165,17 @@ export default function DesktopLayout({ children }: { children: React.ReactNode 
                             ? 'bg-gray-800 text-white border border-gray-700 shadow-md' 
                             : 'text-gray-600 hover:bg-gray-200 hover:text-gray-900 bg-white'
                         }`}
+                        disabled={isNavigating}
                       >
-                        <Link href={item.path} className="flex items-center gap-3 w-full">
+                        <Link 
+                          href={item.path} 
+                          className="flex items-center gap-3 w-full"
+                          onClick={(e) => {
+                            if (item.path !== pathname) {
+                              startNavigation(item.path)
+                            }
+                          }}
+                        >
                           <Icon className={`h-4 w-4 flex-shrink-0 ${
                             isActive ? 'text-white' : 'text-gray-500'
                           }`} />
@@ -255,7 +266,9 @@ export default function DesktopLayout({ children }: { children: React.ReactNode 
           </div>
         </header>
         
-        <main className="flex-1 min-w-0 bg-white">
+        <main className={`flex-1 min-w-0 bg-white transition-opacity duration-200 ${
+          isNavigating ? 'opacity-50 pointer-events-none' : 'opacity-100'
+        }`}>
           <div className="p-6">
             {children}
           </div>
