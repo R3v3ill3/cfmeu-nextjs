@@ -1,7 +1,8 @@
+"use client";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -133,8 +134,11 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
   const ebaStatus = employer?.company_eba_records?.[0] ? getEbaStatusInfo(employer.company_eba_records[0]) : null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" aria-describedby="employer-dialog-description">
+        <DialogDescription id="employer-dialog-description" className="sr-only">
+          View and edit employer details, including company info, EBA, worksites, and workers.
+        </DialogDescription>
         <DialogHeader>
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -525,7 +529,10 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
                 )}
   <EmployerWorkersList employerId={employerId!} />
   <Dialog open={isManualWorkerOpen} onOpenChange={setIsManualWorkerOpen}>
-    <DialogContent className="max-w-2xl">
+    <DialogContent className="max-w-2xl" aria-describedby="manual-worker-description">
+      <DialogDescription id="manual-worker-description" className="sr-only">
+        Add a new worker manually to this employer.
+      </DialogDescription>
       <DialogHeader>
         <DialogTitle>Add New Worker</DialogTitle>
       </DialogHeader>
