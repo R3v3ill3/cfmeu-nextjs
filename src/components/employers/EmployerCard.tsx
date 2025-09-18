@@ -40,10 +40,12 @@ export type EmployerCardData = {
   }>;
 };
 
+type EmployerProject = NonNullable<EmployerCardData["projects"]>[number];
+
 export function EmployerCard({ employer, onClick }: { employer: EmployerCardData, onClick: () => void }) {
   const [fwcSearchOpen, setFwcSearchOpen] = useState(false)
   const [incolinkModalOpen, setIncolinkModalOpen] = useState(false)
-  const [selectedProject, setSelectedProject] = useState<typeof employer.projects[0] | null>(null)
+  const [selectedProject, setSelectedProject] = useState<EmployerProject | null>(null)
   const router = useRouter()
 
   const handleActionClick = (e: React.MouseEvent) => {
@@ -69,7 +71,7 @@ export function EmployerCard({ employer, onClick }: { employer: EmployerCardData
     setIncolinkModalOpen(true)
   };
 
-  const handleProjectClick = (project: typeof employer.projects[0], e: React.MouseEvent) => {
+  const handleProjectClick = (project: EmployerProject, e: React.MouseEvent) => {
     e.stopPropagation();
     setSelectedProject(project)
   };
