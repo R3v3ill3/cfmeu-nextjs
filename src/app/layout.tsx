@@ -19,13 +19,16 @@ export const metadata: Metadata = {
   description: "Next.js App Router migrated from Vite",
   icons: {
     icon: [
-      { url: "/favicon.svg?v=4", type: "image/svg+xml" },
-      { url: "/favicon.ico?v=4", type: "image/x-icon" }
+      { url: "/favicon.ico", type: "image/x-icon" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
     ],
-    apple: "/apple-touch-icon.png?v=4",
-    shortcut: "/favicon.ico?v=4",
+    apple: {
+      url: "/apple-touch-icon.png",
+      sizes: "180x180",
+    },
+    shortcut: "/favicon.ico",
     other: [
-      { rel: "mask-icon", url: "/mask-icon.svg?v=4", color: "#000000" }
+      { rel: "mask-icon", url: "/mask-icon.svg", color: "#0b2a5b" },
     ],
   },
 };
@@ -37,6 +40,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+        <link rel="mask-icon" href="/mask-icon.svg" color="#0b2a5b" />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <Providers>{children}</Providers>
       </body>
