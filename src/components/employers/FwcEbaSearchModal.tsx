@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { useToast } from "@/hooks/use-toast"
 import { supabase } from "@/integrations/supabase/client"
 import { FWCSearchResult } from "@/types/fwcLookup"
+import { Progress } from "@/components/ui/progress"
 
 type ScraperJobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled"
 
@@ -184,6 +185,19 @@ export function FwcEbaSearchModal({ isOpen, onClose, employerId, employerName, o
 
   const progressPercent = job && job.progress_total ? Math.round((job.progress_completed ?? 0) / job.progress_total * 100) : 0
 
+  // User-friendly steps for display only (no functional change)
+  const jobSteps = ["Queued", "Searching FWC", "Processing Results", "Finalizing"] as const
+  const deriveStepIndexForJob = (status: ScraperJobStatus, percent: number) => {
+    if (status === "queued") return 0
+    if (status === "running") {
+      if (percent < 10) return 0
+      if (percent < 90) return 1
+      return 2
+    }
+    return 3
+  }
+  const currentStepIndex = deriveStepIndexForJob(job?.status ?? "queued", progressPercent)
+
   useEffect(() => {
     if (!jobEvents.length) return
     const latestCandidates = [...jobEvents]
@@ -247,7 +261,7 @@ export function FwcEbaSearchModal({ isOpen, onClose, employerId, employerName, o
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-xl space-y-4">
+      <DialogContent className="max-w-2xl space-y-4 break-words">
         <DialogHeader>
           <DialogTitle>Search FWC for EBA</DialogTitle>
           <DialogDescription>
@@ -287,9 +301,41 @@ export function FwcEbaSearchModal({ isOpen, onClose, employerId, employerName, o
               <div className="mt-1 text-xs text-muted-foreground">
                 Last updated: {new Date(job.updated_at).toLocaleString()}
               </div>
+              {(["queued", "running"] as ScraperJobStatus[]).includes(job.status) && (
+                <div className="mt-2 flex items-center gap-2">
+                  <img src="/spinner.gif" alt="Loading" className="h-4 w-4" />
+                  <span className="text-sm text-muted-foreground">Searching FWC database...</span>
+                </div>
+              )}
+              <div className="mt-2">
+                <Progress value={progressPercent} />
+              </div>
+              <div className="mt-3">
+                <div className="flex items-center justify-between">
+                  {jobSteps.map((label, idx) => {
+                    const isCompleted = idx < currentStepIndex
+                    const isCurrent = idx === currentStepIndex
+                    return (
+                      <div key={label} className="flex items-center flex-1 min-w-0">
+                        <div
+                          className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-medium ${
+                            isCompleted ? 'bg-green-600 text-white' : isCurrent ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
+                          }`}
+                        >
+                          {idx + 1}
+                        </div>
+                        <div className="ml-2 text-xs truncate">{label}</div>
+                        {idx < jobSteps.length - 1 && (
+                          <div className={`mx-2 h-0.5 flex-1 ${idx < currentStepIndex ? 'bg-green-600' : 'bg-gray-200'}`} />
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
             </div>
-
-            {jobEvents.length > 0 && (
+            {/* Hide debug timeline in user-facing UI */}
+            {false && jobEvents.length > 0 && (
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Job Timeline</h4>
                 <div className="max-h-48 overflow-y-auto space-y-2">
