@@ -63,8 +63,29 @@ async function processFwcJob(client, job) {
             const searchTermOverride = searchOverrides[employerId];
             await (0, jobs_1.appendEvent)(client, job.id, 'fwc_employer_started', { employerId, employerName });
             try {
-                const queryName = searchTermOverride && searchTermOverride.trim().length > 0 ? searchTermOverride : employerName;
-                const results = await searchFwcAgreements(browser, queryName);
+                const queryCandidates = buildQueryCandidates(employerName, searchTermOverride);
+                let results = [];
+                let usedQuery = queryCandidates[0] ?? employerName;
+                for (const candidate of queryCandidates) {
+                    await (0, jobs_1.appendEvent)(client, job.id, 'fwc_employer_query_attempt', {
+                        employerId,
+                        employerName,
+                        query: candidate,
+                    });
+                    const attemptResults = await searchFwcAgreements(browser, candidate);
+                    if (attemptResults.length > 0) {
+                        results = attemptResults;
+                        usedQuery = candidate;
+                        break;
+                    }
+                }
+                await (0, jobs_1.appendEvent)(client, job.id, 'fwc_employer_results', {
+                    employerId,
+                    employerName,
+                    query: usedQuery,
+                    resultsCount: results.length,
+                    firstTitle: results[0]?.title,
+                });
                 if (results.length > 0) {
                     const bestResult = results[0];
                     await upsertEbaRecord(client, employerId, bestResult);
@@ -91,6 +112,7 @@ async function processFwcJob(client, job) {
                     employerName,
                     error: error instanceof Error ? error.message : 'unknown error',
                 });
+                console.error('[worker] fwc_lookup employer failed', employerId, error);
             }
             await (0, jobs_1.updateProgress)(client, job.id, index + 1);
             await sleep(1000);
@@ -123,7 +145,9 @@ async function searchFwcAgreements(browser, companyName) {
         await page.goto(searchUrl.toString(), { waitUntil: 'networkidle2', timeout: 45000 });
         await page.waitForSelector('a h3', { timeout: 30000 });
         const content = await page.content();
-        return parseSearchResults(content, query);
+        const parsed = parseSearchResults(content, query);
+        console.log(`[worker] FWC search`, { query, resultCount: parsed.length });
+        return parsed;
     }
     finally {
         await page.close();
@@ -142,6 +166,29 @@ function simplifyCompanyName(companyName) {
     const words = simplified.split(' ').filter((word) => word.length > 2);
     simplified = words.slice(0, 3).join(' ');
     return simplified;
+}
+function buildQueryCandidates(companyName, override) {
+    const candidates = new Set();
+    const cleanOverride = override?.trim();
+    const simplified = simplifyCompanyName(companyName);
+    const basePrefix = (term) => `cfmeu construction nsw ${term}`.trim();
+    if (cleanOverride) {
+        candidates.add(cleanOverride);
+        candidates.add(basePrefix(cleanOverride));
+    }
+    if (simplified && simplified !== cleanOverride) {
+        candidates.add(basePrefix(simplified));
+        candidates.add(simplified);
+    }
+    if (companyName && companyName !== simplified && companyName !== cleanOverride) {
+        candidates.add(basePrefix(companyName));
+        candidates.add(companyName);
+    }
+    if (candidates.size === 0) {
+        candidates.add(basePrefix(companyName || ''));
+        candidates.add(companyName || '');
+    }
+    return Array.from(candidates).filter((q) => q.trim().length > 0);
 }
 function parseSearchResults(html, searchQuery) {
     const $ = cheerio.load(html);
@@ -203,8 +250,8 @@ async function upsertEbaRecord(client, employerId, result) {
     const updateData = {
         fwc_document_url: result.documentUrl,
         fwc_lodgement_number: result.lodgementNumber,
-        fwc_certified_date: result.approvedDate ?? null,
-        nominal_expiry_date: result.expiryDate ?? null,
+        fwc_certified_date: normalizeDateInput(result.approvedDate),
+        nominal_expiry_date: normalizeDateInput(result.expiryDate),
         comments: existingRecord
             ? `Updated from FWC search. Agreement: ${result.title}. Status: ${result.status}.`
             : `Auto-imported from FWC search. Agreement: ${result.title}. Status: ${result.status}.`,
@@ -237,4 +284,26 @@ async function upsertEbaRecord(client, employerId, result) {
     if (employerUpdateError) {
         throw new Error(`Failed to update employer status: ${employerUpdateError.message}`);
     }
+}
+function normalizeDateInput(value) {
+    if (!value)
+        return null;
+    const trimmed = value.trim();
+    if (!trimmed)
+        return null;
+    const parsed = new Date(trimmed);
+    if (!Number.isNaN(parsed.getTime())) {
+        return parsed.toISOString().slice(0, 10);
+    }
+    const match = trimmed.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+    if (match) {
+        const dd = match[1].padStart(2, '0');
+        const mm = match[2].padStart(2, '0');
+        let yyyy = match[3];
+        if (yyyy.length === 2) {
+            yyyy = (Number(yyyy) > 50 ? '19' : '20') + yyyy;
+        }
+        return `${yyyy}-${mm}-${dd}`;
+    }
+    return null;
 }

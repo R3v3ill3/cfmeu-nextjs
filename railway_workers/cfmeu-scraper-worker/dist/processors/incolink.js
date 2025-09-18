@@ -62,7 +62,10 @@ async function processIncolinkJob(client, job) {
                     employerId,
                     invoiceNumber: invoiceResult.invoiceNumber,
                     invoiceDate: invoiceResult.invoiceDate,
-                    counts: processed,
+                    counts: {
+                        ...processed,
+                        totalParsed: invoiceResult.members.length,
+                    },
                 });
             }
             catch (error) {

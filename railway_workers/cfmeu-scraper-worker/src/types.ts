@@ -31,6 +31,7 @@ export interface ScraperJobEvent {
 export interface FwcJobPayload {
   employerIds: string[]
   options?: {
+    autoLink?: boolean
     searchOverrides?: Record<string, string>
     [key: string]: unknown
   }

@@ -5,6 +5,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/hooks/use-toast"
+import { supabase } from "@/integrations/supabase/client"
+import { FWCSearchResult } from "@/types/fwcLookup"
 
 type ScraperJobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled"
 
@@ -39,6 +41,8 @@ export function FwcEbaSearchModal({ isOpen, onClose, employerId, employerName, o
   const [jobEvents, setJobEvents] = useState<ScraperJobEvent[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [results, setResults] = useState<FWCSearchResult[]>([])
+  const [isLinking, setIsLinking] = useState(false)
   const { toast } = useToast()
 
   const pollRef = useRef<NodeJS.Timeout | null>(null)
@@ -55,7 +59,9 @@ export function FwcEbaSearchModal({ isOpen, onClose, employerId, employerName, o
     clearPolling()
     setJob(null)
     setJobEvents([])
+    setResults([])
     setErrorMessage(null)
+    setIsLinking(false)
     lastStatusRef.current = null
     setSearchTerm(employerName)
   }, [clearPolling, employerName])
@@ -96,11 +102,7 @@ export function FwcEbaSearchModal({ isOpen, onClose, employerId, employerName, o
       clearPolling()
 
       if (jobData.status === "succeeded") {
-        toast({
-          title: "FWC lookup complete",
-          description: "EBA data refreshed from the FWC search.",
-        })
-        onLinkEba()
+        setErrorMessage(null)
       } else if (jobData.status === "failed") {
         toast({
           title: "FWC lookup failed",
@@ -136,12 +138,14 @@ export function FwcEbaSearchModal({ isOpen, onClose, employerId, employerName, o
   const handleQueueLookup = async () => {
     setIsSubmitting(true)
     setErrorMessage(null)
+    setResults([])
     try {
       const body = {
         jobType: "fwc_lookup",
         payload: {
           employerIds: [employerId],
           options: {
+            autoLink: false,
             searchOverrides: {
               [employerId]: searchTerm.trim(),
             },
@@ -161,12 +165,12 @@ export function FwcEbaSearchModal({ isOpen, onClose, employerId, employerName, o
         throw new Error(await response.text())
       }
 
-      const data = (await response.json()) as { job: ScraperJob }
-      setJob(data.job)
-      setJobEvents([])
-      toast({
-        title: "FWC lookup queued",
-        description: "The background worker will fetch the latest EBA data shortly.",
+    const data = (await response.json()) as { job: ScraperJob }
+    setJob(data.job)
+    setJobEvents([])
+    toast({
+      title: "FWC lookup queued",
+      description: "The background worker will fetch the latest EBA data shortly.",
       })
       startPolling(data.job.id)
     } catch (error) {
@@ -179,6 +183,67 @@ export function FwcEbaSearchModal({ isOpen, onClose, employerId, employerName, o
   }
 
   const progressPercent = job && job.progress_total ? Math.round((job.progress_completed ?? 0) / job.progress_total * 100) : 0
+
+  useEffect(() => {
+    if (!jobEvents.length) return
+    const latestCandidates = [...jobEvents]
+      .reverse()
+      .find((event) => event.event_type === "fwc_employer_candidates" || event.event_type === "fwc_employer_results")
+
+    if (latestCandidates && latestCandidates.payload) {
+      const payloadResults = latestCandidates.payload.results as FWCSearchResult[] | undefined
+      if (Array.isArray(payloadResults)) {
+        setResults(payloadResults)
+      }
+    }
+
+    const failureEvent = [...jobEvents]
+      .reverse()
+      .find((event) => event.event_type === "fwc_employer_failed")
+    if (failureEvent?.payload?.error) {
+      setErrorMessage(String(failureEvent.payload.error))
+    }
+  }, [jobEvents])
+
+  const handleLinkEba = async (eba: FWCSearchResult) => {
+    setIsLinking(true)
+    try {
+      const sanitized = {
+        title: eba.title,
+        status: eba.status,
+        approvedDate: normalizeDateForRpc(eba.approvedDate),
+        expiryDate: normalizeDateForRpc(eba.expiryDate),
+        documentUrl: eba.documentUrl,
+        summaryUrl: eba.summaryUrl,
+        lodgementNumber: eba.lodgementNumber,
+      }
+
+      const nullified = Object.fromEntries(
+        Object.entries(sanitized).map(([key, value]) => [key, value ?? null])
+      )
+
+      const { error } = await supabase.rpc('link_eba_to_employer', {
+        p_employer_id: employerId,
+        p_eba_data: nullified,
+      })
+      if (error) throw error
+
+      toast({
+        title: 'EBA linked',
+        description: `${eba.title} has been linked to ${employerName}.`,
+      })
+      onLinkEba()
+      onClose()
+    } catch (error) {
+      toast({
+        title: 'Linking failed',
+        description: error instanceof Error ? error.message : 'Could not link EBA.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsLinking(false)
+    }
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -248,6 +313,38 @@ export function FwcEbaSearchModal({ isOpen, onClose, employerId, employerName, o
             )}
 
             {errorMessage && <p className="text-sm text-destructive">{errorMessage}</p>}
+
+            {job.status === 'succeeded' && (
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium">Possible matches</h4>
+                {results.length > 0 ? (
+                  <ul className="space-y-2 max-h-64 overflow-y-auto">
+                    {results.map((result, index) => (
+                      <li key={`${result.title}-${index}`} className="border rounded p-3 space-y-2">
+                        <div>
+                          <p className="font-semibold">{result.title}</p>
+                          <p className="text-sm text-muted-foreground">
+                            Status: {result.status} • Approved: {result.approvedDate || 'N/A'} • Expires: {result.expiryDate || 'N/A'}
+                          </p>
+                          {result.documentUrl && (
+                            <p className="text-xs text-muted-foreground break-words">
+                              Document: <a href={result.documentUrl} target="_blank" rel="noreferrer" className="underline">{result.documentUrl}</a>
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={() => handleLinkEba(result)} disabled={isLinking}>
+                            {isLinking ? 'Linking…' : 'Link to employer'}
+                          </Button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No EBA matches were returned for this search.</p>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -259,4 +356,37 @@ export function FwcEbaSearchModal({ isOpen, onClose, employerId, employerName, o
       </DialogContent>
     </Dialog>
   )
+}
+const normalizeDateForRpc = (value?: string | null): string | null => {
+  if (!value) return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+
+  const parsed = new Date(trimmed)
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10)
+  }
+
+  const pattern = trimmed.match(/^(\d{1,2})[\/\-\s](\w+|\d{1,2})[\/\-\s](\d{2,4})$/)
+  if (pattern) {
+    const day = pattern[1].padStart(2, '0')
+    let month = pattern[2]
+    const yearRaw = pattern[3]
+
+    const monthIndex = new Date(`${month} 1, ${yearRaw}`).getMonth()
+    if (!Number.isNaN(monthIndex)) {
+      month = String(monthIndex + 1).padStart(2, '0')
+    } else {
+      month = month.padStart(2, '0')
+    }
+
+    let year = yearRaw
+    if (year.length === 2) {
+      year = (Number(year) > 50 ? '19' : '20') + year
+    }
+
+    return `${year}-${month}-${day}`
+  }
+
+  return null
 }

@@ -40,7 +40,7 @@ async function reserveNextJob(client) {
             .eq('id', candidate.id)
             .eq('status', 'queued')
             .lte('run_at', nowIso)
-            .or(`lock_token.is.null,locked_at.lte.${lockExpiry}`)
+            .is('lock_token', null)
             .select()
             .single();
         if (lockError) {

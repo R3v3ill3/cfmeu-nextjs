@@ -9,6 +9,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 async function handleJob(job: ScraperJob) {
   const client = getAdminClient()
+  console.log(`[worker] handling job ${job.id} (${job.job_type})`)
   try {
     await appendEvent(client, job.id, 'job_started', {
       attempts: job.attempts,
@@ -26,6 +27,7 @@ async function handleJob(job: ScraperJob) {
           })
         }
         const summary = await processFwcJob(client, job)
+        console.log(`[worker] fwc_lookup job ${job.id} completed`, summary)
         await appendEvent(client, job.id, 'job_completed', {
           succeeded: summary.succeeded,
           failed: summary.failed,
@@ -47,6 +49,7 @@ async function handleJob(job: ScraperJob) {
         }
 
         const summary = await processIncolinkJob(client, job)
+        console.log(`[worker] incolink_sync job ${job.id} completed`, summary)
         await appendEvent(client, job.id, 'job_completed', {
           succeeded: summary.succeeded,
           failed: summary.failed,
@@ -73,6 +76,7 @@ async function handleJob(job: ScraperJob) {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown worker error'
+    console.error(`[worker] job ${job.id} failed`, message)
     await appendEvent(client, job.id, 'job_failed', { error: message })
 
     const shouldRetry = job.attempts < job.max_attempts

@@ -8,6 +8,7 @@ const incolink_1 = require("./processors/incolink");
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function handleJob(job) {
     const client = (0, supabase_1.getAdminClient)();
+    console.log(`[worker] handling job ${job.id} (${job.job_type})`);
     try {
         await (0, jobs_1.appendEvent)(client, job.id, 'job_started', {
             attempts: job.attempts,
@@ -24,6 +25,7 @@ async function handleJob(job) {
                     });
                 }
                 const summary = await (0, fwc_1.processFwcJob)(client, job);
+                console.log(`[worker] fwc_lookup job ${job.id} completed`, summary);
                 await (0, jobs_1.appendEvent)(client, job.id, 'job_completed', {
                     succeeded: summary.succeeded,
                     failed: summary.failed,
@@ -44,6 +46,7 @@ async function handleJob(job) {
                     });
                 }
                 const summary = await (0, incolink_1.processIncolinkJob)(client, job);
+                console.log(`[worker] incolink_sync job ${job.id} completed`, summary);
                 await (0, jobs_1.appendEvent)(client, job.id, 'job_completed', {
                     succeeded: summary.succeeded,
                     failed: summary.failed,
@@ -71,6 +74,7 @@ async function handleJob(job) {
     }
     catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown worker error';
+        console.error(`[worker] job ${job.id} failed`, message);
         await (0, jobs_1.appendEvent)(client, job.id, 'job_failed', { error: message });
         const shouldRetry = job.attempts < job.max_attempts;
         const nextStatus = shouldRetry ? 'queued' : 'failed';

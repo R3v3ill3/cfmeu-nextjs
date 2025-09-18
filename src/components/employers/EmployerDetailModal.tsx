@@ -682,6 +682,9 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
                   employerId={employer.id}
                   employerName={employer.name}
                   currentIncolinkId={employer.incolink_id}
+                  onUpdate={async () => {
+                    await queryClient.invalidateQueries({ queryKey: ["employer-detail", employerId] });
+                  }}
                 />
               )}
             </>

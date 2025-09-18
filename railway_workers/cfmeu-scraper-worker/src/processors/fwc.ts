@@ -30,6 +30,7 @@ export async function processFwcJob(
   const payload = (job.payload ?? {}) as Partial<FwcJobPayload>
   const employerIds = Array.isArray(payload.employerIds) ? payload.employerIds : []
   const searchOverrides = payload.options?.searchOverrides ?? {}
+  const autoLink = payload.options?.autoLink !== false
 
   if (employerIds.length === 0) {
     await appendEvent(client, job.id, 'fwc_no_employers')
@@ -57,19 +58,55 @@ export async function processFwcJob(
       await appendEvent(client, job.id, 'fwc_employer_started', { employerId, employerName })
 
       try {
-        const queryName = searchTermOverride && searchTermOverride.trim().length > 0 ? searchTermOverride : employerName
-        const results = await searchFwcAgreements(browser, queryName)
+        const queryCandidates = buildQueryCandidates(employerName, searchTermOverride)
+        let results: FwcSearchResult[] = []
+        let usedQuery = queryCandidates[0] ?? employerName
 
-        if (results.length > 0) {
-          const bestResult = results[0]
-          await upsertEbaRecord(client, employerId, bestResult)
-          succeeded += 1
-          await appendEvent(client, job.id, 'fwc_employer_succeeded', {
+        for (const candidate of queryCandidates) {
+          await appendEvent(client, job.id, 'fwc_employer_query_attempt', {
             employerId,
             employerName,
-            resultTitle: bestResult.title,
-            status: bestResult.status,
+            query: candidate,
           })
+          const attemptResults = await searchFwcAgreements(browser, candidate)
+          if (attemptResults.length > 0) {
+            results = attemptResults
+            usedQuery = candidate
+            break
+          }
+        }
+
+        const limitedResults = results.slice(0, 15)
+
+        await appendEvent(client, job.id, 'fwc_employer_results', {
+          employerId,
+          employerName,
+          query: usedQuery,
+          resultsCount: results.length,
+          firstTitle: results[0]?.title,
+          results: autoLink ? undefined : limitedResults,
+        })
+
+        if (results.length > 0) {
+          if (autoLink) {
+            const bestResult = results[0]
+            await upsertEbaRecord(client, employerId, bestResult)
+            succeeded += 1
+            await appendEvent(client, job.id, 'fwc_employer_succeeded', {
+              employerId,
+              employerName,
+              resultTitle: bestResult.title,
+              status: bestResult.status,
+            })
+          } else {
+            succeeded += 1
+            await appendEvent(client, job.id, 'fwc_employer_candidates', {
+              employerId,
+              employerName,
+              query: usedQuery,
+              results: limitedResults,
+            })
+          }
         } else {
           failed += 1
           await appendEvent(client, job.id, 'fwc_employer_no_results', {
@@ -84,6 +121,7 @@ export async function processFwcJob(
           employerName,
           error: error instanceof Error ? error.message : 'unknown error',
         })
+        console.error('[worker] fwc_lookup employer failed', employerId, error)
       }
 
       await updateProgress(client, job.id, index + 1)
@@ -127,7 +165,9 @@ async function searchFwcAgreements(browser: Browser, companyName: string): Promi
     await page.goto(searchUrl.toString(), { waitUntil: 'networkidle2', timeout: 45000 })
     await page.waitForSelector('a h3', { timeout: 30000 })
     const content = await page.content()
-    return parseSearchResults(content, query)
+    const parsed = parseSearchResults(content, query)
+    console.log(`[worker] FWC search`, { query, resultCount: parsed.length })
+    return parsed
   } finally {
     await page.close()
   }
@@ -147,6 +187,36 @@ function simplifyCompanyName(companyName: string): string {
   const words = simplified.split(' ').filter((word) => word.length > 2)
   simplified = words.slice(0, 3).join(' ')
   return simplified
+}
+
+function buildQueryCandidates(companyName: string, override?: string | null): string[] {
+  const candidates = new Set<string>()
+  const cleanOverride = override?.trim()
+  const simplified = simplifyCompanyName(companyName)
+
+  const basePrefix = (term: string) => `cfmeu construction nsw ${term}`.trim()
+
+  if (cleanOverride) {
+    candidates.add(cleanOverride)
+    candidates.add(basePrefix(cleanOverride))
+  }
+
+  if (simplified && simplified !== cleanOverride) {
+    candidates.add(basePrefix(simplified))
+    candidates.add(simplified)
+  }
+
+  if (companyName && companyName !== simplified && companyName !== cleanOverride) {
+    candidates.add(basePrefix(companyName))
+    candidates.add(companyName)
+  }
+
+  if (candidates.size === 0) {
+    candidates.add(basePrefix(companyName || ''))
+    candidates.add(companyName || '')
+  }
+
+  return Array.from(candidates).filter((q) => q.trim().length > 0)
 }
 
 function parseSearchResults(html: string, searchQuery: string): FwcSearchResult[] {
@@ -220,8 +290,8 @@ async function upsertEbaRecord(client: SupabaseClient, employerId: string, resul
   const updateData = {
     fwc_document_url: result.documentUrl,
     fwc_lodgement_number: result.lodgementNumber,
-    fwc_certified_date: result.approvedDate ?? null,
-    nominal_expiry_date: result.expiryDate ?? null,
+    fwc_certified_date: normalizeDateInput(result.approvedDate),
+    nominal_expiry_date: normalizeDateInput(result.expiryDate),
     comments: existingRecord
       ? `Updated from FWC search. Agreement: ${result.title}. Status: ${result.status}.`
       : `Auto-imported from FWC search. Agreement: ${result.title}. Status: ${result.status}.`,
@@ -258,4 +328,28 @@ async function upsertEbaRecord(client: SupabaseClient, employerId: string, resul
   if (employerUpdateError) {
     throw new Error(`Failed to update employer status: ${employerUpdateError.message}`)
   }
+}
+
+function normalizeDateInput(value?: string | null): string | null {
+  if (!value) return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+
+  const parsed = new Date(trimmed)
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10)
+  }
+
+  const match = trimmed.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/)
+  if (match) {
+    const dd = match[1].padStart(2, '0')
+    const mm = match[2].padStart(2, '0')
+    let yyyy = match[3]
+    if (yyyy.length === 2) {
+      yyyy = (Number(yyyy) > 50 ? '19' : '20') + yyyy
+    }
+    return `${yyyy}-${mm}-${dd}`
+  }
+
+  return null
 }
