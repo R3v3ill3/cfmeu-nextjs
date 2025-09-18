@@ -110,9 +110,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
   }
 
-  const url = new URL(request.url)
-  const id = url.searchParams.get('id') ?? undefined
-  const includeEvents = url.searchParams.get('includeEvents') === '1'
+  const searchParams = request.nextUrl.searchParams
+  const id = searchParams.get('id') ?? undefined
+  const includeEvents = searchParams.get('includeEvents') === '1'
 
   if (id) {
     const jobQuery = supabase
@@ -148,8 +148,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ job: jobResult.data, events: eventsResult?.data ?? [] })
   }
 
-  const status = url.searchParams.get('status') ?? undefined
-  const limit = Math.min(Number(url.searchParams.get('limit') ?? 20) || 20, 100)
+  const status = searchParams.get('status') ?? undefined
+  const limit = Math.min(Number(searchParams.get('limit') ?? 20) || 20, 100)
 
   let query = supabase
     .from('scraper_jobs')

@@ -184,6 +184,22 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
     cancelled: 'Cancelled',
   }
 
+  // Simplified job step display for user-facing progress feedback (UI-only)
+  const jobSteps = ['Queued', 'Searching FWC', 'Processing Results', 'Finalizing'] as const
+
+  const deriveStepIndexForJob = (status: ScraperJobStatus, percent: number) => {
+    if (status === 'queued') return 0
+    if (status === 'running') {
+      if (percent < 10) return 0
+      if (percent < 90) return 1
+      return 2
+    }
+    // succeeded, failed, cancelled
+    return 3
+  }
+
+  const currentStepIndex = deriveStepIndexForJob(currentJob?.status ?? 'queued', progressPercent)
+
   const formatTimestamp = useCallback((value: string | null | undefined) => {
     if (!value) return '—'
     try {
@@ -1146,7 +1162,7 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
                   EBA Search Progress
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-5">
+              <CardContent className="space-y-5 break-words">
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span>Status</span>
@@ -1158,27 +1174,41 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
                       {progressCompleted} of {progressTotal}
                     </span>
                   </div>
+                  {['queued', 'running'].includes(currentJob.status) && (
+                    <div className="flex items-center gap-2">
+                      <img src="/spinner.gif" alt="Loading" className="w-4 h-4" />
+                      <span className="text-sm text-muted-foreground">Searching FWC database...</span>
+                    </div>
+                  )}
                   <Progress value={progressPercent} className="w-full" />
                 </div>
 
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div className="rounded border bg-muted/30 p-3 text-sm">
-                    <div className="text-xs text-muted-foreground">Attempts</div>
-                    <div className="font-semibold">
-                      {currentJob.attempts} / {currentJob.max_attempts}
-                    </div>
-                  </div>
-                  <div className="rounded border bg-muted/30 p-3 text-sm">
-                    <div className="text-xs text-muted-foreground">Priority</div>
-                    <div className="font-semibold">{currentJob.priority}</div>
-                  </div>
-                  <div className="rounded border bg-muted/30 p-3 text-sm">
-                    <div className="text-xs text-muted-foreground">Last Updated</div>
-                    <div className="font-semibold">{formatTimestamp(currentJob.updated_at)}</div>
-                  </div>
-                  <div className="rounded border bg-muted/30 p-3 text-sm">
-                    <div className="text-xs text-muted-foreground">Created</div>
-                    <div className="font-semibold">{formatTimestamp(currentJob.created_at)}</div>
+                {/* User-friendly stepper (replaces debug details) */}
+                <div className="mt-2">
+                  <div className="flex items-center justify-between">
+                    {jobSteps.map((label, idx) => {
+                      const isCompleted = idx < currentStepIndex
+                      const isCurrent = idx === currentStepIndex
+                      return (
+                        <div key={label} className="flex items-center flex-1 min-w-0">
+                          <div
+                            className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-medium ${
+                              isCompleted
+                                ? 'bg-green-600 text-white'
+                                : isCurrent
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-gray-200 text-gray-600'
+                            }`}
+                          >
+                            {idx + 1}
+                          </div>
+                          <div className="ml-2 text-xs truncate">{label}</div>
+                          {idx < jobSteps.length - 1 && (
+                            <div className={`mx-2 h-0.5 flex-1 ${idx < currentStepIndex ? 'bg-green-600' : 'bg-gray-200'}`} />
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
 
@@ -1188,15 +1218,8 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
                     <AlertDescription>{currentJob.last_error}</AlertDescription>
                   </Alert>
                 )}
-
-                <Alert>
-                  <Info className="h-4 w-4" />
-                  <AlertDescription>
-                    Detailed EBA matches will appear once the background worker finishes processing this job. You can leave this screen and return later to review the timeline below.
-                  </AlertDescription>
-                </Alert>
-
-                {jobEvents.length > 0 && (
+                {/* Debug timeline hidden in user-facing mode */}
+                {false && jobEvents.length > 0 && (
                   <div className="space-y-3">
                     <h4 className="font-medium">Job Timeline</h4>
                     <div className="space-y-2 max-h-64 overflow-y-auto rounded border bg-muted/30 p-3">

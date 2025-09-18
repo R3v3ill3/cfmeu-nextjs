@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
   const startTime = Date.now();
   
   try {
-    const { searchParams } = new URL(request.url);
+    const searchParams = request.nextUrl.searchParams;
     
     // Create server-side Supabase client
     const supabase = await createServerSupabase();
@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
     const eba = (searchParams.get('eba') || 'all') as ProjectsRequest['eba'];
 
     // Parse patch IDs
-    const patchIds = patchParam ? patchParam.split(",").map(s => s.trim()).filter(Boolean) : [];
+    const patchIds = patchParam ? patchParam.split(',').map(s => s.trim()).filter(Boolean) : [];
 
     // Build query using the optimized materialized view
     let query = supabase.from('project_list_comprehensive_view').select('*', { count: 'exact' });

@@ -1716,7 +1716,7 @@ export default function PendingEmployersImport() {
       
              {/* EBA Search Dialog */}
        <Dialog open={showEbaSearch} onOpenChange={setShowEbaSearch}>
-         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+         <DialogContent className="max-w-5xl max-h-[85vh] overflow-y-auto">
            <DialogHeader>
              <DialogTitle className="flex items-center gap-2">
                <Search className="h-5 w-5 text-blue-500" />
@@ -1727,7 +1727,7 @@ export default function PendingEmployersImport() {
              </DialogDescription>
            </DialogHeader>
            
-           <div className="space-y-4">
+           <div className="space-y-4 break-words">
              {!importResults || !(importResults as ImportResults).processedEmployers || (importResults as ImportResults).processedEmployers.length === 0 ? (
                <Alert>
                  <Info className="h-4 w-4" />
@@ -1744,6 +1744,23 @@ export default function PendingEmployersImport() {
                      for the {(importResults as ImportResults)?.processedEmployers?.length || 0} processed employers.
                    </AlertDescription>
                  </Alert>
+                 {isEbaSearching && (
+                   <div className="bg-blue-50 border border-blue-200 rounded p-3">
+                     <div className="flex items-center gap-2 mb-2">
+                       <img src="/spinner.gif" alt="Loading" className="h-4 w-4" />
+                       <span className="text-sm font-medium text-blue-800">Searching FWC database...</span>
+                     </div>
+                     <div className="text-xs text-blue-800 mb-1">
+                       Progress updates appear below as each employer finishes.
+                     </div>
+                     <div className="w-full bg-blue-100 rounded-full h-2">
+                       <div
+                         className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                         style={{ width: `${Math.min(100, Math.round((Object.values(ebaSearchStates).filter(s => !s.isSearching).length / ((importResults as ImportResults)?.processedEmployers?.length || 1)) * 100))}%` }}
+                       ></div>
+                     </div>
+                   </div>
+                 )}
                  
                  <div className="flex justify-end gap-2">
                    <Button
@@ -1791,18 +1808,32 @@ export default function PendingEmployersImport() {
                  
                  {/* Display EBA Search Results */}
                  {Object.keys(ebaSearchStates).length > 0 && (
-                   <div className="space-y-3 mt-4 max-h-[50vh] overflow-y-auto">
+                   <div className="space-y-3 mt-4 max-h-[55vh] overflow-y-auto">
                      <h4 className="font-medium">EBA Search Results</h4>
                      {Object.entries(ebaSearchStates).map(([employerId, searchState]) => (
                        <Card key={employerId} className="border-blue-200">
                          <CardHeader>
                            <CardTitle className="text-lg">{searchState.employerName}</CardTitle>
                          </CardHeader>
-                         <CardContent>
+                         <CardContent className="break-words">
                            {searchState.isSearching && (
-                             <div className="flex items-center gap-2">
-                               <img src="/spinner.gif" alt="Loading" className="h-4 w-4" />
-                               <span className="text-sm">Searching FWC database...</span>
+                             <div className="space-y-2">
+                               <div className="flex items-center gap-2">
+                                 <img src="/spinner.gif" alt="Loading" className="h-4 w-4" />
+                                 <span className="text-sm">Searching FWC database...</span>
+                               </div>
+                               <div className="flex items-center">
+                                 {[1, 2, 3].map((step, idx) => (
+                                   <React.Fragment key={idx}>
+                                     <div className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center ${
+                                       step === 1 ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
+                                     }`}>
+                                       {step}
+                                     </div>
+                                     {idx < 2 && <div className="flex-1 h-0.5 mx-2 bg-gray-200" />}
+                                   </React.Fragment>
+                                 ))}
+                               </div>
                              </div>
                            )}
                            
@@ -1825,8 +1856,8 @@ export default function PendingEmployersImport() {
                                  <div key={index} className="bg-green-50 p-3 rounded border">
                                    <div className="flex justify-between items-start">
                                      <div className="flex-1">
-                                       <p className="font-medium text-sm">{result.title}</p>
-                                       <div className="flex gap-2 mt-1">
+                                       <p className="font-medium text-sm break-words">{result.title}</p>
+                                       <div className="flex flex-wrap gap-2 mt-1">
                                          <Badge variant="outline" className="text-xs">
                                            {result.status}
                                          </Badge>

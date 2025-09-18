@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
   const startTime = Date.now()
   
   try {
-    const { searchParams } = new URL(request.url)
+    const searchParams = request.nextUrl.searchParams
     const supabase = await createServerSupabase()
     
     // Parse filters

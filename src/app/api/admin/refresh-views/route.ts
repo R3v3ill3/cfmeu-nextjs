@@ -26,7 +26,8 @@ export async function POST(request: NextRequest) {
   try {
     // Basic authentication check (you may want to add proper auth)
     const authHeader = request.headers.get('authorization');
-    const isLocalhost = request.url.includes('localhost');
+    const hostname = request.nextUrl.hostname;
+    const isLocalhost = hostname === 'localhost';
     const isDevelopment = process.env.NODE_ENV === 'development';
     
     if (!isLocalhost && !isDevelopment && !authHeader?.includes('Bearer')) {
