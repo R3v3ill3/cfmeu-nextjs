@@ -25,7 +25,7 @@ interface IncolinkBadgeProps {
   /**
    * Click handler for the badge
    */
-  onClick?: () => void
+  onClick?: React.MouseEventHandler<HTMLDivElement>
   
   /**
    * Whether the badge is clickable/interactive

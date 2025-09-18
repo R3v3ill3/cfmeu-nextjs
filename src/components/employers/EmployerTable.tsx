@@ -39,6 +39,8 @@ type EmployerRow = {
   }>
 }
 
+type EmployerProject = NonNullable<EmployerRow["projects"]>[number]
+
 export function EmployerTable({ rows, onRowClick }: { rows: EmployerRow[]; onRowClick: (id: string) => void }) {
   const [fwcSearchModal, setFwcSearchModal] = useState<{ open: boolean; employerId: string; employerName: string }>({
     open: false,
@@ -51,7 +53,7 @@ export function EmployerTable({ rows, onRowClick }: { rows: EmployerRow[]; onRow
     employerName: '',
     incolinkId: null
   })
-  const [selectedProject, setSelectedProject] = useState<{ project: EmployerRow['projects'][0]; organisers?: EmployerRow['organisers'] } | null>(null)
+  const [selectedProject, setSelectedProject] = useState<{ project: EmployerProject; organisers?: EmployerRow['organisers'] } | null>(null)
   const router = useRouter()
 
   const typeLabel = (t: string) => {
@@ -95,7 +97,7 @@ export function EmployerTable({ rows, onRowClick }: { rows: EmployerRow[]; onRow
     })
   }
 
-  const handleProjectClick = (project: EmployerRow['projects'][0], organisers: EmployerRow['organisers'], e: React.MouseEvent) => {
+  const handleProjectClick = (project: EmployerProject, organisers: EmployerRow['organisers'], e: React.MouseEvent) => {
     e.stopPropagation()
     setSelectedProject({ project, organisers })
   }
@@ -287,5 +289,4 @@ export function EmployerTable({ rows, onRowClick }: { rows: EmployerRow[]; onRow
     </>
   )
 }
-
 
