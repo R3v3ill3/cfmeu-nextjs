@@ -44,6 +44,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function processFwcJob(client, job) {
     const payload = (job.payload ?? {});
     const employerIds = Array.isArray(payload.employerIds) ? payload.employerIds : [];
+    const searchOverrides = payload.options?.searchOverrides ?? {};
     if (employerIds.length === 0) {
         await (0, jobs_1.appendEvent)(client, job.id, 'fwc_no_employers');
         return { succeeded: 0, failed: 0 };
@@ -59,9 +60,11 @@ async function processFwcJob(client, job) {
     try {
         for (const [index, employerId] of employerIds.entries()) {
             const employerName = employerMap.get(employerId) ?? employerId;
+            const searchTermOverride = searchOverrides[employerId];
             await (0, jobs_1.appendEvent)(client, job.id, 'fwc_employer_started', { employerId, employerName });
             try {
-                const results = await searchFwcAgreements(browser, employerName);
+                const queryName = searchTermOverride && searchTermOverride.trim().length > 0 ? searchTermOverride : employerName;
+                const results = await searchFwcAgreements(browser, queryName);
                 if (results.length > 0) {
                     const bestResult = results[0];
                     await upsertEbaRecord(client, employerId, bestResult);

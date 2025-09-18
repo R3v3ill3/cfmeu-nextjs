@@ -30,6 +30,24 @@ type RunStatus = {
   error?: string
 }
 
+type ScraperJobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled"
+
+type ScraperJob = {
+  id: string
+  status: ScraperJobStatus
+  progress_total: number | null
+  progress_completed: number | null
+  created_at: string
+  updated_at: string
+}
+
+type ScraperJobEvent = {
+  id: number
+  event_type: string
+  payload: Record<string, unknown> | null
+  created_at: string
+}
+
 export default function IncolinkScrape() {
   const { toast } = useToast()
   const [employers, setEmployers] = useState<EmployerRow[]>([])
@@ -90,12 +108,13 @@ export default function IncolinkScrape() {
     setSelected(next)
   }
 
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
   const runForSelected = async () => {
     const ids = Array.from(selected)
     if (ids.length === 0) return
     setIsRunning(true)
     try {
-      // Queue statuses
       setRunMap((prev) => {
         const next = { ...prev }
         ids.forEach((id) => (next[id] = { status: "queued" }))
@@ -105,25 +124,21 @@ export default function IncolinkScrape() {
       for (const employerId of ids) {
         setRunMap((prev) => ({ ...prev, [employerId]: { status: "running" } }))
         try {
-          const res = await fetch("/api/incolink/import-workers", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ employerId, invoiceNumber: invoiceNumber.trim() || undefined })
-          })
-          const data = await res.json()
-          if (!res.ok) throw new Error(data?.error || "Import failed")
-          const counts = data?.counts || undefined
+          const job = await queueIncolinkJob(employerId)
+          const result = await pollJob(job.id)
+          const summary = extractSummary(result.events)
           setRunMap((prev) => ({
             ...prev,
             [employerId]: {
-              status: "success",
-              invoiceNumber: data?.invoiceNumber,
-              invoiceDate: data?.invoiceDate || null,
-              counts
-            }
+              status: result.job.status === "succeeded" ? "success" : "error",
+              invoiceNumber: summary?.invoiceNumber,
+              invoiceDate: summary?.invoiceDate ?? null,
+              counts: summary?.counts,
+              error: result.job.status === "succeeded" ? undefined : summary?.error,
+            },
           }))
-        } catch (e) {
-          const msg = (e as Error).message
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : "Import failed"
           setRunMap((prev) => ({ ...prev, [employerId]: { status: "error", error: msg } }))
         }
       }
@@ -132,6 +147,71 @@ export default function IncolinkScrape() {
     } finally {
       setIsRunning(false)
     }
+  }
+
+  const queueIncolinkJob = async (employerId: string): Promise<ScraperJob> => {
+    const body = {
+      jobType: "incolink_sync",
+      payload: {
+        employerIds: [employerId],
+        invoiceNumber: invoiceNumber.trim() || undefined,
+      },
+      priority: 5,
+      progressTotal: 1,
+    }
+
+    const response = await fetch("/api/scraper-jobs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+
+    if (!response.ok) {
+      throw new Error(await response.text())
+    }
+
+    const data = (await response.json()) as { job: ScraperJob }
+    await sleep(1000)
+    return data.job
+  }
+
+  const pollJob = async (
+    jobId: string
+  ): Promise<{ job: ScraperJob; events: ScraperJobEvent[] }> => {
+    for (;;) {
+      const response = await fetch(`/api/scraper-jobs?id=${jobId}&includeEvents=1`, {
+        cache: "no-store",
+      })
+      if (!response.ok) {
+        throw new Error(await response.text())
+      }
+      const data = (await response.json()) as { job: ScraperJob; events?: ScraperJobEvent[] }
+      const events = data.events ?? []
+      if (["succeeded", "failed", "cancelled"].includes(data.job.status)) {
+        return { job: data.job, events }
+      }
+      await sleep(3000)
+    }
+  }
+
+  const extractSummary = (
+    events: ScraperJobEvent[]
+  ): { counts?: RunStatus["counts"]; invoiceNumber?: string; invoiceDate?: string | null; error?: string } | undefined => {
+    const successEvent = events.find((event) => event.event_type === "incolink_employer_succeeded")
+    if (successEvent) {
+      const payload = successEvent.payload ?? {}
+      const counts = (payload.counts ?? undefined) as RunStatus["counts"] | undefined
+      return {
+        counts,
+        invoiceNumber: (payload.invoiceNumber as string) ?? undefined,
+        invoiceDate: (payload.invoiceDate as string | null) ?? null,
+      }
+    }
+    const failureEvent = events.find((event) => event.event_type === "incolink_employer_failed")
+    if (failureEvent) {
+      return { error: (failureEvent.payload?.error as string) ?? "Import failed" }
+    }
+    return undefined
   }
 
   return (
@@ -256,5 +336,3 @@ export default function IncolinkScrape() {
     </div>
   )
 }
-
-

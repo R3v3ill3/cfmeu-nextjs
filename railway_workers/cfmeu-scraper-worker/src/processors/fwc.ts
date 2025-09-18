@@ -29,6 +29,7 @@ export async function processFwcJob(
 ): Promise<FwcLookupSummary> {
   const payload = (job.payload ?? {}) as Partial<FwcJobPayload>
   const employerIds = Array.isArray(payload.employerIds) ? payload.employerIds : []
+  const searchOverrides = payload.options?.searchOverrides ?? {}
 
   if (employerIds.length === 0) {
     await appendEvent(client, job.id, 'fwc_no_employers')
@@ -52,10 +53,12 @@ export async function processFwcJob(
   try {
     for (const [index, employerId] of employerIds.entries()) {
       const employerName = employerMap.get(employerId) ?? employerId
+      const searchTermOverride = searchOverrides[employerId]
       await appendEvent(client, job.id, 'fwc_employer_started', { employerId, employerName })
 
       try {
-        const results = await searchFwcAgreements(browser, employerName)
+        const queryName = searchTermOverride && searchTermOverride.trim().length > 0 ? searchTermOverride : employerName
+        const results = await searchFwcAgreements(browser, queryName)
 
         if (results.length > 0) {
           const bestResult = results[0]

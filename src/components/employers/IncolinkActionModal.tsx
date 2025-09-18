@@ -153,35 +153,38 @@ export function IncolinkActionModal({
     setError(null)
 
     try {
-      const response = await fetch('/api/incolink/import-workers', {
+      const response = await fetch('/api/scraper-jobs', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
-          incolinkNumber: currentIncolinkId
+        body: JSON.stringify({
+          jobType: 'incolink_sync',
+          payload: {
+            employerIds: [employerId],
+          },
+          priority: 5,
+          progressTotal: 1,
         })
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Import failed')
+        throw new Error(await response.text())
       }
 
-      const result = await response.json()
-      
       toast({
-        title: "Import Complete",
-        description: `Imported ${result.members?.length || 0} workers from Incolink`,
+        title: "Import queued",
+        description: "The background worker will import updated Incolink data shortly.",
       })
 
       onUpdate?.()
     } catch (error) {
       console.error('Import error:', error)
-      setError(error instanceof Error ? error.message : 'Import failed')
+      const message = error instanceof Error ? error.message : 'Failed to queue Incolink import'
+      setError(message)
       toast({
         title: "Import Failed",
-        description: "Failed to import worker data from Incolink",
+        description: message,
         variant: "destructive"
       })
     } finally {

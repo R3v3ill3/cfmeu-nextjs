@@ -31,6 +31,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { WorkerForm } from "@/components/workers/WorkerForm";
 import { FwcEbaSearchModal } from "./FwcEbaSearchModal";
 import { IncolinkActionModal } from "./IncolinkActionModal";
+import { useToast } from "@/hooks/use-toast";
 
 type EmployerSite = {
   id: string;
@@ -89,6 +90,7 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
   const [isIncolinkModalOpen, setIsIncolinkModalOpen] = useState(false);
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { toast } = useToast();
 
   useEffect(() => {
     if (isOpen) {
@@ -562,40 +564,57 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
           <Button
             size="sm"
             variant="secondary"
-                          disabled={isImportingIncolink}
-                          aria-busy={isImportingIncolink}
+            disabled={isImportingIncolink}
+            aria-busy={isImportingIncolink}
             onClick={async () => {
-                            setIsImportingIncolink(true);
+              setIsImportingIncolink(true)
               try {
-                const res = await fetch('/api/incolink/import-workers', {
+                const res = await fetch('/api/scraper-jobs', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ employerId })
+                  body: JSON.stringify({
+                    jobType: 'incolink_sync',
+                    payload: {
+                      employerIds: [employerId],
+                    },
+                    priority: 5,
+                    progressTotal: 1,
+                  }),
                 })
-                const data = await res.json()
-                if (!res.ok) throw new Error(data?.error || 'Import failed')
+
+                if (!res.ok) {
+                  throw new Error(await res.text())
+                }
+
+                toast({
+                  title: 'Import queued',
+                  description: 'Background import will refresh worker data shortly.',
+                })
                 queryClient.invalidateQueries({ queryKey: ["employer-workers", employerId] })
                 queryClient.invalidateQueries({ queryKey: ["employer-detail", employerId] })
-                alert(`Imported from Incolink invoice ${data.invoiceNumber}. Created ${data.counts.createdWorkers}, matched ${data.counts.matchedWorkers}, placements ${data.counts.placementsCreated}/${data.counts.totalParsed}`)
               } catch (e) {
-                alert(`Incolink import failed: ${(e as Error).message}`)
-                            } finally {
-                              setIsImportingIncolink(false);
+                toast({
+                  title: 'Import failed',
+                  description: e instanceof Error ? e.message : 'Failed to queue Incolink import.',
+                  variant: 'destructive',
+                })
+              } finally {
+                setIsImportingIncolink(false)
               }
             }}
             title="Import workers from Incolink invoice using employer Incolink ID"
           >
-                          {isImportingIncolink ? (
-                            <span className="inline-flex items-center">
-                              <img src="/spinner.gif" alt="Loading" className="h-4 w-4 mr-2" />
-                              Importing...
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center">
-                              <Download className="h-4 w-4 mr-2" />
-                              Import from Incolink
-                            </span>
-                          )}
+            {isImportingIncolink ? (
+              <span className="inline-flex items-center">
+                <img src="/spinner.gif" alt="Loading" className="h-4 w-4 mr-2" />
+                Importing...
+              </span>
+            ) : (
+              <span className="inline-flex items-center">
+                <Download className="h-4 w-4 mr-2" />
+                Import from Incolink
+              </span>
+            )}
           </Button>
         )}
         <DropdownMenu>

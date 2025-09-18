@@ -30,7 +30,10 @@ export interface ScraperJobEvent {
 
 export interface FwcJobPayload {
   employerIds: string[]
-  options?: Record<string, unknown>
+  options?: {
+    searchOverrides?: Record<string, string>
+    [key: string]: unknown
+  }
   projectId?: string
 }
 

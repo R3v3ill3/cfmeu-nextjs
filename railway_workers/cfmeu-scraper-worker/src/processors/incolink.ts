@@ -94,7 +94,10 @@ export async function processIncolinkJob(client: SupabaseClient, job: ScraperJob
           employerId,
           invoiceNumber: invoiceResult.invoiceNumber,
           invoiceDate: invoiceResult.invoiceDate,
-          counts: processed,
+          counts: {
+            ...processed,
+            totalParsed: invoiceResult.members.length,
+          },
         })
       } catch (error) {
         failed += 1
