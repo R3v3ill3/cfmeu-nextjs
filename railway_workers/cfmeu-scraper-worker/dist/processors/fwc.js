@@ -45,6 +45,7 @@ async function processFwcJob(client, job) {
     const payload = (job.payload ?? {});
     const employerIds = Array.isArray(payload.employerIds) ? payload.employerIds : [];
     const searchOverrides = payload.options?.searchOverrides ?? {};
+    const autoLink = payload.options?.autoLink !== false;
     if (employerIds.length === 0) {
         await (0, jobs_1.appendEvent)(client, job.id, 'fwc_no_employers');
         return { succeeded: 0, failed: 0 };
@@ -79,23 +80,36 @@ async function processFwcJob(client, job) {
                         break;
                     }
                 }
+                const limitedResults = results.slice(0, 15);
                 await (0, jobs_1.appendEvent)(client, job.id, 'fwc_employer_results', {
                     employerId,
                     employerName,
                     query: usedQuery,
                     resultsCount: results.length,
                     firstTitle: results[0]?.title,
+                    results: autoLink ? undefined : limitedResults,
                 });
                 if (results.length > 0) {
-                    const bestResult = results[0];
-                    await upsertEbaRecord(client, employerId, bestResult);
-                    succeeded += 1;
-                    await (0, jobs_1.appendEvent)(client, job.id, 'fwc_employer_succeeded', {
-                        employerId,
-                        employerName,
-                        resultTitle: bestResult.title,
-                        status: bestResult.status,
-                    });
+                    if (autoLink) {
+                        const bestResult = results[0];
+                        await upsertEbaRecord(client, employerId, bestResult);
+                        succeeded += 1;
+                        await (0, jobs_1.appendEvent)(client, job.id, 'fwc_employer_succeeded', {
+                            employerId,
+                            employerName,
+                            resultTitle: bestResult.title,
+                            status: bestResult.status,
+                        });
+                    }
+                    else {
+                        succeeded += 1;
+                        await (0, jobs_1.appendEvent)(client, job.id, 'fwc_employer_candidates', {
+                            employerId,
+                            employerName,
+                            query: usedQuery,
+                            results: limitedResults,
+                        });
+                    }
                 }
                 else {
                     failed += 1;

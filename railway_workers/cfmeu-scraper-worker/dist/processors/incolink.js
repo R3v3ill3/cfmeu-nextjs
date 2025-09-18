@@ -82,6 +82,14 @@ async function processIncolinkJob(client, job) {
     finally {
         await browser.close();
     }
+    try {
+        await client.rpc('refresh_employer_related_views');
+    }
+    catch (error) {
+        await (0, jobs_1.appendEvent)(client, job.id, 'incolink_refresh_failed', {
+            error: error instanceof Error ? error.message : error,
+        });
+    }
     return { succeeded, failed, createdWorkers, matchedWorkers, placementsCreated, placementsSkipped };
 }
 async function getBrowser() {

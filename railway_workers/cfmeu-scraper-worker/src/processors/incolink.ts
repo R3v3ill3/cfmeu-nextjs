@@ -114,6 +114,14 @@ export async function processIncolinkJob(client: SupabaseClient, job: ScraperJob
     await browser.close()
   }
 
+  try {
+    await client.rpc('refresh_employer_related_views')
+  } catch (error) {
+    await appendEvent(client, job.id, 'incolink_refresh_failed', {
+      error: error instanceof Error ? error.message : error,
+    })
+  }
+
   return { succeeded, failed, createdWorkers, matchedWorkers, placementsCreated, placementsSkipped }
 }
 

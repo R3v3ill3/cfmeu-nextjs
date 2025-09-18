@@ -55,5 +55,11 @@ BEGIN
             v_lodgement_number
         );
     END IF;
+
+    -- Refresh materialized views and derived employer status so the UI sees new data immediately
+    PERFORM refresh_employer_eba_status(p_employer_id);
+    PERFORM refresh_employer_related_views();
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp;
