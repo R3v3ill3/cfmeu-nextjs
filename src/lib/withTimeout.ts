@@ -7,7 +7,6 @@ export function withTimeout<T>(promiseLike: PromiseLike<T>, timeoutMs: number, l
         ? `${label} timed out after ${timeoutMs}ms`
         : `Operation timed out after ${timeoutMs}ms`;
       const error = new Error(message);
-      // @ts-expect-error attach code for potential upstream handling
       (error as any).code = "ETIMEDOUT";
       reject(error);
     }, timeoutMs);
