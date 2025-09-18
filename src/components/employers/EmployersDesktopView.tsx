@@ -63,6 +63,8 @@ export function EmployersDesktopView() {
           email,
           phone,
           estimated_worker_count,
+          incolink_id,
+          incolink_last_matched,
           company_eba_records!left(*),
           worker_placements!left(id),
           project_assignments!left(id)
@@ -87,6 +89,7 @@ export function EmployersDesktopView() {
     engaged,
     eba: eba as any,
     type: type as any,
+    enhanced: true, // Enable enhanced data for projects, organisers, incolink
   })
 
   // Conditional data selection based on feature flag

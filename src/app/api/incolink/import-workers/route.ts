@@ -332,7 +332,7 @@ export async function POST(request: NextRequest) {
           return `${yyyy}-${mm}-${dd}`
         })()
         const dateToSet = iso || invoiceDate
-        await supabase.from('workers').update({ last_incolink_payment: dateToSet }).eq('id', workerId)
+        await supabase.from('workers').update({ incolink_last_matched: dateToSet }).eq('id', workerId)
       }
     }
 
@@ -348,7 +348,7 @@ export async function POST(request: NextRequest) {
         return `${yyyy}-${mm}-${dd}`
       })()
       const dateToSet = iso || invoiceDate
-      await supabase.from('employers').update({ last_incolink_payment: dateToSet }).eq('id', employerId)
+      await supabase.from('employers').update({ incolink_last_matched: dateToSet }).eq('id', employerId)
     }
 
     return NextResponse.json({

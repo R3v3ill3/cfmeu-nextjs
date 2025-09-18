@@ -1,5 +1,5 @@
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -13,6 +13,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRADE_OPTIONS } from "@/constants/trades";
 import { GoogleAddressInput, GoogleAddress } from "@/components/projects/GoogleAddressInput";
+import { IncolinkActionModal } from "./IncolinkActionModal";
+import { Plus } from "lucide-react";
 
 const employerTypeOptions = [
   { value: "builder", label: "Builder" },
@@ -47,7 +49,7 @@ const FormSchema = z.object({
   postcode: z.string().optional().nullable(),
   contact_notes: z.string().optional().nullable(),
   estimated_worker_count: z.number().min(0).optional().nullable(),
-  
+  incolink_id: z.string().optional().nullable(),
 });
 
 export type EmployerEditFormProps = {
@@ -67,7 +69,7 @@ export type EmployerEditFormProps = {
     postcode?: string | null;
     contact_notes?: string | null;
     estimated_worker_count?: number | null;
-    
+    incolink_id?: string | null;
   };
   onCancel: () => void;
   onSaved: (updated: { id: string; name: string; employer_type: string }) => void;
@@ -76,48 +78,74 @@ export type EmployerEditFormProps = {
 export default function EmployerEditForm({ employer, onCancel, onSaved }: EmployerEditFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [isFormReady, setIsFormReady] = useState(false);
+  const [isIncolinkModalOpen, setIsIncolinkModalOpen] = useState(false);
+
+  // Stabilize employer object to prevent form re-initialization on every render
+  const stableEmployer = useMemo(() => ({
+    id: employer.id,
+    name: employer.name,
+    employer_type: employer.employer_type,
+    abn: employer.abn,
+    primary_contact_name: employer.primary_contact_name,
+    phone: employer.phone,
+    email: employer.email,
+    website: employer.website,
+    address_line_1: employer.address_line_1,
+    address_line_2: employer.address_line_2,
+    suburb: employer.suburb,
+    state: employer.state,
+    postcode: employer.postcode,
+    contact_notes: employer.contact_notes,
+    estimated_worker_count: employer.estimated_worker_count,
+    incolink_id: employer.incolink_id,
+  }), [employer.id, employer.name, employer.employer_type, employer.abn, employer.primary_contact_name, employer.phone, employer.email, employer.website, employer.address_line_1, employer.address_line_2, employer.suburb, employer.state, employer.postcode, employer.contact_notes, employer.estimated_worker_count, employer.incolink_id]);
+
+  // Stabilize form default values
+  const defaultValues = useMemo(() => ({
+    name: stableEmployer.name ?? "",
+    employer_type: stableEmployer.employer_type as EmployerType,
+    abn: stableEmployer.abn ?? null,
+    primary_contact_name: stableEmployer.primary_contact_name ?? null,
+    phone: stableEmployer.phone ?? null,
+    email: stableEmployer.email ?? null,
+    website: stableEmployer.website ?? null,
+    address_line_1: stableEmployer.address_line_1 ?? null,
+    address_line_2: stableEmployer.address_line_2 ?? null,
+    suburb: stableEmployer.suburb ?? null,
+    state: stableEmployer.state ?? null,
+    postcode: stableEmployer.postcode ?? null,
+    contact_notes: stableEmployer.contact_notes ?? null,
+    estimated_worker_count: stableEmployer.estimated_worker_count ?? null,
+    incolink_id: stableEmployer.incolink_id ?? null,
+  }), [stableEmployer]);
 
 const form = useForm<z.input<typeof FormSchema>>({
   resolver: zodResolver(FormSchema),
-  defaultValues: {
-    name: employer.name ?? "",
-    employer_type: employer.employer_type as EmployerType,
-    abn: employer.abn ?? null,
-    primary_contact_name: employer.primary_contact_name ?? null,
-    phone: employer.phone ?? null,
-    email: employer.email ?? null,
-    website: employer.website ?? null,
-    address_line_1: employer.address_line_1 ?? null,
-    address_line_2: employer.address_line_2 ?? null,
-    suburb: employer.suburb ?? null,
-    state: employer.state ?? null,
-    postcode: employer.postcode ?? null,
-    contact_notes: employer.contact_notes ?? null,
-    estimated_worker_count: employer.estimated_worker_count ?? null,
-    
-  },
+  defaultValues,
+  mode: "onChange", // Prevent re-validation on every change
 });
 
   // Load existing durable classification tags and trade capabilities
   const { data: roleTags = [] } = useQuery({
-    queryKey: ["employer_role_tags", employer.id],
+    queryKey: ["employer_role_tags", stableEmployer.id],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("employer_role_tags")
         .select("tag")
-        .eq("employer_id", employer.id);
+        .eq("employer_id", stableEmployer.id);
       if (error) throw error;
       return (data ?? []) as { tag: "builder" | "head_contractor" }[];
     },
   });
 
   const { data: tradeCaps = [] } = useQuery({
-    queryKey: ["contractor_trade_capabilities", employer.id],
+    queryKey: ["contractor_trade_capabilities", stableEmployer.id],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("contractor_trade_capabilities")
         .select("trade_type")
-        .eq("employer_id", employer.id);
+        .eq("employer_id", stableEmployer.id);
       if (error) throw error;
       return (data ?? []) as { trade_type: string }[];
     },
@@ -127,16 +155,44 @@ const form = useForm<z.input<typeof FormSchema>>({
   const [isBuilder, setIsBuilder] = useState(false);
   const [isHeadContractor, setIsHeadContractor] = useState(false);
   const [selectedTrades, setSelectedTrades] = useState<string[]>([]);
+  
+  // Separate state for GoogleAddressInput to prevent infinite loops
+  const [addressInputValue, setAddressInputValue] = useState("");
 
+  // Delay form rendering to prevent ref composition issues during mount
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsFormReady(true);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Stabilize array dependencies from react-query to prevent re-render loops.
+  // The `data` array from `useQuery` can be a new reference on each render,
+  // causing an infinite loop if used as a `useEffect` dependency directly.
+  const roleTagsKey = useMemo(() => JSON.stringify(roleTags), [roleTags]);
   useEffect(() => {
     const tags = new Set(roleTags.map((r) => r.tag));
     setIsBuilder(tags.has("builder"));
     setIsHeadContractor(tags.has("head_contractor"));
-  }, [roleTags]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roleTagsKey]);
 
+  const tradeCapsKey = useMemo(() => JSON.stringify(tradeCaps), [tradeCaps]);
   useEffect(() => {
     setSelectedTrades(tradeCaps.map((c) => c.trade_type));
-  }, [tradeCaps]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tradeCapsKey]);
+
+  // Initialize address input value from employer data
+  useEffect(() => {
+    const parts: string[] = [];
+    if (stableEmployer.address_line_1) parts.push(stableEmployer.address_line_1);
+    const cityState = [stableEmployer.suburb, stableEmployer.state].filter(Boolean).join(" ");
+    if (cityState) parts.push(cityState);
+    if (stableEmployer.postcode) parts.push(stableEmployer.postcode);
+    setAddressInputValue(parts.join(", "));
+  }, [stableEmployer.address_line_1, stableEmployer.suburb, stableEmployer.state, stableEmployer.postcode]);
 
 const desiredTags = useMemo(() => {
     const s = new Set<RoleTag>();
@@ -149,21 +205,7 @@ const desiredTags = useMemo(() => {
   const currentTrades = useMemo(() => new Set(tradeCaps.map((t) => t.trade_type)), [tradeCaps]);
 const desiredTrades = useMemo(() => new Set(selectedTrades), [selectedTrades]);
 
-  // Compose display address string from form values for the autocomplete input
-  const wl1 = form.watch("address_line_1");
-  const wsuburb = form.watch("suburb");
-  const wstate = form.watch("state");
-  const wpostcode = form.watch("postcode");
-  const displayAddress = useMemo(() => {
-    const parts: string[] = [];
-    if (wl1) parts.push(String(wl1));
-    const cityState = [wsuburb, wstate].filter(Boolean).join(" ");
-    if (cityState) parts.push(cityState);
-    if (wpostcode) parts.push(String(wpostcode));
-    return parts.join(", ");
-  }, [wl1, wsuburb, wstate, wpostcode]);
-
-  const handleAddressSelect = (addr: GoogleAddress) => {
+  const handleAddressSelect = useCallback((addr: GoogleAddress) => {
     const comps = addr.components || {};
     const streetNumber = comps["street_number"]; // e.g., 123
     const route = comps["route"]; // e.g., Main St
@@ -178,9 +220,17 @@ const desiredTrades = useMemo(() => new Set(selectedTrades), [selectedTrades]);
     form.setValue("suburb", suburb, { shouldDirty: true });
     form.setValue("state", state, { shouldDirty: true });
     form.setValue("postcode", postcode, { shouldDirty: true });
-  };
+    
+    // Update the address input display value
+    const parts: string[] = [];
+    if (finalLine1) parts.push(finalLine1);
+    const cityState = [suburb, state].filter(Boolean).join(" ");
+    if (cityState) parts.push(cityState);
+    if (postcode) parts.push(postcode);
+    setAddressInputValue(parts.join(", "));
+  }, [form]);
 
-const onSubmit = async (values: z.input<typeof FormSchema>) => {
+const onSubmit = useCallback(async (values: z.input<typeof FormSchema>) => {
   const parsed = FormSchema.parse(values);
   const toNull = (v: any) => (v === "" ? null : v);
   // Prepare payload for RPC
@@ -199,14 +249,14 @@ const onSubmit = async (values: z.input<typeof FormSchema>) => {
     postcode: toNull(parsed.postcode),
     contact_notes: toNull(parsed.contact_notes),
     estimated_worker_count: parsed.estimated_worker_count ?? null,
-    
+    incolink_id: toNull(parsed.incolink_id),
   };
 
   const desiredTagsArray = Array.from(desiredTags);
   const desiredTradesArray = Array.from(desiredTrades);
 
   const { data, error } = await (supabase as any).rpc('admin_update_employer_full', {
-    p_employer_id: employer.id,
+    p_employer_id: stableEmployer.id,
     p_update: updatePayload,
     p_role_tags: desiredTagsArray,
     p_trade_types: desiredTradesArray,
@@ -228,7 +278,7 @@ const onSubmit = async (values: z.input<typeof FormSchema>) => {
   const updatedRow = data as any;
 
   // Optimistically update caches to reflect changes immediately
-  queryClient.setQueryData(["employer-detail", employer.id], (prev: any) => {
+  queryClient.setQueryData(["employer-detail", stableEmployer.id], (prev: any) => {
     if (!prev) return updatedRow;
     return { ...prev, ...updatedRow };
   });
@@ -236,25 +286,29 @@ const onSubmit = async (values: z.input<typeof FormSchema>) => {
   queryClient.setQueryData(["employers"], (prev: any) => {
     if (!Array.isArray(prev)) return prev;
     return prev.map((e: any) =>
-      e?.id === employer.id
+      e?.id === stableEmployer.id
         ? { ...e, name: updatedRow.name, employer_type: updatedRow.employer_type, estimated_worker_count: updatedRow.estimated_worker_count }
         : e
     );
   });
 
-  await queryClient.refetchQueries({ queryKey: ["employer-detail", employer.id] });
+  await queryClient.refetchQueries({ queryKey: ["employer-detail", stableEmployer.id] });
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: ["employers"] }),
     queryClient.invalidateQueries({ queryKey: ["employer_role_tags"] }),
-    queryClient.invalidateQueries({ queryKey: ["employer_role_tags", employer.id] }),
+    queryClient.invalidateQueries({ queryKey: ["employer_role_tags", stableEmployer.id] }),
     queryClient.invalidateQueries({ queryKey: ["contractor_trade_capabilities"] }),
-    queryClient.invalidateQueries({ queryKey: ["contractor_trade_capabilities", employer.id] }),
+    queryClient.invalidateQueries({ queryKey: ["contractor_trade_capabilities", stableEmployer.id] }),
   ]);
 
   toast({ title: 'Employer updated', description: 'Changes saved successfully.' });
-  const updatedEmployer = { id: employer.id, name: updatedRow.name, employer_type: updatedRow.employer_type };
+  const updatedEmployer = { id: stableEmployer.id, name: updatedRow.name, employer_type: updatedRow.employer_type };
   onSaved(updatedEmployer as { id: string; name: string; employer_type: string });
-};
+}, [stableEmployer, desiredTags, desiredTrades, queryClient, toast, onSaved]);
+
+  if (!isFormReady) {
+    return <div className="p-4 text-center">Loading form...</div>;
+  }
 
   return (
     <div className="space-y-6">
@@ -281,7 +335,7 @@ const onSubmit = async (values: z.input<typeof FormSchema>) => {
       render={({ field }) => (
         <FormItem>
           <FormLabel>Employer Type</FormLabel>
-          <Select onValueChange={field.onChange} defaultValue={field.value}>
+          <Select onValueChange={field.onChange} value={field.value}>
             <FormControl>
               <SelectTrigger>
                 <SelectValue placeholder="Select type" />
@@ -366,7 +420,34 @@ const onSubmit = async (values: z.input<typeof FormSchema>) => {
       )}
     />
 
-    
+    {stableEmployer.incolink_id ? (
+      <FormField
+        control={form.control}
+        name="incolink_id"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Incolink ID</FormLabel>
+            <FormControl>
+              <Input
+                placeholder="Incolink Employer ID"
+                {...field}
+                value={field.value ?? ""}
+                onChange={(e) => field.onChange(e.target.value === "" ? null : e.target.value)}
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+    ) : (
+      <FormItem>
+        <FormLabel>Incolink ID</FormLabel>
+        <Button variant="secondary" className="w-full justify-start" onClick={() => setIsIncolinkModalOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          Add Incolink ID
+        </Button>
+      </FormItem>
+    )}
   </div>
 
   {/* Contact Information */}
@@ -433,7 +514,7 @@ const onSubmit = async (values: z.input<typeof FormSchema>) => {
   {/* Address */}
   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
     <div className="md:col-span-2">
-      <GoogleAddressInput value={displayAddress} onChange={handleAddressSelect} placeholder="Search address" />
+      <GoogleAddressInput value={addressInputValue} onChange={handleAddressSelect} placeholder="Search address" />
     </div>
 
     <FormField
@@ -599,6 +680,16 @@ const onSubmit = async (values: z.input<typeof FormSchema>) => {
           </div>
         </form>
       </Form>
+      <IncolinkActionModal
+        isOpen={isIncolinkModalOpen}
+        onClose={() => setIsIncolinkModalOpen(false)}
+        employerId={stableEmployer.id}
+        employerName={stableEmployer.name}
+        currentIncolinkId={stableEmployer.incolink_id}
+        onUpdate={() => {
+          queryClient.invalidateQueries({ queryKey: ["employer-detail", stableEmployer.id] });
+        }}
+      />
     </div>
   );
 }

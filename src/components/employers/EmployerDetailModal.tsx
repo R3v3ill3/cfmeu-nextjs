@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -7,7 +7,21 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Building, Phone, Mail, FileText, ExternalLink, MapPin, Users, Briefcase, Upload as UploadIcon, Download } from "lucide-react";
+import {
+  Building,
+  Phone,
+  Mail,
+  FileText,
+  ExternalLink,
+  MapPin,
+  Users,
+  Briefcase,
+  Upload as UploadIcon,
+  Download,
+  Database,
+  Search,
+  Plus,
+} from "lucide-react";
 import { getEbaStatusInfo } from "./ebaHelpers";
 import { EmployerWorkersList } from "../workers/EmployerWorkersList";
 import EmployerEditForm from "./EmployerEditForm";
@@ -15,6 +29,16 @@ import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { WorkerForm } from "@/components/workers/WorkerForm";
+import { FwcEbaSearchModal } from "./FwcEbaSearchModal";
+import { IncolinkActionModal } from "./IncolinkActionModal";
+
+type EmployerSite = {
+  id: string;
+  name: string;
+  project_id: string;
+  project_name: string;
+};
+
 type EmployerWithEba = {
   id: string;
   name: string;
@@ -29,6 +53,9 @@ type EmployerWithEba = {
   email: string | null;
   website: string | null;
   primary_contact_name: string | null;
+  incolink_id: string | null;
+  incolink_last_matched: string | null;
+  estimated_worker_count: number | null;
   company_eba_records: {
     id: string;
     contact_name: string | null;
@@ -58,6 +85,8 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
   const [isEditing, setIsEditing] = useState(false);
   const [isManualWorkerOpen, setIsManualWorkerOpen] = useState(false);
   const [isImportingIncolink, setIsImportingIncolink] = useState(false);
+  const [isFwcSearchOpen, setIsFwcSearchOpen] = useState(false);
+  const [isIncolinkModalOpen, setIsIncolinkModalOpen] = useState(false);
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
@@ -90,15 +119,31 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
       if (!employerId) return null;
       const { data, error } = await supabase
         .from("employers")
-        .select(`
-          *,
+        .select(
+          `
+          id, name, abn, employer_type, address_line_1, address_line_2, suburb, state, postcode, phone, email, website, primary_contact_name, incolink_id, incolink_last_matched, estimated_worker_count,
           company_eba_records (*)
-        `)
+        `
+        )
         .eq("id", employerId)
         .single();
 
       if (error) throw error;
       return data as EmployerWithEba;
+    },
+    enabled: !!employerId && isOpen,
+  });
+
+  const { data: workerCount } = useQuery({
+    queryKey: ["employer-worker-count", employerId],
+    queryFn: async () => {
+      if (!employerId) return 0;
+      const { data, error } = await supabase.rpc("get_employer_worker_count", { p_employer_id: employerId });
+      if (error) {
+        console.error("Error fetching worker count:", error);
+        return 0;
+      }
+      return data ?? 0;
     },
     enabled: !!employerId && isOpen,
   });
@@ -109,25 +154,25 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
     enabled: !!employerId && isOpen,
     queryFn: async () => {
       if (!employerId) return [];
-      // Find job sites where this employer has any trade assignment
-      const { data, error } = await (supabase as any)
-        .from("site_contractor_trades")
-        .select("job_site_id, job_sites(id, name, project_id, projects(name))")
-        .eq("employer_id", employerId);
-      if (error) throw error;
-      // De-duplicate by site id
-      const seen = new Set<string>();
-      const sites: { id: string; name: string; projectId: string; projectName?: string | null }[] = [];
-      (data || []).forEach((row: any) => {
-        const s = row.job_sites;
-        if (s?.id && !seen.has(s.id)) {
-          seen.add(s.id);
-          sites.push({ id: s.id as string, name: s.name as string, projectId: s.project_id as string, projectName: s.projects?.name ?? null });
-        }
-      });
-      return sites.sort((a, b) => a.name.localeCompare(b.name));
+      const { data, error } = await supabase.rpc("get_employer_sites", { p_employer_id: employerId });
+      if (error) {
+        console.error("Error fetching employer sites:", error);
+        return [];
+      }
+      return data;
     },
   });
+
+  // Stabilize callbacks to prevent infinite re-renders
+  const handleEditCancel = useCallback(() => {
+    setIsEditing(false);
+  }, []);
+
+  const handleEditSaved = useCallback(() => {
+    setIsEditing(false);
+    queryClient.invalidateQueries({ queryKey: ["employers"] });
+    queryClient.invalidateQueries({ queryKey: ["employer-detail", employerId] });
+  }, [queryClient, employerId]);
 
   if (!isOpen) return null;
 
@@ -165,15 +210,12 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
             <div className="space-y-6">
               <EmployerEditForm
                 employer={employer}
-                onCancel={() => setIsEditing(false)}
-                onSaved={() => {
-                  setIsEditing(false);
-                  queryClient.invalidateQueries({ queryKey: ["employers"] });
-                  queryClient.invalidateQueries({ queryKey: ["employer-detail", employer.id] });
-                }}
+                onCancel={handleEditCancel}
+                onSaved={handleEditSaved}
               />
             </div>
           ) : (
+            <>
             <Tabs value={activeTab} onValueChange={(v: string) => setActiveTab(v as "overview" | "eba" | "sites" | "workers")} className="space-y-6">
               <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -194,9 +236,16 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
                     <CardContent className="space-y-3">
                       <div>
                         <label className="text-sm font-medium text-muted-foreground">Employer Type</label>
-                        <p className="capitalize">{employer.employer_type.replace(/_/g, ' ')}</p>
+                        <p className="capitalize">{employer.employer_type.replace(/_/g, " ")}</p>
                       </div>
-                      
+
+                      {typeof workerCount === "number" && workerCount > 0 && (
+                        <div>
+                          <label className="text-sm font-medium text-muted-foreground">Known workers</label>
+                          <p>{workerCount}</p>
+                        </div>
+                      )}
+
                       {(employer.address_line_1 || employer.suburb) && (
                         <div>
                           <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
@@ -218,9 +267,9 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
                       {employer.website && (
                         <div>
                           <label className="text-sm font-medium text-muted-foreground">Website</label>
-                          <a 
-                            href={employer.website} 
-                            target="_blank" 
+                          <a
+                            href={employer.website}
+                            target="_blank"
                             rel="noopener noreferrer"
                             className="text-primary hover:underline flex items-center gap-1"
                           >
@@ -246,7 +295,7 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
                           <p>{employer.primary_contact_name}</p>
                         </div>
                       )}
-                      
+
                       {employer.phone && (
                         <div>
                           <label className="text-sm font-medium text-muted-foreground">Phone</label>
@@ -255,7 +304,7 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
                           </a>
                         </div>
                       )}
-                      
+
                       {employer.email && (
                         <div>
                           <label className="text-sm font-medium text-muted-foreground">Email</label>
@@ -273,7 +322,7 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
                               <p>{employer.company_eba_records[0].contact_name}</p>
                             </div>
                           )}
-                          
+
                           {employer.company_eba_records[0].contact_phone && (
                             <div>
                               <label className="text-sm font-medium text-muted-foreground">EBA Phone</label>
@@ -282,7 +331,7 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
                               </a>
                             </div>
                           )}
-                          
+
                           {employer.company_eba_records[0].contact_email && (
                             <div>
                               <label className="text-sm font-medium text-muted-foreground">EBA Email</label>
@@ -296,6 +345,41 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
                     </CardContent>
                   </Card>
                 </div>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Database className="h-5 w-5" />
+                      Incolink Details
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {employer.incolink_id ? (
+                      <>
+                        <div>
+                          <label className="text-sm font-medium text-muted-foreground">Incolink Employer ID</label>
+                          <p>{employer.incolink_id}</p>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium text-muted-foreground">Last Payment Date</label>
+                          <p>
+                            {employer.incolink_last_matched
+                              ? new Date(employer.incolink_last_matched).toLocaleDateString()
+                              : "N/A"}
+                          </p>
+                        </div>
+                        <Button variant="outline" size="sm" disabled>
+                          Sync Incolink
+                        </Button>
+                      </>
+                    ) : (
+                      <Button variant="secondary" size="sm" onClick={() => setIsIncolinkModalOpen(true)}>
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add Incolink ID
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
 
                 {ebaStatus && (
                   <Card>
@@ -326,9 +410,24 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
                   <div className="space-y-4">
                     <Card>
                       <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                          <FileText className="h-5 w-5" />
-                          EBA Information
+                        <CardTitle className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-5 w-5" />
+                            EBA Information
+                          </div>
+                          {employer.company_eba_records[0].fwc_document_url && (
+                            <Button asChild variant="outline" size="sm">
+                              <a
+                                href={employer.company_eba_records[0].fwc_document_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-2"
+                              >
+                                <ExternalLink className="h-4 w-4" />
+                                View FWC Document
+                              </a>
+                            </Button>
+                          )}
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-4">
@@ -339,35 +438,35 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
                               <p className="font-mono text-sm">{employer.company_eba_records[0].eba_file_number}</p>
                             </div>
                           )}
-                          
+
                           {employer.company_eba_records[0].fwc_lodgement_number && (
                             <div>
                               <label className="text-sm font-medium text-muted-foreground">FWC Lodgement Number</label>
                               <p className="font-mono text-sm">{employer.company_eba_records[0].fwc_lodgement_number}</p>
                             </div>
                           )}
-                          
+
                           {employer.company_eba_records[0].fwc_matter_number && (
                             <div>
                               <label className="text-sm font-medium text-muted-foreground">FWC Matter Number</label>
                               <p className="font-mono text-sm">{employer.company_eba_records[0].fwc_matter_number}</p>
                             </div>
                           )}
-                          
+
                           {employer.company_eba_records[0].eba_lodged_fwc && (
                             <div>
                               <label className="text-sm font-medium text-muted-foreground">Lodged with FWC</label>
                               <p>{new Date(employer.company_eba_records[0].eba_lodged_fwc).toLocaleDateString()}</p>
                             </div>
                           )}
-                          
+
                           {employer.company_eba_records[0].date_eba_signed && (
                             <div>
                               <label className="text-sm font-medium text-muted-foreground">EBA Signed</label>
                               <p>{new Date(employer.company_eba_records[0].date_eba_signed).toLocaleDateString()}</p>
                             </div>
                           )}
-                          
+
                           {employer.company_eba_records[0].fwc_certified_date && (
                             <div>
                               <label className="text-sm font-medium text-muted-foreground">FWC Certified</label>
@@ -376,26 +475,19 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
                           )}
                         </div>
 
-                        {employer.company_eba_records[0].fwc_document_url && (
-                          <div>
-                            <Button asChild variant="outline" size="sm">
-                              <a 
-                                href={employer.company_eba_records[0].fwc_document_url} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-2"
-                              >
-                                <ExternalLink className="h-4 w-4" />
-                                View FWC Document
-                              </a>
-                            </Button>
-                          </div>
-                        )}
-
                         {employer.company_eba_records[0].comments && (
                           <div>
                             <label className="text-sm font-medium text-muted-foreground">Comments</label>
                             <p className="text-sm bg-muted p-3 rounded-md">{employer.company_eba_records[0].comments}</p>
+                          </div>
+                        )}
+
+                        {!employer.company_eba_records[0].fwc_document_url && canEdit && (
+                          <div className="md:col-span-2 pt-4 border-t">
+                            <Button variant="secondary" size="sm" onClick={() => setIsFwcSearchOpen(true)}>
+                              <Search className="mr-2 h-4 w-4" />
+                              Find EBA on FWC to complete details
+                            </Button>
                           </div>
                         )}
                       </CardContent>
@@ -409,6 +501,12 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
                       <p className="text-muted-foreground text-center">
                         No Enterprise Bargaining Agreement information is available for this employer.
                       </p>
+                      {canEdit && (
+                        <Button variant="secondary" size="sm" className="mt-4" onClick={() => setIsFwcSearchOpen(true)}>
+                          <Search className="mr-2 h-4 w-4" />
+                          Search FWC for EBA
+                        </Button>
+                      )}
                     </CardContent>
                   </Card>
                 )}
@@ -429,12 +527,12 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
                     </CardHeader>
                     <CardContent>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {employerSites.map((s) => (
+                        {employerSites.map((s: EmployerSite) => (
                           <div key={s.id} className="flex items-center justify-between border rounded px-3 py-2">
                             <div className="truncate mr-3">
                               <div className="font-medium truncate">{s.name}</div>
-                              {s.projectName && (
-                                <div className="text-xs text-muted-foreground truncate">{s.projectName}</div>
+                              {s.project_name && (
+                                <div className="text-xs text-muted-foreground truncate">{s.project_name}</div>
                               )}
                             </div>
                           </div>
@@ -448,7 +546,7 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
                       <Briefcase className="h-12 w-12 text-muted-foreground mb-4" />
                       <h3 className="text-lg font-semibold mb-2">No Worksites</h3>
                       <p className="text-muted-foreground text-center">
-                        No worksite information is currently available for this employer.
+                        This employer has not been assigned to any worksites.
                       </p>
                     </CardContent>
                   </Card>
@@ -536,15 +634,38 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
       <DialogHeader>
         <DialogTitle>Add New Worker</DialogTitle>
       </DialogHeader>
-      <WorkerForm 
+      <WorkerForm
         onSuccess={() => {
           setIsManualWorkerOpen(false);
         }}
       />
     </DialogContent>
   </Dialog>
-</TabsContent>
-            </Tabs>
+ </TabsContent>
+              </Tabs>
+              {isFwcSearchOpen && employer && (
+                <FwcEbaSearchModal
+                  isOpen={isFwcSearchOpen}
+                  onClose={() => setIsFwcSearchOpen(false)}
+                  employerId={employer.id}
+                  employerName={employer.name}
+                  abn={employer.abn ?? undefined}
+                  onLinkEba={async () => {
+                    await queryClient.invalidateQueries({ queryKey: ["employer-detail", employerId] });
+                    setIsFwcSearchOpen(false);
+                  }}
+                />
+              )}
+              {employer && (
+                <IncolinkActionModal
+                  isOpen={isIncolinkModalOpen}
+                  onClose={() => setIsIncolinkModalOpen(false)}
+                  employerId={employer.id}
+                  employerName={employer.name}
+                  currentIncolinkId={employer.incolink_id}
+                />
+              )}
+            </>
           )
         ) : (
           <div className="p-8 text-center">

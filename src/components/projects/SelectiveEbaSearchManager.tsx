@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,27 +13,25 @@ import { Separator } from '@/components/ui/separator';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { 
-  Search, 
-  Building2, 
-  ExternalLink, 
-  FileText, 
-  AlertTriangle, 
-  Info, 
-  XCircle,
+import {
+  Search,
+  Building2,
+  ExternalLink,
+  FileText,
+  AlertTriangle,
+  Info,
   Users,
   HardHat,
   Filter,
   CheckCircle,
   Clock,
   Play,
-  Pause
-} from 'lucide-react';
+  Pause,
+} from 'lucide-react'
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from "@/components/ui/use-toast";
-import { FwcLookupService } from '@/services/fwcLookupService';
-import { getTradeOptionsByStage, getAllStages, getStageLabel, type TradeStage } from "@/utils/tradeUtils";
-import { FWCSearchResult, FwcLookupJob } from '@/types/fwcLookup';
+import { getTradeOptionsByStage, getAllStages, getStageLabel, type TradeStage } from '@/utils/tradeUtils'
+import { FWCSearchResult, FwcLookupJobOptions } from '@/types/fwcLookup'
 
 // Types for contractor roles and assignments
 interface ContractorRole {
@@ -108,6 +106,36 @@ export interface SelectiveEbaSearchManagerProps {
   onClose?: () => void;
 }
 
+type ScraperJobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+
+type ScraperJob = {
+  id: string
+  job_type: 'fwc_lookup' | 'incolink_sync'
+  payload: Record<string, unknown>
+  progress_total: number
+  progress_completed: number
+  status: ScraperJobStatus
+  priority: number
+  attempts: number
+  max_attempts: number
+  lock_token: string | null
+  locked_at: string | null
+  run_at: string
+  last_error: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  completed_at: string | null
+}
+
+type ScraperJobEvent = {
+  id: number
+  job_id: string
+  event_type: string
+  payload: Record<string, unknown> | null
+  created_at: string
+}
+
 export default function SelectiveEbaSearchManager({ projectId, onClose }: SelectiveEbaSearchManagerProps) {
   // State management
   const [employers, setEmployers] = useState<SelectableEmployer[]>([]);
@@ -124,7 +152,8 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
   
   // Loading and search states
   const [isLoading, setIsLoading] = useState(true);
-  const [currentJob, setCurrentJob] = useState<FwcLookupJob | null>(null);
+  const [currentJob, setCurrentJob] = useState<ScraperJob | null>(null)
+  const [jobEvents, setJobEvents] = useState<ScraperJobEvent[]>([])
   const [searchResults, setSearchResults] = useState<Record<string, { isSearching: boolean; results: FWCSearchResult[]; error?: string }>>({});
 
   // UI state
@@ -137,12 +166,32 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
   const [isManualSearching, setIsManualSearching] = useState(false);
   const [processedEmployers, setProcessedEmployers] = useState<Set<string>>(new Set()); // Track completed searches
 
-  const { toast } = useToast();
-  const fwcService = FwcLookupService.getInstance();
+  const { toast } = useToast()
 
   // Trade options for filtering
   const tradeOptionsByStage = useMemo(() => getTradeOptionsByStage(), []);
   const allStages = useMemo(() => getAllStages(), []);
+
+  const progressCompleted = currentJob?.progress_completed ?? 0
+  const progressTotal = currentJob?.progress_total ?? 0
+  const progressPercent = progressTotal > 0 ? Math.round((progressCompleted / progressTotal) * 100) : 0
+
+  const statusLabels: Record<ScraperJobStatus, string> = {
+    queued: 'Queued',
+    running: 'Running',
+    succeeded: 'Completed',
+    failed: 'Failed',
+    cancelled: 'Cancelled',
+  }
+
+  const formatTimestamp = useCallback((value: string | null | undefined) => {
+    if (!value) return '—'
+    try {
+      return new Date(value).toLocaleString()
+    } catch {
+      return value
+    }
+  }, [])
 
   // Load project employers with their roles and trade assignments
   const loadProjectEmployers = useCallback(async () => {
@@ -444,44 +493,45 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
     const employerIds = Array.from(selectedEmployers);
     
     try {
-      // Create FWC lookup job
-      const job = await fwcService.createFwcLookupJob(employerIds, {
+      const jobOptions: FwcLookupJobOptions = {
         priority: 'normal',
         skipExisting: filters.ebaStatus === 'missing_only',
-        batchSize: 3, // Conservative batch size
-        autoSelectBest: true
-      });
+        batchSize: 3,
+        autoSelectBest: true,
+      }
 
-      setCurrentJob(job);
-      setActiveTab('results');
+      const response = await fetch('/api/scraper-jobs', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jobType: 'fwc_lookup',
+          payload: {
+            employerIds,
+            options: jobOptions,
+            projectId,
+          },
+          priority: jobOptions.priority === 'high' ? 2 : jobOptions.priority === 'low' ? 8 : 5,
+          progressTotal: employerIds.length,
+          maxAttempts: 5,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(await response.text())
+      }
+
+      const { job } = (await response.json()) as { job: ScraperJob }
+
+      setCurrentJob(job)
+      setJobEvents([])
+      setActiveTab('results')
 
       toast({
-        title: 'EBA Search Started',
-        description: `Searching for EBAs for ${employerIds.length} employers. This may take several minutes.`,
-      });
-
-      // Monitor job progress
-      const checkProgress = setInterval(() => {
-        const updatedJob = fwcService.getJob(job.id);
-        if (updatedJob) {
-          setCurrentJob(updatedJob);
-          
-          if (updatedJob.status === 'completed' || updatedJob.status === 'failed') {
-            clearInterval(checkProgress);
-            
-            // Refresh employer data to show updated EBA status
-            loadProjectEmployers();
-            
-            toast({
-              title: updatedJob.status === 'completed' ? 'Search Complete' : 'Search Failed',
-              description: updatedJob.status === 'completed' 
-                ? `Found EBAs for ${updatedJob.results.filter(r => r.success).length} of ${updatedJob.results.length} employers.`
-                : 'EBA search encountered errors. Please try again.',
-              variant: updatedJob.status === 'completed' ? 'default' : 'destructive',
-            });
-          }
-        }
-      }, 2000);
+        title: 'EBA Search Queued',
+        description: `Queued ${employerIds.length} employers for background lookup. You can close this panel and return later.`,
+      })
 
     } catch (error) {
       console.error('Failed to start EBA search:', error);
@@ -492,6 +542,86 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
       });
     }
   };
+
+  const fetchJobDetails = useCallback(async (jobId: string) => {
+    const response = await fetch(`/api/scraper-jobs?id=${jobId}&includeEvents=1`, {
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+
+    const data = (await response.json()) as { job: ScraperJob; events?: ScraperJobEvent[] };
+    setCurrentJob(data.job);
+    setJobEvents(data.events ?? []);
+    return data.job;
+  }, []);
+
+  useEffect(() => {
+    if (!currentJob) return;
+    const terminalStatuses: ScraperJobStatus[] = ['succeeded', 'failed', 'cancelled'];
+    if (terminalStatuses.includes(currentJob.status)) return;
+
+    let cancelled = false;
+
+    const poll = async () => {
+      try {
+        await fetchJobDetails(currentJob.id);
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Failed to poll scraper job:', error);
+        }
+      }
+    };
+
+    const interval = setInterval(poll, 4000);
+    void poll();
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [currentJob?.id, currentJob?.status, fetchJobDetails]);
+
+  const lastNotifiedJobRef = useRef<{ id: string; status: ScraperJobStatus } | null>(null);
+
+  useEffect(() => {
+    if (!currentJob) {
+      lastNotifiedJobRef.current = null;
+      return;
+    }
+
+    const terminalStatuses: ScraperJobStatus[] = ['succeeded', 'failed', 'cancelled'];
+    if (!terminalStatuses.includes(currentJob.status)) return;
+
+    const previous = lastNotifiedJobRef.current;
+    if (previous && previous.id === currentJob.id && previous.status === currentJob.status) {
+      return;
+    }
+
+    lastNotifiedJobRef.current = { id: currentJob.id, status: currentJob.status };
+
+    loadProjectEmployers();
+
+    const title =
+      currentJob.status === 'succeeded'
+        ? 'EBA Search Complete'
+        : currentJob.status === 'failed'
+        ? 'EBA Search Failed'
+        : 'EBA Search Cancelled';
+
+    const description =
+      currentJob.status === 'succeeded'
+        ? 'Background lookup finished. Employer data will refresh with the latest EBA information.'
+        : currentJob.last_error || 'The background lookup finished with issues. Review the timeline for details.';
+
+    toast({
+      title,
+      description,
+      variant: currentJob.status === 'succeeded' ? 'default' : 'destructive',
+    });
+  }, [currentJob?.id, currentJob?.status, currentJob?.last_error, loadProjectEmployers, toast]);
 
   // Create EBA record from search result
   const createEbaRecord = useCallback(async (employerId: string, result: FWCSearchResult) => {
@@ -1008,90 +1138,84 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  {currentJob.status === 'processing' && <Clock className="h-5 w-5 animate-spin" />}
-                  {currentJob.status === 'completed' && <CheckCircle className="h-5 w-5 text-green-600" />}
-                  {currentJob.status === 'failed' && <XCircle className="h-5 w-5 text-red-600" />}
+                  {currentJob.status === 'running' && <Clock className="h-5 w-5 animate-spin" />}
+                  {currentJob.status === 'queued' && <Clock className="h-5 w-5" />}
+                  {currentJob.status === 'succeeded' && <CheckCircle className="h-5 w-5 text-green-600" />}
+                  {currentJob.status === 'failed' && <AlertTriangle className="h-5 w-5 text-red-600" />}
+                  {currentJob.status === 'cancelled' && <AlertTriangle className="h-5 w-5 text-amber-600" />}
                   EBA Search Progress
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-5">
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span>Progress</span>
-                    <span>{currentJob.progress.completed} of {currentJob.progress.total}</span>
+                    <span>Status</span>
+                    <span>{statusLabels[currentJob.status]}</span>
                   </div>
-                  <Progress 
-                    value={(currentJob.progress.completed / currentJob.progress.total) * 100} 
-                    className="w-full" 
-                  />
-                  {currentJob.progress.currentEmployer && (
-                    <div className="text-sm text-gray-600">
-                      Currently searching: {currentJob.progress.currentEmployer}
-                    </div>
-                  )}
+                  <div className="flex justify-between text-sm">
+                    <span>Progress</span>
+                    <span>
+                      {progressCompleted} of {progressTotal}
+                    </span>
+                  </div>
+                  <Progress value={progressPercent} className="w-full" />
                 </div>
 
-                {currentJob.status === 'completed' && (
-                  <div className="grid grid-cols-3 gap-4 text-center">
-                    <div className="bg-green-50 p-3 rounded">
-                      <div className="text-2xl font-bold text-green-600">
-                        {currentJob.results.filter(r => r.success).length}
-                      </div>
-                      <div className="text-sm text-green-700">Found EBAs</div>
-                    </div>
-                    <div className="bg-red-50 p-3 rounded">
-                      <div className="text-2xl font-bold text-red-600">
-                        {currentJob.results.filter(r => !r.success).length}
-                      </div>
-                      <div className="text-sm text-red-700">No EBAs Found</div>
-                    </div>
-                    <div className="bg-blue-50 p-3 rounded">
-                      <div className="text-2xl font-bold text-blue-600">
-                        {currentJob.errors.length}
-                      </div>
-                      <div className="text-sm text-blue-700">Errors</div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="rounded border bg-muted/30 p-3 text-sm">
+                    <div className="text-xs text-muted-foreground">Attempts</div>
+                    <div className="font-semibold">
+                      {currentJob.attempts} / {currentJob.max_attempts}
                     </div>
                   </div>
+                  <div className="rounded border bg-muted/30 p-3 text-sm">
+                    <div className="text-xs text-muted-foreground">Priority</div>
+                    <div className="font-semibold">{currentJob.priority}</div>
+                  </div>
+                  <div className="rounded border bg-muted/30 p-3 text-sm">
+                    <div className="text-xs text-muted-foreground">Last Updated</div>
+                    <div className="font-semibold">{formatTimestamp(currentJob.updated_at)}</div>
+                  </div>
+                  <div className="rounded border bg-muted/30 p-3 text-sm">
+                    <div className="text-xs text-muted-foreground">Created</div>
+                    <div className="font-semibold">{formatTimestamp(currentJob.created_at)}</div>
+                  </div>
+                </div>
+
+                {currentJob.last_error && (
+                  <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>{currentJob.last_error}</AlertDescription>
+                  </Alert>
                 )}
 
-                {currentJob.results.length > 0 && (
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    Detailed EBA matches will appear once the background worker finishes processing this job. You can leave this screen and return later to review the timeline below.
+                  </AlertDescription>
+                </Alert>
+
+                {jobEvents.length > 0 && (
                   <div className="space-y-3">
-                    <h4 className="font-medium">Search Results</h4>
-                    <div className="space-y-2 max-h-64 overflow-y-auto">
-                      {currentJob.results.map((result, idx) => (
-                        <div key={idx} className={`p-3 rounded border ${result.success ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
-                          <div className="flex items-center justify-between">
+                    <h4 className="font-medium">Job Timeline</h4>
+                    <div className="space-y-2 max-h-64 overflow-y-auto rounded border bg-muted/30 p-3">
+                      {jobEvents.map((event) => (
+                        <div key={event.id} className="rounded bg-background p-3 text-sm shadow-sm">
+                          <div className="flex items-start justify-between gap-3">
                             <div>
-                              <div className="font-medium">{result.employerName}</div>
-                              {result.success && result.selectedResult && (
-                                <div className="text-sm text-gray-600">
-                                  {result.selectedResult.title}
-                                </div>
-                              )}
-                              {!result.success && (
-                                <div className="text-sm text-red-600">
-                                  {result.error || 'No EBA found'}
-                                </div>
+                              <div className="font-semibold uppercase tracking-wide text-xs text-muted-foreground">
+                                {event.event_type}
+                              </div>
+                              {event.payload && Object.keys(event.payload).length > 0 && (
+                                <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-muted-foreground">
+                                  {JSON.stringify(event.payload, null, 2)}
+                                </pre>
                               )}
                             </div>
-                            <div className="flex gap-2">
-                              {result.success && result.selectedResult?.documentUrl && (
-                                <Button size="sm" variant="outline" asChild>
-                                  <a href={result.selectedResult.documentUrl} target="_blank" rel="noopener noreferrer">
-                                    <ExternalLink className="w-4 h-4" />
-                                  </a>
-                                </Button>
-                              )}
-                              {result.success && result.selectedResult && (
-                                <Button
-                                  size="sm"
-                                  onClick={() => createEbaRecord(result.employerId, result.selectedResult!)}
-                                >
-                                  <FileText className="w-4 h-4 mr-1" />
-                                  Create EBA Record
-                                </Button>
-                              )}
-                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {formatTimestamp(event.created_at)}
+                            </span>
                           </div>
                         </div>
                       ))}
@@ -1108,9 +1232,9 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
                 <p className="text-gray-600">
                   Return to the Selection tab to start a new EBA search.
                 </p>
-                <Button 
-                  variant="outline" 
-                  onClick={() => setActiveTab('selection')} 
+                <Button
+                  variant="outline"
+                  onClick={() => setActiveTab('selection')}
                   className="mt-4"
                 >
                   Back to Selection

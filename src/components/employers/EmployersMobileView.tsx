@@ -81,6 +81,7 @@ export function EmployersMobileView() {
     sort: 'name',
     dir: 'asc',
     q: q || undefined,
+    enhanced: true, // Enable enhanced data for projects, organisers, incolink
   })
 
   const { data, totalCount, totalPages, currentPage, isFetching } = serverSideResult
@@ -113,7 +114,12 @@ export function EmployersMobileView() {
     employer_type: emp.employer_type,
     phone: emp.phone,
     email: emp.email,
+    incolink_id: emp.incolink_id,
+    incolink_last_matched: emp.incolink_last_matched,
+    worker_placements: emp.worker_placements || [],
     ebaCategory: emp.company_eba_records?.[0] ? getEbaCategory(emp.company_eba_records[0]) : { category: 'no', label: 'No EBA', variant: 'destructive' },
+    projects: emp.projects,
+    organisers: emp.organisers,
   }))
 
   return (

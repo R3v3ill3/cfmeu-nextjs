@@ -10,6 +10,7 @@ export interface EmployersParams {
   engaged?: boolean;
   eba?: 'all' | 'active' | 'lodged' | 'pending' | 'no';
   type?: 'all' | 'builder' | 'principal_contractor' | 'large_contractor' | 'small_contractor' | 'individual';
+  enhanced?: boolean;
 }
 
 export interface EmployerRecord {
@@ -21,9 +22,22 @@ export interface EmployerRecord {
   email: string | null;
   phone: string | null;
   estimated_worker_count: number | null;
+  incolink_id: string | null;
   company_eba_records: any[];
   worker_placements: { id: string }[];
   project_assignments: { id: string }[];
+  // Enhanced data
+  projects?: Array<{
+    id: string;
+    name: string;
+    roles?: string[];
+    trades?: string[];
+  }>;
+  organisers?: Array<{
+    id: string;
+    name: string;
+    patch_name?: string;
+  }>;
 }
 
 export interface EmployersResponse {
@@ -71,6 +85,10 @@ export function useEmployersServerSide(params: EmployersParams) {
       
       if (params.type && params.type !== 'all') {
         searchParams.set('type', params.type);
+      }
+      
+      if (params.enhanced) {
+        searchParams.set('enhanced', 'true');
       }
 
       const url = `/api/employers?${searchParams.toString()}`;

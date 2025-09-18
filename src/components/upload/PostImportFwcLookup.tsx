@@ -8,27 +8,45 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { 
-  Search, 
-  Clock, 
-  CheckCircle, 
-  XCircle, 
-  AlertTriangle, 
+import {
+  Search,
+  Clock,
+  CheckCircle,
   Download,
   Play,
   Pause,
   Square,
-  RefreshCw
-} from 'lucide-react';
+  RefreshCw,
+} from 'lucide-react'
 import { supabase } from '@/integrations/supabase/client';
-import { FwcLookupService } from '@/services/fwcLookupService';
-import { 
-  FwcLookupJob, 
-  FwcLookupJobOptions, 
+import {
+  FwcLookupJobOptions,
   FwcLookupJobSummary,
-  ImportResults 
-} from '@/types/fwcLookup';
-import { toast } from '@/hooks/use-toast';
+  ImportResults,
+} from '@/types/fwcLookup'
+import { toast } from '@/hooks/use-toast'
+
+type ScraperJobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+
+type ScraperJob = {
+  id: string
+  job_type: 'fwc_lookup' | 'incolink_sync'
+  payload: Record<string, unknown>
+  status: ScraperJobStatus
+  priority: number
+  attempts: number
+  max_attempts: number
+  lock_token: string | null
+  locked_at: string | null
+  run_at: string
+  last_error: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  completed_at: string | null
+  progress_total: number
+  progress_completed: number
+}
 
 interface PostImportFwcLookupProps {
   importResults: ImportResults;
@@ -48,55 +66,95 @@ export function PostImportFwcLookup({
   onComplete, 
   onClose 
 }: PostImportFwcLookupProps) {
-  const [eligibleEmployers, setEligibleEmployers] = useState<EligibleEmployer[]>([]);
-  const [selectedEmployers, setSelectedEmployers] = useState<Set<string>>(new Set());
-  const [isAnalyzing, setIsAnalyzing] = useState(true);
-  const [currentJob, setCurrentJob] = useState<FwcLookupJob | null>(null);
-  const [jobSummary, setJobSummary] = useState<FwcLookupJobSummary | null>(null);
-  const [isJobRunning, setIsJobRunning] = useState(false);
+  const [eligibleEmployers, setEligibleEmployers] = useState<EligibleEmployer[]>([])
+  const [selectedEmployers, setSelectedEmployers] = useState<Set<string>>(new Set())
+  const [isAnalyzing, setIsAnalyzing] = useState(true)
+  const [currentJob, setCurrentJob] = useState<ScraperJob | null>(null)
+  const [jobSummary, setJobSummary] = useState<FwcLookupJobSummary | null>(null)
+  const [isJobRunning, setIsJobRunning] = useState(false)
   const [jobOptions, setJobOptions] = useState<FwcLookupJobOptions>({
     priority: 'normal',
     batchSize: 3,
     skipExisting: true,
-    autoSelectBest: true
-  });
+    autoSelectBest: true,
+  })
 
-  const fwcService = FwcLookupService.getInstance();
-
-  // Poll job status if running
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    
-    if (currentJob && isJobRunning) {
-      interval = setInterval(() => {
-        const updatedJob = fwcService.getJob(currentJob.id);
-        if (updatedJob) {
-          setCurrentJob(updatedJob);
-          
-          if (updatedJob.status === 'completed' || updatedJob.status === 'failed') {
-            setIsJobRunning(false);
-            const summary = fwcService.getJobSummary(updatedJob.id);
-            if (summary) {
-              setJobSummary(summary);
-              onComplete?.(summary);
-            }
-            
-            toast({
-              title: updatedJob.status === 'completed' ? 'FWC Lookup Complete' : 'FWC Lookup Failed',
-              description: summary ? 
-                `Processed ${summary.processedEmployers}/${summary.totalEmployers} employers. ${summary.successfulLookups} successful lookups.` :
-                'Check the job details for more information.',
-              variant: updatedJob.status === 'completed' ? 'default' : 'destructive'
-            });
-          }
-        }
-      }, 2000); // Poll every 2 seconds
+  const buildSummary = useCallback((job: ScraperJob): FwcLookupJobSummary => {
+    const statusMap: Record<ScraperJobStatus, FwcLookupJobSummary['status']> = {
+      queued: 'pending',
+      running: 'processing',
+      succeeded: 'completed',
+      failed: 'failed',
+      cancelled: 'cancelled',
     }
-    
+
+    const totalEmployers = job.progress_total || 0
+    const processedEmployers = job.progress_completed || 0
+    const totalDuration = job.completed_at
+      ? new Date(job.completed_at).getTime() - new Date(job.created_at).getTime()
+      : 0
+
+    return {
+      jobId: job.id,
+      totalEmployers,
+      processedEmployers,
+      successfulLookups: processedEmployers,
+      failedLookups: Math.max(0, totalEmployers - processedEmployers),
+      skippedEmployers: Math.max(0, totalEmployers - processedEmployers),
+      averageProcessingTime: 0,
+      totalDuration,
+      status: statusMap[job.status] ?? 'pending',
+    }
+  }, [])
+
+  const fetchJob = useCallback(async (jobId: string) => {
+    const response = await fetch(`/api/scraper-jobs?id=${jobId}&includeEvents=1`, {
+      cache: 'no-store',
+    })
+
+    if (!response.ok) {
+      const message = await response.text()
+      throw new Error(message || 'Failed to fetch job status')
+    }
+
+    return (await response.json()) as { job: ScraperJob }
+  }, [])
+
+  useEffect(() => {
+    if (!currentJob || !isJobRunning) {
+      return
+    }
+
+    let cancelled = false
+
+    const interval = setInterval(async () => {
+      try {
+        const { job } = await fetchJob(currentJob.id)
+        if (cancelled) return
+        setCurrentJob(job)
+
+        if (job.status === 'succeeded' || job.status === 'failed' || job.status === 'cancelled') {
+          setIsJobRunning(false)
+          const summary = buildSummary(job)
+          setJobSummary(summary)
+          onComplete?.(summary)
+
+          toast({
+            title: job.status === 'succeeded' ? 'FWC Lookup Complete' : 'FWC Lookup Finished',
+            description: `Processed ${summary.processedEmployers}/${summary.totalEmployers} employers`,
+            variant: job.status === 'failed' ? 'destructive' : 'default',
+          })
+        }
+      } catch (error) {
+        console.error('Failed to poll scraper job:', error)
+      }
+    }, 2000)
+
     return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [currentJob, isJobRunning, onComplete, fwcService]);
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [currentJob, isJobRunning, buildSummary, fetchJob, onComplete, toast])
 
   const analyzeEligibleEmployers = useCallback(async () => {
     setIsAnalyzing(true);
@@ -155,57 +213,89 @@ export function PostImportFwcLookup({
       toast({
         title: 'No Employers Selected',
         description: 'Please select at least one employer for FWC lookup.',
-        variant: 'destructive'
-      });
-      return;
+        variant: 'destructive',
+      })
+      return
     }
-    
+
     try {
-      const job = await fwcService.createFwcLookupJob(
-        Array.from(selectedEmployers),
-        jobOptions
-      );
-      
-      setCurrentJob(job);
-      setIsJobRunning(true);
-      
+      const employerIds = Array.from(selectedEmployers)
+      const response = await fetch('/api/scraper-jobs', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jobType: 'fwc_lookup',
+          payload: {
+            employerIds,
+            options: jobOptions,
+          },
+          priority: jobOptions.priority === 'high' ? 2 : jobOptions.priority === 'low' ? 8 : 5,
+          maxAttempts: 5,
+          progressTotal: employerIds.length,
+        }),
+      })
+
+      if (!response.ok) {
+        const message = await response.text()
+        throw new Error(message || 'Failed to create lookup job')
+      }
+
+      const { job } = (await response.json()) as { job: ScraperJob }
+
+      setCurrentJob(job)
+      setIsJobRunning(true)
+      setJobSummary(null)
+
       toast({
         title: 'FWC Lookup Started',
-        description: `Processing ${job.employerIds.length} employers. Estimated time: ${Math.ceil(job.estimatedDuration! / 60)} minutes.`,
-      });
-      
+        description: `Queued ${employerIds.length} employers for lookup`,
+      })
     } catch (error) {
-      console.error('Failed to start FWC lookup:', error);
+      console.error('Failed to start FWC lookup:', error)
       toast({
         title: 'Failed to Start FWC Lookup',
         description: error instanceof Error ? error.message : 'An unexpected error occurred.',
-        variant: 'destructive'
-      });
+        variant: 'destructive',
+      })
     }
-  };
+  }
 
   const cancelFwcLookup = async () => {
-    if (!currentJob) return;
-    
+    if (!currentJob) return
+
     try {
-      await fwcService.cancelJob(currentJob.id);
-      setIsJobRunning(false);
-      setCurrentJob(null);
-      
+      const response = await fetch('/api/scraper-jobs', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ id: currentJob.id, action: 'cancel' }),
+      })
+
+      if (!response.ok) {
+        const message = await response.text()
+        throw new Error(message || 'Could not cancel job')
+      }
+
+      const { job } = (await response.json()) as { job: ScraperJob }
+      setCurrentJob(job)
+      setIsJobRunning(false)
+
       toast({
         title: 'FWC Lookup Cancelled',
         description: 'The FWC lookup job has been cancelled.',
-      });
-      
+      })
     } catch (error) {
-      console.error('Failed to cancel FWC lookup:', error);
+      console.error('Failed to cancel FWC lookup:', error)
       toast({
         title: 'Cancellation Failed',
-        description: 'Could not cancel the FWC lookup job.',
-        variant: 'destructive'
-      });
+        description: error instanceof Error ? error.message : 'Could not cancel the FWC lookup job.',
+        variant: 'destructive',
+      })
     }
-  };
+  }
 
   const toggleEmployerSelection = (employerId: string) => {
     setSelectedEmployers(prev => {
@@ -235,29 +325,40 @@ export function PostImportFwcLookup({
   };
 
   const getProgressPercentage = () => {
-    if (!currentJob || currentJob.progress.total === 0) return 0;
-    return Math.round((currentJob.progress.completed / currentJob.progress.total) * 100);
-  };
+    if (!currentJob || currentJob.progress_total === 0) return 0
+    return Math.round((currentJob.progress_completed / currentJob.progress_total) * 100)
+  }
 
   const downloadJobReport = () => {
-    if (!currentJob || !jobSummary) return;
-    
+    if (!currentJob || !jobSummary) return
+
     const reportData = {
       jobId: currentJob.id,
       summary: jobSummary,
-      results: currentJob.results,
-      errors: currentJob.errors
-    };
-    
-    const blob = new Blob([JSON.stringify(reportData, null, 2)], { 
-      type: 'application/json' 
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `fwc-lookup-report-${currentJob.id}.json`;
-    link.click();
-  };
+      payload: currentJob.payload,
+      status: currentJob.status,
+      attempts: currentJob.attempts,
+      maxAttempts: currentJob.max_attempts,
+      progress: {
+        total: currentJob.progress_total,
+        completed: currentJob.progress_completed,
+      },
+      timestamps: {
+        createdAt: currentJob.created_at,
+        updatedAt: currentJob.updated_at,
+        completedAt: currentJob.completed_at,
+      },
+    }
+
+    const blob = new Blob([JSON.stringify(reportData, null, 2)], {
+      type: 'application/json',
+    })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `fwc-lookup-report-${currentJob.id}.json`
+    link.click()
+  }
 
   if (isAnalyzing) {
     return (
@@ -304,48 +405,44 @@ export function PostImportFwcLookup({
               FWC Lookup in Progress
             </CardTitle>
             <CardDescription>
-              Processing {currentJob.progress.completed}/{currentJob.progress.total} employers
+              Processing {currentJob.progress_completed}/{currentJob.progress_total} employers
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
               <div className="flex justify-between text-sm mb-2">
-                <span>Progress: {currentJob.progress.completed}/{currentJob.progress.total}</span>
+                <span>
+                  Progress: {currentJob.progress_completed}/{currentJob.progress_total}
+                </span>
                 <span>{getProgressPercentage()}%</span>
               </div>
               <Progress value={getProgressPercentage()} className="w-full" />
             </div>
 
-            {currentJob.progress.currentEmployer && (
-              <div className="text-sm text-muted-foreground">
-                Currently processing: <span className="font-medium">{currentJob.progress.currentEmployer}</span>
-              </div>
-            )}
-
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
               <div className="text-center">
-                <div className="text-lg font-semibold text-green-600">
-                  {currentJob.results.filter(r => r.success).length}
-                </div>
-                <div className="text-xs text-muted-foreground">Successful</div>
-              </div>
-              <div className="text-center">
-                <div className="text-lg font-semibold text-red-600">
-                  {currentJob.results.filter(r => !r.success).length}
-                </div>
-                <div className="text-xs text-muted-foreground">Failed</div>
-              </div>
-              <div className="text-center">
                 <div className="text-lg font-semibold text-blue-600">
-                  {currentJob.progress.completed}
+                  {currentJob.progress_completed}
                 </div>
                 <div className="text-xs text-muted-foreground">Processed</div>
               </div>
               <div className="text-center">
                 <div className="text-lg font-semibold text-gray-600">
-                  {Math.ceil((currentJob.estimatedDuration || 0) / 60)}m
+                  {currentJob.status === 'running' ? 'Running' : 'Queued'}
                 </div>
-                <div className="text-xs text-muted-foreground">Est. Time</div>
+                <div className="text-xs text-muted-foreground">Status</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-semibold text-gray-600">
+                  {currentJob.attempts}/{currentJob.max_attempts}
+                </div>
+                <div className="text-xs text-muted-foreground">Attempts</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-semibold text-gray-600">
+                  {currentJob.priority}
+                </div>
+                <div className="text-xs text-muted-foreground">Priority</div>
               </div>
             </div>
 
