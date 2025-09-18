@@ -1,0 +1,23 @@
+{
+  "name": "cfmeu-scraper-worker",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "ts-node src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@sparticuz/chromium": "^138.0.2",
+    "@supabase/supabase-js": "^2.57.4",
+    "cheerio": "^1.1.2",
+    "dotenv": "^17.2.2",
+    "puppeteer": "^24.22.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2"
+  }
+}
