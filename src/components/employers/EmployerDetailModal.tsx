@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { getSupabaseBrowserClient, resetSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,7 @@ import { WorkerForm } from "@/components/workers/WorkerForm";
 import { FwcEbaSearchModal } from "./FwcEbaSearchModal";
 import { IncolinkActionModal } from "./IncolinkActionModal";
 import { useToast } from "@/hooks/use-toast";
+import { withTimeout } from "@/lib/withTimeout";
 
 type EmployerSite = {
   id: string;
@@ -103,52 +104,89 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
     queryKey: ["my-role", user?.id],
     queryFn: async () => {
       if (!user?.id) return null;
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .maybeSingle();
-      if (error) throw error;
-      return (data?.role as string) ?? null;
+      const supabase = getSupabaseBrowserClient();
+      try {
+        const res = await withTimeout<any>(
+          supabase
+            .from("profiles")
+            .select("role")
+            .eq("id", user.id)
+            .maybeSingle(),
+          15000,
+          "fetch my role"
+        );
+        if (res.error) throw res.error;
+        return (res.data?.role as string) ?? null;
+      } catch (err: any) {
+        if (err?.code === "ETIMEDOUT") {
+          resetSupabaseBrowserClient();
+        }
+        throw err;
+      }
     },
     enabled: !!user?.id,
   });
 
   const canEdit = ["admin", "organiser", "lead_organiser", "delegate"].includes(myRole || "");
 
-  const { data: employer, isLoading } = useQuery({
+  const { data: employer, isLoading, error: employerError, refetch: refetchEmployer } = useQuery({
     queryKey: ["employer-detail", employerId],
     queryFn: async () => {
       if (!employerId) return null;
-      const { data, error } = await supabase
-        .from("employers")
-        .select(
-          `
-          id, name, abn, employer_type, address_line_1, address_line_2, suburb, state, postcode, phone, email, website, primary_contact_name, incolink_id, incolink_last_matched, estimated_worker_count,
-          company_eba_records (*)
-        `
-        )
-        .eq("id", employerId)
-        .single();
-
-      if (error) throw error;
-      return data as EmployerWithEba;
+      const supabase = getSupabaseBrowserClient();
+      try {
+        const res = await withTimeout<any>(
+          supabase
+            .from("employers")
+            .select(
+              `
+              id, name, abn, employer_type, address_line_1, address_line_2, suburb, state, postcode, phone, email, website, primary_contact_name, incolink_id, incolink_last_matched, estimated_worker_count,
+              company_eba_records (*)
+            `
+            )
+            .eq("id", employerId)
+            .single(),
+          20000,
+          "fetch employer details"
+        );
+        if (res.error) throw res.error;
+        return res.data as EmployerWithEba;
+      } catch (err: any) {
+        if (err?.code === "ETIMEDOUT") {
+          resetSupabaseBrowserClient();
+        }
+        throw err;
+      }
     },
     enabled: !!employerId && isOpen,
+    retry: 1,
   });
 
   const { data: workerCount } = useQuery({
     queryKey: ["employer-worker-count", employerId],
     queryFn: async () => {
       if (!employerId) return 0;
-      const { data, error } = await supabase.rpc("get_employer_worker_count", { p_employer_id: employerId });
-      if (error) {
-        console.error("Error fetching worker count:", error);
-        return 0;
+      const supabase = getSupabaseBrowserClient();
+      try {
+        const res = await withTimeout<any>(
+          supabase.rpc("get_employer_worker_count", { p_employer_id: employerId }),
+          15000,
+          "fetch employer worker count"
+        );
+        if (res.error) {
+          console.error("Error fetching worker count:", res.error);
+          return 0;
+        }
+        return res.data ?? 0;
+      } catch (err: any) {
+        if (err?.code === "ETIMEDOUT") {
+          resetSupabaseBrowserClient();
+        }
+        throw err;
       }
-      return data ?? 0;
     },
     enabled: !!employerId && isOpen,
+    retry: 1,
   });
 
   const invalidateEmployerData = useCallback(async () => {
@@ -170,13 +208,26 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
     enabled: !!employerId && isOpen,
     queryFn: async () => {
       if (!employerId) return [];
-      const { data, error } = await supabase.rpc("get_employer_sites", { p_employer_id: employerId });
-      if (error) {
-        console.error("Error fetching employer sites:", error);
-        return [];
+      const supabase = getSupabaseBrowserClient();
+      try {
+        const res = await withTimeout<any>(
+          supabase.rpc("get_employer_sites", { p_employer_id: employerId }),
+          20000,
+          "fetch employer sites"
+        );
+        if (res.error) {
+          console.error("Error fetching employer sites:", res.error);
+          return [];
+        }
+        return res.data;
+      } catch (err: any) {
+        if (err?.code === "ETIMEDOUT") {
+          resetSupabaseBrowserClient();
+        }
+        throw err;
       }
-      return data;
     },
+    retry: 1,
   });
 
   // Stabilize callbacks to prevent infinite re-renders
@@ -220,6 +271,14 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
 
         {isLoading ? (
           <div className="p-8 text-center flex items-center justify-center gap-2"><img src="/spinner.gif" alt="Loading" className="h-4 w-4" /> Loading employer details...</div>
+        ) : employerError ? (
+          <div className="p-8 text-center space-y-3">
+            <p className="text-sm text-red-600">Failed to load employer details. {String((employerError as any)?.message || '')}</p>
+            <div className="flex items-center justify-center gap-2">
+              <Button size="sm" variant="secondary" onClick={() => refetchEmployer()}>Try again</Button>
+              <Button size="sm" variant="outline" onClick={() => { resetSupabaseBrowserClient(); refetchEmployer(); }}>Reset connection</Button>
+            </div>
+          </div>
         ) : employer ? (
           isEditing ? (
             <div className="space-y-6">

@@ -22,3 +22,8 @@ export function getSupabaseBrowserClient(): SupabaseClient<GenericDatabase> {
   return browserClient
 }
 
+export function resetSupabaseBrowserClient(): void {
+  // Force recreation of the browser client on next access
+  browserClient = null
+}
+

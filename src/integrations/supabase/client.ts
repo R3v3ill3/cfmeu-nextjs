@@ -4,5 +4,9 @@
 // Prefer using getSupabaseBrowserClient() from @/lib/supabase/client directly in new code.
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 
-export const supabase = getSupabaseBrowserClient()
+export let supabase = getSupabaseBrowserClient()
+
+export function refreshSupabaseClient() {
+  supabase = getSupabaseBrowserClient()
+}
 

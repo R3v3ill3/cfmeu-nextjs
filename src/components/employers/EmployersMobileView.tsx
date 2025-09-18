@@ -10,6 +10,7 @@ import { EmployerCard, EmployerCardData } from "./EmployerCard"
 import { EmployerDetailModal } from "./EmployerDetailModal"
 import { getEbaCategory } from "./ebaHelpers"
 import { useQueryClient } from "@tanstack/react-query"
+import { refreshSupabaseClient } from "@/integrations/supabase/client"
 
 const EMPLOYERS_STATE_KEY = 'employers-page-state-mobile'
 
@@ -84,7 +85,7 @@ export function EmployersMobileView() {
     enhanced: true, // Enable enhanced data for projects, organisers, incolink
   })
 
-  const { data, totalCount, totalPages, currentPage, isFetching, refetch } = serverSideResult
+  const { data, totalCount, totalPages, currentPage, isFetching, refetch, error } = serverSideResult as any
   const hasNext = currentPage < totalPages
   const hasPrev = currentPage > 1
 
@@ -109,6 +110,18 @@ export function EmployersMobileView() {
           {[...Array(5)].map((_, i) => (
             <div key={i} className="bg-gray-100 rounded-lg h-32 animate-pulse" />
           ))}
+        </div>
+      </div>
+    )
+  }
+  if (error) {
+    return (
+      <div className="p-4 space-y-4">
+        <h1 className="text-2xl font-semibold">Employers</h1>
+        <div className="text-sm text-red-600">Failed to load employers. {String(error?.message || '')}</div>
+        <div className="flex gap-2">
+          <Button size="sm" variant="secondary" onClick={() => refetch()}>Try again</Button>
+          <Button size="sm" variant="outline" onClick={() => { refreshSupabaseClient(); refetch(); }}>Reset connection</Button>
         </div>
       </div>
     )

@@ -1,4 +1,4 @@
-export function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label?: string): Promise<T> {
+export function withTimeout<T>(promiseLike: PromiseLike<T>, timeoutMs: number, label?: string): Promise<T> {
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -8,18 +8,24 @@ export function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label?: s
         : `Operation timed out after ${timeoutMs}ms`;
       const error = new Error(message);
       // @ts-expect-error attach code for potential upstream handling
-      error.code = "ETIMEDOUT";
+      (error as any).code = "ETIMEDOUT";
       reject(error);
     }, timeoutMs);
   });
 
-  return Promise.race([
-    promise.finally(() => {
-      if (timeoutHandle) {
-        clearTimeout(timeoutHandle);
+  const guardedPromise = new Promise<T>((resolve, reject) => {
+    promiseLike.then(
+      (value) => {
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+        resolve(value);
+      },
+      (err) => {
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+        reject(err);
       }
-    }),
-    timeoutPromise,
-  ]) as Promise<T>;
+    );
+  });
+
+  return Promise.race([guardedPromise, timeoutPromise]) as Promise<T>;
 }
 

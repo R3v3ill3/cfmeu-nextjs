@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { withTimeout } from "@/lib/withTimeout";
+import { resetSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -50,9 +52,11 @@ export const EmployerWorkersList = ({ employerId }: EmployerWorkersListProps) =>
   const { data: workers, isLoading, refetch } = useQuery({
     queryKey: ["employer-workers", employerId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("workers")
-        .select(`
+      try {
+        const { data, error } = await withTimeout<any>(
+          supabase
+            .from("workers")
+            .select(`
           id,
           first_name,
           surname,
@@ -75,10 +79,18 @@ export const EmployerWorkersList = ({ employerId }: EmployerWorkersListProps) =>
             end_date
           )
         `)
-        .eq("worker_placements.employer_id", employerId);
-
-      if (error) throw error;
-      return data as WorkerWithRoles[];
+            .eq("worker_placements.employer_id", employerId),
+          20000,
+          "fetch employer workers"
+        );
+        if (error) throw error;
+        return data as WorkerWithRoles[];
+      } catch (err: any) {
+        if (err?.code === "ETIMEDOUT") {
+          resetSupabaseBrowserClient();
+        }
+        throw err;
+      }
     },
     enabled: !!employerId,
   });
@@ -87,12 +99,23 @@ export const EmployerWorkersList = ({ employerId }: EmployerWorkersListProps) =>
     queryKey: ["employer-estimate", employerId],
     enabled: !!employerId,
     queryFn: async () => {
-      const { data } = await supabase
-        .from("employers")
-        .select("estimated_worker_count")
-        .eq("id", employerId)
-        .maybeSingle()
-      return (data as any) || null
+      try {
+        const { data } = await withTimeout<any>(
+          supabase
+            .from("employers")
+            .select("estimated_worker_count")
+            .eq("id", employerId)
+            .maybeSingle(),
+          15000,
+          "fetch employer estimate"
+        );
+        return (data as any) || null
+      } catch (err: any) {
+        if (err?.code === "ETIMEDOUT") {
+          resetSupabaseBrowserClient();
+        }
+        throw err;
+      }
     }
   })
 
@@ -102,10 +125,14 @@ export const EmployerWorkersList = ({ employerId }: EmployerWorkersListProps) =>
     if (est > 0 && actual > est) {
       const adjust = async () => {
         try {
-          await supabase
-            .from("employers")
-            .update({ estimated_worker_count: actual })
-            .eq("id", employerId)
+          await withTimeout(
+            supabase
+              .from("employers")
+              .update({ estimated_worker_count: actual })
+              .eq("id", employerId),
+            15000,
+            "update employer estimate"
+          )
           setAutoAdjustedMsg(`Estimate adjusted to ${actual} to match assigned workers`)
           await qc.invalidateQueries({ queryKey: ["employer-estimate", employerId] })
         } catch (e) {
