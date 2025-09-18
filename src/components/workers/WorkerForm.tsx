@@ -48,7 +48,7 @@ type WorkerFormData = z.infer<typeof workerSchema>;
 
 interface WorkerFormProps {
   worker?: any;
-  onSuccess: () => void;
+  onSuccess: () => void | Promise<void>;
   hideUnionSection?: boolean;
 }
 
@@ -195,7 +195,7 @@ export const WorkerForm = ({ worker, onSuccess, hideUnionSection = false }: Work
         });
       }
 
-      onSuccess();
+      await onSuccess();
     } catch (error) {
       console.error("Error saving worker:", error);
       toast({

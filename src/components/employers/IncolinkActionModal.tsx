@@ -18,7 +18,7 @@ interface IncolinkActionModalProps {
   employerId: string
   employerName: string
   currentIncolinkId?: string | null
-  onUpdate?: () => void
+  onUpdate?: () => void | Promise<void>
 }
 
 export function IncolinkActionModal({ 
@@ -67,7 +67,7 @@ export function IncolinkActionModal({
         description: `Incolink ID updated for ${employerName}`,
       })
       
-      onUpdate?.()
+      await onUpdate?.()
       onClose()
     } catch (error) {
       console.error('Update incolink ID error:', error)
@@ -177,7 +177,7 @@ export function IncolinkActionModal({
         description: "The background worker will import updated Incolink data shortly.",
       })
 
-      onUpdate?.()
+      await onUpdate?.()
     } catch (error) {
       console.error('Import error:', error)
       const message = error instanceof Error ? error.message : 'Failed to queue Incolink import'

@@ -1,9 +1,7 @@
 "use client"
 export const dynamic = 'force-dynamic'
 
-import { useState, useEffect } from "react"
-import { useQuery } from "@tanstack/react-query"
-import { supabase } from "@/integrations/supabase/client"
+import { useState, useEffect, useCallback } from "react"
 import { useSearchParams, usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,6 +9,7 @@ import { useEmployersServerSideCompatible } from "@/hooks/useEmployersServerSide
 import { EmployerCard, EmployerCardData } from "./EmployerCard"
 import { EmployerDetailModal } from "./EmployerDetailModal"
 import { getEbaCategory } from "./ebaHelpers"
+import { useQueryClient } from "@tanstack/react-query"
 
 const EMPLOYERS_STATE_KEY = 'employers-page-state-mobile'
 
@@ -34,6 +33,7 @@ const loadEmployersState = () => {
 }
 
 export function EmployersMobileView() {
+  const queryClient = useQueryClient()
   const router = useRouter()
   const pathname = usePathname()
   const sp = useSearchParams()
@@ -84,9 +84,16 @@ export function EmployersMobileView() {
     enhanced: true, // Enable enhanced data for projects, organisers, incolink
   })
 
-  const { data, totalCount, totalPages, currentPage, isFetching } = serverSideResult
+  const { data, totalCount, totalPages, currentPage, isFetching, refetch } = serverSideResult
   const hasNext = currentPage < totalPages
   const hasPrev = currentPage > 1
+
+  const refreshEmployers = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["employers-server-side"] })
+    queryClient.invalidateQueries({ queryKey: ["employers-list"] })
+    queryClient.invalidateQueries({ queryKey: ["employers"] })
+    refetch()
+  }, [queryClient, refetch])
 
   const handleCardClick = (employerId: string) => {
     setSelectedEmployerId(employerId)
@@ -139,7 +146,7 @@ export function EmployersMobileView() {
       ) : (
         <div className="space-y-4">
           {cardData.map((emp) => (
-            <EmployerCard key={emp.id} employer={emp} onClick={() => handleCardClick(emp.id)} />
+            <EmployerCard key={emp.id} employer={emp} onClick={() => handleCardClick(emp.id)} onUpdated={refreshEmployers} />
           ))}
         </div>
       )}
@@ -161,6 +168,7 @@ export function EmployersMobileView() {
         isOpen={isDetailOpen}
         onClose={() => setIsDetailOpen(false)}
         initialTab="overview"
+        onEmployerUpdated={refreshEmployers}
       />
     </div>
   )

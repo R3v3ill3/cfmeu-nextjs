@@ -1,10 +1,10 @@
 "use client"
 export const dynamic = 'force-dynamic'
 
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { EmployerCard } from "@/components/employers/EmployerCard"
-import { useState, useMemo } from "react"
+import { useState, useMemo, useCallback } from "react"
 import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -18,6 +18,7 @@ import { EmployerTable } from "@/components/employers/EmployerTable"
 import { useEmployersServerSideCompatible } from "@/hooks/useEmployersServerSide"
 
 export function EmployersDesktopView() {
+  const queryClient = useQueryClient()
   const router = useRouter()
   const pathname = usePathname()
   const sp = useSearchParams()
@@ -92,12 +93,21 @@ export function EmployersDesktopView() {
     enhanced: true, // Enable enhanced data for projects, organisers, incolink
   })
 
+  const { refetch: refetchEmployers } = serverSideResult
+
   // Conditional data selection based on feature flag
   const employersData = USE_SERVER_SIDE ? serverSideResult.data : allEmployersData
   const isFetching = USE_SERVER_SIDE ? serverSideResult.isFetching : clientFetching
 
   const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
+
+  const refreshEmployers = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["employers-server-side"] })
+    queryClient.invalidateQueries({ queryKey: ["employers-list"] })
+    queryClient.invalidateQueries({ queryKey: ["employers"] })
+    refetchEmployers()
+  }, [queryClient, refetchEmployers])
 
   const { filteredRows, totalCount, totalPages, currentPage } = useMemo(() => {
     if (USE_SERVER_SIDE) {
@@ -294,6 +304,7 @@ export function EmployersDesktopView() {
               setSelectedEmployerId(id)
               setIsDetailOpen(true)
             }}
+            onEmployerUpdated={refreshEmployers}
           />
         </div>
       ) : (
@@ -309,6 +320,7 @@ export function EmployersDesktopView() {
                 setSelectedEmployerId(emp.id)
                 setIsDetailOpen(true)
               }}
+              onUpdated={refreshEmployers}
             />
           ))}
         </div>
@@ -350,6 +362,7 @@ export function EmployersDesktopView() {
         isOpen={isDetailOpen}
         onClose={() => setIsDetailOpen(false)}
         initialTab="overview"
+        onEmployerUpdated={refreshEmployers}
       />
     </div>
   )

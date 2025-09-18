@@ -124,6 +124,7 @@ export const WorkerDetailModal = ({ workerId, isOpen, onClose, onUpdate }: Worke
   const currentPlacement = worker?.worker_placements?.[0];
   type WorkerUnionRole = { end_date: string | null } & Record<string, unknown>;
   const activeUnionRoles = worker?.union_roles?.filter((role: WorkerUnionRole) => !role.end_date || new Date(role.end_date) > new Date());
+  const safeWorkerId = worker?.id ?? null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -197,31 +198,37 @@ export const WorkerDetailModal = ({ workerId, isOpen, onClose, onUpdate }: Worke
           )}
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-2">
-          <TabsList>
-            <TabsTrigger value="personal">Personal</TabsTrigger>
-            <TabsTrigger value="placements">Placements</TabsTrigger>
-            <TabsTrigger value="roles">Union Roles</TabsTrigger>
-            <TabsTrigger value="activity">Activity</TabsTrigger>
-            <TabsTrigger value="ratings">Ratings</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="personal" className="p-2">
-            <WorkerForm worker={worker} onSuccess={handleWorkerUpdate} />
-          </TabsContent>
-          <TabsContent value="placements" className="p-2">
-            <WorkerPlacementsTab workerId={worker.id} onUpdate={handleWorkerUpdate} />
-          </TabsContent>
-          <TabsContent value="roles" className="p-2">
-            <WorkerUnionRolesTab workerId={worker.id} onUpdate={handleWorkerUpdate} />
-          </TabsContent>
-          <TabsContent value="activity" className="p-2">
-            <WorkerActivitiesTab workerId={worker.id} onUpdate={handleWorkerUpdate} />
-          </TabsContent>
-          <TabsContent value="ratings" className="p-2">
-            <WorkerRatingsTab workerId={worker.id} onUpdate={handleWorkerUpdate} />
-          </TabsContent>
-        </Tabs>
+        {isLoading ? (
+          <div className="p-4 text-sm text-muted-foreground">Loading worker details…</div>
+        ) : worker ? (
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-2">
+            <TabsList>
+              <TabsTrigger value="personal">Personal</TabsTrigger>
+              <TabsTrigger value="placements">Placements</TabsTrigger>
+              <TabsTrigger value="roles">Union Roles</TabsTrigger>
+              <TabsTrigger value="activity">Activity</TabsTrigger>
+              <TabsTrigger value="ratings">Ratings</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="personal" className="p-2">
+              <WorkerForm worker={worker} onSuccess={handleWorkerUpdate} />
+            </TabsContent>
+            <TabsContent value="placements" className="p-2">
+              <WorkerPlacementsTab workerId={safeWorkerId} onUpdate={handleWorkerUpdate} />
+            </TabsContent>
+            <TabsContent value="roles" className="p-2">
+              <WorkerUnionRolesTab workerId={safeWorkerId} onUpdate={handleWorkerUpdate} />
+            </TabsContent>
+            <TabsContent value="activity" className="p-2">
+              <WorkerActivitiesTab workerId={safeWorkerId} onUpdate={handleWorkerUpdate} />
+            </TabsContent>
+            <TabsContent value="ratings" className="p-2">
+              <WorkerRatingsTab workerId={safeWorkerId} onUpdate={handleWorkerUpdate} />
+            </TabsContent>
+          </Tabs>
+        ) : (
+          <div className="p-4 text-sm text-muted-foreground">Worker not found.</div>
+        )}
       </DialogContent>
     </Dialog>
   );

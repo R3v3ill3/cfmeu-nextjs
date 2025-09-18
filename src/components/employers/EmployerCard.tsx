@@ -42,7 +42,7 @@ export type EmployerCardData = {
 
 type EmployerProject = NonNullable<EmployerCardData["projects"]>[number];
 
-export function EmployerCard({ employer, onClick }: { employer: EmployerCardData, onClick: () => void }) {
+export function EmployerCard({ employer, onClick, onUpdated }: { employer: EmployerCardData, onClick: () => void, onUpdated?: () => void }) {
   const [fwcSearchOpen, setFwcSearchOpen] = useState(false)
   const [incolinkModalOpen, setIncolinkModalOpen] = useState(false)
   const [selectedProject, setSelectedProject] = useState<EmployerProject | null>(null)
@@ -268,6 +268,7 @@ export function EmployerCard({ employer, onClick }: { employer: EmployerCardData
         employerId={employer.id}
         employerName={employer.name}
         currentIncolinkId={employer.incolink_id}
+        onUpdate={onUpdated}
       />
 
       {selectedProject && (

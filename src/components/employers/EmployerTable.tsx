@@ -41,7 +41,7 @@ type EmployerRow = {
 
 type EmployerProject = NonNullable<EmployerRow["projects"]>[number]
 
-export function EmployerTable({ rows, onRowClick }: { rows: EmployerRow[]; onRowClick: (id: string) => void }) {
+export function EmployerTable({ rows, onRowClick, onEmployerUpdated }: { rows: EmployerRow[]; onRowClick: (id: string) => void; onEmployerUpdated?: () => void }) {
   const [fwcSearchModal, setFwcSearchModal] = useState<{ open: boolean; employerId: string; employerName: string }>({
     open: false,
     employerId: '',
@@ -276,6 +276,7 @@ export function EmployerTable({ rows, onRowClick }: { rows: EmployerRow[]; onRow
         employerId={incolinkModal.employerId}
         employerName={incolinkModal.employerName}
         currentIncolinkId={incolinkModal.incolinkId}
+        onUpdate={onEmployerUpdated}
       />
 
       {selectedProject && (
@@ -289,4 +290,3 @@ export function EmployerTable({ rows, onRowClick }: { rows: EmployerRow[]; onRow
     </>
   )
 }
-

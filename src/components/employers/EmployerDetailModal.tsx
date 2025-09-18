@@ -79,9 +79,10 @@ interface EmployerDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialTab?: "overview" | "eba" | "sites" | "workers";
+  onEmployerUpdated?: () => void;
 }
 
-export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = "overview" }: EmployerDetailModalProps) => {
+export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = "overview", onEmployerUpdated }: EmployerDetailModalProps) => {
   const [activeTab, setActiveTab] = useState(initialTab);
   const [isEditing, setIsEditing] = useState(false);
   const [isManualWorkerOpen, setIsManualWorkerOpen] = useState(false);
@@ -150,6 +151,19 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
     enabled: !!employerId && isOpen,
   });
 
+  const invalidateEmployerData = useCallback(async () => {
+    if (!employerId) return;
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["employer-detail", employerId] }),
+      queryClient.invalidateQueries({ queryKey: ["employer-worker-count", employerId] }),
+      queryClient.invalidateQueries({ queryKey: ["employer-workers", employerId] }),
+      queryClient.invalidateQueries({ queryKey: ["employers-server-side"] }),
+      queryClient.invalidateQueries({ queryKey: ["employers-list"] }),
+      queryClient.invalidateQueries({ queryKey: ["employers"] }),
+    ]);
+    onEmployerUpdated?.();
+  }, [queryClient, employerId, onEmployerUpdated]);
+
   // Worksites for this employer, across all projects
   const { data: employerSites = [], isFetching: isFetchingSites } = useQuery({
     queryKey: ["employer-sites", employerId],
@@ -170,11 +184,10 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
     setIsEditing(false);
   }, []);
 
-  const handleEditSaved = useCallback(() => {
+  const handleEditSaved = useCallback(async (_updated?: { id: string; name: string; employer_type: string }) => {
     setIsEditing(false);
-    queryClient.invalidateQueries({ queryKey: ["employers"] });
-    queryClient.invalidateQueries({ queryKey: ["employer-detail", employerId] });
-  }, [queryClient, employerId]);
+    await invalidateEmployerData();
+  }, [invalidateEmployerData]);
 
   if (!isOpen) return null;
 
@@ -590,8 +603,7 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
                   title: 'Import queued',
                   description: 'Background import will refresh worker data shortly.',
                 })
-                queryClient.invalidateQueries({ queryKey: ["employer-workers", employerId] })
-                queryClient.invalidateQueries({ queryKey: ["employer-detail", employerId] })
+                await invalidateEmployerData()
               } catch (e) {
                 toast({
                   title: 'Import failed',
@@ -654,8 +666,9 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
         <DialogTitle>Add New Worker</DialogTitle>
       </DialogHeader>
       <WorkerForm
-        onSuccess={() => {
+        onSuccess={async () => {
           setIsManualWorkerOpen(false);
+          await invalidateEmployerData();
         }}
       />
     </DialogContent>
@@ -663,17 +676,17 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
  </TabsContent>
               </Tabs>
               {isFwcSearchOpen && employer && (
-                <FwcEbaSearchModal
-                  isOpen={isFwcSearchOpen}
-                  onClose={() => setIsFwcSearchOpen(false)}
-                  employerId={employer.id}
-                  employerName={employer.name}
-                  abn={employer.abn ?? undefined}
-                  onLinkEba={async () => {
-                    await queryClient.invalidateQueries({ queryKey: ["employer-detail", employerId] });
+              <FwcEbaSearchModal
+                isOpen={isFwcSearchOpen}
+                onClose={() => setIsFwcSearchOpen(false)}
+                employerId={employer.id}
+                employerName={employer.name}
+                abn={employer.abn ?? undefined}
+                onLinkEba={async () => {
+                    await invalidateEmployerData();
                     setIsFwcSearchOpen(false);
                   }}
-                />
+              />
               )}
               {employer && (
                 <IncolinkActionModal
@@ -682,9 +695,7 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
                   employerId={employer.id}
                   employerName={employer.name}
                   currentIncolinkId={employer.incolink_id}
-                  onUpdate={async () => {
-                    await queryClient.invalidateQueries({ queryKey: ["employer-detail", employerId] });
-                  }}
+                  onUpdate={invalidateEmployerData}
                 />
               )}
             </>
