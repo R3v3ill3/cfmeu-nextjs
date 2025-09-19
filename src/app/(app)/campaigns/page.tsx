@@ -190,9 +190,7 @@ export default function CampaignsPage() {
                   <div>Status: {c.status}</div>
                 </div>
                 <div className="mt-4 space-y-3">
-                  {/* Campaign Activities */}
-                  {/* Lazy import to avoid circular issues */}
-                  {/* @ts-ignore */}
+                  {/* Campaign activities UI lives in a helper component declared below */}
                   <CampaignActivities campaignId={c.id} />
                 </div>
               </CardContent>
@@ -214,4 +212,3 @@ function CampaignActivities({ campaignId }: { campaignId: string }) {
 		</div>
 	)
 }
-

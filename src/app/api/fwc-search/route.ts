@@ -93,16 +93,16 @@ export async function POST(request: NextRequest) {
 
     console.log('Navigating to FWC page...');
     await page.goto(searchUrl.toString(), {
-      waitUntil: 'networkidle2', // Wait for network to be idle
+      waitUntil: 'networkidle2',
       timeout: 45000
     });
-    
+
     console.log('Page loaded. Waiting for results to render...');
-    
-    // It's good practice to wait for a selector that indicates results are loaded.
-    // Based on manual inspection, the results are inside a div that gets populated.
-    // We can wait for the presence of the result headings.
-    await page.waitForSelector('a h3', { timeout: 30000 });
+
+    await page.waitForFunction(
+      () => typeof window !== 'undefined' && (window as any).aspViewModel?.documentResult !== undefined,
+      { timeout: 30000 }
+    );
 
     console.log('Results selector found. Getting page content.');
     const html = await page.content();
@@ -142,148 +142,185 @@ export async function POST(request: NextRequest) {
 }
 
 function parseSearchResults(html: string, searchQuery: string): FWCSearchResult[] {
+  console.log('🔍 Parsing FWC search results...');
+  const viewModel = extractAspViewModel(html);
+  if (viewModel?.documentResult) {
+    const token = viewModel.documentResult.token ?? undefined;
+    const rawResults = Array.isArray(viewModel.documentResult.results)
+      ? viewModel.documentResult.results
+      : [];
+
+    const parsedResults = rawResults
+      .map(raw => mapViewModelResult(raw, token))
+      .filter((result): result is FWCSearchResult => Boolean(result));
+
+    console.log(`📋 Parsed ${parsedResults.length} results from FWC view model`);
+    if (parsedResults.length > 0) {
+      return dedupeResults(parsedResults);
+    }
+  }
+
+  console.log('⚠️ Falling back to legacy HTML parsing for FWC results');
+  const legacyResults = parseLegacyHtml(html);
+  console.log(`📋 Parsed ${legacyResults.length} results via legacy parser`);
+  return dedupeResults(legacyResults);
+}
+
+type AspViewModel = {
+  documentResult?: {
+    results?: Array<Record<string, any>>;
+    token?: string;
+  };
+};
+
+function extractAspViewModel(html: string): AspViewModel | null {
+  const match = html.match(/aspViewModel\s*=\s*(\{[\s\S]*?\})\s*;\s*<\/script>/);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[1]) as AspViewModel;
+  } catch (error) {
+    console.warn('⚠️ Failed to parse aspViewModel JSON', error);
+    return null;
+  }
+}
+
+function mapViewModelResult(raw: Record<string, any>, token?: string): FWCSearchResult | null {
+  const document = raw.document ?? {};
+
+  const title = pickString(raw.DocumentTitle, document.DocumentTitle, raw.AgreementTitle, document.AgreementTitle);
+  if (!title) return null;
+
+  const agreementType = pickString(raw.AgreementType, document.AgreementType) || 'Single-enterprise Agreement';
+  const status = pickString(raw.AgreementStatusDesc, document.AgreementStatusDesc) || 'Unknown';
+  const approvedDate = normalizeAspDate(raw.DocumentDates || document.DocumentDates);
+  const expiryDate = normalizeAspDate(raw.NominalExpiryDate || document.NominalExpiryDate);
+  const lodgementNumber = pickString(raw.PublicationID, document.PublicationID);
+
+  const decodedUrl = decodeStorageUrl(document.metadata_storage_path);
+  const documentUrl = decodedUrl ? appendToken(decodedUrl, token) : undefined;
+
+  return {
+    title,
+    agreementType,
+    status,
+    approvedDate: approvedDate ?? undefined,
+    expiryDate: expiryDate ?? undefined,
+    lodgementNumber: lodgementNumber ?? undefined,
+    documentUrl,
+    summaryUrl: undefined,
+    downloadToken: token,
+  };
+}
+
+function ensureArray<T>(value: T | T[] | null | undefined): T[] {
+  if (Array.isArray(value)) return value;
+  if (value === undefined || value === null) return [];
+  return [value];
+}
+
+function pickString(...candidates: Array<unknown>): string | null {
+  for (const candidate of candidates) {
+    const values = ensureArray(candidate as any);
+    for (const value of values) {
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed) return trimmed;
+      }
+    }
+  }
+  return null;
+}
+
+function normalizeAspDate(value: unknown): string | null {
+  const [first] = ensureArray(value as any);
+  if (!first || typeof first !== 'string') return null;
+  const trimmed = first.trim();
+  if (!trimmed) return null;
+  const parsed = new Date(trimmed);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
+  }
+  return trimmed;
+}
+
+function decodeStorageUrl(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !value) return undefined;
+  try {
+    const decoded = Buffer.from(value, 'base64').toString('utf8').trim();
+    return decoded.replace(/(\.pdf|\.doc|\.docx|\.rtf|\.zip)(\d+)$/i, '$1');
+  } catch {
+    return undefined;
+  }
+}
+
+function appendToken(url: string, token?: string): string {
+  if (!token) return url;
+  const normalizedToken = token.startsWith('?') ? token : `?${token}`;
+  return url.includes('?') ? `${url}&${normalizedToken.slice(1)}` : `${url}${normalizedToken}`;
+}
+
+function parseLegacyHtml(html: string): FWCSearchResult[] {
   const $ = cheerio.load(html);
   const results: FWCSearchResult[] = [];
 
-  console.log('🔍 Parsing FWC search results...');
-  
-  // Based on browser inspection, FWC uses a structure like:
-  // - Each result is in a container with heading level 3
-  // - Metadata is in sibling generic containers
-  // - PDF links are in the format /document-search/view/3/[encoded]
-  
-  // Find all h3 headings that are agreement titles (inside links)
   const agreementLinks = $('a h3').parent();
-  console.log(`📋 Found ${agreementLinks.length} agreement title links`);
-  
-  agreementLinks.each((index, linkElement) => {
-    try {
-      const $link = $(linkElement);
-      const $container = $link.closest('div').parent(); // Get the parent container
-      
-      // Extract title from h3
-      const title = $link.find('h3').text().trim();
-      if (!title || title.length < 10) return;
-      
-      console.log(`📄 Processing agreement: ${title}`);
-      
-      // Extract document URL
-      let documentUrl = $link.attr('href') || '';
-      if (documentUrl && !documentUrl.startsWith('http')) {
-        documentUrl = `https://www.fwc.gov.au${documentUrl}`;
-      }
-      
-      // Find the metadata container (sibling to the link container)
-      const $metadataContainer = $container.find('div').last(); // Usually the last div has metadata
-      const metadataText = $metadataContainer.text();
-      
-      console.log(`📊 Metadata for ${title.substring(0, 30)}...: ${metadataText.substring(0, 200)}`);
-      
-      // Extract specific metadata fields
-      let status = 'Unknown';
-      let agreementId = '';
-      let approvedDate = '';
-      let expiryDate = '';
-      let abn = '';
-      let employerName = '';
-      
-      // Look for status (Approved, Terminated, etc.)
-      const statusMatch = metadataText.match(/\b(Approved|Terminated|Replaced|Superseded)\b/i);
-      if (statusMatch) status = statusMatch[1];
-      
-      // Look for agreement ID (format: AE123456)
-      const idMatch = metadataText.match(/\b(AE\d+)\b/);
-      if (idMatch) agreementId = idMatch[1];
-      
-      // Look for approved date
-      const approvedMatch = metadataText.match(/Approved:\s*(\d{1,2}\s+\w+\s+\d{4})/i);
-      if (approvedMatch) approvedDate = approvedMatch[1];
-      
-      // Look for expiry date
-      const expiryMatch = metadataText.match(/Nominal expiry:\s*(\d{1,2}\s+\w+\s+\d{4})/i);
-      if (expiryMatch) expiryDate = expiryMatch[1];
-      
-      // Look for ABN
-      const abnMatch = metadataText.match(/ABN:\s*(\d+)/);
-      if (abnMatch) abn = abnMatch[1];
-      
-      // Extract employer name (usually after ABN or before ABN)
-      const employerMatch = title.match(/^([^-]+)/);
-      if (employerMatch) employerName = employerMatch[1].trim();
-      
-      // Find PDF download link
-      let pdfUrl = '';
-      const $pdfLink = $container.find('a').filter((_, el) => {
-        const href = $(el).attr('href') || '';
-        const text = $(el).text().toLowerCase();
-        return href.includes('/document-search/view/') || text.includes('pdf');
-      }).first();
-      
-      if ($pdfLink.length > 0) {
-        pdfUrl = $pdfLink.attr('href') || '';
-        if (pdfUrl && !pdfUrl.startsWith('http')) {
-          pdfUrl = `https://www.fwc.gov.au${pdfUrl}`;
-        }
-      }
 
-      const result: FWCSearchResult = {
-        title: title,
-        agreementType: 'Single-enterprise Agreement', // Default, could be parsed from metadata
-        status: status,
-        approvedDate: approvedDate || undefined,
-        expiryDate: expiryDate || undefined,
-        lodgementNumber: agreementId || undefined,
-        documentUrl: pdfUrl || documentUrl,
-        summaryUrl: documentUrl,
-      };
+  agreementLinks.each((_, linkElement) => {
+    const $link = $(linkElement);
+    const $container = $link.closest('div').parent();
 
-      console.log(`✅ Parsed result:`, {
-        title: result.title.substring(0, 50),
-        status: result.status,
-        agreementId,
-        approvedDate,
-        expiryDate
-      });
+    const title = $link.find('h3').text().trim();
+    if (!title || title.length < 10) return;
 
-      results.push(result);
-
-    } catch (error) {
-      console.error('Error parsing agreement result:', error);
+    let documentUrl = $link.attr('href') || '';
+    if (documentUrl && !documentUrl.startsWith('http')) {
+      documentUrl = `https://www.fwc.gov.au${documentUrl}`;
     }
-  });
 
-  console.log(`✅ Successfully parsed ${results.length} EBA results`);
+    const $metadataContainer = $container.find('div').last();
+    const metadataText = $metadataContainer.text();
 
-  // If still no results, provide detailed debugging
-  if (results.length === 0) {
-    console.log('⚠️ No EBA results could be parsed from FWC response. Dumping full HTML for review.');
-    console.log('📄 Full FWC Response HTML:', html);
-    
-    // Debug: Check what elements exist
-    const $ = cheerio.load(html);
-    console.log('🔍 Page title:', $('title').text());
-    console.log('🔍 Main headings:', $('h1, h2, h3').map((_, el) => $(el).text().trim()).get());
-    console.log('🔍 Links found:', $('a').length);
-    console.log('🔍 Forms found:', $('form').length);
-    
-    // Check for common FWC page elements
-    const commonElements = ['.search-results', '.results', '.documents', '.agreements', '.no-results', '.error'];
-    commonElements.forEach(selector => {
-      const elements = $(selector);
-      if (elements.length > 0) {
-        console.log(`🔍 Found ${selector}:`, elements.first().text().trim().substring(0, 200));
-      }
+    let status = 'Unknown';
+    let agreementId = '';
+    let approvedDate = '';
+    let expiryDate = '';
+
+    const statusMatch = metadataText.match(/\b(Approved|Terminated|Replaced|Superseded)\b/i);
+    if (statusMatch) status = statusMatch[1];
+
+    const idMatch = metadataText.match(/\b(AE\d+)\b/);
+    if (idMatch) agreementId = idMatch[1];
+
+    const approvedMatch = metadataText.match(/Approved:\s*(\d{1,2}\s+\w+\s+\d{4})/i);
+    if (approvedMatch) approvedDate = approvedMatch[1];
+
+    const expiryMatch = metadataText.match(/Nominal expiry:\s*(\d{1,2}\s+\w+\s+\d{4})/i);
+    if (expiryMatch) expiryDate = expiryMatch[1];
+
+    const summaryUrlMatch = metadataText.match(/Summary:\s*(https?:\/\/\S+)/i);
+    const summaryUrl = summaryUrlMatch ? summaryUrlMatch[1] : undefined;
+
+    results.push({
+      title,
+      agreementType: 'Single-enterprise Agreement',
+      status,
+      approvedDate: approvedDate || undefined,
+      expiryDate: expiryDate || undefined,
+      lodgementNumber: agreementId || undefined,
+      documentUrl,
+      summaryUrl,
     });
-  }
-
-  // Remove duplicates based on title similarity
-  const uniqueResults = results.filter((result, index, arr) => {
-    return index === arr.findIndex(r => 
-      r.title.toLowerCase().trim() === result.title.toLowerCase().trim()
-    );
   });
 
-  return uniqueResults.slice(0, 20); // Limit to 20 results
+  return results;
+}
+
+function dedupeResults(results: FWCSearchResult[]): FWCSearchResult[] {
+  const unique = results.filter((result, index, arr) => {
+    return index === arr.findIndex(r => r.title.toLowerCase().trim() === result.title.toLowerCase().trim());
+  });
+
+  return unique.slice(0, 20);
 }
 
 // Manual search endpoint for fallback

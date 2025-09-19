@@ -163,7 +163,10 @@ async function searchFwcAgreements(browser: Browser, companyName: string): Promi
 
   try {
     await page.goto(searchUrl.toString(), { waitUntil: 'networkidle2', timeout: 45000 })
-    await page.waitForSelector('a h3', { timeout: 30000 })
+    await page.waitForFunction(
+      () => typeof window !== 'undefined' && (window as any).aspViewModel?.documentResult !== undefined,
+      { timeout: 30000 }
+    )
     const content = await page.content()
     const parsed = parseSearchResults(content, query)
     console.log(`[worker] FWC search`, { query, resultCount: parsed.length })
@@ -220,6 +223,119 @@ function buildQueryCandidates(companyName: string, override?: string | null): st
 }
 
 function parseSearchResults(html: string, searchQuery: string): FwcSearchResult[] {
+  const viewModel = extractAspViewModel(html)
+  if (viewModel?.documentResult) {
+    const token = viewModel.documentResult.token ?? undefined
+    const rawResults = Array.isArray(viewModel.documentResult.results)
+      ? viewModel.documentResult.results
+      : []
+    const parsedResults = rawResults
+      .map((raw) => mapViewModelResult(raw, token))
+      .filter((result): result is FwcSearchResult => Boolean(result))
+
+    if (parsedResults.length > 0) {
+      return parsedResults
+    }
+  }
+
+  return parseLegacyHtml(html)
+}
+
+type AspViewModel = {
+  documentResult?: {
+    results?: Array<Record<string, any>>
+    token?: string
+  }
+}
+
+function extractAspViewModel(html: string): AspViewModel | null {
+  const match = html.match(/aspViewModel\s*=\s*(\{[\s\S]*?\})\s*;\s*<\/script>/)
+  if (!match) return null
+  try {
+    return JSON.parse(match[1]) as AspViewModel
+  } catch (error) {
+    console.warn('[worker] Failed to parse aspViewModel JSON', error)
+    return null
+  }
+}
+
+function mapViewModelResult(raw: Record<string, any>, token?: string): FwcSearchResult | null {
+  const document = raw.document ?? {}
+
+  const title = pickString(raw.DocumentTitle, document.DocumentTitle, raw.AgreementTitle, document.AgreementTitle)
+  if (!title) return null
+
+  const agreementType =
+    pickString(raw.AgreementType, document.AgreementType) || 'Single-enterprise Agreement'
+  const status = pickString(raw.AgreementStatusDesc, document.AgreementStatusDesc) || 'Unknown'
+  const approvedDate = normalizeAspDate(raw.DocumentDates || document.DocumentDates)
+  const expiryDate = normalizeAspDate(raw.NominalExpiryDate || document.NominalExpiryDate)
+  const lodgementNumber = pickString(raw.PublicationID, document.PublicationID)
+
+  const decodedUrl = decodeStorageUrl(document.metadata_storage_path)
+  const documentUrl = decodedUrl ? appendToken(decodedUrl, token) : undefined
+
+  return {
+    title,
+    agreementType,
+    status,
+    approvedDate: approvedDate ?? undefined,
+    expiryDate: expiryDate ?? undefined,
+    lodgementNumber: lodgementNumber ?? undefined,
+    documentUrl,
+    summaryUrl: undefined,
+    downloadToken: token,
+  }
+}
+
+function ensureArray<T>(value: T | T[] | null | undefined): T[] {
+  if (Array.isArray(value)) return value
+  if (value === undefined || value === null) return []
+  return [value]
+}
+
+function pickString(...candidates: Array<unknown>): string | null {
+  for (const candidate of candidates) {
+    const values = ensureArray(candidate as any)
+    for (const value of values) {
+      if (typeof value === 'string') {
+        const trimmed = value.trim()
+        if (trimmed) return trimmed
+      }
+    }
+  }
+  return null
+}
+
+function normalizeAspDate(value: unknown): string | null {
+  const [first] = ensureArray(value as any)
+  if (!first || typeof first !== 'string') return null
+  const trimmed = first.trim()
+  if (!trimmed) return null
+  const parsed = new Date(trimmed)
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10)
+  }
+  return trimmed
+}
+
+function decodeStorageUrl(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !value) return undefined
+  try {
+    const decoded = Buffer.from(value, 'base64').toString('utf8').trim()
+    return decoded.replace(/(\.pdf|\.doc|\.docx|\.rtf|\.zip)(\d+)$/i, '$1')
+  } catch {
+    return undefined
+  }
+}
+
+function appendToken(url: string, token?: string): string {
+  if (!token) return url
+  const normalizedToken = token.startsWith('?') ? token : `?${token}`
+  return url.includes('?') ? `${url}&${normalizedToken.slice(1)}` : `${url}${normalizedToken}`
+}
+
+function parseLegacyHtml(html: string): FwcSearchResult[] {
   const $ = cheerio.load(html)
   const results: FwcSearchResult[] = []
 

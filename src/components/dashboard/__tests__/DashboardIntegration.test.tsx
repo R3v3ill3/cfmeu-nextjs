@@ -46,9 +46,12 @@ const createWrapper = () => {
     },
   })
 
-  return ({ children }: { children: React.ReactNode }) => (
+  const QueryClientWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   )
+  QueryClientWrapper.displayName = 'QueryClientWrapper'
+
+  return QueryClientWrapper
 }
 
 describe('Dashboard Integration Tests', () => {
