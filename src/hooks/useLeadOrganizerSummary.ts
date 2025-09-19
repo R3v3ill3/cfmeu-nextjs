@@ -352,7 +352,7 @@ export function useAllLeadOrganizerSummaries() {
                   totalProjects = projects?.length || 0
                 }
 
-                patches = (await Promise.all(patchIds.map((pid) => fetchPatchSummary(pid)))).filter(Boolean) as PatchSummaryData[]
+                patches = (await Promise.all(patchIds.map((pid: string) => fetchPatchSummary(pid)))).filter(Boolean) as PatchSummaryData[]
               }
 
               return {

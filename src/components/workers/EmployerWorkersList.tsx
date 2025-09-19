@@ -210,6 +210,23 @@ export const EmployerWorkersList = ({ employerId }: EmployerWorkersListProps) =>
     setShowWorkerDetail(true);
   };
 
+  // Narrow worker data to the subset used by WorkerCard to satisfy its type
+  const toCardWorker = (w: WorkerWithRoles) => ({
+    id: w.id,
+    first_name: w.first_name,
+    surname: w.surname,
+    union_membership_status: w.union_membership_status,
+    email: w.email,
+    mobile_phone: w.mobile_phone,
+    job_titles: Array.from(
+      new Set(
+        (w.worker_placements || [])
+          .map((p) => p.job_title)
+          .filter((t): t is string => typeof t === 'string' && t.length > 0)
+      )
+    ),
+  });
+
   return (
     <div className="space-y-6">
       {autoAdjustedMsg && (
@@ -253,7 +270,7 @@ export const EmployerWorkersList = ({ employerId }: EmployerWorkersListProps) =>
           {delegates.map(worker => (
             <WorkerCard 
               key={worker.id} 
-              worker={worker}
+              worker={toCardWorker(worker)}
               onSelect={handleWorkerClick}
               onViewDetail={handleWorkerClick}
             />
@@ -277,7 +294,7 @@ export const EmployerWorkersList = ({ employerId }: EmployerWorkersListProps) =>
           {hsrs.map(worker => (
             <WorkerCard 
               key={worker.id} 
-              worker={worker}
+              worker={toCardWorker(worker)}
               onSelect={handleWorkerClick}
               onViewDetail={handleWorkerClick}
             />
@@ -307,7 +324,7 @@ export const EmployerWorkersList = ({ employerId }: EmployerWorkersListProps) =>
           {regularWorkers.map(worker => (
             <WorkerCard 
               key={worker.id} 
-              worker={worker}
+              worker={toCardWorker(worker)}
               onSelect={handleWorkerClick}
               onViewDetail={handleWorkerClick}
             />
