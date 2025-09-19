@@ -4,6 +4,33 @@ import { SupabaseClient } from '@supabase/supabase-js'
 import { appendEvent, updateProgress } from '../jobs'
 import { FwcJobPayload, ScraperJob } from '../types'
 
+const BASE_SEARCH_PREFIX = 'cfmeu construction nsw'
+const STOP_WORDS = new Set([
+  'cfmeu',
+  'construction',
+  'nsw',
+  'pty',
+  'ltd',
+  'limited',
+  'group',
+  'contractor',
+  'contractors',
+  'company',
+  'holdings',
+  'holding',
+  'services',
+  'service',
+  'solutions',
+  'solution',
+  'systems',
+  'technology',
+  'technologies',
+  'international',
+  'australia',
+  'australian',
+  'the',
+])
+
 export interface FwcLookupSummary {
   succeeded: number
   failed: number
@@ -312,39 +339,90 @@ function simplifyCompanyName(companyName: string): string {
   return simplified
 }
 
+function collapseSpaces(value: string): string {
+  return value ? value.replace(/\s+/g, ' ').trim() : ''
+}
+
+function extractDistinctKeywords(companyName: string): string[] {
+  if (!companyName) return []
+
+  const sanitized = companyName.replace(/[^\w\s]/g, ' ')
+  const parts = sanitized.split(/\s+/)
+  const seen = new Set<string>()
+  const keywords: string[] = []
+
+  for (const part of parts) {
+    const trimmed = part.trim()
+    if (trimmed.length <= 2) continue
+    const lower = trimmed.toLowerCase()
+    if (STOP_WORDS.has(lower)) continue
+    if (seen.has(lower)) continue
+    seen.add(lower)
+    keywords.push(trimmed)
+  }
+
+  return keywords
+}
+
 function truncateForLog(value: string, max = 1200): string {
   if (value.length <= max) return value
   return `${value.slice(0, max)}…`
 }
 
 function buildQueryCandidates(companyName: string, override?: string | null): string[] {
-  const candidates = new Set<string>()
-  const cleanOverride = override?.trim()
-  const simplified = simplifyCompanyName(companyName)
+  const seen = new Set<string>()
+  const ordered: string[] = []
+  const cleanOverride = collapseSpaces(override ?? '')
+  const simplified = collapseSpaces(simplifyCompanyName(companyName))
+  const cleanedCompanyName = collapseSpaces(companyName)
+  const keywords = extractDistinctKeywords(companyName)
 
-  const basePrefix = (term: string) => `cfmeu construction nsw ${term}`.trim()
+  const pushCandidate = (value: string) => {
+    const normalized = collapseSpaces(value)
+    if (!normalized) return
+    const key = normalized.toLowerCase()
+    if (seen.has(key)) return
+    seen.add(key)
+    ordered.push(normalized)
+  }
+
+  const pushWithPrefix = (term: string) => {
+    const normalized = collapseSpaces(term)
+    if (!normalized) return
+    pushCandidate(normalized)
+    if (!normalized.toLowerCase().startsWith(BASE_SEARCH_PREFIX)) {
+      pushCandidate(`${BASE_SEARCH_PREFIX} ${normalized}`)
+    }
+  }
 
   if (cleanOverride) {
-    candidates.add(cleanOverride)
-    candidates.add(basePrefix(cleanOverride))
+    pushWithPrefix(cleanOverride)
   }
 
-  if (simplified && simplified !== cleanOverride) {
-    candidates.add(basePrefix(simplified))
-    candidates.add(simplified)
+  if (simplified && simplified.toLowerCase() !== cleanOverride.toLowerCase()) {
+    pushWithPrefix(simplified)
   }
 
-  if (companyName && companyName !== simplified && companyName !== cleanOverride) {
-    candidates.add(basePrefix(companyName))
-    candidates.add(companyName)
+  if (cleanedCompanyName && cleanedCompanyName.toLowerCase() !== simplified.toLowerCase()) {
+    pushWithPrefix(cleanedCompanyName)
   }
 
-  if (candidates.size === 0) {
-    candidates.add(basePrefix(companyName || ''))
-    candidates.add(companyName || '')
+  if (keywords.length > 0) {
+    pushWithPrefix(keywords.join(' '))
+    keywords.forEach((word) => pushWithPrefix(word))
+
+    // Add combinations of the first few keywords for broader matching without stop words
+    for (let i = 0; i < Math.min(3, keywords.length); i++) {
+      for (let j = i + 1; j < Math.min(i + 3, keywords.length); j++) {
+        pushWithPrefix(`${keywords[i]} ${keywords[j]}`)
+      }
+    }
   }
 
-  return Array.from(candidates).filter((q) => q.trim().length > 0)
+  // Always include the base prefix as the very last resort
+  pushCandidate(BASE_SEARCH_PREFIX)
+
+  return ordered
 }
 
 function parseSearchResults(html: string, searchQuery: string): FwcSearchResult[] {
