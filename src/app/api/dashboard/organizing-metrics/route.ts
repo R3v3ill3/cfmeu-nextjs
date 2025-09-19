@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
     if (error) {
       console.error('Organizing metrics API error:', error)
       return NextResponse.json(
-        { error: 'Failed to calculate organizing metrics' },
+        { error: 'Failed to calculate organizing metrics', details: error.message || error.toString() },
         { status: 500 }
       )
     }

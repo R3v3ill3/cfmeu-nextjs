@@ -165,65 +165,67 @@ export function ProjectMetricsSection({ data, projects, isLoading }: ProjectMetr
         <div className="grid lg:grid-cols-2 gap-4">
           {/* Left side: Data table */}
           <div className="space-y-3">
-            <Table variant="desktop">
-              <TableHeader variant="desktop">
-                <TableRow variant="desktop">
-                  <TableHead variant="desktop" className="py-2">Stage</TableHead>
-                  <TableHead variant="desktop" className="py-2">Active</TableHead>
-                  <TableHead variant="desktop" className="py-2">Potential</TableHead>
-                  <TableHead variant="desktop" className="py-2">Excluded</TableHead>
-                  <TableHead variant="desktop" className="py-2">Total</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody variant="desktop">
-                {filteredStages.map((s) => {
-                  const a = getCount('active', s.key)
-                  const p = getCount('potential', s.key)
-                  const e = getCount('excluded', s.key)
-                  const total = a + p + e
-                  return (
-                    <TableRow key={s.key} variant="desktop-hover">
-                      <TableCell variant="desktop" className="font-medium py-2">{s.label}</TableCell>
-                      <TableCell variant="desktop" className="py-2">
-                        <button
-                          className="text-blue-700 hover:underline"
-                          onClick={() => navigateToProjects('active', s.key)}
-                        >
-                          {a}
-                        </button>
-                      </TableCell>
-                      <TableCell variant="desktop" className="py-2">
-                        <button
-                          className="text-blue-700 hover:underline"
-                          onClick={() => navigateToProjects('potential', s.key)}
-                        >
-                          {p}
-                        </button>
-                      </TableCell>
-                      <TableCell variant="desktop" className="py-2">
-                        <button
-                          className="text-blue-700 hover:underline"
-                          onClick={() => navigateToProjects('excluded', s.key)}
-                        >
-                          {e}
-                        </button>
-                      </TableCell>
-                      <TableCell variant="desktop" className="py-2">
-                        <button
-                          className="text-gray-900 hover:underline"
-                          onClick={() => navigateToProjects(undefined, s.key)}
-                        >
-                          {total}
-                        </button>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-              {filteredStages.length === 0 && (
-                <TableCaption variant="desktop">No data to display yet.</TableCaption>
-              )}
-            </Table>
+            <div className="overflow-x-auto">
+              <Table variant="desktop">
+                <TableHeader variant="desktop">
+                  <TableRow variant="desktop">
+                    <TableHead variant="desktop" className="py-2">Stage</TableHead>
+                    <TableHead variant="desktop" className="py-2">Active</TableHead>
+                    <TableHead variant="desktop" className="py-2">Potential</TableHead>
+                    <TableHead variant="desktop" className="py-2">Excluded</TableHead>
+                    <TableHead variant="desktop" className="py-2">Total</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody variant="desktop">
+                  {filteredStages.map((s) => {
+                    const a = getCount('active', s.key)
+                    const p = getCount('potential', s.key)
+                    const e = getCount('excluded', s.key)
+                    const total = a + p + e
+                    return (
+                      <TableRow key={s.key} variant="desktop-hover">
+                        <TableCell variant="desktop" className="font-medium py-2">{s.label}</TableCell>
+                        <TableCell variant="desktop" className="py-2">
+                          <button
+                            className="text-blue-700 hover:underline"
+                            onClick={() => navigateToProjects('active', s.key)}
+                          >
+                            {a}
+                          </button>
+                        </TableCell>
+                        <TableCell variant="desktop" className="py-2">
+                          <button
+                            className="text-blue-700 hover:underline"
+                            onClick={() => navigateToProjects('potential', s.key)}
+                          >
+                            {p}
+                          </button>
+                        </TableCell>
+                        <TableCell variant="desktop" className="py-2">
+                          <button
+                            className="text-blue-700 hover:underline"
+                            onClick={() => navigateToProjects('excluded', s.key)}
+                          >
+                            {e}
+                          </button>
+                        </TableCell>
+                        <TableCell variant="desktop" className="py-2">
+                          <button
+                            className="text-gray-900 hover:underline"
+                            onClick={() => navigateToProjects(undefined, s.key)}
+                          >
+                            {total}
+                          </button>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+                {filteredStages.length === 0 && (
+                  <TableCaption variant="desktop">No data to display yet.</TableCaption>
+                )}
+              </Table>
+            </div>
             
             <Button 
               variant="outline" 

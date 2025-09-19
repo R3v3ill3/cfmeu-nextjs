@@ -3,6 +3,72 @@ import { supabase } from "@/integrations/supabase/client"
 import { PatchSummaryData, fetchPatchSummary } from "./usePatchSummaryData"
 import { OrganizingUniverseMetrics, useOrganizingUniverseMetrics, fetchOrganizingUniverseMetrics } from "./useOrganizingUniverseMetrics"
 import { mergeOrganiserNameLists, PENDING_USER_DASHBOARD_STATUSES } from "@/utils/organiserDisplay"
+import { useAuth } from "@/hooks/useAuth"
+import { PatchSummaryDataServerSide } from "./usePatchSummaryDataServerSide"
+
+const getDashboardApiBaseUrl = () => {
+  if (typeof window !== 'undefined') {
+    return ''
+  }
+  if (process.env.NEXT_PUBLIC_VERCEL_URL) {
+    return `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
+  }
+  return 'http://localhost:3000'
+}
+
+const mapServerPatchToSummary = (summary: PatchSummaryDataServerSide): PatchSummaryData => ({
+  patchId: summary.patchId,
+  patchName: summary.patchName,
+  organiserNames: summary.organiserNames,
+  projectCount: summary.projectCount,
+  organizingMetrics: {
+    ebaProjectsPercentage: summary.ebaProjectsPercentage,
+    ebaProjectsCount: summary.ebaProjectsCount,
+    totalActiveProjects: summary.projectCount,
+    knownBuilderPercentage: summary.knownBuilderPercentage,
+    knownBuilderCount: summary.knownBuilderCount,
+    keyContractorCoveragePercentage: summary.keyContractorCoverage,
+    mappedKeyContractors: 0,
+    totalKeyContractorSlots: 0,
+    keyContractorEbaBuilderPercentage: 0,
+    keyContractorsOnEbaBuilderProjects: 0,
+    totalKeyContractorsOnEbaBuilderProjects: 0,
+    keyContractorEbaPercentage: summary.keyContractorEbaPercentage,
+    keyContractorsWithEba: 0,
+    totalMappedKeyContractors: 0
+  },
+  lastUpdated: summary.lastUpdated
+})
+
+async function fetchServerPatchSummaries({
+  viewerId,
+  viewerRole,
+  leadOrganizerId
+}: {
+  viewerId: string
+  viewerRole: string
+  leadOrganizerId: string
+}): Promise<PatchSummaryDataServerSide[]> {
+  const baseUrl = getDashboardApiBaseUrl()
+  const searchParams = new URLSearchParams()
+  searchParams.set('userId', viewerId)
+  searchParams.set('userRole', viewerRole)
+  searchParams.set('leadOrganizerId', leadOrganizerId)
+
+  const response = await fetch(`${baseUrl}/api/dashboard/patch-summaries?${searchParams.toString()}`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include'
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`Failed to fetch patch summaries for lead ${leadOrganizerId}: ${response.status} ${errorText}`)
+  }
+
+  const data = await response.json()
+  return (data?.summaries || []) as PatchSummaryDataServerSide[]
+}
 
 export interface LeadOrganizerSummary {
   leadOrganizerId: string
@@ -23,168 +89,98 @@ export interface LeadOrganizerSummary {
  * Shows all patches assigned to the lead organizer with aggregated metrics
  */
 export function useLeadOrganizerSummary(leadOrganizerId: string) {
-  // Get patches assigned to this lead organizer
-  const { data: patchData, isLoading: patchLoading } = useQuery({
-    queryKey: ["lead-organizer-patches", leadOrganizerId],
-    enabled: !!leadOrganizerId,
+  const { user } = useAuth()
+
+  const { data: basics, isLoading: basicsLoading } = useQuery({
+    queryKey: ["lead-organizer-basics", leadOrganizerId, user?.id],
+    enabled: !!leadOrganizerId && !!user?.id,
     staleTime: 30000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      // Get lead organizer profile
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("id, full_name, email")
-        .eq("id", leadOrganizerId)
-        .single()
+      if (!user?.id) throw new Error('User must be authenticated')
 
+      const [leadProfileResult, viewerProfileResult, pendingLinksResult] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("id, full_name, email")
+          .eq("id", leadOrganizerId)
+          .single(),
+        supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", user.id)
+          .single(),
+        supabase
+          .from("lead_draft_organiser_links")
+          .select("pending:pending_user_id(full_name, email, role, status)")
+          .eq("lead_user_id", leadOrganizerId)
+          .eq("is_active", true)
+      ])
+
+      const { data: profile, error: profileError } = leadProfileResult
       if (profileError) throw profileError
 
-      // Get patches assigned to this lead organizer
-      const { data: patchAssignments, error: assignmentError } = await supabase
-        .from("lead_organiser_patch_assignments")
-        .select(`
-          patch_id,
-          patches:patch_id(id, name)
-        `)
-        .eq("lead_organiser_id", leadOrganizerId)
-        .is("effective_to", null)
+      const { data: viewerProfile, error: viewerError } = viewerProfileResult
+      if (viewerError) throw viewerError
 
-      if (assignmentError) throw assignmentError
-
-      const { data: pendingOrganiserLinks, error: pendingLinkError } = await supabase
-        .from("lead_draft_organiser_links")
-        .select("pending:pending_user_id(full_name, email, role, status)")
-        .eq("lead_user_id", leadOrganizerId)
-        .eq("is_active", true)
-
+      const { data: pendingOrganiserLinks, error: pendingLinkError } = pendingLinksResult
       if (pendingLinkError) throw pendingLinkError
 
       return {
         profile,
-        patchAssignments: patchAssignments || [],
+        viewerRole: viewerProfile?.role || 'lead_organiser',
         pendingOrganisers: pendingOrganiserLinks || []
       }
     }
   })
 
-  // Get organizing metrics for all patches assigned to this lead
-  const patchIds = patchData?.patchAssignments?.map((pa: any) => pa.patch_id) || []
-  const { data: aggregatedMetrics, isLoading: metricsLoading } = useOrganizingUniverseMetrics({
-    patchIds
-  })
+  const viewerRole = basics?.viewerRole || 'lead_organiser'
 
-  // Get detailed patch summaries
-  const { data: patchSummaries, isLoading: summariesLoading } = useQuery({
-    queryKey: ["lead-patch-summaries", leadOrganizerId, patchIds],
-    enabled: patchIds.length > 0,
+  const { data: serverSummaries, isLoading: summariesLoading } = useQuery({
+    queryKey: ["lead-patch-summaries-server", leadOrganizerId, viewerRole, user?.id],
+    enabled: !!leadOrganizerId && !!user?.id && !!viewerRole,
     staleTime: 30000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      const summaries = await Promise.all(
-        patchIds.map(async (patchId: string) => {
-          try {
-            // Get patch basic info
-            const { data: patch, error: patchError } = await supabase
-              .from("patches")
-              .select("id, name")
-              .eq("id", patchId)
-              .single()
-
-            if (patchError) throw patchError
-
-            // Get organiser assignments for this patch
-            const { data: organiserAssignments, error: orgError } = await supabase
-              .from("organiser_patch_assignments")
-              .select(`
-                organiser_id,
-                profiles:organiser_id(full_name, email)
-              `)
-              .eq("patch_id", patchId)
-              .is("effective_to", null)
-
-            if (orgError) throw orgError
-
-            // Get project count for this patch
-            const { data: patchSites, error: sitesError } = await supabase
-              .from("patch_job_sites")
-              .select("job_site_id")
-              .eq("patch_id", patchId)
-              .is("effective_to", null)
-
-            if (sitesError) throw sitesError
-
-            const siteIds = patchSites?.map(ps => ps.job_site_id) || []
-            let projectCount = 0
-
-            if (siteIds.length > 0) {
-              const { data: projects, error: projectsError } = await supabase
-                .from("projects")
-                .select("id")
-                .in("main_job_site_id", siteIds)
-                .eq("organising_universe", "active")
-
-              if (projectsError) throw projectsError
-              projectCount = projects?.length || 0
-            }
-
-            return {
-              patchId,
-              patchName: patch.name,
-              organiserNames: organiserAssignments?.map((oa: any) => 
-                oa.profiles?.full_name || oa.profiles?.email || 'Unknown'
-              ) || [],
-              projectCount,
-              organizingMetrics: {
-                ebaProjectsPercentage: 0,
-                ebaProjectsCount: 0,
-                totalActiveProjects: 0,
-                knownBuilderPercentage: 0,
-                knownBuilderCount: 0,
-                keyContractorCoveragePercentage: 0,
-                mappedKeyContractors: 0,
-                totalKeyContractorSlots: 0,
-                keyContractorEbaBuilderPercentage: 0,
-                keyContractorsOnEbaBuilderProjects: 0,
-                totalKeyContractorsOnEbaBuilderProjects: 0,
-                keyContractorEbaPercentage: 0,
-                keyContractorsWithEba: 0,
-                totalMappedKeyContractors: 0
-              }, // Individual patch metrics will be calculated separately
-              lastUpdated: new Date().toISOString()
-            } as PatchSummaryData
-          } catch (error) {
-            console.error(`Error fetching patch summary for ${patchId}:`, error)
-            return null
-          }
-        })
-      )
-
-      return summaries.filter(Boolean) as PatchSummaryData[]
+      if (!user?.id) throw new Error('User must be authenticated')
+      return await fetchServerPatchSummaries({
+        viewerId: user.id,
+        viewerRole,
+        leadOrganizerId
+      })
     }
   })
 
-  const isLoading = patchLoading || metricsLoading || summariesLoading
+  const patchSummaries = (serverSummaries || []).map(mapServerPatchToSummary)
+  const patchIds = patchSummaries.map(summary => summary.patchId)
 
-  if (isLoading || !patchData || !aggregatedMetrics) {
-    return { data: null, isLoading }
+  const { data: aggregatedMetrics, isLoading: metricsLoading } = useOrganizingUniverseMetrics({
+    patchIds,
+    userId: user?.id,
+    userRole: viewerRole
+  })
+
+  const isLoading = basicsLoading || summariesLoading || metricsLoading
+
+  if (isLoading || !basics || !aggregatedMetrics) {
+    return { data: null, isLoading: true }
   }
 
-  const totalProjects = patchSummaries?.reduce((sum, patch) => sum + patch.projectCount, 0) || 0
+  const totalProjects = patchSummaries.reduce((sum, patch) => sum + patch.projectCount, 0)
 
   const pendingOrganiserNames = mergeOrganiserNameLists(
     [],
-    ((patchData as any)?.pendingOrganisers || [])
-      .map((link: any) => link?.pending)
-      .filter((pending: any) => pending && (!pending.status || PENDING_USER_DASHBOARD_STATUSES.includes(pending.status)))
+    (basics.pendingOrganisers as any[] | undefined)?.map((link: any) => link?.pending)
+      .filter((pending: any) => pending && (!pending.status || PENDING_USER_DASHBOARD_STATUSES.includes(pending.status))) || []
   )
 
   const summaryData: LeadOrganizerSummary = {
     leadOrganizerId,
-    leadOrganizerName: patchData.profile.full_name || patchData.profile.email || 'Unknown',
-    email: patchData.profile.email || '',
-    patchCount: patchIds.length,
+    leadOrganizerName: basics.profile.full_name || basics.profile.email || 'Unknown',
+    email: basics.profile.email || '',
+    patchCount: patchSummaries.length,
     totalProjects,
-    patches: patchSummaries || [],
+    patches: patchSummaries,
     aggregatedMetrics,
     lastUpdated: new Date().toISOString(),
     pendingOrganisers: pendingOrganiserNames,
@@ -199,12 +195,29 @@ export function useLeadOrganizerSummary(leadOrganizerId: string) {
  * Used by admin dashboard to show overview of all leads
  */
 export function useAllLeadOrganizerSummaries() {
+  const { user } = useAuth()
+
   return useQuery({
-    queryKey: ["all-lead-organizer-summaries"],
+    queryKey: ["all-lead-organizer-summaries", user?.id],
+    enabled: !!user?.id,
     staleTime: 30000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
+      if (!user?.id) {
+        throw new Error('User must be authenticated to load lead summaries')
+      }
+
       const pendingStatuses = Array.from(PENDING_USER_DASHBOARD_STATUSES)
+
+      const { data: viewerProfile, error: viewerError } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+      if (viewerError) throw viewerError
+
+      const viewerRole = viewerProfile?.role || 'admin'
 
       const { data: leads, error: leadsError } = await supabase
         .from("profiles")
@@ -238,27 +251,23 @@ export function useAllLeadOrganizerSummaries() {
       const liveSummaries = await Promise.all(
         (leads || []).map(async (lead: any) => {
           try {
-            const { data: patchAssignments, error: assignmentError } = await supabase
-              .from("lead_organiser_patch_assignments")
-              .select("patch_id")
-              .eq("lead_organiser_id", lead.id)
-              .is("effective_to", null)
+            const serverSummaries = await fetchServerPatchSummaries({
+              viewerId: user.id,
+              viewerRole,
+              leadOrganizerId: lead.id
+            })
+            const patchIds = serverSummaries.map(summary => summary.patchId)
 
-            if (assignmentError) throw assignmentError
+            const aggregatedMetrics = await fetchOrganizingUniverseMetrics({
+              patchIds,
+              userId: user.id,
+              userRole: viewerRole
+            })
 
-            const patchIds = patchAssignments?.map((pa: any) => pa.patch_id) || []
-            const [aggregatedMetrics, patches] = await Promise.all([
-              fetchOrganizingUniverseMetrics({ patchIds }),
-              patchIds.length > 0
-                ? Promise.all(patchIds.map((pid: string) => fetchPatchSummary(pid))).then((results) =>
-                    (results.filter(Boolean) as PatchSummaryData[])
-                  )
-                : Promise.resolve([] as PatchSummaryData[])
-            ])
-
+            const patches = serverSummaries.map(mapServerPatchToSummary)
             const totalProjects = aggregatedMetrics.totalActiveProjects > 0
               ? aggregatedMetrics.totalActiveProjects
-              : patches.reduce((sum, patch) => sum + patch.projectCount, 0)
+              : serverSummaries.reduce((sum, summary) => sum + (summary.projectCount || 0), 0)
 
             const pendingOrganiserRows = (pendingByLead.get(String(lead.id)) || [])
               .filter((row: any) => row && (!row.status || pendingStatuses.includes(row.status)))
@@ -268,7 +277,7 @@ export function useAllLeadOrganizerSummaries() {
               leadOrganizerId: lead.id,
               leadOrganizerName: lead.full_name || lead.email || 'Unknown',
               email: lead.email || '',
-              patchCount: patchIds.length,
+              patchCount: serverSummaries.length,
               totalProjects,
               patches,
               aggregatedMetrics,
@@ -301,7 +310,11 @@ export function useAllLeadOrganizerSummaries() {
             try {
               const patchIds = (Array.isArray(lead.assigned_patch_ids) ? lead.assigned_patch_ids : []).map((id: any) => String(id))
               const [aggregatedMetrics, patches] = await Promise.all([
-                fetchOrganizingUniverseMetrics({ patchIds }),
+                fetchOrganizingUniverseMetrics({
+                  patchIds,
+                  userId: user.id,
+                  userRole: viewerRole
+                }),
                 patchIds.length > 0
                   ? Promise.all(patchIds.map((pid: string) => fetchPatchSummary(pid))).then((results) =>
                       (results.filter(Boolean) as PatchSummaryData[])

@@ -22,17 +22,14 @@ import {
   SidebarTrigger,
   SidebarInput,
 } from "@/components/ui/sidebar"
-import { LogOut, Users, Building, FolderOpen, FileCheck, Shield, BarChart3, Settings, Home, MapPin, Crown, QrCode, Search as SearchIcon, Moon, Sun } from "lucide-react"
+import { LogOut, Users, Building, FolderOpen, FileCheck, Shield, BarChart3, Settings, Home, MapPin, Crown, QrCode, Search as SearchIcon } from "lucide-react"
 import AdminPatchSelector from "@/components/admin/AdminPatchSelector"
 import { supabase } from "@/integrations/supabase/client"
 import { useNavigationVisibility } from "@/hooks/useNavigationVisibility"
 import { useNavigationLoading } from "@/hooks/useNavigationLoading"
-import { useTheme } from "next-themes"
-import { Switch } from "@/components/ui/switch"
 import { JoinQrDialog } from "@/components/JoinQrDialog"
 
 const cfmeuLogoLight = "/favicon.svg" as unknown as string
-const cfmeuLogoDark = "/favicon.svg" as unknown as string
 
 type NavItem = { path: string; label: string; icon: any; description?: string }
 
@@ -128,14 +125,8 @@ export default function DesktopLayout({ children }: { children: React.ReactNode 
   const userRole = useUserRole()
   const items = useVisibleNavItems(userRole)
   const { isNavigating, startNavigation } = useNavigationLoading()
-  const { resolvedTheme, setTheme } = useTheme()
   const [query, setQuery] = useState("")
-  const [mounted, setMounted] = useState(false)
   const [joinQrOpen, setJoinQrOpen] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
 
   const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -229,29 +220,6 @@ export default function DesktopLayout({ children }: { children: React.ReactNode 
 
         <SidebarFooter className="border-t px-3 py-3">
           <div className="space-y-3">
-            <div className="group-data-[collapsible=icon]:hidden">
-              <div className="flex overflow-hidden rounded-md border">
-                <button
-                  type="button"
-                  aria-label="Use light theme"
-                  onClick={() => setTheme("light")}
-                  className={`flex w-1/2 items-center justify-center gap-2 px-3 py-2 text-sm ${mounted && resolvedTheme !== "dark" ? "border border-[var(--brand-blue)]" : "border-transparent"}`}
-                >
-                  <Sun className="h-4 w-4" />
-                  <span>Light</span>
-                </button>
-                <button
-                  type="button"
-                  aria-label="Use dark theme"
-                  onClick={() => setTheme("dark")}
-                  className={`flex w-1/2 items-center justify-center gap-2 px-3 py-2 text-sm ${mounted && resolvedTheme === "dark" ? "border border-[var(--brand-blue)]" : "border-transparent"}`}
-                >
-                  <Moon className="h-4 w-4" />
-                  <span>Dark</span>
-                </button>
-              </div>
-            </div>
-
             <div className="flex items-center justify-between rounded-md border px-3 py-2">
               <div className="min-w-0 group-data-[collapsible=icon]:hidden">
                 <div className="text-xs text-muted-foreground">Signed in as</div>
@@ -267,7 +235,7 @@ export default function DesktopLayout({ children }: { children: React.ReactNode 
       </Sidebar>
       
       <SidebarInset>
-        <header className="sticky top-0 z-50 border-b bg-white dark:bg-background">
+        <header className="sticky top-0 z-50 border-b bg-white">
           <div className="flex h-14 items-center gap-4 px-6">
             <SidebarTrigger className="h-8 w-8 rounded-md border p-1.5 transition-colors" />
             

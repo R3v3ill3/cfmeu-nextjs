@@ -14,7 +14,6 @@ import { useNavigationLoading } from "@/hooks/useNavigationLoading";
 import { JoinQrDialog } from "@/components/JoinQrDialog";
 // Fallback to generic icon from public since original assets are not present
 const cfmeuLogoLight = "/favicon.svg" as unknown as string;
-const cfmeuLogoDark = "/favicon.svg" as unknown as string;
 
 const navItems = [
   { path: "/projects", label: "Projects", icon: FolderOpen },
@@ -129,7 +128,7 @@ const Layout = ({ children }: LayoutProps) => {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b sticky top-0 z-30 bg-white dark:bg-gray-900 shadow-md">
+      <header className="border-b sticky top-0 z-30 bg-white shadow-md">
         <div className="flex h-16 items-center px-4">
           {/* Mobile menu */}
           <Sheet open={isOpen} onOpenChange={setIsOpen}>
@@ -138,7 +137,7 @@ const Layout = ({ children }: LayoutProps) => {
                 <Menu className="h-5 w-5" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-64 bg-white text-foreground dark:bg-background">
+            <SheetContent side="left" className="w-64 !bg-white z-50 text-foreground shadow-lg">
               <div className="flex flex-col gap-4">
                 <div className="flex items-center gap-3">
                   <Image
@@ -146,18 +145,25 @@ const Layout = ({ children }: LayoutProps) => {
                     alt="CFMEU Construction Union Logo"
                     width={32}
                     height={32}
-                    className="h-8 w-auto dark:hidden"
-                  />
-                  <Image
-                    src={cfmeuLogoDark}
-                    alt="CFMEU Construction Union Logo"
-                    width={32}
-                    height={32}
-                    className="h-8 w-auto hidden dark:block"
+                    className="h-8 w-auto"
                   />
                   <h2 className="text-lg font-semibold">CFMEU Organiser</h2>
                 </div>
                 <NavItems mobile />
+                <div className="mt-auto pt-4">
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => {
+                      setJoinQrOpen(true)
+                      setIsOpen(false)
+                    }}
+                  >
+                    <QrCode className="mr-2 h-4 w-4" />
+                    Join
+                  </Button>
+                </div>
               </div>
             </SheetContent>
           </Sheet>
@@ -169,14 +175,7 @@ const Layout = ({ children }: LayoutProps) => {
               alt="CFMEU Construction Union Logo"
               width={32}
               height={32}
-              className="h-8 w-auto dark:hidden"
-            />
-            <Image
-              src={cfmeuLogoDark}
-              alt="CFMEU Construction Union Logo"
-              width={32}
-              height={32}
-              className="h-8 w-auto hidden dark:block"
+              className="h-8 w-auto"
             />
             <h1 className="text-xl font-bold">CFMEU Organiser</h1>
           </div>
@@ -188,15 +187,6 @@ const Layout = ({ children }: LayoutProps) => {
 
           {/* User menu */}
           <div className="ml-auto flex items-center gap-4">
-            <Button
-              variant="default"
-              size="sm"
-              className="md:hidden"
-              onClick={() => setJoinQrOpen(true)}
-            >
-              <QrCode className="mr-2 h-4 w-4" />
-              Join
-            </Button>
             {userRole === "admin" && (
               // Admin-only patch selector next to user name
               // eslint-disable-next-line @typescript-eslint/ban-ts-comment
