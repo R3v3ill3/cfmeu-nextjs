@@ -2,14 +2,13 @@
 
 import { useSearchParams } from "next/navigation"
 import { useNewDashboardData } from "@/hooks/useNewDashboardData"
-import { Badge } from "@/components/ui/badge"
-import { AlertTriangle, CheckCircle } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { AlertTriangle } from "lucide-react"
 import { ComplianceAlertsCard } from "@/components/dashboard/ComplianceAlertsCard"
 import { ProjectMetricsSection } from "@/components/dashboard/ProjectMetricsSection"
 import { PreConstructionMetricsComponent } from "@/components/dashboard/PreConstructionMetrics"
 import { RoleBasedDashboard } from "@/components/dashboard/RoleBasedDashboard"
 import { ActiveConstructionMetricsComponent } from "@/components/dashboard/ActiveConstructionMetrics"
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 
 export function MobileDashboardView() {
   const sp = useSearchParams()
@@ -29,26 +28,13 @@ export function MobileDashboardView() {
 
   return (
     <div className="space-y-4 p-4">
-      {/* Header */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-2xl font-bold">Dashboard</CardTitle>
-          <p className="text-muted-foreground">Key metrics at a glance</p>
-        </CardHeader>
-        <CardContent>
-          {data?.errors?.length ? (
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-amber-500" />
-              <p className="text-sm text-amber-700">Partial data shown.</p>
-            </div>
-          ) : (
-            <Badge variant="outline" className="text-sm border-green-200 text-green-700">
-              <CheckCircle className="h-3 w-3 mr-1" />
-              Live Data
-            </Badge>
-          )}
-        </CardContent>
-      </Card>
+      {/* Removed decorative header per request */}
+      {data?.errors?.length ? (
+        <div className="flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 text-amber-500" />
+          <p className="text-sm text-amber-700">Partial data shown.</p>
+        </div>
+      ) : null}
 
       {/* Compliance Alerts */}
       <ComplianceAlertsCard />

@@ -42,105 +42,164 @@ export interface OrganizingUniverseFilters {
  * All operations are read-only to ensure data protection
  */
 export function useOrganizingUniverseMetrics(filters: OrganizingUniverseFilters = {}) {
-  // Feature flag for server-side processing
-  const USE_SERVER_SIDE = process.env.NEXT_PUBLIC_USE_SERVER_SIDE_DASHBOARD === 'true'
-  
   return useQuery({
     queryKey: ["organizing-universe-metrics", filters],
-    enabled: !USE_SERVER_SIDE, // Only run when server-side is disabled
     staleTime: 30000,
     refetchOnWindowFocus: false,
-    queryFn: async (): Promise<OrganizingUniverseMetrics> => {
+    queryFn: () => fetchOrganizingUniverseMetrics(filters)
+  })
+}
+
+/**
+ * Standalone fetcher so non-hook code paths can reuse the same logic
+ */
+export async function fetchOrganizingUniverseMetrics(filters: OrganizingUniverseFilters = {}): Promise<OrganizingUniverseMetrics> {
+  const USE_SERVER_SIDE = process.env.NEXT_PUBLIC_USE_SERVER_SIDE_DASHBOARD === 'true'
+
+  if (Array.isArray(filters.patchIds) && filters.patchIds.length === 0) {
+    return getEmptyMetrics()
+  }
+
+  try {
+    console.log('Organizing universe metrics fetch filters:', filters)
+
+    if (USE_SERVER_SIDE) {
+      const searchParams = new URLSearchParams()
+
+      if (filters.patchIds && filters.patchIds.length > 0) {
+        searchParams.set('patchIds', filters.patchIds.join(','))
+      }
+      if (filters.tier && filters.tier !== 'all') {
+        searchParams.set('tier', filters.tier)
+      }
+      if (filters.stage && filters.stage !== 'all') {
+        searchParams.set('stage', filters.stage)
+      }
+      if (filters.universe && filters.universe !== 'all') {
+        searchParams.set('universe', filters.universe)
+      }
+      if (filters.eba && filters.eba !== 'all') {
+        searchParams.set('eba', filters.eba)
+      }
+      if (filters.userId) {
+        searchParams.set('userId', filters.userId)
+      }
+      if (filters.userRole) {
+        searchParams.set('userRole', filters.userRole)
+      }
+
+      const url = `/api/dashboard/organizing-metrics?${searchParams.toString()}`
       try {
-        // Get active projects (organizing universe = active)
-        let activeProjectsQuery = supabase
-          .from("projects")
-          .select(`
-            id,
-            name,
-            organising_universe,
-            stage_class,
-            tier,
-            project_assignments!left(
-              assignment_type,
-              is_primary_for_role,
-              employers!left(
-                id,
-                name,
-                company_eba_records!left(id, fwc_certified_date)
-              ),
-              contractor_role_types!left(code),
-              trade_types!left(code)
-            ),
-            job_sites!left(
-              id,
-              site_contractor_trades!left(
-                employer_id,
-                trade_type,
-                employers!left(
-                  id,
-                  name,
-                  company_eba_records!left(id, fwc_certified_date)
-                )
-              )
-            )
-          `)
-          .eq("organising_universe", "active")
-
-        // Apply patch filtering if specified
-        if (filters.patchIds && filters.patchIds.length > 0) {
-          console.log('🔍 Applying patch filter:', filters.patchIds)
-          
-          const { data: patchSites, error: patchSitesError } = await supabase
-            .from("patch_job_sites")
-            .select("job_site_id")
-            .in("patch_id", filters.patchIds)
-            .is("effective_to", null)
-
-          if (patchSitesError) {
-            console.error('Patch sites query error:', patchSitesError)
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json'
           }
+        })
 
-          const siteIds = patchSites?.map(ps => ps.job_site_id) || []
-          console.log('🔍 Found patch sites:', siteIds.length)
-          
-          if (siteIds.length > 0) {
-            activeProjectsQuery = activeProjectsQuery
-              .in("main_job_site_id", siteIds)
-          } else {
-            // No sites in patches, return empty metrics
-            console.warn('No sites found for patches:', filters.patchIds)
-            return getEmptyMetrics()
-          }
+        if (!response.ok) {
+          const errorText = await response.text()
+          console.error('Failed to fetch server-side organizing metrics:', response.status, errorText)
+          return getEmptyMetrics()
         }
 
-        // Apply additional filters
-        if (filters.tier && filters.tier !== "all") {
-          activeProjectsQuery = activeProjectsQuery.eq("tier", filters.tier)
-        }
-        if (filters.stage && filters.stage !== "all") {
-          activeProjectsQuery = activeProjectsQuery.eq("stage_class", filters.stage)
-        }
-
-        const { data: activeProjects, error } = await activeProjectsQuery
-
-        if (error) {
-          console.error("Error fetching active projects:", error)
-          throw error
-        }
-
-        console.log(`📊 Loaded ${activeProjects?.length || 0} active projects for organizing universe metrics`)
-        
-        const metrics = calculateMetrics(activeProjects || [])
-        console.log('📊 Calculated organizing universe metrics:', metrics)
-        
-        return metrics
+        const data = await response.json()
+        console.log('Organizing universe metrics server result:', { filters, metrics: data?.metrics })
+        return data?.metrics || getEmptyMetrics()
       } catch (error) {
-        console.error("Error calculating organizing universe metrics:", error)
+        console.error('Error fetching server-side organizing metrics:', error)
         return getEmptyMetrics()
       }
     }
-  })
+
+    // Get active projects (organizing universe = active)
+    let activeProjectsQuery = supabase
+      .from("projects")
+      .select(`
+        id,
+        name,
+        organising_universe,
+        stage_class,
+        tier,
+        project_assignments!left(
+          assignment_type,
+          is_primary_for_role,
+          employers!left(
+            id,
+            name,
+            company_eba_records!left(id, fwc_certified_date)
+          ),
+          contractor_role_types!left(code),
+          trade_types!left(code)
+        ),
+        job_sites!left(
+          id,
+          site_contractor_trades!left(
+            employer_id,
+            trade_type,
+            employers!left(
+              id,
+              name,
+              company_eba_records!left(id, fwc_certified_date)
+            )
+          )
+        )
+      `)
+      .eq("organising_universe", "active")
+
+    // Apply patch filtering if specified
+    if (filters.patchIds && filters.patchIds.length > 0) {
+      console.log('🔍 Applying patch filter:', filters.patchIds)
+      
+      const { data: patchSites, error: patchSitesError } = await supabase
+        .from("patch_job_sites")
+        .select("job_site_id")
+        .in("patch_id", filters.patchIds)
+        .is("effective_to", null)
+
+      if (patchSitesError) {
+        console.error('Patch sites query error:', patchSitesError)
+      }
+
+      const siteIds = patchSites?.map(ps => ps.job_site_id) || []
+      console.log('🔍 Found patch sites:', siteIds.length)
+      
+      if (siteIds.length > 0) {
+        activeProjectsQuery = activeProjectsQuery
+          .in("main_job_site_id", siteIds)
+      } else {
+        // No sites in patches, return empty metrics
+        console.warn('No sites found for patches:', filters.patchIds)
+        return getEmptyMetrics()
+      }
+    }
+
+    // Apply additional filters
+    if (filters.tier && filters.tier !== "all") {
+      activeProjectsQuery = activeProjectsQuery.eq("tier", filters.tier)
+    }
+    if (filters.stage && filters.stage !== "all") {
+      activeProjectsQuery = activeProjectsQuery.eq("stage_class", filters.stage)
+    }
+
+    const { data: activeProjects, error } = await activeProjectsQuery
+
+    if (error) {
+      console.error("Error fetching active projects:", error)
+      throw error
+    }
+
+    console.log(`📊 Loaded ${activeProjects?.length || 0} active projects for organizing universe metrics`)
+    
+    const metrics = calculateMetrics(activeProjects || [])
+    console.log('Organizing universe metrics client result:', { filters, metrics })
+    console.log('📊 Calculated organizing universe metrics:', metrics)
+    
+    return metrics
+  } catch (error) {
+    console.error("Error calculating organizing universe metrics:", error)
+    return getEmptyMetrics()
+  }
 }
 
 /**

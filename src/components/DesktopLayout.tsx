@@ -22,13 +22,14 @@ import {
   SidebarTrigger,
   SidebarInput,
 } from "@/components/ui/sidebar"
-import { LogOut, Users, Building, FolderOpen, FileCheck, Shield, BarChart3, Settings, Home, MapPin, Crown, Search as SearchIcon, Moon, Sun } from "lucide-react"
+import { LogOut, Users, Building, FolderOpen, FileCheck, Shield, BarChart3, Settings, Home, MapPin, Crown, QrCode, Search as SearchIcon, Moon, Sun } from "lucide-react"
 import AdminPatchSelector from "@/components/admin/AdminPatchSelector"
 import { supabase } from "@/integrations/supabase/client"
 import { useNavigationVisibility } from "@/hooks/useNavigationVisibility"
 import { useNavigationLoading } from "@/hooks/useNavigationLoading"
 import { useTheme } from "next-themes"
 import { Switch } from "@/components/ui/switch"
+import { JoinQrDialog } from "@/components/JoinQrDialog"
 
 const cfmeuLogoLight = "/favicon.svg" as unknown as string
 const cfmeuLogoDark = "/favicon.svg" as unknown as string
@@ -130,6 +131,7 @@ export default function DesktopLayout({ children }: { children: React.ReactNode 
   const { resolvedTheme, setTheme } = useTheme()
   const [query, setQuery] = useState("")
   const [mounted, setMounted] = useState(false)
+  const [joinQrOpen, setJoinQrOpen] = useState(false)
 
   useEffect(() => {
     setMounted(true)
@@ -209,6 +211,17 @@ export default function DesktopLayout({ children }: { children: React.ReactNode 
                     </SidebarMenuItem>
                   )
                 })}
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    size="lg"
+                    tooltip="Join CFMEU"
+                    className="justify-start rounded-full font-medium text-[var(--brand-blue)]"
+                    onClick={() => setJoinQrOpen(true)}
+                  >
+                    <QrCode className="h-4 w-4" />
+                    <span className="truncate">Join CFMEU</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
@@ -254,7 +267,7 @@ export default function DesktopLayout({ children }: { children: React.ReactNode 
       </Sidebar>
       
       <SidebarInset>
-        <header className="sticky top-0 z-30 border-b bg-background">
+        <header className="sticky top-0 z-50 border-b bg-white dark:bg-background">
           <div className="flex h-14 items-center gap-4 px-6">
             <SidebarTrigger className="h-8 w-8 rounded-md border p-1.5 transition-colors" />
             
@@ -303,7 +316,7 @@ export default function DesktopLayout({ children }: { children: React.ReactNode 
           </div>
         </main>
       </SidebarInset>
+      <JoinQrDialog open={joinQrOpen} onOpenChange={setJoinQrOpen} />
     </SidebarProvider>
   )
 }
-

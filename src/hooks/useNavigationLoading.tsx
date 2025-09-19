@@ -58,12 +58,12 @@ export function NavigationLoadingOverlay() {
   if (!isNavigating) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
       {/* Dimmed background */}
-      <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/50 dark:bg-black/60" />
       
       {/* Loading indicator */}
-      <div className="relative bg-white rounded-lg shadow-lg p-6 mx-4 max-w-sm w-full border">
+      <div className="relative bg-white rounded-lg shadow-lg p-6 mx-4 max-w-sm w-full border dark:bg-background">
         <div className="flex flex-col items-center space-y-4">
           <img 
             src="/spinner.gif" 
@@ -71,8 +71,8 @@ export function NavigationLoadingOverlay() {
             className="w-8 h-8" 
           />
           <div className="text-center">
-            <h3 className="font-medium text-gray-900">Loading Page...</h3>
-            <p className="text-sm text-gray-600 mt-1">
+            <h3 className="font-medium text-gray-900 dark:text-foreground">Loading Page...</h3>
+            <p className="text-sm text-gray-600 dark:text-muted-foreground mt-1">
               {targetPath ? `Navigating to ${getPageTitle(targetPath)}` : 'Please wait'}
             </p>
           </div>

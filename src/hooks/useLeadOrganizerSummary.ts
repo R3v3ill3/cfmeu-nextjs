@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { PatchSummaryData, fetchPatchSummary } from "./usePatchSummaryData"
-import { OrganizingUniverseMetrics, useOrganizingUniverseMetrics } from "./useOrganizingUniverseMetrics"
+import { OrganizingUniverseMetrics, useOrganizingUniverseMetrics, fetchOrganizingUniverseMetrics } from "./useOrganizingUniverseMetrics"
 import { mergeOrganiserNameLists, PENDING_USER_DASHBOARD_STATUSES } from "@/utils/organiserDisplay"
 
 export interface LeadOrganizerSummary {
@@ -247,30 +247,18 @@ export function useAllLeadOrganizerSummaries() {
             if (assignmentError) throw assignmentError
 
             const patchIds = patchAssignments?.map((pa: any) => pa.patch_id) || []
-            let totalProjects = 0
+            const [aggregatedMetrics, patches] = await Promise.all([
+              fetchOrganizingUniverseMetrics({ patchIds }),
+              patchIds.length > 0
+                ? Promise.all(patchIds.map((pid: string) => fetchPatchSummary(pid))).then((results) =>
+                    (results.filter(Boolean) as PatchSummaryData[])
+                  )
+                : Promise.resolve([] as PatchSummaryData[])
+            ])
 
-            if (patchIds.length > 0) {
-              const { data: patchSites, error: patchSitesError } = await supabase
-                .from("patch_job_sites")
-                .select("job_site_id")
-                .in("patch_id", patchIds)
-                .is("effective_to", null)
-
-              if (patchSitesError) throw patchSitesError
-
-              const siteIds = patchSites?.map((ps: any) => ps.job_site_id) || []
-
-              if (siteIds.length > 0) {
-                const { data: projects, error: projectsError } = await supabase
-                  .from("projects")
-                  .select("id")
-                  .in("main_job_site_id", siteIds)
-                  .eq("organising_universe", "active")
-
-                if (projectsError) throw projectsError
-                totalProjects = projects?.length || 0
-              }
-            }
+            const totalProjects = aggregatedMetrics.totalActiveProjects > 0
+              ? aggregatedMetrics.totalActiveProjects
+              : patches.reduce((sum, patch) => sum + patch.projectCount, 0)
 
             const pendingOrganiserRows = (pendingByLead.get(String(lead.id)) || [])
               .filter((row: any) => row && (!row.status || pendingStatuses.includes(row.status)))
@@ -282,23 +270,8 @@ export function useAllLeadOrganizerSummaries() {
               email: lead.email || '',
               patchCount: patchIds.length,
               totalProjects,
-              patches: [],
-              aggregatedMetrics: {
-                ebaProjectsPercentage: 0,
-                ebaProjectsCount: 0,
-                totalActiveProjects: totalProjects,
-                knownBuilderPercentage: 0,
-                knownBuilderCount: 0,
-                keyContractorCoveragePercentage: 0,
-                mappedKeyContractors: 0,
-                totalKeyContractorSlots: 0,
-                keyContractorEbaBuilderPercentage: 0,
-                keyContractorsOnEbaBuilderProjects: 0,
-                totalKeyContractorsOnEbaBuilderProjects: 0,
-                keyContractorEbaPercentage: 0,
-                keyContractorsWithEba: 0,
-                totalMappedKeyContractors: 0
-              },
+              patches,
+              aggregatedMetrics,
               lastUpdated: new Date().toISOString(),
               pendingOrganisers: pendingOrganiserNames,
               status: 'active'
@@ -327,33 +300,18 @@ export function useAllLeadOrganizerSummaries() {
           pendingLeads.map(async (lead: any) => {
             try {
               const patchIds = (Array.isArray(lead.assigned_patch_ids) ? lead.assigned_patch_ids : []).map((id: any) => String(id))
-              let totalProjects = 0
-              let patches: PatchSummaryData[] = []
+              const [aggregatedMetrics, patches] = await Promise.all([
+                fetchOrganizingUniverseMetrics({ patchIds }),
+                patchIds.length > 0
+                  ? Promise.all(patchIds.map((pid: string) => fetchPatchSummary(pid))).then((results) =>
+                      (results.filter(Boolean) as PatchSummaryData[])
+                    )
+                  : Promise.resolve([] as PatchSummaryData[])
+              ])
 
-              if (patchIds.length > 0) {
-                const { data: patchSites, error: patchSitesError } = await supabase
-                  .from('patch_job_sites')
-                  .select('job_site_id')
-                  .in('patch_id', patchIds)
-                  .is('effective_to', null)
-
-                if (patchSitesError) throw patchSitesError
-
-                const siteIds = (patchSites || []).map((ps: any) => ps.job_site_id)
-
-                if (siteIds.length > 0) {
-                  const { data: projects, error: projectsError } = await supabase
-                    .from('projects')
-                    .select('id')
-                    .in('main_job_site_id', siteIds)
-                    .eq('organising_universe', 'active')
-
-                  if (projectsError) throw projectsError
-                  totalProjects = projects?.length || 0
-                }
-
-                patches = (await Promise.all(patchIds.map((pid: string) => fetchPatchSummary(pid)))).filter(Boolean) as PatchSummaryData[]
-              }
+              const totalProjects = aggregatedMetrics.totalActiveProjects > 0
+                ? aggregatedMetrics.totalActiveProjects
+                : patches.reduce((sum, patch) => sum + patch.projectCount, 0)
 
               return {
                 leadOrganizerId: `pending:${lead.id}`,
@@ -362,22 +320,7 @@ export function useAllLeadOrganizerSummaries() {
                 patchCount: patchIds.length,
                 totalProjects,
                 patches,
-                aggregatedMetrics: {
-                  ebaProjectsPercentage: 0,
-                  ebaProjectsCount: 0,
-                  totalActiveProjects: totalProjects,
-                  knownBuilderPercentage: 0,
-                  knownBuilderCount: 0,
-                  keyContractorCoveragePercentage: 0,
-                  mappedKeyContractors: 0,
-                  totalKeyContractorSlots: 0,
-                  keyContractorEbaBuilderPercentage: 0,
-                  keyContractorsOnEbaBuilderProjects: 0,
-                  totalKeyContractorsOnEbaBuilderProjects: 0,
-                  keyContractorEbaPercentage: 0,
-                  keyContractorsWithEba: 0,
-                  totalMappedKeyContractors: 0
-                },
+                aggregatedMetrics,
                 lastUpdated: new Date().toISOString(),
                 pendingOrganisers: [],
                 isPending: true,

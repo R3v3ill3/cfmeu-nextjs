@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Menu, LogOut, Users, Building, MapPin, Activity, Upload, BarChart3, FolderOpen, FileCheck, Shield, AlertTriangle } from "lucide-react";
+import { Menu, LogOut, Users, Building, MapPin, Activity, Upload, BarChart3, FolderOpen, FileCheck, Shield, AlertTriangle, QrCode } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import AdminPatchSelector from "@/components/admin/AdminPatchSelector";
 import { useNavigationVisibility } from "@/hooks/useNavigationVisibility";
 import { useNavigationLoading } from "@/hooks/useNavigationLoading";
+import { JoinQrDialog } from "@/components/JoinQrDialog";
 // Fallback to generic icon from public since original assets are not present
 const cfmeuLogoLight = "/favicon.svg" as unknown as string;
 const cfmeuLogoDark = "/favicon.svg" as unknown as string;
@@ -34,6 +35,7 @@ const Layout = ({ children }: LayoutProps) => {
   const [userRole, setUserRole] = useState<string | null>(null);
   const { visibility } = useNavigationVisibility();
   const { isNavigating, startNavigation } = useNavigationLoading();
+  const [joinQrOpen, setJoinQrOpen] = useState(false);
 
   useEffect(() => {
     const checkUserRole = async () => {
@@ -127,7 +129,7 @@ const Layout = ({ children }: LayoutProps) => {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b sticky top-0 z-30 bg-background/95 supports-[backdrop-filter]:bg-background/80 backdrop-blur">
+      <header className="border-b sticky top-0 z-30 bg-background shadow-md">
         <div className="flex h-16 items-center px-4">
           {/* Mobile menu */}
           <Sheet open={isOpen} onOpenChange={setIsOpen}>
@@ -136,7 +138,7 @@ const Layout = ({ children }: LayoutProps) => {
                 <Menu className="h-5 w-5" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-64">
+            <SheetContent side="left" className="w-64 bg-white text-foreground dark:bg-background">
               <div className="flex flex-col gap-4">
                 <div className="flex items-center gap-3">
                   <Image
@@ -186,6 +188,15 @@ const Layout = ({ children }: LayoutProps) => {
 
           {/* User menu */}
           <div className="ml-auto flex items-center gap-4">
+            <Button
+              variant="default"
+              size="sm"
+              className="md:hidden"
+              onClick={() => setJoinQrOpen(true)}
+            >
+              <QrCode className="mr-2 h-4 w-4" />
+              Join
+            </Button>
             {userRole === "admin" && (
               // Admin-only patch selector next to user name
               // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -209,6 +220,7 @@ const Layout = ({ children }: LayoutProps) => {
       }`}>
         {children}
       </main>
+      <JoinQrDialog open={joinQrOpen} onOpenChange={setJoinQrOpen} />
     </div>
   );
 };

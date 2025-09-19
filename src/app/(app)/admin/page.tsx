@@ -20,6 +20,7 @@ import DuplicateEmployerManager from "@/components/admin/DuplicateEmployerManage
 import DataUploadTab from "@/components/admin/DataUploadTab"
 import { NavigationVisibilityManager } from "@/components/admin/NavigationVisibilityManager"
 import { useAuth } from "@/hooks/useAuth"
+import { useSearchParams } from "next/navigation"
 
 export default function AdminPage() {
   const [open, setOpen] = useState(false)
@@ -27,6 +28,7 @@ export default function AdminPage() {
   const [lookupOpen, setLookupOpen] = useState(false)
   const [userRole, setUserRole] = useState<string | null>(null)
   const { user } = useAuth()
+  const searchParams = useSearchParams()
 
   // Get user role
   useEffect(() => {
@@ -46,6 +48,17 @@ export default function AdminPage() {
   const isAdmin = userRole === "admin"
   const isLeadOrganiser = userRole === "lead_organiser"
   const defaultTab = isAdmin ? "users" : "invites" // Lead organisers start with invites tab
+  const [tabValue, setTabValue] = useState<string>(defaultTab)
+
+  const tabParam = searchParams?.get("tab")
+
+  useEffect(() => {
+    if (tabParam) {
+      setTabValue(tabParam)
+    } else {
+      setTabValue(defaultTab)
+    }
+  }, [tabParam, defaultTab])
 
   return (
     <RoleGuard allow={["admin", "lead_organiser"]}>
@@ -61,7 +74,7 @@ export default function AdminPage() {
             <Button onClick={() => setOpen(true)}>Invite User</Button>
           </div>
         </div>
-        <Tabs defaultValue={defaultTab}>
+        <Tabs value={tabValue} onValueChange={setTabValue}>
           <TabsList>
             {isAdmin && <TabsTrigger value="users">Users</TabsTrigger>}
             <TabsTrigger value="invites">Invites</TabsTrigger>
@@ -131,4 +144,3 @@ function AdminHierarchyTab() {
   })
   return <RoleHierarchyManager users={users as any} />
 }
-

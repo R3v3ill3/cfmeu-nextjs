@@ -2,14 +2,12 @@
 
 import { useSearchParams } from "next/navigation"
 import { useNewDashboardData } from "@/hooks/useNewDashboardData"
-import { Badge } from "@/components/ui/badge"
-import { Activity, AlertTriangle, CheckCircle } from "lucide-react"
+import { AlertTriangle } from "lucide-react"
 import { ComplianceAlertsCard } from "@/components/dashboard/ComplianceAlertsCard"
 import { ProjectMetricsSection } from "@/components/dashboard/ProjectMetricsSection"
 import { PreConstructionMetricsComponent } from "@/components/dashboard/PreConstructionMetrics"
 import { DashboardDebugInfo } from "@/components/dashboard/DashboardDebugInfo"
 import { RoleBasedDashboard } from "@/components/dashboard/RoleBasedDashboard"
-import { DashboardModeCompact } from "@/components/dashboard/DashboardFeatureFlagIndicator"
 import { ActiveConstructionMetricsComponent } from "@/components/dashboard/ActiveConstructionMetrics"
 import { EbaCoverageSection } from "@/components/dashboard/EbaCoverageSection"
 
@@ -32,32 +30,13 @@ export function DesktopDashboardView() {
 
   return (
     <div className="space-y-6">
-      {/* Desktop-optimized header with enhanced visual hierarchy */}
-      <div className="lg:bg-white lg:border lg:border-gray-300 lg:rounded-lg lg:p-6 lg:shadow-md">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 lg:text-4xl">Dashboard</h1>
-            <p className="text-gray-700 mt-2 lg:text-lg">Union organising platform overview and analytics</p>
-            {data?.errors?.length ? (
-              <div className="flex items-center gap-2 mt-3">
-                <AlertTriangle className="h-4 w-4 text-amber-500" />
-                <p className="text-sm text-amber-700">Some data failed to load; showing partial results.</p>
-              </div>
-            ) : null}
-          </div>
-          <div className="mt-4 lg:mt-0 flex flex-wrap gap-2">
-            <Badge variant="outline" className="text-sm px-3 py-1 border-green-200 text-green-700">
-              <CheckCircle className="h-3 w-3 mr-1" />
-              Live Data
-            </Badge>
-            <Badge variant="outline" className="text-sm px-3 py-1 border-blue-200 text-blue-700">
-              <Activity className="h-3 w-3 mr-1" />
-              Real-time Updates
-            </Badge>
-            <DashboardModeCompact />
-          </div>
+      {/* Removed decorative header per request */}
+      {data?.errors?.length ? (
+        <div className="flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 text-amber-500" />
+          <p className="text-sm text-amber-700">Some data failed to load; showing partial results.</p>
         </div>
-      </div>
+      ) : null}
 
       {/* Compliance Alerts */}
       <ComplianceAlertsCard />
