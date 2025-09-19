@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
     const membership = (searchParams.get('membership') || 'all') as WorkersRequest['membership'];
     const tier = searchParams.get('tier') || undefined;
     const employerId = searchParams.get('employerId') || undefined;
-    const incolink = (searchParams.get('incolink') as 'with' | 'without' | null) || undefined;
+    const incolink = (searchParams.get('incolink') as 'with' | 'without' | 'all' | null) || undefined;
 
     // Build query using the optimized materialized view
     let query = supabase.from('worker_list_view').select('*', { count: 'exact' });
@@ -102,7 +102,8 @@ export async function GET(request: NextRequest) {
       const { data: tierRows, error: tierError } = await supabase
         .from('worker_placements')
         .select('worker_id, employers:employer_id(tier)')
-        .eq('employers.tier', tier);
+        .eq('employers.tier', tier)
+        .limit(10000);
 
       if (tierError) {
         console.error('Workers API tier filter error:', tierError);
@@ -120,7 +121,8 @@ export async function GET(request: NextRequest) {
       const { data: employerRows, error: employerError } = await supabase
         .from('worker_placements')
         .select('worker_id')
-        .eq('employer_id', employerId);
+        .eq('employer_id', employerId)
+        .limit(10000);
 
       if (employerError) {
         console.error('Workers API employer filter error:', employerError);
@@ -137,7 +139,8 @@ export async function GET(request: NextRequest) {
     if (incolink && incolink !== 'all') {
       const queryBuilder = supabase
         .from('workers')
-        .select('id');
+        .select('id')
+        .limit(10000);
 
       let incolinkQuery;
       if (incolink === 'with') {
@@ -207,7 +210,17 @@ export async function GET(request: NextRequest) {
       }
 
       const allowedIdsArray = Array.from(allowedWorkerIds);
-      query = query.in('id', allowedIdsArray);
+      const chunkSize = 200;
+      if (allowedIdsArray.length <= chunkSize) {
+        query = query.in('id', allowedIdsArray);
+      } else {
+        const clauses: string[] = [];
+        for (let i = 0; i < allowedIdsArray.length; i += chunkSize) {
+          const chunk = allowedIdsArray.slice(i, i + chunkSize).join(',');
+          clauses.push(`id.in.(${chunk})`);
+        }
+        query = query.or(clauses.join(','));
+      }
     }
 
     // Apply sorting
@@ -316,6 +329,7 @@ export async function GET(request: NextRequest) {
       hasActiveProject: boolean;
       activeProjectNames: Set<string>;
       employerNames: Set<string>;
+      employerIds: Set<string>;
       jobTitles: Set<string>;
       jobSiteNames: Set<string>;
     };
@@ -328,6 +342,7 @@ export async function GET(request: NextRequest) {
           hasActiveProject: false,
           activeProjectNames: new Set<string>(),
           employerNames: new Set<string>(),
+          employerIds: new Set<string>(),
           jobTitles: new Set<string>(),
           jobSiteNames: new Set<string>(),
         });
@@ -336,6 +351,8 @@ export async function GET(request: NextRequest) {
     };
 
     const now = new Date();
+
+    const employerIdsForEba = new Set<string>();
 
     placementRows.forEach((placement: any) => {
       const workerId = placement.worker_id as string | null;
@@ -347,7 +364,20 @@ export async function GET(request: NextRequest) {
         if (employer.name) {
           agg.employerNames.add(employer.name);
         }
-        let hasActiveEba = employer.enterprise_agreement_status === true;
+        if (employer.id) {
+          const employerIdString = String(employer.id);
+          agg.employerIds.add(employerIdString);
+          employerIdsForEba.add(employerIdString);
+        }
+        const enterpriseStatus = employer.enterprise_agreement_status;
+        let hasActiveEba = enterpriseStatus === true;
+        if (!hasActiveEba && typeof enterpriseStatus === 'string') {
+          const normalized = enterpriseStatus.toLowerCase();
+          const activeStatusSet = new Set(['active', 'current', 'certified', 'approved', 'in_force', 'in-force', 'live', 'yes']);
+          if (activeStatusSet.has(normalized)) {
+            hasActiveEba = true;
+          }
+        }
         const ebaRecords = Array.isArray(employer.company_eba_records)
           ? employer.company_eba_records
           : employer.company_eba_records
@@ -388,6 +418,49 @@ export async function GET(request: NextRequest) {
       }
     });
 
+    const activeEmployerIds = new Set<string>();
+    if (employerIdsForEba.size > 0) {
+      const idsArray = Array.from(employerIdsForEba);
+      const chunkSize = 200;
+      for (let i = 0; i < idsArray.length; i += chunkSize) {
+        const chunk = idsArray.slice(i, i + chunkSize);
+        const { data: ebaRows, error: ebaError } = await supabase
+          .from('company_eba_records')
+          .select('employer_id, status, fwc_certified_date, nominal_expiry_date')
+          .in('employer_id', chunk);
+
+        if (ebaError) {
+          console.error('Workers API EBA lookup error:', ebaError);
+          continue;
+        }
+
+        (ebaRows || []).forEach((record: any) => {
+          const employerId = record.employer_id as string | null;
+          if (!employerId) return;
+          const status = typeof record.status === 'string' ? record.status.toLowerCase() : '';
+          const hasCertifiedDate = Boolean(record.fwc_certified_date);
+          const nominalExpiry = record.nominal_expiry_date ? new Date(record.nominal_expiry_date) : null;
+          const nowDate = new Date();
+          const statusesIndicatingActive = new Set(['active', 'current', 'live', 'certified', 'approved']);
+          const hasActiveStatus = status ? statusesIndicatingActive.has(status) : false;
+          const hasFutureNominal = nominalExpiry ? nominalExpiry >= nowDate : false;
+          if (hasCertifiedDate || hasActiveStatus || hasFutureNominal) {
+            activeEmployerIds.add(String(employerId));
+          }
+        });
+      }
+    }
+
+    aggregates.forEach((agg) => {
+      if (agg.hasActiveEba) return;
+      for (const employerId of agg.employerIds) {
+        if (activeEmployerIds.has(employerId)) {
+          agg.hasActiveEba = true;
+          break;
+        }
+      }
+    });
+
     // Transform data to match client expectations
     const workers: WorkerRecord[] = rawWorkers.map((row: any) => {
       const extra = aggregates.get(row.id) || {
@@ -395,6 +468,7 @@ export async function GET(request: NextRequest) {
         hasActiveProject: false,
         activeProjectNames: new Set<string>(),
         employerNames: new Set<string>(),
+        employerIds: new Set<string>(),
         jobTitles: new Set<string>(),
         jobSiteNames: new Set<string>(),
       };
