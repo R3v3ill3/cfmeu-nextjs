@@ -129,7 +129,7 @@ const Layout = ({ children }: LayoutProps) => {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b sticky top-0 z-30 bg-background shadow-md">
+      <header className="border-b sticky top-0 z-30 bg-white dark:bg-gray-900 shadow-md">
         <div className="flex h-16 items-center px-4">
           {/* Mobile menu */}
           <Sheet open={isOpen} onOpenChange={setIsOpen}>

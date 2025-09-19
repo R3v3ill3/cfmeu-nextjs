@@ -58,12 +58,11 @@ export function NavigationLoadingOverlay() {
   if (!isNavigating) return null
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-      {/* Dimmed background */}
-      <div className="absolute inset-0 bg-black/50 dark:bg-black/60" />
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-white/80 dark:bg-black/80 backdrop-blur-sm">
+      {/* Dimmed background - REMOVED for solid overlay */}
       
       {/* Loading indicator */}
-      <div className="relative bg-white rounded-lg shadow-lg p-6 mx-4 max-w-sm w-full border dark:bg-background">
+      <div className="relative bg-white rounded-lg shadow-2xl p-6 mx-4 max-w-sm w-full border dark:bg-gray-800 dark:border-gray-700">
         <div className="flex flex-col items-center space-y-4">
           <img 
             src="/spinner.gif" 
