@@ -35,6 +35,7 @@ export const WorkerDetailModal = ({ workerId, isOpen, onClose, onUpdate }: Worke
         .from("workers")
         .select(`
           *,
+          incolink_member_id,
           organisers (
             id,
             first_name,

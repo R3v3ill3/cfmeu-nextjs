@@ -5,7 +5,6 @@ import { useNewDashboardData } from "@/hooks/useNewDashboardData"
 import { Badge } from "@/components/ui/badge"
 import { AlertTriangle, CheckCircle } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { DashboardFiltersBar } from "@/components/dashboard/DashboardFiltersBar"
 import { ComplianceAlertsCard } from "@/components/dashboard/ComplianceAlertsCard"
 import { ProjectMetricsSection } from "@/components/dashboard/ProjectMetricsSection"
 import { PreConstructionMetricsComponent } from "@/components/dashboard/PreConstructionMetrics"
@@ -16,10 +15,7 @@ export function MobileDashboardView() {
   const sp = useSearchParams()
   const patchParam = sp.get("patch") || ""
   const patchIds = patchParam.split(",").map(s => s.trim()).filter(Boolean)
-  const tier = sp.get("tier") || undefined
-  const stage = sp.get("stage") || undefined
-  const universe = sp.get("universe") || undefined
-  const { data, isLoading } = useNewDashboardData({ patchIds, tier, stage, universe })
+  const { data, isLoading } = useNewDashboardData({ patchIds })
 
   if (isLoading) {
     return (
@@ -54,9 +50,6 @@ export function MobileDashboardView() {
         </CardContent>
       </Card>
 
-      {/* Filters */}
-      <DashboardFiltersBar compact={true} />
-
       {/* Compliance Alerts */}
       <ComplianceAlertsCard />
 
@@ -68,9 +61,21 @@ export function MobileDashboardView() {
           excluded_construction: 0, excluded_pre_construction: 0, excluded_future: 0,
           excluded_archived: 0, total: 0
         }} 
+        projects={data?.projects}
         isLoading={isLoading} 
         errors={data?.errors}
       />
+
+      {/* Organising Universe Summary */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-xl font-bold">Organising Universe</CardTitle>
+          <p className="text-muted-foreground text-sm">Role-based project organising metrics</p>
+        </CardHeader>
+        <CardContent>
+          <RoleBasedDashboard />
+        </CardContent>
+      </Card>
 
       {/* Pre-Construction Metrics */}
       <PreConstructionMetricsComponent 
@@ -82,17 +87,6 @@ export function MobileDashboardView() {
         isLoading={isLoading} 
       />
       
-      {/* Organizing Universe Summary */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-xl font-bold">Organizing Universe</CardTitle>
-          <p className="text-muted-foreground text-sm">Role-based project organizing metrics</p>
-        </CardHeader>
-        <CardContent>
-          <RoleBasedDashboard />
-        </CardContent>
-      </Card>
-
       {/* Active Construction Metrics */}
       <ActiveConstructionMetricsComponent 
         data={data?.active_construction || {

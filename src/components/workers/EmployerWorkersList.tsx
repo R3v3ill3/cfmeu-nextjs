@@ -60,6 +60,7 @@ export const EmployerWorkersList = ({ employerId }: EmployerWorkersListProps) =>
           id,
           first_name,
           surname,
+          incolink_member_id,
           email,
           mobile_phone,
           union_membership_status,
@@ -252,8 +253,9 @@ export const EmployerWorkersList = ({ employerId }: EmployerWorkersListProps) =>
           {delegates.map(worker => (
             <WorkerCard 
               key={worker.id} 
-              worker={worker} 
-              onClick={() => handleWorkerClick(worker.id)}
+              worker={worker}
+              onSelect={handleWorkerClick}
+              onViewDetail={handleWorkerClick}
             />
           ))}
         </div>
@@ -275,8 +277,9 @@ export const EmployerWorkersList = ({ employerId }: EmployerWorkersListProps) =>
           {hsrs.map(worker => (
             <WorkerCard 
               key={worker.id} 
-              worker={worker} 
-              onClick={() => handleWorkerClick(worker.id)}
+              worker={worker}
+              onSelect={handleWorkerClick}
+              onViewDetail={handleWorkerClick}
             />
           ))}
         </div>
@@ -304,8 +307,9 @@ export const EmployerWorkersList = ({ employerId }: EmployerWorkersListProps) =>
           {regularWorkers.map(worker => (
             <WorkerCard 
               key={worker.id} 
-              worker={worker} 
-              onClick={() => handleWorkerClick(worker.id)}
+              worker={worker}
+              onSelect={handleWorkerClick}
+              onViewDetail={handleWorkerClick}
             />
           ))}
           {(() => {

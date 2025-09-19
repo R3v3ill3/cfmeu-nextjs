@@ -4,7 +4,6 @@ import { useSearchParams } from "next/navigation"
 import { useNewDashboardData } from "@/hooks/useNewDashboardData"
 import { Badge } from "@/components/ui/badge"
 import { Activity, AlertTriangle, CheckCircle } from "lucide-react"
-import { DashboardFiltersBar } from "@/components/dashboard/DashboardFiltersBar"
 import { ComplianceAlertsCard } from "@/components/dashboard/ComplianceAlertsCard"
 import { ProjectMetricsSection } from "@/components/dashboard/ProjectMetricsSection"
 import { PreConstructionMetricsComponent } from "@/components/dashboard/PreConstructionMetrics"
@@ -18,10 +17,7 @@ export function DesktopDashboardView() {
   const sp = useSearchParams()
   const patchParam = sp.get("patch") || ""
   const patchIds = patchParam.split(",").map(s => s.trim()).filter(Boolean)
-  const tier = sp.get("tier") || undefined
-  const stage = sp.get("stage") || undefined
-  const universe = sp.get("universe") || undefined
-  const { data, isLoading } = useNewDashboardData({ patchIds, tier, stage, universe })
+  const { data, isLoading } = useNewDashboardData({ patchIds })
 
   if (isLoading) {
     return (
@@ -63,9 +59,6 @@ export function DesktopDashboardView() {
         </div>
       </div>
 
-      {/* Filters ribbon */}
-      <DashboardFiltersBar compact={true} />
-
       {/* Compliance Alerts */}
       <ComplianceAlertsCard />
 
@@ -80,9 +73,21 @@ export function DesktopDashboardView() {
           excluded_construction: 0, excluded_pre_construction: 0, excluded_future: 0,
           excluded_archived: 0, total: 0
         }}
+        projects={data?.projects}
         isLoading={isLoading}
         errors={data?.errors}
       />
+
+      {/* Organising Universe Summary */}
+      <div className="lg:bg-white lg:border lg:border-gray-300 lg:rounded-lg lg:shadow-md">
+        <div className="lg:p-6">
+          <div className="mb-4">
+            <h2 className="text-2xl font-bold text-gray-900 lg:text-3xl">Organising Universe Summary</h2>
+            <p className="text-gray-700 mt-1 lg:text-lg">Role-based project organising metrics and patch summaries</p>
+          </div>
+          <RoleBasedDashboard />
+        </div>
+      </div>
 
       {/* Active Pre-Construction Metrics */}
       <PreConstructionMetricsComponent
@@ -96,17 +101,6 @@ export function DesktopDashboardView() {
 
       {/* Debug Info (Development Only) */}
       <DashboardDebugInfo />
-
-      {/* Role-Based Dashboard - Organizing Universe Summary */}
-      <div className="lg:bg-white lg:border lg:border-gray-300 lg:rounded-lg lg:shadow-md">
-        <div className="lg:p-6">
-          <div className="mb-4">
-            <h2 className="text-2xl font-bold text-gray-900 lg:text-3xl">Organizing Universe Summary</h2>
-            <p className="text-gray-700 mt-1 lg:text-lg">Role-based project organizing metrics and patch summaries</p>
-          </div>
-          <RoleBasedDashboard />
-        </div>
-      </div>
 
       {/* Active Construction Metrics (moved to bottom) */}
       <ActiveConstructionMetricsComponent

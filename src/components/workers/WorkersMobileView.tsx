@@ -5,8 +5,12 @@ import { useState, useEffect } from "react"
 import { useSearchParams, usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { useWorkersServerSideCompatible } from "@/hooks/useWorkersServerSide"
-import { WorkerCard, WorkerCardData } from "./WorkerCard"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useQuery } from "@tanstack/react-query"
+import { useWorkersServerSideCompatible, WorkerRecord } from "@/hooks/useWorkersServerSide"
+import { supabase } from "@/integrations/supabase/client"
+import { PROJECT_TIER_LABELS, ProjectTier } from "@/components/projects/types"
+import { WorkerCard } from "./WorkerCard"
 import { WorkerDetailModal } from "./WorkerDetailModal"
 
 const WORKERS_STATE_KEY = 'workers-page-state-mobile'
@@ -15,7 +19,11 @@ const saveWorkersState = (params: URLSearchParams) => {
   try {
     const state = {
       q: params.get('q') || '',
-      page: params.get('page') || '1'
+      page: params.get('page') || '1',
+      membership: params.get('membership') || 'all',
+      tier: params.get('tier') || 'all',
+      employerId: params.get('employerId') || '',
+      incolink: params.get('incolink') || 'all'
     }
     sessionStorage.setItem(WORKERS_STATE_KEY, JSON.stringify(state))
   } catch (e) {}
@@ -35,6 +43,10 @@ export function WorkersMobileView() {
   const pathname = usePathname()
   const sp = useSearchParams()
   const q = (sp.get("q") || "").toLowerCase()
+  const membership = (sp.get("membership") || "all") as 'all' | 'member' | 'non_member'
+  const tier = (sp.get("tier") || "all") as 'all' | ProjectTier
+  const employerId = sp.get("employerId") || ""
+  const incolink = (sp.get("incolink") || "all") as 'all' | 'with' | 'without'
   const page = Math.max(1, parseInt(sp.get('page') || '1', 10) || 1)
   const PAGE_SIZE = 10
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null)
@@ -51,6 +63,10 @@ export function WorkersMobileView() {
         const params = new URLSearchParams()
         if (savedState.q) params.set('q', savedState.q)
         if (savedState.page && savedState.page !== '1') params.set('page', savedState.page)
+        if (savedState.membership && savedState.membership !== 'all') params.set('membership', savedState.membership)
+        if (savedState.tier && savedState.tier !== 'all') params.set('tier', savedState.tier)
+        if (savedState.employerId) params.set('employerId', savedState.employerId)
+        if (savedState.incolink && savedState.incolink !== 'all') params.set('incolink', savedState.incolink)
         if (params.toString()) {
           router.replace(`${pathname}?${params.toString()}`)
         }
@@ -60,7 +76,7 @@ export function WorkersMobileView() {
 
   const setParam = (key: string, value?: string) => {
     const params = new URLSearchParams(sp.toString())
-    if (!value) {
+    if (!value || value === 'all') {
       params.delete(key)
     } else {
       params.set(key, value)
@@ -78,6 +94,23 @@ export function WorkersMobileView() {
     sort: 'name',
     dir: 'asc',
     q: q || undefined,
+    membership,
+    tier: tier !== 'all' ? tier : undefined,
+    employerId: employerId || undefined,
+    incolink: incolink !== 'all' ? incolink : undefined,
+  })
+
+  const { data: employerOptions = [] } = useQuery({
+    queryKey: ["workers-filter-employers-mobile"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('employers')
+        .select('id, name, tier')
+        .order('name')
+        .limit(200)
+      if (error) throw error
+      return data || []
+    }
   })
 
   const { data, totalCount, totalPages, currentPage, isFetching } = serverSideResult
@@ -103,16 +136,6 @@ export function WorkersMobileView() {
     )
   }
 
-  const cardData: WorkerCardData[] = data.map((w: any) => ({
-    id: w.id,
-    first_name: w.first_name,
-    surname: w.surname,
-    member_number: w.member_number,
-    union_membership_status: w.union_membership_status,
-    mobile_phone: w.mobile_phone,
-    email: w.email,
-  }))
-
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between">
@@ -125,12 +148,68 @@ export function WorkersMobileView() {
         onChange={(e) => setParam("q", e.target.value)}
       />
 
+      <Select value={membership} onValueChange={(value) => setParam('membership', value)}>
+        <SelectTrigger>
+          <SelectValue placeholder="Membership" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All workers</SelectItem>
+          <SelectItem value="member">CFMEU members</SelectItem>
+          <SelectItem value="non_member">Non-members</SelectItem>
+        </SelectContent>
+      </Select>
+
+      <Select value={tier} onValueChange={(value) => setParam('tier', value)}>
+        <SelectTrigger>
+          <SelectValue placeholder="Tier" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All tiers</SelectItem>
+          {Object.entries(PROJECT_TIER_LABELS).map(([tierValue, label]) => (
+            <SelectItem key={tierValue} value={tierValue}>
+              {label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Select value={employerId || 'all'} onValueChange={(value) => setParam('employerId', value === 'all' ? undefined : value)}>
+        <SelectTrigger>
+          <SelectValue placeholder="Employer" />
+        </SelectTrigger>
+        <SelectContent className="max-h-64">
+          <SelectItem value="all">All employers</SelectItem>
+          {employerOptions.map((option: any) => (
+            <SelectItem key={option.id} value={option.id}>
+              {option.name}
+              {option.tier ? ` • ${PROJECT_TIER_LABELS[option.tier as ProjectTier] ?? option.tier}` : ''}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Select value={incolink} onValueChange={(value) => setParam('incolink', value)}>
+        <SelectTrigger>
+          <SelectValue placeholder="Incolink" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All workers</SelectItem>
+          <SelectItem value="with">With Incolink</SelectItem>
+          <SelectItem value="without">No Incolink</SelectItem>
+        </SelectContent>
+      </Select>
+
       {data.length === 0 && !isFetching ? (
         <p className="text-center text-muted-foreground pt-8">No workers found.</p>
       ) : (
         <div className="space-y-4">
-          {cardData.map((worker) => (
-            <WorkerCard key={worker.id} worker={worker} onClick={() => handleCardClick(worker.id)} />
+          {(data as WorkerRecord[]).map((worker) => (
+            <WorkerCard 
+              key={worker.id}
+              worker={worker}
+              onSelect={handleCardClick}
+              onViewDetail={handleCardClick}
+            />
           ))}
         </div>
       )}
@@ -150,7 +229,10 @@ export function WorkersMobileView() {
       <WorkerDetailModal
         workerId={selectedWorkerId}
         isOpen={isDetailOpen}
-        onClose={() => setIsDetailOpen(false)}
+        onClose={() => {
+          setIsDetailOpen(false)
+          setSelectedWorkerId(null)
+        }}
       />
     </div>
   )

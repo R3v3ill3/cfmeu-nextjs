@@ -197,8 +197,8 @@ export function EmployersDesktopView() {
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Employers</h1>
-        {/* Development indicator for which implementation is active */}
-        {process.env.NODE_ENV === 'development' && (
+        {/* Optional debug badge */}
+        {process.env.NEXT_PUBLIC_SHOW_DEBUG_BADGES === 'true' && (
           <div className="text-xs px-2 py-1 rounded border">
             {USE_SERVER_SIDE ? (
               <span className="text-green-600">🚀 Server-side {serverSideResult.debug?.queryTime ? `(${serverSideResult.debug.queryTime}ms)` : ''}</span>

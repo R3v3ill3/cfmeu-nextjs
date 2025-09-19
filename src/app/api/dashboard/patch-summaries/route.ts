@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
+import { mergeOrganiserNameLists, PENDING_USER_DASHBOARD_STATUSES } from '@/utils/organiserDisplay'
 
 export interface PatchSummariesRequest {
   userId: string
@@ -87,7 +88,7 @@ export async function GET(request: NextRequest) {
     }
     
     // Transform data to match client interface
-    const summaries: PatchSummaryData[] = (summariesData || []).map((row: any) => ({
+    let summaries: PatchSummaryData[] = (summariesData || []).map((row: any) => ({
       patchId: row.patch_id,
       patchName: row.patch_name,
       organiserNames: row.organiser_names || [],
@@ -100,6 +101,37 @@ export async function GET(request: NextRequest) {
       keyContractorEbaPercentage: row.key_contractor_eba_percentage || 0,
       lastUpdated: row.last_updated || new Date().toISOString()
     }))
+
+    if (summaries.length > 0) {
+      const patchIdSet = new Set(summaries.map((summary) => summary.patchId))
+      const { data: pendingRows, error: pendingError } = await supabase
+        .from('pending_users')
+        .select('full_name, email, role, status, assigned_patch_ids')
+        .in('status', Array.from(PENDING_USER_DASHBOARD_STATUSES))
+
+      if (pendingError) {
+        console.error('Failed to load pending organisers for summaries:', pendingError)
+      } else if (pendingRows && pendingRows.length > 0) {
+        const pendingByPatch = new Map<string, any[]>()
+        pendingRows.forEach((row: any) => {
+          const assigned: any[] = Array.isArray(row.assigned_patch_ids) ? row.assigned_patch_ids : []
+          assigned.forEach((pidRaw) => {
+            const pid = String(pidRaw)
+            if (!patchIdSet.has(pid)) return
+            if (!pendingByPatch.has(pid)) pendingByPatch.set(pid, [])
+            pendingByPatch.get(pid)!.push(row)
+          })
+        })
+
+        summaries = summaries.map((summary) => {
+          const pendingForPatch = pendingByPatch.get(summary.patchId) || []
+          return {
+            ...summary,
+            organiserNames: mergeOrganiserNameLists(summary.organiserNames, pendingForPatch)
+          }
+        })
+      }
+    }
     
     // Calculate aggregated metrics
     let aggregatedMetrics = undefined

@@ -34,7 +34,7 @@ interface RoleBasedDashboardProps {
  * Role-based dashboard component that shows different views based on user role:
  * - Organiser: Shows patch summary cards for their assigned patches
  * - Co-ordinator: Shows expandable summary for their lead patches
- * - Admin: Shows overview of all lead organizers with expandable patch details
+ * - Admin: Shows overview of all co-ordinators with expandable patch details
  */
 export function RoleBasedDashboard({ className }: RoleBasedDashboardProps) {
   const { user } = useAuth()
@@ -387,7 +387,7 @@ function LeadOrganiserDashboard({
           <CardHeader>
             <CardTitle className="flex items-center">
               <Crown className="h-5 w-5 mr-2" />
-              Your Leadership Summary
+              Your Co-ordinator Summary
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -404,7 +404,7 @@ function LeadOrganiserDashboard({
         <CardHeader>
           <CardTitle className="flex items-center">
             <Crown className="h-5 w-5 mr-2" />
-            Your Leadership Summary
+            Your Co-ordinator Summary
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -441,7 +441,7 @@ function AdminDashboard({
           <CardHeader>
             <CardTitle className="flex items-center">
               <BarChart3 className="h-5 w-5 mr-2" />
-              All Lead Organizers
+              All Co-ordinators
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -462,13 +462,13 @@ function AdminDashboard({
         <CardHeader>
           <CardTitle className="flex items-center">
             <BarChart3 className="h-5 w-5 mr-2" />
-            All Lead Organizers
+            All Co-ordinators
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="text-center py-8">
-            <Crown className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-            <p className="text-gray-500">No lead organizers found.</p>
+              <Crown className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+            <p className="text-gray-500">No co-ordinators found.</p>
           </div>
         </CardContent>
       </Card>
@@ -482,10 +482,10 @@ function AdminDashboard({
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center">
               <BarChart3 className="h-5 w-5 mr-2" />
-              All Lead Organizers
+              All Co-ordinators
             </CardTitle>
             <Badge variant="outline" className="text-sm">
-              {leadSummaries.length} lead{leadSummaries.length !== 1 ? 's' : ''}
+              {leadSummaries.length} co-ordinator{leadSummaries.length !== 1 ? 's' : ''}
             </Badge>
           </div>
         </CardHeader>

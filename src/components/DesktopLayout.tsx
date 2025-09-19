@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
@@ -20,13 +20,15 @@ import {
   SidebarProvider,
   SidebarSeparator,
   SidebarTrigger,
+  SidebarInput,
 } from "@/components/ui/sidebar"
-import { LogOut, Users, Building, FolderOpen, FileCheck, Shield, BarChart3, Settings, Home, Upload, MapPin, Crown } from "lucide-react"
+import { LogOut, Users, Building, FolderOpen, FileCheck, Shield, BarChart3, Settings, Home, MapPin, Crown, Search as SearchIcon, Moon, Sun } from "lucide-react"
 import AdminPatchSelector from "@/components/admin/AdminPatchSelector"
 import { supabase } from "@/integrations/supabase/client"
-import { desktopDesignSystem } from "@/lib/desktop-design-system"
 import { useNavigationVisibility } from "@/hooks/useNavigationVisibility"
 import { useNavigationLoading } from "@/hooks/useNavigationLoading"
+import { useTheme } from "next-themes"
+import { Switch } from "@/components/ui/switch"
 
 const cfmeuLogoLight = "/favicon.svg" as unknown as string
 const cfmeuLogoDark = "/favicon.svg" as unknown as string
@@ -125,70 +127,83 @@ export default function DesktopLayout({ children }: { children: React.ReactNode 
   const userRole = useUserRole()
   const items = useVisibleNavItems(userRole)
   const { isNavigating, startNavigation } = useNavigationLoading()
+  const { resolvedTheme, setTheme } = useTheme()
+  const [query, setQuery] = useState("")
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  const filteredItems = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return items
+    return items.filter((item) =>
+      [item.label, item.description]?.some((v) => v?.toLowerCase().includes(q))
+    )
+  }, [items, query])
 
   return (
     <SidebarProvider>
-      <Sidebar collapsible="icon" className="border-r border-gray-300 bg-white shadow-sm">
-        <SidebarHeader className="border-b border-gray-300 bg-gray-100">
-          <div className="flex items-center gap-3 px-4 py-4">
-            <Image 
-              src={cfmeuLogoLight} 
-              alt="CFMEU Construction Union Logo" 
-              width={32} 
-              height={32} 
-              className="h-8 w-8 flex-shrink-0" 
-            />
-            <div className="min-w-0 flex-1">
-              <span className="block font-semibold text-gray-900 text-sm">CFMEU Organiser</span>
-              <span className="block text-xs text-gray-700">Union Platform</span>
+      <Sidebar collapsible="icon" className="border-r bg-background text-foreground">
+        <SidebarHeader className="border-b">
+          <div className="px-3 py-3">
+            <div className="flex items-center gap-3 rounded-xl border bg-sidebar-accent/40 px-3 py-3">
+              <Image
+                src={cfmeuLogoLight}
+                alt="CFMEU Construction Union Logo"
+                width={32}
+                height={32}
+                className="h-8 w-8 shrink-0 rounded-md"
+              />
+              <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
+                <div className="text-sm font-semibold truncate">CFMEU Organiser</div>
+                <div className="text-xs text-muted-foreground truncate">Union platform</div>
+              </div>
+            </div>
+            <div className="mt-3 group-data-[collapsible=icon]:hidden">
+              <div className="relative">
+                <SearchIcon className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                <SidebarInput
+                  placeholder="Search..."
+                  className="pl-9"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+              </div>
             </div>
           </div>
         </SidebarHeader>
-        
-        <SidebarContent className="px-3 py-4">
+
+        <SidebarContent className="px-2 py-2">
           <SidebarGroup>
-            <SidebarGroupLabel className="px-3 py-2 text-xs font-semibold text-gray-700 uppercase tracking-wider">
-              Navigation
-            </SidebarGroupLabel>
+            <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">Navigation</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {items.map((item) => {
+                {filteredItems.map((item) => {
                   const Icon = item.icon
                   const isActive = pathname === item.path
                   return (
                     <SidebarMenuItem key={item.path}>
-                      <SidebarMenuButton 
-                        asChild 
+                      <SidebarMenuButton
+                        asChild
                         isActive={isActive}
-                        className={`w-full justify-start gap-3 px-3 py-2.5 text-sm font-medium rounded-md transition-all duration-200 ${
-                          isActive 
-                            ? 'bg-gray-800 text-white border border-gray-700 shadow-md' 
-                            : 'text-gray-600 hover:bg-gray-200 hover:text-gray-900 bg-white'
-                        }`}
+                        size="lg"
+                        tooltip={item.label}
                         disabled={isNavigating}
+                        className="justify-start rounded-full data-[active=true]:bg-[var(--brand-blue)] data-[active=true]:text-white data-[active=true]:shadow data-[active=true]:ring-1 data-[active=true]:ring-[var(--brand-blue)]"
                       >
-                        <Link 
-                          href={item.path} 
+                        <Link
+                          href={item.path}
                           className="flex items-center gap-3 w-full"
-                          onClick={(e) => {
+                          onClick={() => {
                             if (item.path !== pathname) {
                               startNavigation(item.path)
                             }
                           }}
                         >
-                          <Icon className={`h-4 w-4 flex-shrink-0 ${
-                            isActive ? 'text-white' : 'text-gray-500'
-                          }`} />
-                          <div className="min-w-0 flex-1">
-                            <span className="block truncate">{item.label}</span>
-                            {item.description && (
-                              <span className={`block text-xs truncate mt-0.5 ${
-                                isActive ? 'text-gray-300' : 'text-gray-500'
-                              }`}>
-                                {item.description}
-                              </span>
-                            )}
-                          </div>
+                          <Icon className="h-4 w-4" />
+                          <span className="truncate">{item.label}</span>
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -198,22 +213,40 @@ export default function DesktopLayout({ children }: { children: React.ReactNode 
             </SidebarGroupContent>
           </SidebarGroup>
         </SidebarContent>
-        
-        <SidebarFooter className="border-t border-gray-300 bg-gray-100 px-3 py-4">
+
+        <SidebarFooter className="border-t px-3 py-3">
           <div className="space-y-3">
-            <div className="px-3 py-2">
-              <div className="text-xs text-gray-700 mb-1">Signed in as</div>
-              <div className="text-sm font-medium text-gray-900 truncate">{user?.email}</div>
+            <div className="group-data-[collapsible=icon]:hidden">
+              <div className="flex overflow-hidden rounded-md border">
+                <button
+                  type="button"
+                  aria-label="Use light theme"
+                  onClick={() => setTheme("light")}
+                  className={`flex w-1/2 items-center justify-center gap-2 px-3 py-2 text-sm ${mounted && resolvedTheme !== "dark" ? "border border-[var(--brand-blue)]" : "border-transparent"}`}
+                >
+                  <Sun className="h-4 w-4" />
+                  <span>Light</span>
+                </button>
+                <button
+                  type="button"
+                  aria-label="Use dark theme"
+                  onClick={() => setTheme("dark")}
+                  className={`flex w-1/2 items-center justify-center gap-2 px-3 py-2 text-sm ${mounted && resolvedTheme === "dark" ? "border border-[var(--brand-blue)]" : "border-transparent"}`}
+                >
+                  <Moon className="h-4 w-4" />
+                  <span>Dark</span>
+                </button>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={signOut} 
-                className="flex-1 justify-center gap-2 text-xs"
-              >
-                <LogOut className="h-3 w-3" /> 
-                Sign Out
+
+            <div className="flex items-center justify-between rounded-md border px-3 py-2">
+              <div className="min-w-0 group-data-[collapsible=icon]:hidden">
+                <div className="text-xs text-muted-foreground">Signed in as</div>
+                <div className="truncate text-sm font-medium">{user?.email}</div>
+              </div>
+              <Button variant="outline" size="sm" onClick={signOut} className="gap-2">
+                <LogOut className="h-3 w-3" />
+                <span className="group-data-[collapsible=icon]:hidden">Logout</span>
               </Button>
             </div>
           </div>
@@ -221,9 +254,9 @@ export default function DesktopLayout({ children }: { children: React.ReactNode 
       </Sidebar>
       
       <SidebarInset>
-        <header className="sticky top-0 z-30 border-b border-gray-300 bg-white shadow-sm">
+        <header className="sticky top-0 z-30 border-b bg-background">
           <div className="flex h-14 items-center gap-4 px-6">
-            <SidebarTrigger className="h-8 w-8 rounded-md border border-gray-300 bg-white p-1.5 text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors shadow-sm" />
+            <SidebarTrigger className="h-8 w-8 rounded-md border p-1.5 transition-colors" />
             
             <div className="flex items-center gap-3 min-w-0 flex-1">
               <Image 
@@ -233,7 +266,7 @@ export default function DesktopLayout({ children }: { children: React.ReactNode 
                 height={24} 
                 className="h-6 w-6 flex-shrink-0" 
               />
-              <span className="font-medium text-gray-900 truncate max-w-[40vw]">
+              <span className="font-medium truncate max-w-[40vw]">
                 CFMEU Organiser Platform
               </span>
             </div>
@@ -241,32 +274,28 @@ export default function DesktopLayout({ children }: { children: React.ReactNode 
             <div className="flex items-center gap-3 ml-auto">
               {userRole === "admin" && (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-700 hidden xl:block">Patch:</span>
+                  <span className="text-xs text-muted-foreground hidden xl:block">Patch:</span>
                   {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
                   {/* @ts-ignore */}
                   <AdminPatchSelector />
                 </div>
               )}
               
-              <div className="hidden lg:flex items-center gap-2 text-sm text-gray-700">
+              <div className="hidden lg:flex items-center gap-2 text-sm text-muted-foreground">
                 <span className="hidden xl:block">Welcome back,</span>
-                <span className="font-medium text-gray-900 truncate max-w-[200px]">
+                <span className="font-medium truncate max-w-[200px]">
                   {user?.email?.split('@')[0]}
                 </span>
               </div>
               
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="h-8 w-8 p-0 text-gray-700 hover:bg-gray-100 hover:text-gray-900"
-              >
+              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
                 <Settings className="h-4 w-4" />
               </Button>
             </div>
           </div>
         </header>
         
-        <main className={`flex-1 min-w-0 bg-white transition-opacity duration-200 ${
+        <main className={`flex-1 min-w-0 bg-background transition-opacity duration-200 ${
           isNavigating ? 'opacity-50 pointer-events-none' : 'opacity-100'
         }`}>
           <div className="p-6">

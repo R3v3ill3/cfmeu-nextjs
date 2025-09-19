@@ -28,8 +28,8 @@ interface LeadOrganizerSummaryCardProps {
 }
 
 /**
- * Expandable summary card for lead organizers showing their patch assignments
- * Used by admin dashboard and lead organizer views
+ * Expandable summary card for co-ordinators showing their patch assignments
+ * Used by admin dashboard and co-ordinator views
  */
 export function LeadOrganizerSummaryCard({ 
   leadSummary, 
@@ -40,6 +40,9 @@ export function LeadOrganizerSummaryCard({
   defaultExpanded = false
 }: LeadOrganizerSummaryCardProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
+  const isPendingLead = !!leadSummary.isPending
+  const statusLabel = (leadSummary.status || (isPendingLead ? 'pending' : 'active')).replace(/_/g, ' ')
+  const formattedStatus = statusLabel.charAt(0).toUpperCase() + statusLabel.slice(1)
   
   if (isLoading) {
     return (
@@ -66,18 +69,21 @@ export function LeadOrganizerSummaryCard({
   }
 
   const handleLeadClick = () => {
+    if (isPendingLead) return
     if (onOpenLead) {
       onOpenLead(leadSummary.leadOrganizerId)
     }
   }
 
   const handleProjectsClick = () => {
+    if (isPendingLead) return
     if (onOpenProjects) {
       onOpenProjects(leadSummary.leadOrganizerId)
     }
   }
 
   const handlePatchProjectsClick = (patchId: string) => {
+    if (isPendingLead) return
     if (onOpenProjects) {
       onOpenProjects(leadSummary.leadOrganizerId, patchId)
     }
@@ -111,8 +117,13 @@ export function LeadOrganizerSummaryCard({
                 <div className="flex items-center space-x-2 ml-2">
                   <Badge variant="outline" className="text-xs border-purple-200 text-purple-700">
                     <Crown className="h-3 w-3 mr-1" />
-                    Lead
+                    Co-ordinator
                   </Badge>
+                  {formattedStatus && (
+                    <Badge variant={isPendingLead ? "destructive" : "secondary"} className="text-xs">
+                      {formattedStatus}
+                    </Badge>
+                  )}
                   
                   <CollapsibleTrigger asChild>
                     <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
@@ -139,6 +150,15 @@ export function LeadOrganizerSummaryCard({
               <span>{leadSummary.totalProjects} project{leadSummary.totalProjects !== 1 ? 's' : ''}</span>
             </div>
           </div>
+
+          {leadSummary.pendingOrganisers?.length > 0 && (
+            <div className="mt-2 text-xs text-amber-700 flex items-start">
+              <Users className="h-3 w-3 mr-1 mt-0.5" />
+              <span>
+                Pending organisers: {leadSummary.pendingOrganisers.join(', ')}
+              </span>
+            </div>
+          )}
         </CardHeader>
 
         <CardContent className="px-4 pb-4 pt-0 space-y-3 flex-1 flex flex-col">
@@ -148,11 +168,17 @@ export function LeadOrganizerSummaryCard({
               <BarChart3 className="h-4 w-4 mr-2" />
               Aggregated Metrics
             </h4>
-            <OrganizingUniverseMetricsComponent
-              metrics={leadSummary.aggregatedMetrics}
-              variant="compact"
-              onClick={handleProjectsClick}
-            />
+            {isPendingLead ? (
+              <div className="rounded-md border border-dashed border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                Metrics will appear once this co-ordinator is onboarded.
+              </div>
+            ) : (
+              <OrganizingUniverseMetricsComponent
+                metrics={leadSummary.aggregatedMetrics}
+                variant="compact"
+                onClick={handleProjectsClick}
+              />
+            )}
           </div>
 
           {/* Expandable patch details */}
@@ -181,16 +207,17 @@ export function LeadOrganizerSummaryCard({
                           )}
                         </div>
                         
-                        <div className="flex space-x-1">
-                          <Button 
-                            size="sm" 
-                            variant="ghost" 
-                            className="h-6 text-xs"
-                            onClick={() => handlePatchProjectsClick(patch.patchId)}
-                          >
-                            <FolderOpen className="h-3 w-3 mr-1" />
-                            Projects
-                          </Button>
+                      <div className="flex space-x-1">
+                        <Button 
+                          size="sm" 
+                          variant="ghost" 
+                          className="h-6 text-xs"
+                          disabled={isPendingLead}
+                          onClick={() => handlePatchProjectsClick(patch.patchId)}
+                        >
+                          <FolderOpen className="h-3 w-3 mr-1" />
+                          Projects
+                        </Button>
                           <Button 
                             size="sm" 
                             variant="ghost" 
@@ -219,6 +246,7 @@ export function LeadOrganizerSummaryCard({
               className="w-full" 
               size="sm" 
               variant="outline"
+              disabled={isPendingLead}
               onClick={handleProjectsClick}
             >
               <FolderOpen className="h-4 w-4 mr-2" />

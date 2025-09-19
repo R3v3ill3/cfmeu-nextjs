@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { OrganizingUniverseMetrics, useOrganizingUniverseMetrics } from "./useOrganizingUniverseMetrics"
+import { mergeOrganiserNameLists, PENDING_USER_DASHBOARD_STATUSES } from "@/utils/organiserDisplay"
 
 export interface PatchSummaryData {
   patchId: string
@@ -52,6 +53,14 @@ export function usePatchSummaryData(patchId: string) {
 
       if (orgError) throw orgError
 
+      const { data: pendingOrganisers, error: pendingError } = await supabase
+        .from("pending_users")
+        .select("full_name, email, role, status, assigned_patch_ids")
+        .in("status", Array.from(PENDING_USER_DASHBOARD_STATUSES))
+        .contains("assigned_patch_ids", [patchId])
+
+      if (pendingError) throw pendingError
+
       // Get project count for this patch
       const { data: patchSites, error: sitesError } = await supabase
         .from("patch_job_sites")
@@ -78,6 +87,7 @@ export function usePatchSummaryData(patchId: string) {
       return {
         patch,
         organiserAssignments: organiserAssignments || [],
+        pendingOrganisers: pendingOrganisers || [],
         projectCount
       }
     }
@@ -89,12 +99,19 @@ export function usePatchSummaryData(patchId: string) {
     return { data: null, isLoading }
   }
 
+  const liveOrganiserNames = patchData.organiserAssignments.map((oa: any) => 
+    oa.profiles?.full_name || oa.profiles?.email || 'Unknown'
+  )
+
+  const organiserNames = mergeOrganiserNameLists(
+    liveOrganiserNames,
+    (patchData.pendingOrganisers as any[] | undefined) || []
+  )
+
   const summaryData: PatchSummaryData = {
     patchId,
     patchName: patchData.patch.name,
-    organiserNames: patchData.organiserAssignments.map((oa: any) => 
-      oa.profiles?.full_name || oa.profiles?.email || 'Unknown'
-    ),
+    organiserNames,
     projectCount: patchData.projectCount,
     organizingMetrics: metrics,
     lastUpdated: new Date().toISOString()
@@ -131,7 +148,7 @@ export function usePatchSummariesData(patchIds: string[]) {
  * Fetch summary data for a single patch
  * Utility function used by batch queries
  */
-async function fetchPatchSummary(patchId: string): Promise<PatchSummaryData | null> {
+export async function fetchPatchSummary(patchId: string): Promise<PatchSummaryData | null> {
   try {
     // Get patch basic info
     const { data: patch, error: patchError } = await supabase
@@ -153,6 +170,14 @@ async function fetchPatchSummary(patchId: string): Promise<PatchSummaryData | nu
       .is("effective_to", null)
 
     if (orgError) throw orgError
+
+    const { data: pendingOrganisers, error: pendingError } = await supabase
+      .from("pending_users")
+      .select("full_name, email, role, status, assigned_patch_ids")
+      .in("status", Array.from(PENDING_USER_DASHBOARD_STATUSES))
+      .contains("assigned_patch_ids", [patchId])
+
+    if (pendingError) throw pendingError
 
     // Get project count for this patch
     const { data: patchSites, error: sitesError } = await supabase
@@ -177,12 +202,19 @@ async function fetchPatchSummary(patchId: string): Promise<PatchSummaryData | nu
       projectCount = projects?.length || 0
     }
 
+    const liveOrganiserNames = organiserAssignments?.map((oa: any) => 
+      oa.profiles?.full_name || oa.profiles?.email || 'Unknown'
+    ) || []
+
+    const organiserNames = mergeOrganiserNameLists(
+      liveOrganiserNames,
+      (pendingOrganisers as any[] | undefined) || []
+    )
+
     return {
       patchId,
       patchName: patch.name,
-      organiserNames: organiserAssignments?.map((oa: any) => 
-        oa.profiles?.full_name || oa.profiles?.email || 'Unknown'
-      ) || [],
+      organiserNames,
       projectCount,
       organizingMetrics: {
         ebaProjectsPercentage: 0,

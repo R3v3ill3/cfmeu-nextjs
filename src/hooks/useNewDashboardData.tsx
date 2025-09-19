@@ -17,6 +17,13 @@ export interface DashboardProjectCounts {
   total: number;
 }
 
+export interface DashboardProject {
+  id: string;
+  tier: string | null;
+  organising_universe: string | null;
+  stage_class: string | null;
+}
+
 export interface CoreTradeEmployers {
   demolition: number;
   piling: number;
@@ -63,6 +70,7 @@ export interface NewDashboardData {
   project_counts: DashboardProjectCounts;
   active_construction: ActiveConstructionMetrics;
   active_pre_construction: PreConstructionMetrics;
+  projects: DashboardProject[];
   errors: string[];
 }
 
@@ -121,10 +129,12 @@ export const useNewDashboardData = (opts?: { patchIds?: string[]; tier?: string;
           throw projectsError;
         }
 
-        console.log(`📊 Loaded ${projects?.length || 0} total projects from database`);
+        const projectRows = (projects || []) as any[];
+
+        console.log(`📊 Loaded ${projectRows.length} total projects from database`);
 
         // Calculate real project counts
-        const projectCounts = (projects || []).reduce((acc: any, project) => {
+        const projectCounts = projectRows.reduce((acc: any, project) => {
           const universe = project.organising_universe || 'excluded';
           const stage = project.stage_class || 'archived';
           const key = `${universe}_${stage}`;
@@ -152,7 +162,7 @@ export const useNewDashboardData = (opts?: { patchIds?: string[]; tier?: string;
         console.log('📊 Real project counts calculated:', project_counts);
 
         // Get active construction projects for detailed metrics
-        const activeConstructionProjects = (projects || []).filter(p => 
+        const activeConstructionProjects = projectRows.filter(p => 
           p.organising_universe === 'active' && p.stage_class === 'construction'
         );
 
@@ -223,9 +233,16 @@ export const useNewDashboardData = (opts?: { patchIds?: string[]; tier?: string;
         };
 
         // Active pre-construction metrics
-        const preConstructionProjects = (projects || []).filter(p => 
+        const preConstructionProjects = projectRows.filter(p => 
           p.organising_universe === 'active' && p.stage_class === 'pre_construction'
         );
+
+        const dashboardProjects: DashboardProject[] = projectRows.map((project) => ({
+          id: String(project.id),
+          tier: project.tier ?? null,
+          organising_universe: project.organising_universe ?? null,
+          stage_class: project.stage_class ?? null,
+        }));
 
         const active_pre_construction: PreConstructionMetrics = {
           total_projects: preConstructionProjects.length,
@@ -251,6 +268,7 @@ export const useNewDashboardData = (opts?: { patchIds?: string[]; tier?: string;
           project_counts,
           active_construction,
           active_pre_construction,
+          projects: dashboardProjects,
           errors
         };
         
@@ -307,6 +325,7 @@ export const useNewDashboardData = (opts?: { patchIds?: string[]; tier?: string;
             avg_assigned_workers: 0,
             avg_members: 0
           },
+          projects: [],
           errors
         };
       }

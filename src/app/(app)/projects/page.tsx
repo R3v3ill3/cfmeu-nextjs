@@ -577,6 +577,7 @@ export default function ProjectsPage() {
   const router = useRouter()
   const pathname = usePathname()
   const sp = useSearchParams()
+  const SHOW_DEBUG_BADGES = process.env.NEXT_PUBLIC_SHOW_DEBUG_BADGES === 'true'
   const [filtersOpen, setFiltersOpen] = useState(false)
   const q = (sp.get("q") || "").toLowerCase()
   const patchParam = sp.get("patch") || ""
@@ -957,8 +958,8 @@ export default function ProjectsPage() {
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Projects</h1>
-        {/* Development indicator for which implementation is active */}
-        {process.env.NODE_ENV === 'development' && (
+        {/* Optional debug badge */}
+        {SHOW_DEBUG_BADGES && (
           <div className="text-xs px-2 py-1 rounded border">
             {USE_SERVER_SIDE ? (
               <span className="text-green-600">🚀 Projects Server-side {serverSideResult.debug?.queryTime ? `(${serverSideResult.debug.queryTime}ms)` : ''}</span>

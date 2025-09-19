@@ -8,6 +8,9 @@ export interface WorkersParams {
   dir: 'asc' | 'desc';
   q?: string;
   membership?: 'all' | 'member' | 'non_member';
+  tier?: string;
+  employerId?: string;
+  incolink?: 'all' | 'with' | 'without';
 }
 
 export interface WorkerRecord {
@@ -19,6 +22,15 @@ export interface WorkerRecord {
   mobile_phone: string | null;
   member_number: string | null;
   union_membership_status: string | null;
+  incolink_member_id: string | null;
+  has_incolink_id: boolean;
+  has_active_eba: boolean;
+  has_active_project: boolean;
+  active_project_names: string[];
+  active_project_count: number;
+  employer_names: string[];
+  job_titles: string[];
+  job_site_names: string[];
   worker_placements: {
     job_title: string | null;
     job_sites: { name: string | null } | null;
@@ -66,6 +78,18 @@ export function useWorkersServerSide(params: WorkersParams) {
       
       if (params.membership && params.membership !== 'all') {
         searchParams.set('membership', params.membership);
+      }
+
+      if (params.tier && params.tier !== 'all') {
+        searchParams.set('tier', params.tier);
+      }
+
+      if (params.employerId) {
+        searchParams.set('employerId', params.employerId);
+      }
+
+      if (params.incolink && params.incolink !== 'all') {
+        searchParams.set('incolink', params.incolink);
       }
 
       const url = `/api/workers?${searchParams.toString()}`;
