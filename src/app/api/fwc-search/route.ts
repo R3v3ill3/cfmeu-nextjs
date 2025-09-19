@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as cheerio from 'cheerio';
+import type { Browser as ChromiumBrowser, Page as ChromiumPage } from 'puppeteer-core';
 
 export const runtime = 'nodejs';
 
@@ -39,7 +40,7 @@ function simplifyCompanyName(companyName: string): string {
   return simplified;
 }
 
-async function getBrowser() {
+async function getBrowser(): Promise<ChromiumBrowser> {
   const isProd = process.env.NODE_ENV === 'production' || !!process.env.VERCEL_ENV;
   if (isProd) {
     const puppeteerCore = (await import('puppeteer-core')).default;
@@ -56,12 +57,12 @@ async function getBrowser() {
       headless: true,
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROME_PATH,
-    });
+    }) as unknown as ChromiumBrowser;
   }
 }
 
 export async function POST(request: NextRequest) {
-  let browser;
+  let browser: ChromiumBrowser | null = null;
   try {
     const { companyName, searchTerm } = await request.json();
     
@@ -85,7 +86,7 @@ export async function POST(request: NextRequest) {
     console.log(`📍 Search URL: ${searchUrl.toString()}`);
 
     browser = await getBrowser();
-    const page = await browser.newPage();
+    const page = (await browser.newPage()) as ChromiumPage;
     page.setDefaultNavigationTimeout(60000);
     
     // Set a realistic user agent
@@ -100,7 +101,9 @@ export async function POST(request: NextRequest) {
     console.log('Page loaded. Waiting for results to render...');
 
     await page.waitForFunction(
-      () => typeof window !== 'undefined' && (window as any).aspViewModel?.documentResult !== undefined,
+      () =>
+        typeof window !== 'undefined' &&
+        Boolean((window as { aspViewModel?: { documentResult?: unknown } }).aspViewModel?.documentResult),
       { timeout: 30000 }
     );
 
