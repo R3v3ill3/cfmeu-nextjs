@@ -149,7 +149,64 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
           20000,
           "fetch employer details"
         );
-        if (res.error) throw res.error;
+        if (res.error) {
+          // Log and fall back to separate queries; some rows may fail due to relationship issues or RLS
+          console.error("Employer relational fetch failed, falling back:", res.error);
+
+          // Base employer (no nested relations)
+          const base = await withTimeout<any>(
+            supabase
+              .from("employers")
+              .select(
+                `
+                id, name, abn, employer_type, address_line_1, address_line_2, suburb, state, postcode, phone, email, website, primary_contact_name, incolink_id, incolink_last_matched, estimated_worker_count
+              `
+              )
+              .eq("id", employerId)
+              .single(),
+            20000,
+            "fetch employer base"
+          );
+          if (base.error) throw base.error;
+
+          // Company EBA records separately (best-effort)
+          let ebaRecords: any[] = [];
+          try {
+            const eba = await withTimeout<any>(
+              supabase
+                .from("company_eba_records")
+                .select(`
+                  id,
+                  contact_name,
+                  contact_phone,
+                  contact_email,
+                  eba_file_number,
+                  fwc_lodgement_number,
+                  fwc_matter_number,
+                  eba_lodged_fwc,
+                  date_eba_signed,
+                  fwc_certified_date,
+                  fwc_document_url,
+                  sector,
+                  comments
+                `)
+                .eq("employer_id", employerId)
+                .order("fwc_certified_date", { ascending: false }),
+              20000,
+              "fetch employer eba records"
+            );
+            if (!eba.error) {
+              ebaRecords = Array.isArray(eba.data) ? eba.data : [];
+            }
+          } catch (e) {
+            // Ignore EBA errors; not critical for base rendering
+          }
+
+          return {
+            ...base.data,
+            company_eba_records: ebaRecords,
+          } as EmployerWithEba;
+        }
         return res.data as EmployerWithEba;
       } catch (err: any) {
         if (err?.code === "ETIMEDOUT") {
@@ -307,10 +364,10 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
                         Company Information
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-3">
+                  <CardContent className="space-y-3">
                       <div>
                         <label className="text-sm font-medium text-muted-foreground">Employer Type</label>
-                        <p className="capitalize">{employer.employer_type.replace(/_/g, " ")}</p>
+                        <p className="capitalize">{employer.employer_type ? employer.employer_type.replace(/_/g, " ") : "—"}</p>
                       </div>
 
                       {typeof workerCount === "number" && workerCount > 0 && (

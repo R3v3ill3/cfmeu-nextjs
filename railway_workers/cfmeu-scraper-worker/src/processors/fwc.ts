@@ -9,6 +9,26 @@ export interface FwcLookupSummary {
   failed: number
 }
 
+interface FwcSearchDebugContext {
+  stage: 'goto' | 'wait_for_viewmodel' | 'parse'
+  query: string
+  pageUrl?: string
+  pageTitle?: string
+  hasAspViewModel?: boolean
+  htmlSample?: string
+  errorMessage?: string
+}
+
+export class FwcSearchError extends Error {
+  context: FwcSearchDebugContext
+
+  constructor(message: string, context: FwcSearchDebugContext) {
+    super(message)
+    this.name = 'FwcSearchError'
+    this.context = context
+  }
+}
+
 interface FwcSearchResult {
   title: string
   agreementType: string
@@ -52,12 +72,21 @@ export async function processFwcJob(
 
   const browser = await getBrowser()
   try {
+    console.log('[worker] FWC job started', {
+      jobId: job.id,
+      employerIds: employerIds.length,
+      autoLink,
+    })
     for (const [index, employerId] of employerIds.entries()) {
       const employerName = employerMap.get(employerId) ?? employerId
       const searchTermOverride = searchOverrides[employerId]
       await appendEvent(client, job.id, 'fwc_employer_started', { employerId, employerName })
 
       try {
+        console.log('[worker] FWC employer lookup', {
+          employerId,
+          employerName,
+        })
         const queryCandidates = buildQueryCandidates(employerName, searchTermOverride)
         let results: FwcSearchResult[] = []
         let usedQuery = queryCandidates[0] ?? employerName
@@ -116,11 +145,22 @@ export async function processFwcJob(
         }
       } catch (error) {
         failed += 1
-        await appendEvent(client, job.id, 'fwc_employer_failed', {
+        const basePayload: Record<string, unknown> = {
           employerId,
           employerName,
           error: error instanceof Error ? error.message : 'unknown error',
-        })
+        }
+
+        if (error instanceof FwcSearchError) {
+          basePayload.debug = error.context
+          await appendEvent(client, job.id, 'fwc_employer_debug', {
+            employerId,
+            employerName,
+            context: error.context,
+          })
+        }
+
+        await appendEvent(client, job.id, 'fwc_employer_failed', basePayload)
         console.error('[worker] fwc_lookup employer failed', employerId, error)
       }
 
@@ -162,15 +202,95 @@ async function searchFwcAgreements(browser: Browser, companyName: string): Promi
   )
 
   try {
-    await page.goto(searchUrl.toString(), { waitUntil: 'networkidle2', timeout: 45000 })
-    await page.waitForFunction(
-      () => typeof window !== 'undefined' && (window as any).aspViewModel?.documentResult !== undefined,
-      { timeout: 30000 }
-    )
-    const content = await page.content()
-    const parsed = parseSearchResults(content, query)
-    console.log(`[worker] FWC search`, { query, resultCount: parsed.length })
+    try {
+      await page.goto(searchUrl.toString(), { waitUntil: 'networkidle2', timeout: 45000 })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      const pageUrl = page.url()
+      const pageTitle = await page.title().catch(() => 'unknown')
+      const htmlSample = truncateForLog(await page.content().catch(() => ''))
+      throw new FwcSearchError(message, {
+        stage: 'goto',
+        query,
+        pageUrl,
+        pageTitle,
+        htmlSample,
+        errorMessage: message,
+      })
+    }
+
+    let content: string | undefined
+    let waitedForViewModel = false
+    let waitWarningContext: FwcSearchDebugContext | null = null
+    try {
+      await page.waitForFunction(
+        () =>
+          typeof window !== 'undefined' &&
+          Boolean((window as { aspViewModel?: { documentResult?: unknown } }).aspViewModel?.documentResult),
+        { timeout: 30000 }
+      )
+      waitedForViewModel = true
+    } catch (error) {
+      const [pageUrl, pageTitle, hasAsp] = await Promise.all([
+        page.url(),
+        page.title().catch(() => 'unknown'),
+        page
+          .evaluate(() => Boolean((window as { aspViewModel?: unknown }).aspViewModel))
+          .catch(() => false),
+      ])
+      content = await page.content()
+      const snippet = truncateForLog(content)
+      const message = error instanceof Error ? error.message : String(error)
+      console.warn('[worker] FWC aspViewModel wait timed out', {
+        query,
+        pageUrl,
+        pageTitle,
+        hasAspViewModel: hasAsp,
+        htmlSample: snippet,
+        error: message,
+      })
+      waitWarningContext = {
+        stage: 'wait_for_viewmodel',
+        query,
+        pageUrl,
+        pageTitle,
+        hasAspViewModel: hasAsp,
+        htmlSample: snippet,
+        errorMessage: message,
+      }
+    }
+
+    const finalContent = content ?? (await page.content())
+    const parsed = parseSearchResults(finalContent, query)
+    console.log(`[worker] FWC search`, {
+      query,
+      resultCount: parsed.length,
+      waitedForViewModel,
+      waitWarning: Boolean(waitWarningContext),
+    })
+
+    if (parsed.length === 0 && waitWarningContext) {
+      throw new FwcSearchError(waitWarningContext.errorMessage ?? 'FWC results empty after wait timeout', waitWarningContext)
+    }
+
     return parsed
+  } catch (error) {
+    if (error instanceof FwcSearchError) {
+      throw error
+    }
+
+    const message = error instanceof Error ? error.message : String(error)
+    const pageUrl = await page.url()
+    const pageTitle = await page.title().catch(() => 'unknown')
+    const htmlSample = truncateForLog(await page.content().catch(() => ''))
+    throw new FwcSearchError(message, {
+      stage: 'parse',
+      query,
+      pageUrl,
+      pageTitle,
+      htmlSample,
+      errorMessage: message,
+    })
   } finally {
     await page.close()
   }
@@ -190,6 +310,11 @@ function simplifyCompanyName(companyName: string): string {
   const words = simplified.split(' ').filter((word) => word.length > 2)
   simplified = words.slice(0, 3).join(' ')
   return simplified
+}
+
+function truncateForLog(value: string, max = 1200): string {
+  if (value.length <= max) return value
+  return `${value.slice(0, max)}…`
 }
 
 function buildQueryCandidates(companyName: string, override?: string | null): string[] {
