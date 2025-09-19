@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { mergeOrganiserNameLists, PENDING_USER_DASHBOARD_STATUSES } from '@/utils/organiserDisplay'
 
+export const dynamic = 'force-dynamic'
+
 export interface PatchSummariesRequest {
   userId: string
   userRole: 'organiser' | 'lead_organiser' | 'admin'

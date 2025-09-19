@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
 
+export const dynamic = 'force-dynamic'
+
 export interface OrganizingMetricsRequest {
   patchIds?: string[]
   tier?: string

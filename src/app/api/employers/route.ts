@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
 
+export const dynamic = 'force-dynamic'
+
 // Helper function to fetch enhanced employer data (projects, organisers, incolink IDs)
 async function fetchEnhancedEmployerData(supabase: any, employerIds: string[]) {
   const enhancedData: Record<string, any> = {};

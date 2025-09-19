@@ -3,6 +3,7 @@ import * as cheerio from 'cheerio';
 import type { Browser as ChromiumBrowser, Page as ChromiumPage } from 'puppeteer-core';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic'
 
 export interface FWCSearchResult {
   title: string;

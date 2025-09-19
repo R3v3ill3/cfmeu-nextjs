@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
 
+export const dynamic = 'force-dynamic'
+
 const SUPPORTED_JOB_TYPES = ['fwc_lookup', 'incolink_sync'] as const
 const DEFAULT_MAX_ATTEMPTS = 5
 const DEFAULT_PRIORITY = 5

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
 
+export const dynamic = 'force-dynamic'
+
 // Request/Response types matching the existing client-side interface
 export interface ProjectsRequest {
   page: number;
