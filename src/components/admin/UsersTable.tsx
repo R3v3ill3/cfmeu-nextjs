@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
 
 type Profile = { id: string; email: string | null; full_name: string | null; role: string | null; is_active: boolean | null }
@@ -42,6 +43,26 @@ export function UsersTable() {
     onError: (e) => toast({ title: "Failed to update role", description: (e as Error).message, variant: "destructive" })
   })
 
+  const resetPassword = useMutation({
+    mutationFn: async ({ email }: { email: string }) => {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/reset-password`,
+      })
+      if (error) throw error
+    },
+    onSuccess: (_, variables) => {
+      toast({ 
+        title: "Password reset sent", 
+        description: `Password reset email sent to ${variables.email}` 
+      })
+    },
+    onError: (e) => toast({ 
+      title: "Failed to send password reset", 
+      description: (e as Error).message, 
+      variant: "destructive" 
+    })
+  })
+
   return (
     <Card>
       <CardHeader>
@@ -57,6 +78,7 @@ export function UsersTable() {
                 <TableHead>Email</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Role</TableHead>
+                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -79,11 +101,21 @@ export function UsersTable() {
                       </SelectContent>
                     </Select>
                   </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => u.email && resetPassword.mutate({ email: u.email })}
+                      disabled={!u.email || resetPassword.isPending}
+                    >
+                      {resetPassword.isPending ? "Sending..." : "Reset Password"}
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
               {users.length === 0 && !isFetching && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">No users found.</TableCell>
+                  <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">No users found.</TableCell>
                 </TableRow>
               )}
             </TableBody>

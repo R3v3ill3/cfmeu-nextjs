@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { createClient } from '@supabase/supabase-js'
+import { decryptWithEnvKey } from '@/lib/crypto/secrets'
+
+const ALLOWED_ROLES = ['organiser', 'lead_organiser', 'admin'] as const
+type AllowedRole = typeof ALLOWED_ROLES[number]
+const ROLE_SET = new Set<AllowedRole>(ALLOWED_ROLES)
+const RATE_LIMIT_MS = Number(process.env.INCOLINK_MIN_INTERVAL_MS ?? 5 * 60 * 1000)
+const RATE_LIMIT_TASK = 'incolink_import'
+const CREDENTIAL_PROVIDER = 'incolink'
+const CREDENTIAL_KEY_ENV = 'INCOLINK_CREDENTIAL_KEY'
 
 export const runtime = 'nodejs'
 
@@ -45,11 +53,11 @@ async function waitForSelectorAnyFrame(page: any, selectors: string[], timeout =
 }
 
 type ParsedMember = { surname: string; given_names: string; member_number: string; raw: string }
+type IncolinkCredentials = { email: string; password: string }
 
-async function fetchMembersFromIncolink(incolinkNumber: string, invoiceNumber?: string): Promise<{ members: ParsedMember[], invoiceNumber: string, invoiceDate: string | null }> {
-  const email = process.env.INCOLINK_EMAIL
-  const password = process.env.INCOLINK_PASSWORD
-  if (!email || !password) throw new Error('Missing INCOLINK_EMAIL or INCOLINK_PASSWORD')
+async function fetchMembersFromIncolink(incolinkNumber: string, credentials: IncolinkCredentials, invoiceNumber?: string): Promise<{ members: ParsedMember[], invoiceNumber: string, invoiceDate: string | null }> {
+  const { email, password } = credentials
+  if (!email || !password) throw new Error('Missing Incolink login credentials')
 
   const browser = await getBrowser()
   let page: any
@@ -216,6 +224,91 @@ function normalizeName(s: string) {
 
 export async function POST(request: NextRequest) {
   const supabase = await createServerSupabase()
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('id, role')
+    .eq('id', user.id)
+    .maybeSingle()
+
+  if (profileError) {
+    console.error('Incolink import failed to load profile:', profileError)
+    return NextResponse.json({ error: 'Unable to load user profile' }, { status: 500 })
+  }
+
+  const role = profile?.role as AllowedRole | undefined
+  if (!role || !ROLE_SET.has(role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  let credentials: IncolinkCredentials | null = null
+
+  const { data: credentialRow, error: credentialError } = await supabase
+    .from('user_external_credentials')
+    .select('secret_encrypted')
+    .eq('user_id', user.id)
+    .eq('provider', CREDENTIAL_PROVIDER)
+    .maybeSingle()
+
+  if (credentialError && credentialError.code !== 'PGRST116') {
+    console.error('Failed to load Incolink credentials:', credentialError)
+    return NextResponse.json({ error: 'Unable to load stored Incolink credentials' }, { status: 500 })
+  }
+
+  if (!credentialRow) {
+    return NextResponse.json({ error: 'Incolink credentials not configured for this user' }, { status: 400 })
+  }
+
+  try {
+    const decrypted = decryptWithEnvKey(CREDENTIAL_KEY_ENV, credentialRow.secret_encrypted)
+    const parsed = JSON.parse(decrypted)
+    credentials = { email: parsed.email, password: parsed.password }
+  } catch (error) {
+    console.error('Failed to decrypt Incolink credentials:', error)
+    return NextResponse.json({ error: 'Stored Incolink credentials are invalid or could not be decrypted' }, { status: 500 })
+  }
+
+  if (!credentials || !credentials.email || !credentials.password) {
+    return NextResponse.json({ error: 'Stored Incolink credentials are incomplete' }, { status: 400 })
+  }
+
+  const resolvedCredentials: IncolinkCredentials = credentials
+
+  if (Number.isFinite(RATE_LIMIT_MS) && RATE_LIMIT_MS > 0) {
+    const { data: rateRow, error: rateError } = await supabase
+      .from('automation_rate_limits')
+      .select('last_run_at')
+      .eq('user_id', user.id)
+      .eq('task', RATE_LIMIT_TASK)
+      .maybeSingle()
+
+    if (rateError && rateError.code !== 'PGRST116') {
+      console.error('Failed to evaluate Incolink rate limit:', rateError)
+      return NextResponse.json({ error: 'Unable to evaluate rate limit' }, { status: 500 })
+    }
+
+    if (rateRow?.last_run_at) {
+      const lastRunAt = new Date(rateRow.last_run_at).getTime()
+      const now = Date.now()
+      const elapsed = now - lastRunAt
+      if (elapsed < RATE_LIMIT_MS) {
+        const retryAfter = Math.ceil((RATE_LIMIT_MS - elapsed) / 1000)
+        return NextResponse.json(
+          { error: 'Too Many Requests', retryAfterSeconds: retryAfter },
+          { status: 429, headers: { 'Retry-After': retryAfter.toString() } }
+        )
+      }
+    }
+  }
   try {
     const { employerId, invoiceNumber } = await request.json()
     if (!employerId) return NextResponse.json({ error: 'employerId is required' }, { status: 400 })
@@ -230,7 +323,7 @@ export async function POST(request: NextRequest) {
     if (!employer) return NextResponse.json({ error: 'Employer not found' }, { status: 404 })
     if (!employer.incolink_id) return NextResponse.json({ error: 'Employer has no incolink_id' }, { status: 400 })
 
-    const { members, invoiceNumber: resolvedInvoice, invoiceDate } = await fetchMembersFromIncolink(String(employer.incolink_id), invoiceNumber)
+    const { members, invoiceNumber: resolvedInvoice, invoiceDate } = await fetchMembersFromIncolink(String(employer.incolink_id), resolvedCredentials, invoiceNumber)
 
     const today = new Date().toISOString().slice(0, 10)
     let createdWorkers = 0
@@ -351,6 +444,18 @@ export async function POST(request: NextRequest) {
       await supabase.from('employers').update({ incolink_last_matched: dateToSet }).eq('id', employerId)
     }
 
+    const { error: rateUpsertError } = await supabase
+      .from('automation_rate_limits')
+      .upsert({
+        user_id: user.id,
+        task: RATE_LIMIT_TASK,
+        last_run_at: new Date().toISOString(),
+      }, { onConflict: 'user_id,task' })
+
+    if (rateUpsertError) {
+      console.error('Failed to persist Incolink rate limit timestamp:', rateUpsertError)
+    }
+
     return NextResponse.json({
       employerId,
       invoiceNumber: resolvedInvoice,
@@ -364,5 +469,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
-
-

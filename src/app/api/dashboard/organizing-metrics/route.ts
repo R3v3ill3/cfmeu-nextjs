@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
 
+const ALLOWED_ROLES = ['organiser', 'lead_organiser', 'admin'] as const
+type AllowedRole = typeof ALLOWED_ROLES[number]
+const ROLE_SET = new Set<AllowedRole>(ALLOWED_ROLES)
+
 export const dynamic = 'force-dynamic'
 
 export interface OrganizingMetricsRequest {
@@ -39,40 +43,100 @@ export interface OrganizingMetricsResponse {
 
 export async function GET(request: NextRequest) {
   const startTime = Date.now()
-  
+
   try {
     const searchParams = request.nextUrl.searchParams
     const supabase = await createServerSupabase()
-    
-    // Parse filters
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, role')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (profileError) {
+      console.error('Organizing metrics profile load failed:', profileError)
+      return NextResponse.json({ error: 'Unable to load user profile' }, { status: 500 })
+    }
+
+    const sessionRole = profile?.role as AllowedRole | undefined
+    if (!sessionRole || !ROLE_SET.has(sessionRole)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     const patchIds = searchParams.get('patchIds')?.split(',').filter(Boolean) || []
     const tier = searchParams.get('tier') || undefined
     const stage = searchParams.get('stage') || undefined
     const universe = searchParams.get('universe') || 'active'
     const eba = searchParams.get('eba') || undefined
-    const userId = searchParams.get('userId') || undefined
-    const userRole = searchParams.get('userRole') || undefined
-    
-    // Use optimized RPC function for organizing universe calculations
+    const requestedUserId = searchParams.get('userId') || undefined
+    const requestedRoleParam = searchParams.get('userRole') as AllowedRole | null
+
+    let effectiveUserId = user.id
+    let effectiveRole: AllowedRole = sessionRole
+
+    if (sessionRole === 'admin') {
+      if (requestedUserId && requestedUserId !== user.id) {
+        effectiveUserId = requestedUserId
+
+        const { data: targetProfile, error: targetError } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', requestedUserId)
+          .maybeSingle()
+
+        if (targetError) {
+          console.error('Failed to resolve target profile for organizing metrics:', targetError)
+          return NextResponse.json({ error: 'Unable to resolve target profile' }, { status: 400 })
+        }
+
+        const targetRole = targetProfile?.role as AllowedRole | undefined
+        if (targetRole && ROLE_SET.has(targetRole)) {
+          effectiveRole = targetRole
+        }
+      }
+
+      if (requestedRoleParam && ROLE_SET.has(requestedRoleParam)) {
+        effectiveRole = requestedRoleParam
+      }
+    } else if (requestedUserId && requestedUserId !== user.id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     const { data: metricsArray, error } = await supabase.rpc('calculate_organizing_universe_metrics', {
       p_patch_ids: patchIds.length > 0 ? patchIds : null,
       p_tier: tier,
       p_stage: stage,
       p_universe: universe,
       p_eba_filter: eba,
-      p_user_id: userId,
-      p_user_role: userRole
+      p_user_id: effectiveUserId,
+      p_user_role: effectiveRole,
     })
-    
+
     if (error) {
       console.error('Organizing metrics API error:', error)
+      const message = error.message || error.toString()
+      if (error.code === '42501') {
+        return NextResponse.json({ error: message }, { status: 403 })
+      }
+      if (error.code === '22023') {
+        return NextResponse.json({ error: message }, { status: 400 })
+      }
       return NextResponse.json(
-        { error: 'Failed to calculate organizing metrics', details: error.message || error.toString() },
-        { status: 500 }
+        { error: 'Failed to calculate organizing metrics', details: message },
+        { status: 500 },
       )
     }
-    
-    // Extract metrics from the single-row result
+
     const metrics = metricsArray && metricsArray[0] ? {
       ebaProjectsPercentage: metricsArray[0].eba_projects_percentage || 0,
       ebaProjectsCount: metricsArray[0].eba_projects_count || 0,
@@ -87,7 +151,7 @@ export async function GET(request: NextRequest) {
       totalKeyContractorsOnEbaBuilderProjects: metricsArray[0].total_key_contractors_on_eba_builder_projects || 0,
       keyContractorEbaPercentage: metricsArray[0].key_contractor_eba_percentage || 0,
       keyContractorsWithEba: metricsArray[0].key_contractors_with_eba || 0,
-      totalMappedKeyContractors: metricsArray[0].total_mapped_key_contractors || 0
+      totalMappedKeyContractors: metricsArray[0].total_mapped_key_contractors || 0,
     } : {
       ebaProjectsPercentage: 0,
       ebaProjectsCount: 0,
@@ -102,64 +166,38 @@ export async function GET(request: NextRequest) {
       totalKeyContractorsOnEbaBuilderProjects: 0,
       keyContractorEbaPercentage: 0,
       keyContractorsWithEba: 0,
-      totalMappedKeyContractors: 0
+      totalMappedKeyContractors: 0,
     }
-    
+
     const queryTime = Date.now() - startTime
-    
+
     const response: OrganizingMetricsResponse = {
       metrics,
       debug: {
         queryTime,
-        appliedFilters: { patchIds, tier, stage, universe, eba, userId, userRole },
-        patchCount: patchIds.length
-      }
+        appliedFilters: { patchIds, tier, stage, universe, eba, userId: effectiveUserId, userRole: effectiveRole },
+        patchCount: patchIds.length,
+      },
     }
-    
-    // Cache for 2 minutes, stale for 5 minutes
+
     const headers = {
       'Cache-Control': 'public, s-maxage=120, stale-while-revalidate=300',
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
     }
-    
+
     return NextResponse.json(response, { headers })
-    
   } catch (error) {
     console.error('Organizing metrics API unexpected error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
-// Health check endpoint
 export async function HEAD() {
-  try {
-    const supabase = await createServerSupabase()
-    
-    // Quick health check - test the RPC function
-    const { error } = await supabase.rpc('calculate_organizing_universe_metrics', {
-      p_patch_ids: null,
-      p_tier: null,
-      p_stage: null,
-      p_universe: 'active',
-      p_eba_filter: null,
-      p_user_id: null,
-      p_user_role: null
-    })
-    
-    if (error) throw error
-    
-    return new NextResponse(null, {
-      status: 200,
-      headers: {
-        'X-Service': 'organizing-metrics',
-        'X-Last-Updated': new Date().toISOString()
-      }
-    })
-  } catch (error) {
-    console.error('Organizing metrics health check failed:', error)
-    return new NextResponse(null, { status: 503 })
-  }
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'X-Service': 'organizing-metrics',
+      'X-Last-Updated': new Date().toISOString(),
+    },
+  })
 }

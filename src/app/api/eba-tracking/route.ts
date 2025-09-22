@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
 
+const ALLOWED_ROLES = ['organiser', 'lead_organiser', 'admin'] as const;
+type AllowedRole = typeof ALLOWED_ROLES[number];
+const ROLE_SET = new Set<AllowedRole>(ALLOWED_ROLES);
+
 export const dynamic = 'force-dynamic'
 
 // Request/Response types
@@ -56,8 +60,32 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     
-    // Create server-side Supabase client
     const supabase = await createServerSupabase();
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, role')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (profileError) {
+      console.error('EBA tracking API failed to load profile:', profileError);
+      return NextResponse.json({ error: 'Unable to load user profile' }, { status: 500 });
+    }
+
+    const role = profile?.role as AllowedRole | undefined;
+    if (!role || !ROLE_SET.has(role)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
     
     // Parse parameters
     const page = parseInt(searchParams.get('page') || '1');

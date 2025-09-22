@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { mergeOrganiserNameLists, PENDING_USER_DASHBOARD_STATUSES } from '@/utils/organiserDisplay'
 
+const ALLOWED_ROLES = ['organiser', 'lead_organiser', 'admin'] as const
+type AllowedRole = typeof ALLOWED_ROLES[number]
+const ALLOWED_PROFILE_ROLES = new Set<AllowedRole>(ALLOWED_ROLES)
+
 export const dynamic = 'force-dynamic'
 
 export interface PatchSummariesRequest {
@@ -51,11 +55,36 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
     const supabase = await createServerSupabase()
-    
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, role')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (profileError) {
+      console.error('Failed to load authenticated profile for patch summaries:', profileError)
+      return NextResponse.json({ error: 'Unable to load user profile' }, { status: 500 })
+    }
+
+    const sessionRole = (profile?.role ?? undefined) as PatchSummariesRequest['userRole'] | undefined
+
+    if (!sessionRole || !ALLOWED_PROFILE_ROLES.has(sessionRole)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     // Parse request parameters
-    const userId = searchParams.get('userId')
-    const userRole = searchParams.get('userRole') as 'organiser' | 'lead_organiser' | 'admin'
-    const leadOrganizerId = searchParams.get('leadOrganizerId') || undefined
+    const requestedUserId = searchParams.get('userId')
+    const leadOrganizerIdParam = searchParams.get('leadOrganizerId') || undefined
     
     const filters = {
       tier: searchParams.get('tier') || undefined,
@@ -64,29 +93,81 @@ export async function GET(request: NextRequest) {
       eba: searchParams.get('eba') || undefined
     }
     
-    if (!userId || !userRole) {
-      return NextResponse.json(
-        { error: 'Missing required parameters: userId and userRole' },
-        { status: 400 }
-      )
+    let effectiveUserId = user.id
+    let effectiveRole: PatchSummariesRequest['userRole'] = sessionRole
+    let leadOrganizerId = leadOrganizerIdParam
+
+    if (sessionRole === 'admin') {
+      effectiveUserId = requestedUserId || user.id
+
+      if (effectiveUserId !== user.id) {
+        const { data: targetProfile, error: targetProfileError } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', effectiveUserId)
+          .maybeSingle()
+
+        if (targetProfileError) {
+          console.error('Failed to resolve target profile for admin patch summaries:', targetProfileError)
+          return NextResponse.json({ error: 'Unable to resolve target user profile' }, { status: 400 })
+        }
+
+        const targetProfileRole = targetProfile?.role as AllowedRole | undefined
+
+        if (targetProfileRole && ALLOWED_PROFILE_ROLES.has(targetProfileRole)) {
+          effectiveRole = targetProfileRole
+        } else {
+          const requestedRoleParam = searchParams.get('userRole') as PatchSummariesRequest['userRole'] | null
+          const requestedRole = requestedRoleParam as AllowedRole | null
+          if (requestedRole && ALLOWED_PROFILE_ROLES.has(requestedRole)) {
+            effectiveRole = requestedRole
+          }
+        }
+      }
+    } else {
+      if (requestedUserId && requestedUserId !== user.id) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
+
+      effectiveUserId = user.id
+      effectiveRole = sessionRole
+
+      if (leadOrganizerId && leadOrganizerId !== user.id) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
+
+      if (sessionRole === 'lead_organiser') {
+        leadOrganizerId = user.id
+      } else {
+        leadOrganizerId = undefined
+      }
+    }
+
+    if (!effectiveUserId || !effectiveRole) {
+      return NextResponse.json({ error: 'Unable to derive execution context' }, { status: 400 })
     }
     
     // Use optimized RPC function for patch summaries
     const { data: summariesData, error } = await supabase.rpc('get_patch_summaries_for_user', {
-      p_user_id: userId,
-      p_user_role: userRole,
+      p_user_id: effectiveUserId,
+      p_user_role: effectiveRole,
       p_lead_organiser_id: leadOrganizerId || null,
       p_filters: Object.keys(filters).some(key => filters[key as keyof typeof filters]) 
         ? filters 
         : null
     })
-    
+
     if (error) {
       console.error('Patch summaries API error:', error)
-      console.error('Error details:', error.message || error.toString())
-      console.error('Error code:', error.code)
+      const message = error.message || error.toString()
+      if (error.code === '42501') {
+        return NextResponse.json({ error: message }, { status: 403 })
+      }
+      if (error.code === '22023') {
+        return NextResponse.json({ error: message }, { status: 400 })
+      }
       return NextResponse.json(
-        { error: 'Failed to fetch patch summaries', details: error.message || error.toString() },
+        { error: 'Failed to fetch patch summaries', details: message },
         { status: 500 }
       )
     }
@@ -159,7 +240,7 @@ export async function GET(request: NextRequest) {
       aggregatedMetrics,
       debug: {
         queryTime,
-        userRole,
+        userRole: effectiveRole,
         patchCount: summaries.length
       }
     }
@@ -183,29 +264,11 @@ export async function GET(request: NextRequest) {
 
 // Health check endpoint
 export async function HEAD() {
-  try {
-    const supabase = await createServerSupabase()
-    
-    // Quick health check - test with admin role and no filters
-    const { error } = await supabase.rpc('get_patch_summaries_for_user', {
-      p_user_id: '00000000-0000-0000-0000-000000000000', // dummy UUID
-      p_user_role: 'admin',
-      p_lead_organiser_id: null,
-      p_filters: null
-    })
-    
-    // Error is expected due to dummy UUID, but function should exist
-    const isHealthy = !error || error.message.includes('foreign key') || error.message.includes('not found')
-    
-    return new NextResponse(null, {
-      status: isHealthy ? 200 : 503,
-      headers: {
-        'X-Service': 'patch-summaries',
-        'X-Last-Updated': new Date().toISOString()
-      }
-    })
-  } catch (error) {
-    console.error('Patch summaries health check failed:', error)
-    return new NextResponse(null, { status: 503 })
-  }
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'X-Service': 'patch-summaries',
+      'X-Last-Updated': new Date().toISOString(),
+    },
+  })
 }

@@ -1,6 +1,6 @@
 -- Harden dashboard RPCs to derive permissions from auth context
 
-CREATE OR REPLACE FUNCTION calculate_organizing_universe_metrics(
+CREATE OR REPLACE FUNCTION public.calculate_organizing_universe_metrics(
   p_patch_ids UUID[] DEFAULT NULL,
   p_tier TEXT DEFAULT NULL,
   p_stage TEXT DEFAULT NULL,
@@ -29,41 +29,118 @@ DECLARE
   key_contractor_trades TEXT[] := ARRAY['demolition', 'piling', 'concreting', 'form_work', 'scaffolding', 'tower_crane', 'mobile_crane'];
   key_contractor_roles TEXT[] := ARRAY['head_contractor', 'builder'];
   active_user_id UUID;
-  caller_role TEXT;
+  session_role TEXT;
+  effective_user_id UUID;
   effective_role TEXT;
+  patch_ids_filter UUID[];
+  requested_patch_ids UUID[];
+  final_patch_ids UUID[];
+  shared_lead_ids UUID[];
   sanitized_universe TEXT;
   sanitized_tier TEXT;
   sanitized_stage TEXT;
+  allowed_roles CONSTANT TEXT[] := ARRAY['organiser', 'lead_organiser', 'admin'];
 BEGIN
+  PERFORM set_config('search_path', 'public', true);
+
   active_user_id := auth.uid();
-
   IF active_user_id IS NULL THEN
-    RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'Organizing metrics require authentication';
+    RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'Authentication required';
   END IF;
 
-  SELECT role INTO caller_role
-  FROM profiles
-  WHERE id = active_user_id;
-
-  IF caller_role IS NULL THEN
-    RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'Unable to determine caller role';
+  SELECT role INTO session_role FROM profiles WHERE id = active_user_id;
+  IF session_role IS NULL OR session_role <> ALL(allowed_roles) THEN
+    RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'Role not permitted to view organizing metrics';
   END IF;
 
-  IF caller_role NOT IN ('organiser', 'lead_organiser', 'admin') THEN
-    RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'Role is not permitted to view organizing metrics';
+  effective_user_id := active_user_id;
+  IF session_role = 'admin' AND p_user_id IS NOT NULL THEN
+    effective_user_id := p_user_id;
   END IF;
 
-  IF caller_role <> 'admin' AND p_user_id IS NOT NULL AND p_user_id <> active_user_id THEN
-    RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'Impersonating another account is not permitted';
+  IF session_role <> 'admin' AND effective_user_id <> active_user_id THEN
+    RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'Impersonation is not permitted';
   END IF;
 
-  effective_role := CASE
-    WHEN caller_role = 'admin' AND p_user_role IS NOT NULL THEN p_user_role
-    ELSE caller_role
-  END;
+  IF session_role = 'admin' AND p_user_role IS NOT NULL THEN
+    IF p_user_role <> ALL(allowed_roles) THEN
+      RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'Invalid role override requested';
+    END IF;
+    effective_role := p_user_role;
+  END IF;
 
-  IF effective_role NOT IN ('organiser', 'lead_organiser', 'admin') THEN
-    effective_role := caller_role;
+  IF effective_role IS NULL THEN
+    IF effective_user_id IS NULL THEN
+      effective_role := session_role;
+    ELSE
+      SELECT role INTO effective_role FROM profiles WHERE id = effective_user_id;
+      IF effective_role IS NULL THEN
+        RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'Target profile could not be resolved';
+      END IF;
+    END IF;
+  END IF;
+
+  IF effective_role <> ALL(allowed_roles) THEN
+    RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'Role not permitted to view organizing metrics';
+  END IF;
+
+  patch_ids_filter := NULL;
+  IF effective_role = 'admin' OR effective_role = 'lead_organiser' THEN
+    patch_ids_filter := NULL; -- full access
+  ELSE
+    SELECT ARRAY_AGG(DISTINCT lopa.lead_organiser_id) INTO shared_lead_ids
+    FROM lead_organiser_patch_assignments lopa
+    JOIN organiser_patch_assignments opa
+      ON opa.patch_id = lopa.patch_id
+     AND opa.effective_to IS NULL
+    WHERE opa.organiser_id = effective_user_id
+      AND lopa.effective_to IS NULL;
+
+    WITH organiser_patches AS (
+      SELECT DISTINCT opa.patch_id
+      FROM organiser_patch_assignments opa
+      WHERE opa.organiser_id = effective_user_id
+        AND opa.effective_to IS NULL
+    ),
+    peer_patches AS (
+      SELECT DISTINCT lopa.patch_id
+      FROM lead_organiser_patch_assignments lopa
+      WHERE lopa.effective_to IS NULL
+        AND shared_lead_ids IS NOT NULL
+        AND lopa.lead_organiser_id = ANY(shared_lead_ids)
+    )
+    SELECT ARRAY_AGG(DISTINCT patch_id) INTO patch_ids_filter
+    FROM (
+      SELECT patch_id FROM organiser_patches
+      UNION
+      SELECT patch_id FROM peer_patches
+    ) s;
+
+    IF patch_ids_filter IS NULL THEN
+      patch_ids_filter := ARRAY[]::UUID[];
+    END IF;
+  END IF;
+
+  requested_patch_ids := NULL;
+  IF p_patch_ids IS NOT NULL THEN
+    SELECT ARRAY_AGG(DISTINCT pid)
+    INTO requested_patch_ids
+    FROM UNNEST(p_patch_ids) AS pid;
+  END IF;
+
+  IF patch_ids_filter IS NULL THEN
+    final_patch_ids := requested_patch_ids;
+  ELSIF requested_patch_ids IS NULL THEN
+    final_patch_ids := patch_ids_filter;
+  ELSE
+    SELECT ARRAY_AGG(DISTINCT scope_id)
+    INTO final_patch_ids
+    FROM UNNEST(patch_ids_filter) AS scope_id
+    WHERE scope_id = ANY(requested_patch_ids);
+
+    IF final_patch_ids IS NULL THEN
+      final_patch_ids := ARRAY[]::UUID[];
+    END IF;
   END IF;
 
   sanitized_universe := COALESCE(p_universe, 'active');
@@ -79,7 +156,7 @@ BEGIN
     WHERE p.organising_universe::text = sanitized_universe
       AND (sanitized_tier IS NULL OR p.tier::text = sanitized_tier)
       AND (sanitized_stage IS NULL OR p.stage_class::text = sanitized_stage)
-      AND (p_patch_ids IS NULL OR pjs.patch_id = ANY(p_patch_ids))
+      AND (final_patch_ids IS NULL OR pjs.patch_id = ANY(final_patch_ids))
   ),
   project_builders AS (
     SELECT 

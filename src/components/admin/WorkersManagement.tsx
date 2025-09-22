@@ -3,11 +3,12 @@
 import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Users, Link, Upload } from 'lucide-react'
+import { Users, Link } from 'lucide-react'
 import WorkerImport from '@/components/upload/WorkerImport'
 import { IncolinkImport } from '@/components/upload/IncolinkImport'
 import IncolinkScrape from '@/components/upload/IncolinkScrape'
 import FileUpload from '@/components/upload/FileUpload'
+import { IncolinkCredentialsCard } from '@/components/admin/IncolinkCredentialsCard'
 
 type WorkerImportMode = 'standard' | 'incolink'
 
@@ -106,26 +107,32 @@ export default function WorkersManagement() {
               )}
 
               {selectedMode === 'incolink' && (
-                <Tabs defaultValue="upload" className="w-full">
-                  <TabsList>
-                    <TabsTrigger value="upload">Upload CSV</TabsTrigger>
-                    <TabsTrigger value="scrape">Web Scraping</TabsTrigger>
-                  </TabsList>
-                  
-                  <TabsContent value="upload" className="mt-4">
-                    <div className="space-y-4">
+                <div className="space-y-6">
+                  <IncolinkCredentialsCard />
+                  <Tabs defaultValue="upload" className="w-full">
+                    <TabsList>
+                      <TabsTrigger value="upload">Upload CSV</TabsTrigger>
+                      <TabsTrigger value="scrape">Web Scraping</TabsTrigger>
+                    </TabsList>
+                    
+                    <TabsContent value="upload" className="mt-4">
+                      <div className="space-y-4">
+                        <p className="text-sm text-muted-foreground">
+                          Upload an Incolink CSV file containing worker data including employment history, 
+                          payment information, and project assignments.
+                        </p>
+                        <FileUpload onFileUploaded={handleFileUploaded} />
+                      </div>
+                    </TabsContent>
+                    
+                    <TabsContent value="scrape" className="mt-4 space-y-4">
                       <p className="text-sm text-muted-foreground">
-                        Upload an Incolink CSV file containing worker data including employment history, 
-                        payment information, and project assignments.
+                        Ensure your credentials are saved before running a scrape. The job will use the stored login and respect per-user limits.
                       </p>
-                      <FileUpload onFileUploaded={handleFileUploaded} />
-                    </div>
-                  </TabsContent>
-                  
-                  <TabsContent value="scrape" className="mt-4">
-                    <IncolinkScrape />
-                  </TabsContent>
-                </Tabs>
+                      <IncolinkScrape />
+                    </TabsContent>
+                  </Tabs>
+                </div>
               )}
             </CardContent>
           </Card>

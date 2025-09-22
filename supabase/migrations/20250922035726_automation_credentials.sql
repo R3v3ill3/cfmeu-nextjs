@@ -120,6 +120,7 @@ END $$;
 CREATE OR REPLACE FUNCTION public.user_external_credentials_set_updated_at()
 RETURNS trigger AS $$
 BEGIN
+  PERFORM set_config('search_path', 'public', true);
   NEW.updated_at = NOW();
   RETURN NEW;
 END;

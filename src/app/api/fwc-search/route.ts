@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as cheerio from 'cheerio';
 import type { Browser as ChromiumBrowser, Page as ChromiumPage } from 'puppeteer-core';
+import { createServerSupabase } from '@/lib/supabase/server';
+
+const ALLOWED_ROLES = ['organiser', 'lead_organiser', 'admin'] as const;
+type AllowedRole = typeof ALLOWED_ROLES[number];
+const ROLE_SET = new Set<AllowedRole>(ALLOWED_ROLES);
+const RATE_LIMIT_MS = Number(process.env.FWC_MIN_INTERVAL_MS ?? 60_000);
+const RATE_LIMIT_TASK = 'fwc_search';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic'
@@ -63,6 +70,58 @@ async function getBrowser(): Promise<ChromiumBrowser> {
 }
 
 export async function POST(request: NextRequest) {
+  const supabase = await createServerSupabase();
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('id, role')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  if (profileError) {
+    console.error('FWC search profile load failed:', profileError);
+    return NextResponse.json({ error: 'Unable to load user profile' }, { status: 500 });
+  }
+
+  const role = profile?.role as AllowedRole | undefined;
+  if (!role || !ROLE_SET.has(role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  if (Number.isFinite(RATE_LIMIT_MS) && RATE_LIMIT_MS > 0) {
+    const { data: rateRow, error: rateError } = await supabase
+      .from('automation_rate_limits')
+      .select('last_run_at')
+      .eq('user_id', user.id)
+      .eq('task', RATE_LIMIT_TASK)
+      .maybeSingle();
+
+    if (rateError && rateError.code !== 'PGRST116') {
+      console.error('Failed to evaluate FWC search rate limit:', rateError);
+      return NextResponse.json({ error: 'Unable to evaluate rate limit' }, { status: 500 });
+    }
+
+    if (rateRow?.last_run_at) {
+      const elapsed = Date.now() - new Date(rateRow.last_run_at).getTime();
+      if (elapsed < RATE_LIMIT_MS) {
+        const retryAfter = Math.ceil((RATE_LIMIT_MS - elapsed) / 1000);
+        return NextResponse.json(
+          { error: 'Too Many Requests', retryAfterSeconds: retryAfter },
+          { status: 429, headers: { 'Retry-After': retryAfter.toString() } }
+        );
+      }
+    }
+  }
+
   let browser: ChromiumBrowser | null = null;
   try {
     const { companyName, searchTerm } = await request.json();
@@ -115,6 +174,18 @@ export async function POST(request: NextRequest) {
 
     console.log(`✅ Found ${results.length} EBA results for "${query}"`);
     
+    const { error: rateUpsertError } = await supabase
+      .from('automation_rate_limits')
+      .upsert({
+        user_id: user.id,
+        task: RATE_LIMIT_TASK,
+        last_run_at: new Date().toISOString(),
+      }, { onConflict: 'user_id,task' });
+
+    if (rateUpsertError) {
+      console.error('Failed to persist FWC search rate limit timestamp:', rateUpsertError);
+    }
+
     return NextResponse.json({ 
       results, 
       searchQuery: query,

@@ -1,5 +1,4 @@
--- Harden get_patch_summaries_for_user by deriving access scope from the caller's session role
--- Organisers inherit access to patches owned by the same lead/coordinator; admins may impersonate.
+-- Reapply hardened get_patch_summaries_for_user with corrected patch scope aliases
 
 CREATE OR REPLACE FUNCTION public.get_patch_summaries_for_user(
   p_user_id UUID DEFAULT NULL,
@@ -39,7 +38,6 @@ BEGIN
   END IF;
 
   SELECT role INTO session_role FROM profiles WHERE id = active_user_id;
-
   IF session_role IS NULL OR session_role <> ALL(allowed_roles) THEN
     RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'Role not permitted to view patch summaries';
   END IF;
@@ -79,7 +77,7 @@ BEGIN
 
   IF lead_filter IS NOT NULL THEN
     IF session_role = 'admin' THEN
-      NULL; -- admins may request any lead scope
+      NULL;
     ELSIF effective_role = 'lead_organiser' THEN
       IF effective_user_id IS NULL OR lead_filter <> effective_user_id THEN
         RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'Lead organiser filter not permitted';
@@ -108,7 +106,7 @@ BEGIN
       WHERE lopa.lead_organiser_id = lead_filter
         AND lopa.effective_to IS NULL;
     ELSE
-      patch_ids_filter := NULL; -- full access
+      patch_ids_filter := NULL;
     END IF;
   ELSIF effective_role = 'lead_organiser' THEN
     IF lead_filter IS NOT NULL THEN
@@ -117,7 +115,7 @@ BEGIN
       WHERE lopa.lead_organiser_id = lead_filter
         AND lopa.effective_to IS NULL;
     ELSE
-      patch_ids_filter := NULL; -- coordinators may view all patches
+      patch_ids_filter := NULL;
     END IF;
   ELSE
     SELECT ARRAY_AGG(DISTINCT lopa.lead_organiser_id) INTO shared_lead_ids
@@ -152,7 +150,7 @@ BEGIN
     ) s;
 
     IF patch_ids_filter IS NULL THEN
-      patch_ids_filter := ARRAY[]::UUID[]; -- organiser with no assignments sees nothing
+      patch_ids_filter := ARRAY[]::UUID[];
     END IF;
   END IF;
 
