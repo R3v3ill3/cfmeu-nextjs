@@ -219,16 +219,50 @@ export function useAllLeadOrganizerSummaries() {
 
       const viewerRole = viewerProfile?.role || 'admin'
 
-      const { data: leads, error: leadsError } = await supabase
-        .from("profiles")
-        .select("id, full_name, email")
-        .eq("role", "lead_organiser")
-        .eq("is_active", true)
+      // Get both confirmed and draft lead organizers
+      const [confirmedLeadsResult, draftLeadsResult] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("id, full_name, email")
+          .eq("role", "lead_organiser")
+          .eq("is_active", true),
+        supabase
+          .from("pending_users")
+          .select("id, full_name, email, status")
+          .eq("role", "lead_organiser")
+          .in("status", ["draft", "invited"])
+      ])
 
-      if (leadsError) throw leadsError
+      if (confirmedLeadsResult.error) {
+        console.error('Error fetching confirmed leads:', confirmedLeadsResult.error)
+        throw confirmedLeadsResult.error
+      }
+      if (draftLeadsResult.error) {
+        console.error('Error fetching draft leads:', draftLeadsResult.error)
+        throw draftLeadsResult.error
+      }
 
-      const leadIds = (leads || []).map((lead: any) => lead.id).filter(Boolean)
+      const confirmedLeads = confirmedLeadsResult.data || []
+      const draftLeads = draftLeadsResult.data || []
+
+      console.log('Found leads:', { confirmedLeads: confirmedLeads.length, draftLeads: draftLeads.length })
+
+      // Combine confirmed and draft lead organizers
+      const leads = [
+        ...confirmedLeads.map(lead => ({ ...lead, isDraft: false })),
+        ...draftLeads.map(lead => ({ ...lead, isDraft: true }))
+      ]
+
+      console.log('Total leads after combining:', leads.length)
+
+      const leadIds = leads.map((lead: any) => lead.id).filter(Boolean)
       const pendingByLead = new Map<string, any[]>()
+
+      // If no leads found, return empty array early
+      if (leadIds.length === 0) {
+        console.log('No lead organizers found')
+        return []
+      }
 
       if (leadIds.length > 0) {
         const { data: pendingLinks, error: pendingLinksError } = await supabase
@@ -249,13 +283,15 @@ export function useAllLeadOrganizerSummaries() {
       }
 
       const liveSummaries = await Promise.all(
-        (leads || []).map(async (lead: any) => {
+        leads.map(async (lead: any) => {
           try {
-            const serverSummaries = await fetchServerPatchSummaries({
+            console.log(`Fetching summaries for lead ${lead.id} (${lead.full_name})`)
+        const serverSummaries = await fetchServerPatchSummaries({
               viewerId: user.id,
               viewerRole,
               leadOrganizerId: lead.id
             })
+            console.log(`Got ${serverSummaries.length} patch summaries for lead ${lead.id}`)
             const patchIds = serverSummaries.map(summary => summary.patchId)
 
             const aggregatedMetrics = await fetchOrganizingUniverseMetrics({
@@ -283,7 +319,8 @@ export function useAllLeadOrganizerSummaries() {
               aggregatedMetrics,
               lastUpdated: new Date().toISOString(),
               pendingOrganisers: pendingOrganiserNames,
-              status: 'active'
+              isPending: lead.isDraft || false,
+              status: lead.isDraft ? (lead.status || 'draft') : 'active'
             } as LeadOrganizerSummary
           } catch (error) {
             console.error(`Error fetching lead summary for ${lead?.id}:`, error)
@@ -292,65 +329,7 @@ export function useAllLeadOrganizerSummaries() {
         })
       )
 
-      const { data: pendingLeads, error: pendingLeadsError } = await supabase
-        .from('pending_users')
-        .select('id, full_name, email, status, assigned_patch_ids')
-        .eq('role', 'lead_organiser')
-        .in('status', pendingStatuses)
-
-      if (pendingLeadsError) {
-        console.error('Failed to fetch pending lead organisers:', pendingLeadsError)
-      }
-
-      let pendingSummaries: LeadOrganizerSummary[] = []
-
-      if (pendingLeads && pendingLeads.length > 0) {
-        pendingSummaries = (await Promise.all(
-          pendingLeads.map(async (lead: any) => {
-            try {
-              const patchIds = (Array.isArray(lead.assigned_patch_ids) ? lead.assigned_patch_ids : []).map((id: any) => String(id))
-              const [aggregatedMetrics, patches] = await Promise.all([
-                fetchOrganizingUniverseMetrics({
-                  patchIds,
-                  userId: user.id,
-                  userRole: viewerRole
-                }),
-                patchIds.length > 0
-                  ? Promise.all(patchIds.map((pid: string) => fetchPatchSummary(pid))).then((results) =>
-                      (results.filter(Boolean) as PatchSummaryData[])
-                    )
-                  : Promise.resolve([] as PatchSummaryData[])
-              ])
-
-              const totalProjects = aggregatedMetrics.totalActiveProjects > 0
-                ? aggregatedMetrics.totalActiveProjects
-                : patches.reduce((sum, patch) => sum + patch.projectCount, 0)
-
-              return {
-                leadOrganizerId: `pending:${lead.id}`,
-                leadOrganizerName: lead.full_name || lead.email || 'Pending co-ordinator',
-                email: lead.email || '',
-                patchCount: patchIds.length,
-                totalProjects,
-                patches,
-                aggregatedMetrics,
-                lastUpdated: new Date().toISOString(),
-                pendingOrganisers: [],
-                isPending: true,
-                status: lead.status || 'pending'
-              } as LeadOrganizerSummary
-            } catch (error) {
-              console.error(`Error building pending lead summary for ${lead?.id}:`, error)
-              return null
-            }
-          })
-        )).filter(Boolean) as LeadOrganizerSummary[]
-      }
-
-      return [
-        ...liveSummaries.filter(Boolean) as LeadOrganizerSummary[],
-        ...pendingSummaries
-      ]
+      return liveSummaries.filter(Boolean) as LeadOrganizerSummary[]
     }
   })
 }

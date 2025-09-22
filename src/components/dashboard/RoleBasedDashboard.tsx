@@ -119,6 +119,8 @@ export function RoleBasedDashboard({ className }: RoleBasedDashboardProps) {
     )
   }
 
+  console.log('User profile:', userProfile)
+
   // Render appropriate dashboard based on user role
   return (
     <div className={className}>

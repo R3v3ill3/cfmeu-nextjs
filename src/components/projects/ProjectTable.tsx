@@ -7,6 +7,42 @@ import Link from "next/link"
 import { useMemo } from "react"
 import { getOrganisingUniverseBadgeVariant } from "@/utils/organisingUniverse"
 import { useNavigationLoading } from "@/hooks/useNavigationLoading"
+import { usePatchOrganiserLabels } from "@/hooks/usePatchOrganiserLabels"
+import { useQuery } from "@tanstack/react-query"
+import { supabase } from "@/integrations/supabase/client"
+
+// Helper component to get organiser names for a project
+function ProjectOrganiserNames({ projectId }: { projectId: string }) {
+  // Get patch IDs for this project (same logic as individual project page)
+  const { data: patchIds = [] } = useQuery({
+    queryKey: ["project-patch-ids", projectId],
+    enabled: !!projectId,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      // Get job sites for project
+      const { data: sites } = await supabase
+        .from("job_sites")
+        .select("id")
+        .eq("project_id", projectId)
+      
+      const siteIds = (sites || []).map(s => s.id).filter(Boolean)
+      if (siteIds.length === 0) return []
+      
+      // Get patches for those job sites
+      const { data: patchSites } = await supabase
+        .from("patch_job_sites")
+        .select("patch_id")
+        .in("job_site_id", siteIds)
+      
+      return Array.from(new Set((patchSites || []).map(ps => ps.patch_id).filter(Boolean)))
+    }
+  })
+  
+  const { mergedList: organiserNames = [] } = usePatchOrganiserLabels(patchIds)
+  
+  return <span>{organiserNames.length > 0 ? organiserNames.join(', ') : '—'}</span>
+}
 
 type ProjectRow = {
   id: string
@@ -89,7 +125,7 @@ export function ProjectTable({
           const engaged = summary?.engaged_employer_count || 0
           const delegateName = summary?.delegate_name || null
           const patchName = summary?.first_patch_name || '—'
-          const organiserNames = summary?.organiser_names || '—'
+          // organiserNames will be handled by ProjectOrganiserNames component
           
           const ebaPercentage = engaged > 0 ? Math.round((ebaActive / engaged) * 100) : 0
 
@@ -162,9 +198,9 @@ export function ProjectTable({
                 <span className="text-sm">{patchName}</span>
               </TableCell>
               <TableCell>
-                <span className="text-sm truncate" title={organiserNames}>
-                  {organiserNames.length > 20 ? `${organiserNames.substring(0, 20)}...` : organiserNames}
-                </span>
+                <div className="text-sm truncate">
+                  <ProjectOrganiserNames projectId={project.id} />
+                </div>
               </TableCell>
               <TableCell className="text-right">
                 <Badge variant="outline" className="text-xs border-gray-800 text-black bg-white">

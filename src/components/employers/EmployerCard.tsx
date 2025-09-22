@@ -132,11 +132,6 @@ export function EmployerCard({ employer, onClick, onUpdated }: { employer: Emplo
               </Badge>
             )}
             
-            {employer.employer_type && (
-              <Badge variant="outline" className="capitalize">
-                {employer.employer_type.replace(/_/g, ' ')}
-              </Badge>
-            )}
           </div>
 
           {employer.incolink_last_matched && (

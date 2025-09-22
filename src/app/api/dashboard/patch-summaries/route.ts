@@ -83,6 +83,8 @@ export async function GET(request: NextRequest) {
     
     if (error) {
       console.error('Patch summaries API error:', error)
+      console.error('Error details:', error.message || error.toString())
+      console.error('Error code:', error.code)
       return NextResponse.json(
         { error: 'Failed to fetch patch summaries', details: error.message || error.toString() },
         { status: 500 }

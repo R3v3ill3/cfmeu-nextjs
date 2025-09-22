@@ -76,14 +76,14 @@ export function CfmeuEbaBadge({
     >
       <Image 
         src="/eurekaflag.gif" 
-        alt="Eureka Flag - EBA Active" 
+        alt="Eureka Flag - EBA" 
         width={config.logo.width}
         height={config.logo.height}
         className="object-contain flex-shrink-0"
       />
       {showText && (
         <span className={cn("font-medium", config.text)}>
-          EBA Active
+          EBA
         </span>
       )}
     </Badge>

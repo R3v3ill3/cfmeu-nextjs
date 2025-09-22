@@ -122,7 +122,7 @@ export function LeadOrganizerSummaryCard({
                 <div className="flex items-center space-x-2 ml-2 flex-shrink-0">
                   <Badge variant="outline" className="text-xs border-purple-200 text-purple-700">
                     <Crown className="h-3 w-3 mr-1" />
-                    Co-ordinator
+                    {isPendingLead ? 'Draft Co-ordinator' : 'Co-ordinator'}
                   </Badge>
                   {statusDisplay && (
                     <Badge
