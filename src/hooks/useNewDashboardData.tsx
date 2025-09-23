@@ -76,6 +76,8 @@ export interface NewDashboardData {
 
 export const useNewDashboardData = (opts?: { patchIds?: string[]; tier?: string; stage?: string; universe?: string }) => {
   const { session, loading } = useAuth();
+  const workerEnabled = process.env.NEXT_PUBLIC_USE_WORKER_DASHBOARD === 'true';
+  const workerUrl = process.env.NEXT_PUBLIC_DASHBOARD_WORKER_URL || '';
 
   return useQuery({
     queryKey: ["new-dashboard-data", opts?.patchIds?.slice().sort() || []],
@@ -86,9 +88,32 @@ export const useNewDashboardData = (opts?: { patchIds?: string[]; tier?: string;
     queryFn: async (): Promise<NewDashboardData> => {
       const errors: string[] = [];
       
-      console.log('Loading dashboard with REAL data...');
+      console.log('Loading dashboard data...');
       
       try {
+        // If worker enabled, call it with Authorization and return
+        if (workerEnabled && workerUrl && session?.access_token) {
+          const searchParams = new URLSearchParams();
+          if (opts?.tier && opts.tier !== 'all') searchParams.set('tier', opts.tier);
+          if (opts?.stage && opts.stage !== 'all') searchParams.set('stage', opts.stage);
+          if (opts?.universe && opts.universe !== 'all') searchParams.set('universe', opts.universe);
+          if (opts?.patchIds && opts.patchIds.length > 0) searchParams.set('patchIds', opts.patchIds.join(','));
+
+          const url = `${workerUrl.replace(/\/$/, '')}/v1/dashboard?${searchParams.toString()}`;
+          const resp = await fetch(url, {
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          if (!resp.ok) {
+            throw new Error(`Worker dashboard error ${resp.status}`);
+          }
+          const data = await resp.json();
+          ;(data as any).via = 'worker';
+          return { ...(data as any), errors } as NewDashboardData;
+        }
+
         // Optional patch scoping: resolve project IDs for selected patches
         let scopedProjectIds: string[] | null = null
         if (opts?.patchIds && opts.patchIds.length > 0) {

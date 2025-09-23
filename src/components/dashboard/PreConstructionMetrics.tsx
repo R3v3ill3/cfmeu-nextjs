@@ -13,6 +13,8 @@ import {
   TrendingUp
 } from "lucide-react"
 import { PreConstructionMetrics } from "@/hooks/useNewDashboardData"
+import { FilterIndicatorBadge } from "./FilterIndicatorBadge"
+import { useActiveFilters } from "@/hooks/useActiveFilters"
 
 interface PreConstructionMetricsProps {
   data: PreConstructionMetrics;
@@ -20,6 +22,7 @@ interface PreConstructionMetricsProps {
 }
 
 export function PreConstructionMetricsComponent({ data, isLoading }: PreConstructionMetricsProps) {
+  const { hasActiveFilters, activeFilters } = useActiveFilters()
   if (isLoading) {
     return (
       <Card className="lg:bg-white lg:border-gray-300 lg:shadow-md">
@@ -101,7 +104,14 @@ export function PreConstructionMetricsComponent({ data, isLoading }: PreConstruc
           <div className="flex items-center space-x-2">
             <Clock className="h-5 w-5 text-orange-600" />
             <div>
-              <CardTitle className="text-orange-800">Active Pre-Construction Projects</CardTitle>
+              <CardTitle className="text-orange-800 flex items-center gap-2">
+                Active Pre-Construction Projects
+                <FilterIndicatorBadge 
+                  hasActiveFilters={hasActiveFilters} 
+                  activeFilters={activeFilters}
+                  variant="small"
+                />
+              </CardTitle>
               <CardDescription>
                 Metrics for {data.total_projects} projects in pre-construction phase
               </CardDescription>

@@ -10,6 +10,8 @@ import { useOrganizingUniverseMetricsServerSideCompatible } from "@/hooks/useOrg
 import { FileText, Shield } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { PROJECT_TIER_LABELS, ProjectTier } from "@/components/projects/types"
+import { FilterIndicatorBadge } from "./FilterIndicatorBadge"
+import { useActiveFilters } from "@/hooks/useActiveFilters"
 
 export function EbaCoverageSection() {
   const sp = useSearchParams()
@@ -24,6 +26,9 @@ export function EbaCoverageSection() {
   }, [sp])
 
   const [tierFilter, setTierFilter] = useState<ProjectTier | 'all'>(tierFromParams ?? 'all')
+  
+  // Get active filters for indicator badge
+  const { hasActiveFilters, activeFilters } = useActiveFilters()
 
   const normalizedStage = stage && stage !== 'all' ? stage : 'construction'
   const normalizedUniverse = universe && universe !== 'all' ? universe : 'active'
@@ -41,7 +46,14 @@ export function EbaCoverageSection() {
           <div className="flex items-center space-x-2">
             <FileText className="h-5 w-5 text-blue-600" />
             <div>
-              <CardTitle className="text-lg">EBA Coverage</CardTitle>
+              <CardTitle className="text-lg flex items-center gap-2">
+                EBA Coverage
+                <FilterIndicatorBadge 
+                  hasActiveFilters={hasActiveFilters} 
+                  activeFilters={activeFilters}
+                  variant="small"
+                />
+              </CardTitle>
               <CardDescription className="text-sm">Enterprise Bargaining Agreement coverage across employers</CardDescription>
             </div>
           </div>

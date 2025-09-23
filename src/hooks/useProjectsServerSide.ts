@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/hooks/useAuth';
 
 // Types matching the API endpoint and client expectations
 export interface ProjectsParams {
@@ -74,8 +75,13 @@ export interface ProjectsResponse {
  * This replaces the complex client-side filtering/sorting with server-side processing
  */
 export function useProjectsServerSide(params: ProjectsParams) {
+  const { session, loading } = useAuth();
+  const workerEnabled = process.env.NEXT_PUBLIC_USE_WORKER_PROJECTS === 'true';
+  const workerUrl = process.env.NEXT_PUBLIC_DASHBOARD_WORKER_URL || '';
+
   return useQuery<ProjectsResponse>({
-    queryKey: ['projects-server-side', params],
+    queryKey: ['projects-server-side', params, workerEnabled],
+    enabled: !workerEnabled || (!!session && !loading),
     queryFn: async () => {
       // Build URL parameters, only including non-default values
       const searchParams = new URLSearchParams();
@@ -117,15 +123,21 @@ export function useProjectsServerSide(params: ProjectsParams) {
         searchParams.set('eba', params.eba);
       }
 
-      const url = `/api/projects?${searchParams.toString()}`;
-      console.log('🔄 Fetching projects from server:', url);
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      const urlPath = `?${searchParams.toString()}`;
+      const useWorker = workerEnabled && workerUrl;
+      const url = useWorker ? `${workerUrl.replace(/\/$/, '')}/v1/projects${urlPath}` : `/api/projects${urlPath}`;
+      console.log('🔄 Fetching projects:', { url, useWorker });
+
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (useWorker) {
+        const token = session?.access_token;
+        if (!token) {
+          throw new Error('No auth token for worker request');
+        }
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(url, { method: 'GET', headers });
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -133,6 +145,13 @@ export function useProjectsServerSide(params: ProjectsParams) {
       }
 
       const data = await response.json();
+      // Attach source for debugging UI
+      if (data && typeof data === 'object') {
+        (data as any).debug = {
+          ...(data.debug || {}),
+          via: useWorker ? 'worker' : 'app_api',
+        };
+      }
       
       // Log performance metrics for monitoring
       if (data.debug) {

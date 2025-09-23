@@ -9,12 +9,15 @@ import { PreConstructionMetricsComponent } from "@/components/dashboard/PreConst
 import { RoleBasedDashboard } from "@/components/dashboard/RoleBasedDashboard"
 import { ActiveConstructionMetricsComponent } from "@/components/dashboard/ActiveConstructionMetrics"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
+import { FilterIndicatorBadge } from "@/components/dashboard/FilterIndicatorBadge"
+import { useActiveFilters } from "@/hooks/useActiveFilters"
 
 export function MobileDashboardView() {
   const sp = useSearchParams()
   const patchParam = sp.get("patch") || ""
   const patchIds = patchParam.split(",").map(s => s.trim()).filter(Boolean)
   const { data, isLoading } = useNewDashboardData({ patchIds })
+  const { hasActiveFilters, activeFilters } = useActiveFilters()
 
   if (isLoading) {
     return (
@@ -55,7 +58,14 @@ export function MobileDashboardView() {
       {/* Organising Universe Summary */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl font-bold">Organising Universe</CardTitle>
+          <CardTitle className="text-xl font-bold flex items-center gap-2">
+            Organising Universe
+            <FilterIndicatorBadge 
+              hasActiveFilters={hasActiveFilters} 
+              activeFilters={activeFilters}
+              variant="small"
+            />
+          </CardTitle>
           <p className="text-muted-foreground text-sm">Role-based project organising metrics</p>
         </CardHeader>
         <CardContent>

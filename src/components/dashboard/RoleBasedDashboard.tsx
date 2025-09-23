@@ -20,6 +20,8 @@ import { DashboardFiltersBar, DashboardFilters } from "./DashboardFiltersBar"
 import { PatchSummaryCard, PatchSummaryCardSkeleton } from "./PatchSummaryCard"
 import { LeadOrganizerSummaryCard, LeadOrganizerSummaryCardSkeleton } from "./LeadOrganizerSummaryCard"
 import { OrganizingUniverseMetricsComponent } from "./OrganizingUniverseMetrics"
+import { FilterIndicatorBadge } from "./FilterIndicatorBadge"
+import { useActiveFilters } from "@/hooks/useActiveFilters"
 import { usePatchSummaryData } from "@/hooks/usePatchSummaryData"
 import { useLeadOrganizerSummary, useAllLeadOrganizerSummaries } from "@/hooks/useLeadOrganizerSummary"
 import { useOrganizingUniverseMetrics } from "@/hooks/useOrganizingUniverseMetrics"
@@ -40,6 +42,7 @@ export function RoleBasedDashboard({ className }: RoleBasedDashboardProps) {
   const { user } = useAuth()
   const router = useRouter()
   const [filters, setFilters] = useState<DashboardFilters>({})
+  const { hasActiveFilters, activeFilters } = useActiveFilters()
 
   // Feature flag for server-side processing
   const USE_SERVER_SIDE = process.env.NEXT_PUBLIC_USE_SERVER_SIDE_DASHBOARD === 'true'

@@ -20,6 +20,8 @@ import {
   AlertTriangle
 } from "lucide-react"
 import { ActiveConstructionMetrics } from "@/hooks/useNewDashboardData"
+import { FilterIndicatorBadge } from "./FilterIndicatorBadge"
+import { useActiveFilters } from "@/hooks/useActiveFilters"
 import { useSearchParams } from "next/navigation"
 import { useKeyContractorTradeMetrics } from "@/hooks/useKeyContractorTradeMetrics"
 
@@ -29,6 +31,7 @@ interface ActiveConstructionMetricsProps {
 }
 
 export function ActiveConstructionMetricsComponent({ data, isLoading }: ActiveConstructionMetricsProps) {
+  const { hasActiveFilters, activeFilters } = useActiveFilters()
   const sp = useSearchParams()
   const patchParam = sp.get('patch') || ''
   const patchIds = patchParam.split(',').map(s => s.trim()).filter(Boolean)
@@ -127,7 +130,14 @@ export function ActiveConstructionMetricsComponent({ data, isLoading }: ActiveCo
             <div className="flex items-center space-x-2">
               <Building className="h-5 w-5 text-green-600" />
               <div>
-                <CardTitle className="text-green-800">Active Construction Projects</CardTitle>
+                <CardTitle className="text-green-800 flex items-center gap-2">
+                  Active Construction Projects
+                  <FilterIndicatorBadge 
+                    hasActiveFilters={hasActiveFilters} 
+                    activeFilters={activeFilters}
+                    variant="small"
+                  />
+                </CardTitle>
                 <CardDescription>
                   Metrics for {data.total_projects} projects in active construction phase
                 </CardDescription>

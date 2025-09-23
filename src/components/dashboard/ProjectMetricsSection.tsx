@@ -11,6 +11,8 @@ import { FolderOpen, CheckCircle } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DashboardProject, DashboardProjectCounts } from "@/hooks/useNewDashboardData"
 import { PROJECT_TIER_LABELS, ProjectTier } from "@/components/projects/types"
+import { FilterIndicatorBadge } from "./FilterIndicatorBadge"
+import { useActiveFilters } from "@/hooks/useActiveFilters"
 
 interface ProjectMetricsSectionProps {
   data: DashboardProjectCounts;
@@ -22,6 +24,7 @@ interface ProjectMetricsSectionProps {
 export function ProjectMetricsSection({ data, projects, isLoading }: ProjectMetricsSectionProps) {
   const router = useRouter();
   const sp = useSearchParams();
+  const { hasActiveFilters, activeFilters } = useActiveFilters();
 
   const tierFromParams = useMemo(() => {
     const value = sp.get('tier');
@@ -130,7 +133,14 @@ export function ProjectMetricsSection({ data, projects, isLoading }: ProjectMetr
           <div className="flex items-center space-x-2">
             <FolderOpen className="h-5 w-5 text-blue-600" />
             <div>
-              <CardTitle>Project Overview</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                Project Overview
+                <FilterIndicatorBadge 
+                  hasActiveFilters={hasActiveFilters} 
+                  activeFilters={activeFilters}
+                  variant="small"
+                />
+              </CardTitle>
               <CardDescription>Summary by stage and universe. Click any number to drill in.</CardDescription>
             </div>
           </div>

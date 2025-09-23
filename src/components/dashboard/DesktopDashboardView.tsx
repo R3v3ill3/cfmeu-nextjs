@@ -10,12 +10,15 @@ import { DashboardDebugInfo } from "@/components/dashboard/DashboardDebugInfo"
 import { RoleBasedDashboard } from "@/components/dashboard/RoleBasedDashboard"
 import { ActiveConstructionMetricsComponent } from "@/components/dashboard/ActiveConstructionMetrics"
 import { EbaCoverageSection } from "@/components/dashboard/EbaCoverageSection"
+import { FilterIndicatorBadge } from "@/components/dashboard/FilterIndicatorBadge"
+import { useActiveFilters } from "@/hooks/useActiveFilters"
 
 export function DesktopDashboardView() {
   const sp = useSearchParams()
   const patchParam = sp.get("patch") || ""
   const patchIds = patchParam.split(",").map(s => s.trim()).filter(Boolean)
   const { data, isLoading } = useNewDashboardData({ patchIds })
+  const { hasActiveFilters, activeFilters } = useActiveFilters()
 
   if (isLoading) {
     return (
@@ -61,7 +64,14 @@ export function DesktopDashboardView() {
       <div className="lg:bg-white lg:border lg:border-gray-300 lg:rounded-lg lg:shadow-md">
         <div className="lg:p-6">
           <div className="mb-4">
-            <h2 className="text-2xl font-bold text-gray-900 lg:text-3xl">Organising Universe Summary</h2>
+            <h2 className="text-2xl font-bold text-gray-900 lg:text-3xl flex items-center gap-2">
+              Organising Universe Summary
+              <FilterIndicatorBadge 
+                hasActiveFilters={hasActiveFilters} 
+                activeFilters={activeFilters}
+                variant="small"
+              />
+            </h2>
             <p className="text-gray-700 mt-1 lg:text-lg">Role-based project organising metrics and patch summaries</p>
           </div>
           <RoleBasedDashboard />
