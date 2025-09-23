@@ -138,9 +138,8 @@ export async function GET(request: NextRequest) {
 
       if (sessionRole === 'lead_organiser') {
         leadOrganizerId = user.id
-      } else {
-        leadOrganizerId = undefined
       }
+      // For admin and organiser roles, keep the provided leadOrganizerId
     }
 
     if (!effectiveUserId || !effectiveRole) {

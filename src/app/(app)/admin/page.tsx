@@ -19,6 +19,7 @@ import AddressLookupDialog from "@/components/AddressLookupDialog"
 import DuplicateEmployerManager from "@/components/admin/DuplicateEmployerManager"
 import DataUploadTab from "@/components/admin/DataUploadTab"
 import { NavigationVisibilityManager } from "@/components/admin/NavigationVisibilityManager"
+import { SystemHealthDashboard } from "@/components/admin/SystemHealthDashboard"
 import { useAuth } from "@/hooks/useAuth"
 import { useSearchParams } from "next/navigation"
 
@@ -84,6 +85,7 @@ export default function AdminPage() {
             <TabsTrigger value="scoping">Scoping</TabsTrigger>
             <TabsTrigger value="data-management">Data Management</TabsTrigger>
             {isAdmin && <TabsTrigger value="navigation">Navigation</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="system-health">System Health</TabsTrigger>}
           </TabsList>
           {isAdmin && (
             <TabsContent value="users">
@@ -119,6 +121,11 @@ export default function AdminPage() {
           {isAdmin && (
             <TabsContent value="navigation">
               <NavigationVisibilityManager />
+            </TabsContent>
+          )}
+          {isAdmin && (
+            <TabsContent value="system-health">
+              <SystemHealthDashboard />
             </TabsContent>
           )}
         </Tabs>

@@ -156,7 +156,7 @@ export function useLeadOrganizerSummary(leadOrganizerId: string) {
 
   const { data: aggregatedMetrics, isLoading: metricsLoading } = useOrganizingUniverseMetrics({
     patchIds,
-    userId: user?.id,
+    userId: leadOrganizerId,  // Use the specific lead organizer's ID, not the current user's ID
     userRole: viewerRole
   })
 
@@ -296,7 +296,7 @@ export function useAllLeadOrganizerSummaries() {
 
             const aggregatedMetrics = await fetchOrganizingUniverseMetrics({
               patchIds,
-              userId: user.id,
+              userId: lead.id,  // Use the coordinator's ID, not the admin's ID
               userRole: viewerRole
             })
 
