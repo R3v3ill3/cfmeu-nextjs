@@ -58,8 +58,8 @@ export function useMappingSheetData(projectId: string) {
   return useQuery({
     queryKey: ["mapping-sheet-data", projectId],
     enabled: !!projectId,
-    staleTime: 30000,
-    refetchOnWindowFocus: false,
+    staleTime: 5000, // Reduced from 30s to 5s to pick up delegate changes faster
+    refetchOnWindowFocus: true, // Refetch when user comes back to the window
     queryFn: async (): Promise<MappingSheetData> => {
       if (!projectId) throw new Error("Project ID required");
 

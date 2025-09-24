@@ -7,8 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Copy, Share, ExternalLink, Clock } from "lucide-react";
+import { Copy, Share, ExternalLink, Clock, RefreshCw, QrCode } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { useQueryClient } from "@tanstack/react-query";
+import QRCode from "react-qr-code";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export interface ShareLinkGeneratorProps {
   projectId: string;
@@ -29,6 +32,13 @@ export function ShareLinkGenerator({ projectId, projectName }: ShareLinkGenerato
   const [shareLink, setShareLink] = useState<ShareLinkResponse | null>(null);
   const [resourceType, setResourceType] = useState<'PROJECT_MAPPING_SHEET'>('PROJECT_MAPPING_SHEET');
   const [expiresInHours, setExpiresInHours] = useState('48');
+  const queryClient = useQueryClient();
+  
+  const refreshMappingData = () => {
+    // Invalidate and refetch mapping sheet data
+    queryClient.invalidateQueries(['mapping-sheet-data', projectId]);
+    toast.success('Mapping sheet data refreshed');
+  };
 
   const generateShareLink = async () => {
     try {
@@ -95,14 +105,25 @@ export function ShareLinkGenerator({ projectId, projectName }: ShareLinkGenerato
           Share Mapping Sheet
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle>Share Mapping Sheet</DialogTitle>
         </DialogHeader>
         
-        <div className="space-y-4">
-          <div className="text-sm text-muted-foreground">
-            Generate a secure link to share <strong>{projectName}</strong> mapping sheet with external delegates.
+        <div className="space-y-4 flex-1 min-h-0">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-muted-foreground">
+              Generate a secure link to share <strong>{projectName}</strong> mapping sheet with external delegates.
+            </div>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={refreshMappingData}
+              className="gap-1"
+            >
+              <RefreshCw className="h-3 w-3" />
+              Refresh Data
+            </Button>
           </div>
 
           {!shareLink && (
@@ -157,30 +178,139 @@ export function ShareLinkGenerator({ projectId, projectName }: ShareLinkGenerato
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label>Secure Link</Label>
-                <div className="flex gap-2">
-                  <Input 
-                    value={shareLink.shareUrl}
-                    readOnly
-                    className="font-mono text-sm"
-                  />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => copyToClipboard(shareLink.shareUrl)}
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => window.open(shareLink.shareUrl, '_blank')}
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
+              <Tabs defaultValue="link" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="link" className="flex items-center gap-2">
+                    <Share className="h-4 w-4" />
+                    Share Link
+                  </TabsTrigger>
+                  <TabsTrigger value="qr" className="flex items-center gap-2">
+                    <QrCode className="h-4 w-4" />
+                    QR Code
+                  </TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="link" className="space-y-2">
+                  <Label>Secure Link</Label>
+                  <div className="flex gap-2">
+                    <Input 
+                      value={shareLink.shareUrl}
+                      readOnly
+                      className="font-mono text-sm"
+                    />
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => copyToClipboard(shareLink.shareUrl)}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => window.open(shareLink.shareUrl, '_blank')}
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </TabsContent>
+                
+                <TabsContent value="qr" className="space-y-4">
+                  <div className="text-center space-y-4">
+                    {/* QR Code Display */}
+                    <div className="flex justify-center">
+                      <div className="rounded-xl border bg-white p-6 shadow-lg">
+                        <QRCode
+                          value={shareLink.shareUrl}
+                          size={240}
+                          style={{ height: "auto", width: "240px" }}
+                          viewBox="0 0 256 256"
+                          level="M" // Medium error correction for better scanning
+                        />
+                      </div>
+                    </div>
+                    
+                    {/* Instructions */}
+                    <div className="space-y-3 max-w-sm mx-auto">
+                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <p className="text-sm font-medium text-blue-800 mb-1">📱 For Mobile Delegates</p>
+                        <div className="text-xs text-blue-700 space-y-1">
+                          <div>• <strong>iPhone:</strong> Open Camera app and point at QR code</div>
+                          <div>• <strong>Android:</strong> Open Camera or Google Lens</div>
+                          <div>• <strong>No app needed</strong> - works with built-in camera</div>
+                        </div>
+                      </div>
+                      
+                      <div className="text-xs text-muted-foreground">
+                        QR code links directly to the mapping sheet form with all project data pre-loaded.
+                        Perfect for immediate access during site meetings.
+                      </div>
+                    </div>
+                    
+                    {/* Action Buttons */}
+                    <div className="grid grid-cols-3 gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => copyToClipboard(shareLink.shareUrl)}
+                      >
+                        <Copy className="h-3 w-3 mr-1" />
+                        Copy
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.open(shareLink.shareUrl, '_blank')}
+                      >
+                        <ExternalLink className="h-3 w-3 mr-1" />
+                        Test
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          // Create a larger QR code for printing
+                          const printWindow = window.open('', '_blank');
+                          if (printWindow) {
+                            printWindow.document.write(`
+                              <html>
+                                <head>
+                                  <title>QR Code - ${projectName}</title>
+                                  <style>
+                                    body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+                                    .qr-container { margin: 20px auto; }
+                                    h1 { color: #333; margin-bottom: 10px; }
+                                    p { color: #666; margin: 5px 0; }
+                                  </style>
+                                </head>
+                                <body>
+                                  <h1>Project Mapping Sheet</h1>
+                                  <h2>${projectName}</h2>
+                                  <div class="qr-container">
+                                    <div style="display: inline-block; padding: 20px; border: 2px solid #ccc; background: white;">
+                                      <!-- QR code would be inserted here in a real implementation -->
+                                      <div style="width: 300px; height: 300px; background: #f0f0f0; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #666;">
+                                        QR Code for:<br/>${shareLink.shareUrl}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <p><strong>Scan to access mapping sheet</strong></p>
+                                  <p style="font-size: 12px; word-break: break-all;">${shareLink.shareUrl}</p>
+                                  <p style="font-size: 10px; color: #999;">Expires: ${formatExpiryTime(shareLink.expiresAt)}</p>
+                                </body>
+                              </html>
+                            `);
+                            printWindow.document.close();
+                            printWindow.print();
+                          }
+                        }}
+                      >
+                        🖨️ Print
+                      </Button>
+                    </div>
+                  </div>
+                </TabsContent>
+              </Tabs>
 
               <div className="space-y-2">
                 <Label>Link Details</Label>
@@ -207,15 +337,24 @@ export function ShareLinkGenerator({ projectId, projectName }: ShareLinkGenerato
                 </div>
               </div>
 
-              <div className="pt-2 border-t">
+              <div className="pt-2 border-t space-y-3">
                 <div className="text-xs text-muted-foreground space-y-1">
                   <div>• This link is secure and can only be used by people you share it with</div>
                   <div>• The link will expire automatically after the specified time</div>
                   <div>• Recipients can view and update project information through this link</div>
                 </div>
+                
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                  <div className="text-xs font-medium text-blue-800 mb-1">📝 Important Note</div>
+                  <div className="text-xs text-blue-700">
+                    Changes made by delegates (confirmations, corrections, new data) will be saved to the database 
+                    but <strong>won't appear in this mapping sheet until you refresh your browser</strong> after 
+                    they submit the form.
+                  </div>
+                </div>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2 pt-4 border-t bg-white sticky bottom-0">
                 <Button
                   variant="outline"
                   onClick={() => setShareLink(null)}

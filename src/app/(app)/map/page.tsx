@@ -28,7 +28,7 @@ export default function MapPage() {
   const [showOrganisers, setShowOrganisers] = useState(true);
   const [showProjects, setShowProjects] = useState(true);
   const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
-  const [projectColorBy, setProjectColorBy] = useState<'tier' | 'organising_universe' | 'stage' | 'default'>('default');
+  const [projectColorBy, setProjectColorBy] = useState<'tier' | 'organising_universe' | 'stage' | 'builder_eba' | 'default'>('builder_eba');
   const [labelMode, setLabelMode] = useState<'always' | 'hover' | 'key' | 'off'>('always');
   const [batchPrintMode, setBatchPrintMode] = useState(false);
 
@@ -797,20 +797,30 @@ export default function MapPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Palette className="h-5 w-5" />
-              Project Color Legend
+              Project Colour Legend
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {getColorSchemeLegend(projectColorBy).map(({ label, color }) => (
-                <div key={label} className="flex items-center gap-2">
-                  <div 
-                    className="w-4 h-4 rounded-full border-2 border-white shadow-sm" 
-                    style={{ backgroundColor: color }}
-                  />
-                  <span className="text-sm font-medium">{label}</span>
-                </div>
-              ))}
+              {getColorSchemeLegend(projectColorBy).map(({ label, color }) => {
+                if (projectColorBy === 'builder_eba' && label.startsWith('Builder = EBA active')) {
+                  return (
+                    <div key={label} className="flex items-center gap-2">
+                      <img src="/favicon.ico" alt="Active EBA" className="w-4 h-4" />
+                      <span className="text-sm font-medium">{label}</span>
+                    </div>
+                  )
+                }
+                return (
+                  <div key={label} className="flex items-center gap-2">
+                    <div 
+                      className="w-4 h-4 rounded-full border-2 border-white shadow-sm" 
+                      style={{ backgroundColor: color }}
+                    />
+                    <span className="text-sm font-medium">{label}</span>
+                  </div>
+                )
+              })}
             </div>
           </CardContent>
         </Card>

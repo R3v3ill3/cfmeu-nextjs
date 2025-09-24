@@ -21,7 +21,7 @@ interface InteractiveMapProps {
   showPatchNames?: boolean
   showOrganisers?: boolean
   selectedPatchIds?: string[]
-  projectColorBy?: 'tier' | 'organising_universe' | 'stage' | 'default'
+  projectColorBy?: 'tier' | 'organising_universe' | 'stage' | 'builder_eba' | 'default'
   labelMode?: 'always' | 'hover' | 'key' | 'off'
   autoFocusPatches?: boolean
 }

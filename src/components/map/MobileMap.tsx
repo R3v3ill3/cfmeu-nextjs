@@ -11,7 +11,7 @@ interface MobileMapProps {
   showPatchNames?: boolean;
   showOrganisers?: boolean;
   selectedPatchIds?: string[];
-  projectColorBy?: 'tier' | 'organising_universe' | 'stage' | 'default';
+  projectColorBy?: 'tier' | 'organising_universe' | 'stage' | 'builder_eba' | 'default';
   labelMode?: 'always' | 'hover' | 'key' | 'off';
   autoFocusPatches?: boolean;
 }
@@ -54,7 +54,7 @@ function MobileMap({
   showPatchNames = false, 
   showOrganisers = false,
   selectedPatchIds = [],
-  projectColorBy = 'default',
+  projectColorBy = 'builder_eba',
   labelMode = 'always',
   autoFocusPatches = false
 }: MobileMapProps) {
@@ -96,7 +96,18 @@ function MobileMap({
           longitude,
           project_id,
           patch_id,
-          projects:projects!fk_job_sites_project(name, tier, organising_universe, stage_class)
+          projects:projects!fk_job_sites_project(
+            name,
+            tier,
+            organising_universe,
+            stage_class,
+            builder_id,
+            project_assignments:project_assignments(
+              assignment_type,
+              contractor_role_types(code),
+              employers(name, enterprise_agreement_status)
+            )
+          )
         `)
         .not("latitude", "is", null)
         .not("longitude", "is", null);
@@ -108,6 +119,29 @@ function MobileMap({
     retry: 1,
     staleTime: 30000
   });
+  const deriveBuilderStatus = useCallback((project: any): 'active_builder' | 'inactive_builder' | 'unknown_builder' => {
+    try {
+      if (!project) return 'unknown_builder'
+      const assignmentsRaw = (project as any).project_assignments || []
+      const assignments = Array.isArray(assignmentsRaw) ? assignmentsRaw : [assignmentsRaw]
+      const builderAssignments = assignments.filter((pa: any) => {
+        if (pa?.assignment_type !== 'contractor_role') return false
+        const roleTypes = Array.isArray(pa?.contractor_role_types) ? pa.contractor_role_types : (pa?.contractor_role_types ? [pa.contractor_role_types] : [])
+        return roleTypes.some((rt: any) => rt?.code === 'builder' || rt?.code === 'head_contractor')
+      })
+      for (const assignment of builderAssignments) {
+        const employers = Array.isArray(assignment?.employers) ? assignment.employers : (assignment?.employers ? [assignment.employers] : [])
+        for (const emp of employers) {
+          if (emp?.enterprise_agreement_status === true) return 'active_builder'
+          if (emp && (emp?.enterprise_agreement_status === false || emp?.enterprise_agreement_status === 'no_eba')) return 'inactive_builder'
+        }
+        if (employers.length > 0) return 'inactive_builder'
+      }
+      if ((project as any).builder_id) return 'unknown_builder'
+    } catch {}
+    return 'unknown_builder'
+  }, [])
+
 
   // Filter patches based on selected patch IDs from FiltersBar
   const filteredPatches = useMemo(() => {
@@ -434,23 +468,36 @@ function MobileMap({
 
       {/* Render Job Sites as Markers */}
       {showJobSites && jobSites.map(site => {
-        const color = getProjectColor(projectColorBy, site.projects || {});
+        const project = site.projects || {}
+        if (projectColorBy === 'builder_eba') {
+          const status = deriveBuilderStatus(project)
+          const color = getProjectColor('builder_eba', { builder_status: status } as any)
+          const useFavicon = status === 'active_builder'
+          const icon = useFavicon
+            ? { url: '/favicon.ico', scaledSize: new google.maps.Size(20, 20), anchor: new google.maps.Point(10, 10) }
+            : {
+                url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
+                  <svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n                    <circle cx=\"12\" cy=\"12\" r=\"8\" fill=\"${color}\" stroke=\"#ffffff\" stroke-width=\"2\"/>\n                    <circle cx=\"12\" cy=\"12\" r=\"3\" fill=\"#ffffff\"/>\n                  </svg>\n                `),
+                scaledSize: new google.maps.Size(20, 20),
+                anchor: new google.maps.Point(10, 10)
+              }
+          return (
+            <Marker key={site.id} position={{ lat: site.latitude, lng: site.longitude }} icon={icon as any} />
+          )
+        }
+        const color = getProjectColor(projectColorBy, project as any)
         return (
           <Marker
             key={site.id}
             position={{ lat: site.latitude, lng: site.longitude }}
             icon={{
               url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="12" cy="12" r="8" fill="${color}" stroke="#ffffff" stroke-width="2"/>
-                  <circle cx="12" cy="12" r="3" fill="#ffffff"/>
-                </svg>
-              `),
+                <svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n                  <circle cx=\"12\" cy=\"12\" r=\"8\" fill=\"${color}\" stroke=\"#ffffff\" stroke-width=\"2\"/>\n                  <circle cx=\"12\" cy=\"12\" r=\"3\" fill=\"#ffffff\"/>\n                </svg>\n              `),
               scaledSize: new google.maps.Size(20, 20),
               anchor: new google.maps.Point(10, 10)
             }}
           />
-        );
+        )
       })}
     </GoogleMap>
   ) : <></>;

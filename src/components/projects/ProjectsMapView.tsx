@@ -134,7 +134,7 @@ export default function ProjectsMapView({
   const [infoWindowPosition, setInfoWindowPosition] = useState<{ lat: number, lng: number } | null>(null)
   const [mapsLoaded, setMapsLoaded] = useState(false)
   const [mapsError, setMapsError] = useState<string | null>(null)
-  const [projectColorBy, setProjectColorBy] = useState<'tier' | 'organising_universe' | 'stage' | 'builder_eba' | 'default'>('default')
+  const [projectColorBy, setProjectColorBy] = useState<'tier' | 'organising_universe' | 'stage' | 'builder_eba' | 'default'>('builder_eba')
 
   // Load Google Maps
   useEffect(() => {
@@ -631,14 +631,24 @@ export default function ProjectsMapView({
       </CardContent>
       {projectColorBy !== 'default' && (
         <div className="p-4">
-          <div className="text-sm font-medium mb-2">Project Color Legend</div>
+          <div className="text-sm font-medium mb-2">Project Colour Legend</div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {getColorSchemeLegend(projectColorBy).map(({ label, color }) => (
-              <div key={label} className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded-full border-2 border-white shadow-sm" style={{ backgroundColor: color }} />
-                <span className="text-sm">{label}</span>
-              </div>
-            ))}
+            {getColorSchemeLegend(projectColorBy).map(({ label, color }) => {
+              if (projectColorBy === 'builder_eba' && label.startsWith('Builder = EBA active')) {
+                return (
+                  <div key={label} className="flex items-center gap-2">
+                    <img src="/favicon.ico" alt="Active EBA" className="w-4 h-4" />
+                    <span className="text-sm">{label}</span>
+                  </div>
+                )
+              }
+              return (
+                <div key={label} className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full border-2 border-white shadow-sm" style={{ backgroundColor: color }} />
+                  <span className="text-sm">{label}</span>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}

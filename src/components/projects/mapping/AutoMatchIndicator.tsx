@@ -2,12 +2,12 @@
 
 import React from "react";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, CheckCircle, Clock } from "lucide-react";
+import { AlertTriangle, CheckCircle, Clock, UserCheck, X } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface AutoMatchIndicatorProps {
-  matchStatus?: 'auto_matched' | 'confirmed' | 'needs_review';
-  dataSource?: 'manual' | 'bci_import' | 'other_import';
+  matchStatus?: 'auto_matched' | 'confirmed' | 'needs_review' | 'delegate_confirmed' | 'incorrect_via_delegate';
+  dataSource?: 'manual' | 'bci_import' | 'other_import' | 'public_form';
   matchConfidence?: number;
   matchNotes?: string;
   className?: string;
@@ -47,6 +47,20 @@ export function AutoMatchIndicator({
           variant: 'default' as const,
           text: 'Confirmed',
           description: 'Assignment confirmed by user'
+        };
+      case 'delegate_confirmed':
+        return {
+          icon: UserCheck,
+          variant: 'default' as const,
+          text: 'Confirmed by Delegate',
+          description: 'Assignment confirmed by external delegate via shared form'
+        };
+      case 'incorrect_via_delegate':
+        return {
+          icon: X,
+          variant: 'destructive' as const,
+          text: 'Marked Incorrect',
+          description: 'Assignment marked as incorrect by external delegate'
         };
       default:
         return null;
