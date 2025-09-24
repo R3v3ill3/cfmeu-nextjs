@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -150,10 +150,13 @@ interface BCIProjectImportProps {
   onImportComplete?: () => void;
   initialFile?: File;
   onEmployersStaged?: () => void;
+  autoQuickFlow?: boolean;
+  showTopConfirmAllButton?: boolean;
 }
 
-const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onImportComplete, initialFile, onEmployersStaged }) => {
+const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onImportComplete, initialFile, onEmployersStaged, autoQuickFlow, showTopConfirmAllButton }) => {
   const [isProcessing, setIsProcessing] = useState(false);
+  const hasFiredCompleteRef = useRef(false);
   const [currentStep, setCurrentStep] = useState<'preview' | 'employer_matching' | 'trade_type_confirmation' | 'importing' | 'complete'>('preview');
   const [processedData, setProcessedData] = useState<BCIProjectData[]>([]);
   const [employerMatches, setEmployerMatches] = useState<Record<string, EmployerMatchResult>>({});
@@ -181,6 +184,19 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
   
   // Auto-confirm progress state
   const [isAutoConfirming, setIsAutoConfirming] = useState(false);
+
+  // Automatically notify parent once this importer reaches the 'complete' step
+  useEffect(() => {
+    if (currentStep === 'complete' && onImportComplete && !hasFiredCompleteRef.current) {
+      hasFiredCompleteRef.current = true;
+      console.log('[BCIProjectImport] currentStep=complete → calling onImportComplete()');
+      try {
+        onImportComplete();
+      } catch (_) {
+        // no-op: avoid throwing from effect
+      }
+    }
+  }, [currentStep, onImportComplete]);
   
   // Project validation state
   const [projectValidation, setProjectValidation] = useState<{
@@ -205,7 +221,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
     validRows: number;
     skippedRows: number;
   }>({ totalRows: 0, validRows: 0, skippedRows: 0 });
-  const [selectedImportModel, setSelectedImportModel] = useState<'direct' | 'stage' | 'guided' | null>(null);
+  const [selectedImportModel, setSelectedImportModel] = useState<'direct' | 'stage' | 'guided' | null>(autoQuickFlow ? 'direct' : null);
   
   // Manual search states
   const [showManualSearch, setShowManualSearch] = useState(false);
@@ -1392,6 +1408,12 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
     
     setImportResults(results);
     setCurrentStep('complete');
+    // Proactively notify parent even if UI remains on results screen
+    if (onImportComplete && !hasFiredCompleteRef.current) {
+      hasFiredCompleteRef.current = true;
+      console.log('[BCIProjectImport] projects-only complete → calling onImportComplete()');
+      try { onImportComplete(); } catch (_) {}
+    }
   };
 
   // Move to trade type confirmation step
@@ -3236,6 +3258,30 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
                 {/* Quick actions row */}
                 <div className="flex flex-wrap items-center gap-2 justify-between">
                   <div className="flex flex-wrap items-center gap-2">
+                    {showTopConfirmAllButton && (
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          // Confirm all matches: mark all consolidated employers as confirmed
+                          setConsolidatedMatches(prev => {
+                            const updated = new Map(prev)
+                            updated.forEach((val, key) => {
+                              updated.set(key, { ...val, userConfirmed: true })
+                            })
+                            return updated
+                          })
+                          // Proceed directly to final review/import
+                          if (mode === 'employers-to-existing' || mode === 'employers-to-existing-quick-match') {
+                            confirmEmployerMatches()
+                            // Immediately start the import after moving to trade type confirmation
+                            setTimeout(() => confirmTradeTypes(), 0)
+                          }
+                        }}
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                      >
+                        Confirm all Assignments for all employers and continue to Final Review
+                      </Button>
+                    )}
                     <Button 
                       size="sm" 
                       onClick={autoConfirmExactMatches} 

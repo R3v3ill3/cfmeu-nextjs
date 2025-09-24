@@ -630,6 +630,7 @@ export default function MapPage() {
               <SelectItem value="tier">Tier</SelectItem>
               <SelectItem value="organising_universe">Organising Universe</SelectItem>
               <SelectItem value="stage">Stage</SelectItem>
+              <SelectItem value="builder_eba">Builder EBA Status</SelectItem>
             </SelectContent>
           </Select>
         </div>

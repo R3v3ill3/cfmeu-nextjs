@@ -18,7 +18,7 @@ interface GoogleMapProps {
   height?: string;
   showControls?: boolean;
   onPatchClick?: (patchId: string) => void;
-  projectMarkers?: Array<{ id: string; name: string; lat: number; lng: number }>;
+  projectMarkers?: Array<{ id: string; name: string; lat: number; lng: number; color?: string; iconUrl?: string }>;
   onProjectClick?: (projectId: string) => void;
 }
 
@@ -217,14 +217,31 @@ export function GoogleMap({
                     onClick={() => onPatchClick?.(pg.id)}
                   />
                 ))}
-                {projectMarkers.map(pm => (
-                  <RGMMarker
-                    key={`prj-${pm.id}`}
-                    position={{ lat: pm.lat, lng: pm.lng }}
-                    title={pm.name}
-                    onClick={() => onProjectClick?.(pm.id)}
-                  />
-                ))}
+                {projectMarkers.map(pm => {
+                  const icon = pm.iconUrl
+                    ? { url: pm.iconUrl, scaledSize: new window.google.maps.Size(24, 24), anchor: new window.google.maps.Point(12, 12) }
+                    : pm.color
+                    ? {
+                        url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
+                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="12" cy="12" r="8" fill="${pm.color}" stroke="#ffffff" stroke-width="2"/>
+                            <circle cx="12" cy="12" r="3" fill="#ffffff"/>
+                          </svg>
+                        `),
+                        scaledSize: new window.google.maps.Size(24, 24),
+                        anchor: new window.google.maps.Point(12, 12)
+                      }
+                    : undefined
+                  return (
+                    <RGMMarker
+                      key={`prj-${pm.id}`}
+                      position={{ lat: pm.lat, lng: pm.lng }}
+                      title={pm.name}
+                      onClick={() => onProjectClick?.(pm.id)}
+                      icon={icon as any}
+                    />
+                  )
+                })}
               </RGMMap>
             )}
           </div>

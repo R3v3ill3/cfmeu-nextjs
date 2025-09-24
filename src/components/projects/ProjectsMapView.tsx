@@ -8,7 +8,10 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { MapPin, Building, Users, ExternalLink } from "lucide-react"
 import Link from "next/link"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Palette } from "lucide-react"
+import { getProjectColor, getColorSchemeLegend } from "@/utils/projectColors"
 
 interface ProjectsMapViewProps {
   projects: any[]
@@ -131,6 +134,7 @@ export default function ProjectsMapView({
   const [infoWindowPosition, setInfoWindowPosition] = useState<{ lat: number, lng: number } | null>(null)
   const [mapsLoaded, setMapsLoaded] = useState(false)
   const [mapsError, setMapsError] = useState<string | null>(null)
+  const [projectColorBy, setProjectColorBy] = useState<'tier' | 'organising_universe' | 'stage' | 'builder_eba' | 'default'>('default')
 
   // Load Google Maps
   useEffect(() => {
@@ -171,7 +175,18 @@ export default function ProjectsMapView({
           longitude,
           project_id,
           patch_id,
-          projects:projects!fk_job_sites_project(name, tier)
+          projects:projects!fk_job_sites_project(
+            name,
+            tier,
+            organising_universe,
+            stage_class,
+            builder_id,
+            project_assignments:project_assignments(
+              assignment_type,
+              contractor_role_types(code),
+              employers(name, enterprise_agreement_status)
+            )
+          )
         `)
         .in("project_id", projectIds)
         .not("latitude", "is", null)
@@ -403,8 +418,54 @@ export default function ProjectsMapView({
     )
   }
 
+  const deriveBuilderStatus = (project: any): 'active_builder' | 'inactive_builder' | 'unknown_builder' => {
+    try {
+      if (!project) return 'unknown_builder'
+      const assignmentsRaw = project.project_assignments || []
+      const assignments = Array.isArray(assignmentsRaw) ? assignmentsRaw : [assignmentsRaw]
+      const builderAssignments = assignments.filter((pa: any) => {
+        if (pa?.assignment_type !== 'contractor_role') return false
+        const roleTypes = Array.isArray(pa?.contractor_role_types) ? pa.contractor_role_types : (pa?.contractor_role_types ? [pa.contractor_role_types] : [])
+        return roleTypes.some((rt: any) => rt?.code === 'builder' || rt?.code === 'head_contractor')
+      })
+      for (const assignment of builderAssignments) {
+        const employers = Array.isArray(assignment?.employers) ? assignment.employers : (assignment?.employers ? [assignment.employers] : [])
+        for (const emp of employers) {
+          if (emp?.enterprise_agreement_status === true) return 'active_builder'
+          if (emp && (emp?.enterprise_agreement_status === false || emp?.enterprise_agreement_status === 'no_eba')) return 'inactive_builder'
+        }
+        if (employers.length > 0) return 'inactive_builder'
+      }
+      if (project.builder_id) return 'unknown_builder'
+    } catch {}
+    return 'unknown_builder'
+  }
+
   return (
     <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <MapPin className="h-5 w-5" />
+            Projects Map
+          </div>
+          <div className="flex items-center gap-2">
+            <Palette className="h-4 w-4 text-gray-500" />
+            <Select value={projectColorBy} onValueChange={(value) => setProjectColorBy(value as typeof projectColorBy)}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Color projects by..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">Default (Blue)</SelectItem>
+                <SelectItem value="tier">Tier</SelectItem>
+                <SelectItem value="organising_universe">Organising Universe</SelectItem>
+                <SelectItem value="stage">Stage</SelectItem>
+                <SelectItem value="builder_eba">Builder EBA Status</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardTitle>
+      </CardHeader>
       <CardContent className="p-0">
         <GoogleMap
           mapContainerStyle={mapContainerStyle}
@@ -444,23 +505,44 @@ export default function ProjectsMapView({
           })}
 
           {/* Render Job Sites as Markers */}
-          {jobSites.map(site => (
-            <Marker
-              key={site.id}
-              position={{ lat: site.latitude, lng: site.longitude }}
-              icon={{
-                url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="12" cy="12" r="8" fill="#3b82f6" stroke="#ffffff" stroke-width="2"/>
-                    <circle cx="12" cy="12" r="3" fill="#ffffff"/>
-                  </svg>
-                `),
-                scaledSize: new google.maps.Size(24, 24),
-                anchor: new google.maps.Point(12, 12)
-              }}
-              onClick={() => handleJobSiteClick(site)}
-            />
-          ))}
+          {jobSites.map(site => {
+            const project = site.projects || {}
+            if (projectColorBy === 'builder_eba') {
+              const status = deriveBuilderStatus(project)
+              const color = getProjectColor('builder_eba', { builder_status: status } as any)
+              const useFavicon = status === 'active_builder'
+              const icon = useFavicon
+                ? { url: '/favicon.ico', scaledSize: new google.maps.Size(24, 24), anchor: new google.maps.Point(12, 12) }
+                : {
+                    url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
+                      <svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n                        <circle cx=\"12\" cy=\"12\" r=\"8\" fill=\"${color}\" stroke=\"#ffffff\" stroke-width=\"2\"/>\n                        <circle cx=\"12\" cy=\"12\" r=\"3\" fill=\"#ffffff\"/>\n                      </svg>\n                    `),
+                    scaledSize: new google.maps.Size(24, 24),
+                    anchor: new google.maps.Point(12, 12)
+                  }
+              return (
+                <Marker
+                  key={site.id}
+                  position={{ lat: site.latitude, lng: site.longitude }}
+                  icon={icon as any}
+                  onClick={() => handleJobSiteClick(site)}
+                />
+              )
+            }
+            const color = getProjectColor(projectColorBy, project as any)
+            return (
+              <Marker
+                key={site.id}
+                position={{ lat: site.latitude, lng: site.longitude }}
+                icon={{
+                  url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
+                    <svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n                      <circle cx=\"12\" cy=\"12\" r=\"8\" fill=\"${color}\" stroke=\"#ffffff\" stroke-width=\"2\"/>\n                      <circle cx=\"12\" cy=\"12\" r=\"3\" fill=\"#ffffff\"/>\n                    </svg>\n                  `),
+                  scaledSize: new google.maps.Size(24, 24),
+                  anchor: new google.maps.Point(12, 12)
+                }}
+                onClick={() => handleJobSiteClick(site)}
+              />
+            )
+          })}
 
           {/* Info Window for Job Sites */}
           {selectedJobSite && infoWindowPosition && (
@@ -547,6 +629,19 @@ export default function ProjectsMapView({
           )}
         </GoogleMap>
       </CardContent>
+      {projectColorBy !== 'default' && (
+        <div className="p-4">
+          <div className="text-sm font-medium mb-2">Project Color Legend</div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {getColorSchemeLegend(projectColorBy).map(({ label, color }) => (
+              <div key={label} className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded-full border-2 border-white shadow-sm" style={{ backgroundColor: color }} />
+                <span className="text-sm">{label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </Card>
   )
 }

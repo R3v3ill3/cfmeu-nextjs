@@ -52,6 +52,7 @@ type ProjectRow = {
   tier: string | null
   organising_universe?: string | null
   stage_class?: string | null
+  created_at?: string
   project_assignments?: Array<{
     assignment_type: string
     employer_id: string
@@ -111,6 +112,13 @@ export function ProjectTable({
       <TableBody>
         {rows.map((project) => {
           const summary = summaries[project.id]
+          const isNew = !!(project as any)?.created_at && (function() {
+            try {
+              const since = (typeof window !== 'undefined') ? (new URLSearchParams(window.location.search).get('since') || '') : ''
+              if (!since) return false
+              return new Date((project as any).created_at!) > new Date(since)
+            } catch { return false }
+          })()
           
           const contractors = (project.project_assignments || []).filter((a) => a.assignment_type === 'contractor_role')
           const builderNames = contractors.map((a) => ({ id: a.employer_id, name: a.employers?.name || a.employer_id }))
@@ -130,7 +138,7 @@ export function ProjectTable({
           const ebaPercentage = engaged > 0 ? Math.round((ebaActive / engaged) * 100) : 0
 
           return (
-            <TableRow key={project.id} className="cursor-pointer hover:bg-muted/50" onClick={() => onRowClick(project.id)}>
+            <TableRow key={project.id} className={`cursor-pointer hover:bg-muted/50 ${isNew ? 'bg-yellow-50' : ''}`} onClick={() => onRowClick(project.id)}>
               <TableCell>
                 <div className="flex flex-col">
                   <Link 
@@ -141,7 +149,7 @@ export function ProjectTable({
                       startNavigation(`/projects/${project.id}`)
                     }}
                   >
-                    {project.name}
+                    {project.name} {isNew && <Badge variant="default" className="ml-2 text-[10px] bg-amber-500 hover:bg-amber-600">New</Badge>}
                   </Link>
                   {project.value && (
                     <div className="text-xs text-muted-foreground">

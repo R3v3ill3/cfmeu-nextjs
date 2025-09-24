@@ -8,6 +8,9 @@ import { MapPin, ExternalLink } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { GoogleMap } from '@/components/ui/GoogleMap';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Palette } from 'lucide-react';
+import { getProjectColor, getColorSchemeLegend } from '@/utils/projectColors';
 
 interface AllPatchesMapProps {
   height?: string;
@@ -39,6 +42,7 @@ export function AllPatchesMap({
   selectedPatchIds = [],
   onPatchClick 
 }: AllPatchesMapProps) {
+  const [projectColorBy, setProjectColorBy] = React.useState<'tier' | 'organising_universe' | 'stage' | 'builder_eba' | 'default'>('default')
   // Fetch all active geo patches
   const { data: patches = [], isLoading: patchesLoading } = useQuery({
     queryKey: ['all-patches-map-data'],
@@ -146,12 +150,25 @@ export function AllPatchesMap({
   }));
 
   // Convert job sites to project markers for the map
-  const projectMarkers = jobSites.map(site => ({
-    id: site.project_id,
-    name: `${site.project_name} - ${site.name}`,
-    lat: site.lat,
-    lng: site.lng
-  }));
+  const projectMarkers = jobSites.map(site => {
+    if (projectColorBy === 'builder_eba') {
+      // We don't have builder status in this query; fall back to default colored circle
+      // Future improvement: join project_assignments here similar to other maps
+      return {
+        id: site.project_id,
+        name: `${site.project_name} - ${site.name}`,
+        lat: site.lat,
+        lng: site.lng,
+        color: getProjectColor('builder_eba', { builder_status: 'unknown_builder' } as any)
+      }
+    }
+    return {
+      id: site.project_id,
+      name: `${site.project_name} - ${site.name}`,
+      lat: site.lat,
+      lng: site.lng
+    }
+  });
 
   const handleProjectClick = (projectId: string) => {
     // Navigate to the project detail page
@@ -182,7 +199,20 @@ export function AllPatchesMap({
               </Badge>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <Palette className="h-4 w-4 text-gray-500" />
+            <Select value={projectColorBy} onValueChange={(value) => setProjectColorBy(value as typeof projectColorBy)}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Color projects by..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">Default (Blue)</SelectItem>
+                <SelectItem value="tier">Tier</SelectItem>
+                <SelectItem value="organising_universe">Organising Universe</SelectItem>
+                <SelectItem value="stage">Stage</SelectItem>
+                <SelectItem value="builder_eba">Builder EBA Status</SelectItem>
+              </SelectContent>
+            </Select>
             <Badge variant="outline">
               {patches.length} patch{patches.length !== 1 ? 'es' : ''}
             </Badge>
@@ -206,6 +236,19 @@ export function AllPatchesMap({
           onPatchClick={handlePatchClickInternal}
           onProjectClick={handleProjectClick}
         />
+        {projectColorBy !== 'default' && (
+          <div className="p-3 bg-muted/50 border-t">
+            <div className="text-sm font-medium mb-2">Project Color Legend</div>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {getColorSchemeLegend(projectColorBy).map(({ label, color }) => (
+                <div key={label} className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full border-2 border-white shadow-sm" style={{ backgroundColor: color }} />
+                  <span className="text-sm">{label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {selectedPatchIds.length === 0 && (
           <div className="p-3 bg-muted/50 border-t text-xs text-muted-foreground">
             Click on a patch to view its details, or click on project markers to view project details.

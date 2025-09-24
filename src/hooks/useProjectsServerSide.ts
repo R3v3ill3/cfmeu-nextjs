@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 export interface ProjectsParams {
   page: number;
   pageSize: number;
-  sort: 'name' | 'value' | 'tier' | 'workers' | 'members' | 'delegates' | 'eba_coverage' | 'employers';
+  sort: 'name' | 'value' | 'tier' | 'workers' | 'members' | 'delegates' | 'eba_coverage' | 'employers' | 'created_at';
   dir: 'asc' | 'desc';
   q?: string;
   patch?: string; // Comma-separated patch IDs
@@ -15,6 +15,8 @@ export interface ProjectsParams {
   workers?: 'all' | 'zero' | 'nonzero';
   special?: 'all' | 'noBuilderWithEmployers';
   eba?: 'all' | 'eba_active' | 'eba_inactive' | 'builder_unknown';
+  newOnly?: boolean;
+  since?: string;
 }
 
 export interface ProjectRecord {
@@ -121,6 +123,13 @@ export function useProjectsServerSide(params: ProjectsParams) {
       
       if (params.eba && params.eba !== 'all') {
         searchParams.set('eba', params.eba);
+      }
+
+      if (params.newOnly) {
+        searchParams.set('newOnly', '1');
+      }
+      if (params.since) {
+        searchParams.set('since', params.since);
       }
 
       const urlPath = `?${searchParams.toString()}`;

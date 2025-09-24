@@ -31,6 +31,7 @@ export interface ProjectRecord {
   tier: string | null;
   organising_universe: string | null;
   stage_class: string | null;
+  created_at?: string;
   full_address: string | null;
   project_assignments: {
     assignment_type: string;
@@ -95,7 +96,7 @@ export async function GET(request: NextRequest) {
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('id, role')
+      .select('id, role, last_seen_projects_at')
       .eq('id', user.id)
       .maybeSingle();
 
@@ -122,6 +123,9 @@ export async function GET(request: NextRequest) {
     const workers = (searchParams.get('workers') || 'all') as ProjectsRequest['workers'];
     const special = (searchParams.get('special') || 'all') as ProjectsRequest['special'];
     const eba = (searchParams.get('eba') || 'all') as ProjectsRequest['eba'];
+    const newOnlyParam = searchParams.get('newOnly');
+    const newOnly = newOnlyParam === '1' || newOnlyParam === 'true';
+    const sinceParam = searchParams.get('since') || undefined;
 
     // Parse patch IDs
     const patchIds = patchParam ? patchParam.split(',').map(s => s.trim()).filter(Boolean) : [];
@@ -240,7 +244,18 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Apply sorting with exact same logic as client
+    // Apply "new only" filter using created_at
+    if (newOnly) {
+      // Determine effective since timestamp: URL param or user's last_seen_projects_at
+      const effectiveSince = sinceParam || (profile as any)?.last_seen_projects_at || null;
+      if (effectiveSince) {
+        query = query.gt('created_at', effectiveSince);
+      } else {
+        // If no since available, treat as none (no filter)
+      }
+    }
+
+    // Apply sorting with exact same logic as client plus created_at support
     const needsClientSorting = ["workers", "members", "delegates", "eba_coverage", "employers"].includes(sort);
     
     if (!needsClientSorting) {
@@ -251,6 +266,9 @@ export async function GET(request: NextRequest) {
         query = query.order('value', { ascending: dir === 'asc', nullsFirst: false });
       } else if (sort === 'tier') {
         query = query.order('tier', { ascending: dir === 'asc', nullsFirst: false });
+      } else {
+        // Default to created_at desc if unspecified, or allow explicit created_at sort
+        query = query.order('created_at', { ascending: dir === 'asc' });
       }
     } else {
       // Pre-computed summary fields can now be sorted server-side too!
@@ -293,6 +311,7 @@ export async function GET(request: NextRequest) {
       tier: row.tier,
       organising_universe: row.organising_universe,
       stage_class: row.stage_class,
+      created_at: row.created_at,
       full_address: row.full_address,
       
       // Transform project_assignments_data back to expected format
@@ -341,7 +360,9 @@ export async function GET(request: NextRequest) {
             special,
             eba,
             sort,
-            dir
+            dir,
+            newOnly,
+            since: sinceParam || (profile as any)?.last_seen_projects_at || null
           },
           patchProjectCount,
           patchFilteringUsed: patchIds.length > 0,

@@ -1,4 +1,4 @@
-export type ProjectColorScheme = 'tier' | 'organising_universe' | 'stage' | 'default';
+export type ProjectColorScheme = 'tier' | 'organising_universe' | 'stage' | 'builder_eba' | 'default';
 
 // Color schemes for different project attributes
 export const PROJECT_COLOR_SCHEMES = {
@@ -22,6 +22,13 @@ export const PROJECT_COLOR_SCHEMES = {
     construction: '#10b981',     // emerald - active construction
     archived: '#6b7280',         // gray - archived projects
     null: '#6b7280',             // gray - not classified
+    undefined: '#6b7280'
+  },
+  builder_eba: {
+    active_builder: '#16a34a', // green
+    inactive_builder: '#f97316', // orange
+    unknown_builder: '#6b7280', // gray
+    null: '#6b7280',
     undefined: '#6b7280'
   },
   default: '#3b82f6' // default blue for all projects
@@ -50,6 +57,13 @@ export const COLOR_SCHEME_LABELS = {
     archived: 'Archived',
     null: 'Not Classified',
     undefined: 'Not Classified'
+  },
+  builder_eba: {
+    active_builder: 'Builder = EBA active employer',
+    inactive_builder: 'Builder = known employer (EBA not active)',
+    unknown_builder: 'Builder not known',
+    null: 'Builder not known',
+    undefined: 'Builder not known'
   }
 };
 
@@ -59,6 +73,7 @@ export function getProjectColor(
     tier?: string | null;
     organising_universe?: string | null;
     stage_class?: string | null;
+    builder_status?: 'active_builder' | 'inactive_builder' | 'unknown_builder' | null;
   }
 ): string {
   if (colorScheme === 'default') {
@@ -80,6 +95,9 @@ export function getProjectColor(
       break;
     case 'stage':
       value = project.stage_class;
+      break;
+    case 'builder_eba':
+      value = project.builder_status;
       break;
     default:
       return PROJECT_COLOR_SCHEMES.default;

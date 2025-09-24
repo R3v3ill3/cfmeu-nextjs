@@ -48,6 +48,12 @@ interface JobSiteData {
     tier?: string | null
     organising_universe?: string | null
     stage_class?: string | null
+    builder_id?: string | null
+    project_assignments?: Array<{
+      assignment_type?: string | null
+      contractor_role_types?: any
+      employers?: any
+    }>
   }
 }
 
@@ -315,7 +321,18 @@ export default function InteractiveMap({
             longitude,
             project_id,
             patch_id,
-            projects:projects!fk_job_sites_project(name, tier, organising_universe, stage_class)
+            projects:projects!fk_job_sites_project(
+              name,
+              tier,
+              organising_universe,
+              stage_class,
+              builder_id,
+              project_assignments:project_assignments(
+                assignment_type,
+                contractor_role_types(code),
+                employers(name, enterprise_agreement_status)
+              )
+            )
           `)
           .not("latitude", "is", null)
           .not("longitude", "is", null)
@@ -388,6 +405,32 @@ export default function InteractiveMap({
       console.warn("⚠️ Failed to parse GeoJSON:", e)
       return []
     }
+  }, [])
+
+  const deriveBuilderStatus = useCallback((project: any): 'active_builder' | 'inactive_builder' | 'unknown_builder' => {
+    try {
+      if (!project) return 'unknown_builder'
+      const assignmentsRaw = project.project_assignments || []
+      const assignments = Array.isArray(assignmentsRaw) ? assignmentsRaw : [assignmentsRaw]
+      const builderAssignments = assignments.filter((pa) => {
+        if (pa?.assignment_type !== 'contractor_role') return false
+        const roleTypes = Array.isArray(pa?.contractor_role_types) ? pa.contractor_role_types : (pa?.contractor_role_types ? [pa.contractor_role_types] : [])
+        return roleTypes.some((rt: any) => rt?.code === 'builder' || rt?.code === 'head_contractor')
+      })
+
+      for (const assignment of builderAssignments) {
+        const employers = Array.isArray(assignment?.employers) ? assignment.employers : (assignment?.employers ? [assignment.employers] : [])
+        for (const emp of employers) {
+          if (emp?.enterprise_agreement_status === true) return 'active_builder'
+          if (emp && (emp?.enterprise_agreement_status === false || emp?.enterprise_agreement_status === 'no_eba')) return 'inactive_builder'
+        }
+        if (employers.length > 0) return 'inactive_builder'
+      }
+
+      // Legacy builder_id without status info -> unknown
+      if (project.builder_id) return 'unknown_builder'
+    } catch {}
+    return 'unknown_builder'
   }, [])
 
   // Handle patch click
@@ -776,7 +819,37 @@ export default function InteractiveMap({
 
         {/* Render Job Sites as Markers */}
         {showJobSites && jobSites.map(site => {
-          const color = getProjectColor(projectColorBy, site.projects || {});
+          const project = site.projects || {}
+          if (projectColorBy === 'builder_eba') {
+            const builderStatus = deriveBuilderStatus(project)
+            const color = getProjectColor('builder_eba', { builder_status: builderStatus } as any)
+            const useFavicon = builderStatus === 'active_builder'
+            const icon = useFavicon
+              ? {
+                  url: '/favicon.ico',
+                  scaledSize: new google.maps.Size(24, 24),
+                  anchor: new google.maps.Point(12, 12)
+                }
+              : {
+                  url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <circle cx="12" cy="12" r="8" fill="${color}" stroke="#ffffff" stroke-width="2"/>
+                      <circle cx="12" cy="12" r="3" fill="#ffffff"/>
+                    </svg>
+                  `),
+                  scaledSize: new google.maps.Size(24, 24),
+                  anchor: new google.maps.Point(12, 12)
+                }
+            return (
+              <Marker
+                key={site.id}
+                position={{ lat: site.latitude, lng: site.longitude }}
+                icon={icon as any}
+                onClick={() => handleJobSiteClick(site)}
+              />
+            )
+          }
+          const color = getProjectColor(projectColorBy, project)
           return (
             <Marker
               key={site.id}
@@ -793,7 +866,7 @@ export default function InteractiveMap({
               }}
               onClick={() => handleJobSiteClick(site)}
             />
-          );
+          )
         })}
 
         {/* Info Window for Patches */}

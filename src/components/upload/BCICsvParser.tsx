@@ -99,13 +99,14 @@ interface BCICsvParserProps {
   onDataParsed: (data: BCICsvRow[]) => void;
   onError: (error: string) => void;
   onModeChange?: (mode: BCIImportMode) => void;
+  allowedModes?: BCIImportMode[];
 }
 
-export default function BCICsvParser({ onDataParsed, onError, onModeChange }: BCICsvParserProps) {
+export default function BCICsvParser({ onDataParsed, onError, onModeChange, allowedModes }: BCICsvParserProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [sampleData, setSampleData] = useState<BCICsvRow[]>([]);
-  const [mode, setMode] = useState<BCIImportMode>('projects-and-employers');
+  const [mode, setMode] = useState<BCIImportMode>((allowedModes && allowedModes.length > 0 ? allowedModes[0] : 'projects-and-employers'));
 
   useEffect(() => {
     if (onModeChange) onModeChange(mode);
@@ -285,10 +286,18 @@ export default function BCICsvParser({ onDataParsed, onError, onModeChange }: BC
         </CardHeader>
         <CardContent className="variant:desktop-compact">
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant={mode === 'projects-and-employers' ? 'default' : 'outline'} onClick={() => setMode('projects-and-employers')}>Projects + Employers</Button>
-            <Button size="sm" variant={mode === 'projects-only' ? 'default' : 'outline'} onClick={() => setMode('projects-only')}>Projects only</Button>
-            <Button size="sm" variant={mode === 'employers-to-existing' ? 'default' : 'outline'} onClick={() => setMode('employers-to-existing')}>Employers → existing projects</Button>
-            <Button size="sm" variant={mode === 'employers-to-existing-quick-match' ? 'default' : 'outline'} onClick={() => setMode('employers-to-existing-quick-match')}>Quick Match (BCI ID only)</Button>
+            {(!allowedModes || allowedModes.includes('projects-and-employers')) && (
+              <Button size="sm" variant={mode === 'projects-and-employers' ? 'default' : 'outline'} onClick={() => setMode('projects-and-employers')}>Projects + Employers</Button>
+            )}
+            {(!allowedModes || allowedModes.includes('projects-only')) && (
+              <Button size="sm" variant={mode === 'projects-only' ? 'default' : 'outline'} onClick={() => setMode('projects-only')}>Projects only</Button>
+            )}
+            {(!allowedModes || allowedModes.includes('employers-to-existing')) && (
+              <Button size="sm" variant={mode === 'employers-to-existing' ? 'default' : 'outline'} onClick={() => setMode('employers-to-existing')}>Employers → existing projects</Button>
+            )}
+            {(!allowedModes || allowedModes.includes('employers-to-existing-quick-match')) && (
+              <Button size="sm" variant={mode === 'employers-to-existing-quick-match' ? 'default' : 'outline'} onClick={() => setMode('employers-to-existing-quick-match')}>Quick Match (BCI ID only)</Button>
+            )}
           </div>
           <div className="mt-3 text-xs text-gray-600">
             {mode === 'projects-only' && (

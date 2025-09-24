@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { ArrowUp, ArrowDown, LayoutGrid, List as ListIcon, MapPin, Filter, X, ChevronDown, ChevronUp } from "lucide-react"
+import { ArrowUp, ArrowDown, LayoutGrid, List as ListIcon, MapPin, Filter, X, ChevronDown, ChevronUp, Bell } from "lucide-react"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import CreateProjectDialog from "@/components/projects/CreateProjectDialog"
 import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
@@ -25,6 +25,7 @@ import { useProjectsServerSideCompatible } from "@/hooks/useProjectsServerSide"
 import { ProjectTable } from "@/components/projects/ProjectTable"
 import DuplicateEmployerManager from "@/components/admin/DuplicateEmployerManager"
 import ProjectsMapView from "@/components/projects/ProjectsMapView"
+import NewProjectsBanner from "./NewProjectsBanner"
 import { useMultipleProjectSubsetStats } from "@/hooks/useProjectSubsetStats"
 import { SubsetEbaStats } from "@/components/projects/SubsetEbaStats"
 import { CfmeuEbaBadge, getProjectEbaStatus } from "@/components/ui/CfmeuEbaBadge"
@@ -36,6 +37,7 @@ type ProjectWithRoles = {
   main_job_site_id: string | null
   value: number | null
   tier: string | null
+  created_at?: string
   project_assignments?: Array<{
     assignment_type: string
     employer_id: string
@@ -591,6 +593,8 @@ export default function ProjectsPage() {
   const specialFilter = sp.get("special") || "all"
   const ebaFilter = sp.get("eba") || "all"
   const page = Math.max(1, parseInt(sp.get('page') || '1', 10) || 1)
+  const newOnlyParam = sp.get('newOnly') || '0'
+  const sinceParam = sp.get('since') || ''
   const PAGE_SIZE = 24
 
   // Feature flag for server-side processing
@@ -624,6 +628,29 @@ export default function ProjectsPage() {
       }
     }
   }, []) // Only run on mount
+
+  // If New filter is on without a since timestamp, populate it from profile or now
+  useEffect(() => {
+    const needsSince = newOnlyParam === '1' && !sinceParam
+    if (!needsSince) return
+    (async () => {
+      try {
+        const { data: auth } = await supabase.auth.getUser()
+        const uid = (auth as any)?.user?.id
+        let ts: string | null = null
+        if (uid) {
+          const { data: prof } = await (supabase as any)
+            .from('profiles')
+            .select('last_seen_projects_at, last_login_at')
+            .eq('id', uid)
+            .single()
+          ts = (prof as any)?.last_seen_projects_at || (prof as any)?.last_login_at || null
+        }
+        const effective = ts || new Date().toISOString()
+        setParam('since', effective)
+      } catch {}
+    })()
+  }, [newOnlyParam, sinceParam])
 
   const setParam = (key: string, value?: string) => {
     const params = new URLSearchParams(sp.toString())
@@ -662,8 +689,11 @@ export default function ProjectsPage() {
       }
       filters.push({ key: 'eba', value: ebaFilter, label: ebaLabels[ebaFilter as keyof typeof ebaLabels] || `EBA: ${ebaFilter}` })
     }
+    if (newOnlyParam === '1') {
+      filters.push({ key: 'newOnly', value: '1', label: `New since last viewed` })
+    }
     return filters
-  }, [q, tierFilter, universeFilter, stageFilter, workersFilter, specialFilter, ebaFilter])
+  }, [q, tierFilter, universeFilter, stageFilter, workersFilter, specialFilter, ebaFilter, newOnlyParam])
 
   // If a patch is selected, compute project ids that have at least one site linked to these patches
   const { data: patchProjectIds = [], isFetching: fetchingPatchProjects } = useQuery<string[]>({
@@ -710,11 +740,13 @@ export default function ProjectsPage() {
     workers: workersFilter as any,
     special: specialFilter as any,
     eba: ebaFilter as any,
+    newOnly: newOnlyParam === '1',
+    since: sinceParam || undefined,
   })
 
   // CLIENT-SIDE DATA FETCHING (Original implementation)
   const { data: clientProjectsData, isLoading: clientIsLoading } = useQuery<{ projects: ProjectWithRoles[]; summaries: Record<string, ProjectSummary> }>({
-    queryKey: ["projects-list+summary", patchIds, patchProjectIds, tierFilter, universeFilter, stageFilter, ebaFilter, q],
+    queryKey: ["projects-list+summary", patchIds, patchProjectIds, tierFilter, universeFilter, stageFilter, ebaFilter, q, newOnlyParam, sinceParam],
     staleTime: 30000,
     refetchOnWindowFocus: false,
     enabled: !USE_SERVER_SIDE, // Only run when server-side is disabled
@@ -729,7 +761,8 @@ export default function ProjectsPage() {
           value,
           tier,
           organising_universe,
-          stage_class
+          stage_class,
+          created_at
         `)
 
       // Apply search filter
@@ -763,6 +796,8 @@ export default function ProjectsPage() {
           qy = qy.order("value", { ascending, nullsFirst: false })
         } else if (sort === "tier") {
           qy = qy.order("tier", { ascending, nullsFirst: false })
+        } else if (sort === "created_at") {
+          qy = qy.order("created_at", { ascending })
         } else {
           qy = qy.order("created_at", { ascending: false }) // default
         }
@@ -804,7 +839,25 @@ export default function ProjectsPage() {
         }));
       }
       
-      const allProjects = projectsWithAssignments;
+      let allProjects = projectsWithAssignments as any[];
+
+      // Apply new-only filter on client if requested
+      if (newOnlyParam === '1') {
+        const sinceTs = sinceParam || (await (async () => {
+          try {
+            const { data: auth } = await supabase.auth.getUser()
+            const uid = (auth as any)?.user?.id
+            if (!uid) return ''
+            const { data: prof } = await supabase.from('profiles').select('last_seen_projects_at').eq('id', uid).single()
+            return ((prof as any)?.last_seen_projects_at as string) || ''
+          } catch {
+            return ''
+          }
+        })());
+        if (sinceTs) {
+          allProjects = allProjects.filter((p: any) => p.created_at && new Date(p.created_at) > new Date(sinceTs))
+        }
+      }
       
       // Get summaries for all projects
       let summaries: Record<string, ProjectSummary> = {}
@@ -957,6 +1010,13 @@ export default function ProjectsPage() {
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Projects</h1>
+        {/* Banner: New projects since last viewed */}
+        <NewProjectsBanner patchParam={patchParam} onViewNew={(since) => {
+          const params = new URLSearchParams(sp.toString())
+          params.set('newOnly', '1')
+          if (since) params.set('since', since)
+          router.replace(`${pathname}?${params.toString()}`)
+        }} />
         {/* Optional debug badge */}
         {SHOW_DEBUG_BADGES && (
           <div className="text-xs px-2 py-1 rounded border">
@@ -998,26 +1058,30 @@ export default function ProjectsPage() {
           </Collapsible>
           
           {/* Sort Controls */}
-          <div className="flex items-center gap-2">
-            <Select value={sort} onValueChange={(v) => setParam("sort", v)}>
-              <SelectTrigger className="w-40 h-9">
-                <SelectValue placeholder="Sort by" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="name">Name</SelectItem>
-                <SelectItem value="value">Project Value</SelectItem>
-                <SelectItem value="tier">Tier</SelectItem>
-                <SelectItem value="employers">Employer Count</SelectItem>
-                <SelectItem value="workers">Worker Count</SelectItem>
-                <SelectItem value="members">Member Count</SelectItem>
-                <SelectItem value="delegates">Has Delegate</SelectItem>
-                <SelectItem value="eba_coverage">EBA Coverage</SelectItem>
-              </SelectContent>
-            </Select>
-            <ToggleGroup type="single" variant="outline" size="sm" value={dir} onValueChange={(v) => v && setParam("dir", v)}>
-              <ToggleGroupItem value="asc" aria-label="Ascending"><ArrowUp className="h-4 w-4" /></ToggleGroupItem>
-              <ToggleGroupItem value="desc" aria-label="Descending"><ArrowDown className="h-4 w-4" /></ToggleGroupItem>
-            </ToggleGroup>
+          <div className="border rounded-md p-2 bg-background/50">
+            <div className="text-xs text-muted-foreground mb-1">Sort</div>
+            <div className="flex items-center gap-2">
+              <Select value={sort} onValueChange={(v) => setParam("sort", v)}>
+                <SelectTrigger className="w-44 h-9" aria-label="Sort by">
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="name">Name</SelectItem>
+                  <SelectItem value="value">Project Value</SelectItem>
+                  <SelectItem value="tier">Tier</SelectItem>
+                  <SelectItem value="employers">Employer Count</SelectItem>
+                  <SelectItem value="workers">Worker Count</SelectItem>
+                  <SelectItem value="members">Member Count</SelectItem>
+                  <SelectItem value="delegates">Has Delegate</SelectItem>
+                  <SelectItem value="eba_coverage">EBA Coverage</SelectItem>
+                  <SelectItem value="created_at">Date added</SelectItem>
+                </SelectContent>
+              </Select>
+              <ToggleGroup type="single" variant="outline" size="sm" value={dir} onValueChange={(v) => v && setParam("dir", v)}>
+                <ToggleGroupItem value="asc" aria-label="Ascending"><ArrowUp className="h-4 w-4" /></ToggleGroupItem>
+                <ToggleGroupItem value="desc" aria-label="Descending"><ArrowDown className="h-4 w-4" /></ToggleGroupItem>
+              </ToggleGroup>
+            </div>
           </div>
           
           {/* Action Buttons */}
@@ -1150,6 +1214,19 @@ export default function ProjectsPage() {
                   <SelectContent>
                     <SelectItem value="all">All</SelectItem>
                     <SelectItem value="noBuilderWithEmployers">No Builder, Has Employers</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">New</div>
+                <Select value={newOnlyParam} onValueChange={(value) => setParam("newOnly", value)}>
+                  <SelectTrigger className="h-8">
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">All projects</SelectItem>
+                    <SelectItem value="1">New since last viewed</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

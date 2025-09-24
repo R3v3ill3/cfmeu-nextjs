@@ -5,7 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Building, UserPlus, RefreshCw, UserX, Link, Database } from 'lucide-react'
-import BCIProjectImport from '@/components/upload/BCIProjectImport'
 import PendingEmployersImport from '@/components/upload/PendingEmployersImport'
 import ContractorImport from '@/components/upload/ContractorImport'
 import { BackfillProjectCoordinates } from '@/components/admin/BackfillProjectCoordinates'
@@ -14,7 +13,7 @@ import { IncolinkImport } from '@/components/upload/IncolinkImport'
 import IncolinkScrape from '@/components/upload/IncolinkScrape'
 import FileUpload from '@/components/upload/FileUpload'
 
-type EmployerImportMode = 'bci-employers' | 'pending-employers' | 'csv-upload' | 'project-backfill' | 'duplicates' | 'incolink'
+type EmployerImportMode = 'pending-employers' | 'csv-upload' | 'project-backfill' | 'duplicates' | 'incolink'
 
 interface EmployerOption {
   mode: EmployerImportMode
@@ -25,13 +24,6 @@ interface EmployerOption {
 }
 
 const employerOptions: EmployerOption[] = [
-  {
-    mode: 'bci-employers',
-    title: 'BCI Project Employers',
-    description: 'Import employers from BCI project data to existing projects',
-    icon: Database,
-    requiresUpload: false
-  },
   {
     mode: 'pending-employers',
     title: 'Import Pending Employers',
@@ -126,18 +118,7 @@ export default function EmployersManagement() {
           <CardDescription>{selectedOption?.description}</CardDescription>
         </CardHeader>
         <CardContent>
-          {selectedMode === 'bci-employers' && (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Import employers from BCI project data to link with existing projects.
-              </p>
-              <BCIProjectImport 
-                csvData={[]}
-                mode="employers-to-existing"
-                onImportComplete={resetToSelection}
-              />
-            </div>
-          )}
+          {/* BCI Employers option removed per new UX */}
 
           {selectedMode === 'pending-employers' && (
             <div className="space-y-4">

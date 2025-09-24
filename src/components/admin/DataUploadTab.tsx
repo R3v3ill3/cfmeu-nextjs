@@ -3,15 +3,18 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Users, Building, FileText, FolderOpen } from "lucide-react"
+import { ArrowLeft, Users, Building, FileText, FolderOpen, FileSpreadsheet } from "lucide-react"
 import EbaProjectSearch from "@/components/upload/EbaProjectSearch"
 import { useAuth } from "@/hooks/useAuth"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 import EmployersManagement from "@/components/admin/EmployersManagement"
 import ProjectsManagement from "@/components/admin/ProjectsManagement"
+import BCIXlsxWizard from "@/components/upload/BCIXlsxWizard"
+import BCICsvParser from "@/components/upload/BCICsvParser"
+import BCIProjectImport from "@/components/upload/BCIProjectImport"
 import WorkersManagement from "@/components/admin/WorkersManagement"
 
-type ImportType = "employers" | "projects" | "ebas" | "workers"
+type ImportType = "bci" | "employers" | "projects" | "ebas" | "workers"
 
 type ParsedCSV = {
   headers: string[];
@@ -29,16 +32,23 @@ interface ImportOption {
 
 const importOptions: ImportOption[] = [
   {
+    type: "bci",
+    title: "BCI Imports",
+    description: "Import BCI projects and employers via XLSX or CSV",
+    icon: FileSpreadsheet,
+    category: "data"
+  },
+  {
     type: "employers",
     title: "Employers",
-    description: "Manage employer records, BCI imports, duplicates, and Incolink data",
+    description: "Manage employer records, duplicates, and Incolink data",
     icon: Building,
     category: "data"
   },
   {
     type: "projects", 
     title: "Projects",
-    description: "Import construction project data from various sources including BCI",
+    description: "Import construction project data from CSV or tools",
     icon: FolderOpen,
     category: "data"
   },
@@ -64,7 +74,11 @@ export default function DataUploadTab() {
   const supabase = getSupabaseBrowserClient()
 
   const [step, setStep] = useState<"choose" | "import">("choose")
-  const [importType, setImportType] = useState<ImportType>("employers")
+  const [importType, setImportType] = useState<ImportType>("bci")
+  // BCI CSV local state
+  const [bciCsvRows, setBciCsvRows] = useState<any[]>([])
+  const [bciCsvMode, setBciCsvMode] = useState<any>("projects-only")
+  const [showBciCsvImport, setShowBciCsvImport] = useState(false)
 
   // Get user role on component mount
   useEffect(() => {
@@ -91,7 +105,7 @@ export default function DataUploadTab() {
     if (userRole === "organiser") {
       return ["workers"]
     } else if (userRole === "lead_organiser" || userRole === "admin") {
-      return ["employers", "projects", "ebas", "workers"]
+      return ["bci", "employers", "projects", "ebas", "workers"]
     }
     
     return []
@@ -175,6 +189,49 @@ export default function DataUploadTab() {
 
       {step === "import" && (
         <div className="space-y-4">
+          {importType === "bci" && (
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>BCI Import</CardTitle>
+                  <CardDescription>Upload a BCI .xlsx file (recommended), or import BCI CSV with limited modes.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-6">
+                    <BCIXlsxWizard />
+                    <div className="border-t pt-4">
+                      <CardTitle className="text-base mb-2">BCI CSV (advanced)</CardTitle>
+                      <CardDescription className="mb-3">CSV import supports Projects Only, Employers → Existing Projects, and Quick Match.</CardDescription>
+                      <div className="mt-2 space-y-4">
+                        {!showBciCsvImport ? (
+                          <BCICsvParser
+                            onDataParsed={(rows) => { setBciCsvRows(rows); setShowBciCsvImport(true); }}
+                            onError={(err) => console.error('BCI CSV error:', err)}
+                            onModeChange={(m) => setBciCsvMode(m)}
+                            allowedModes={["projects-only", "employers-to-existing", "employers-to-existing-quick-match"] as any}
+                          />
+                        ) : (
+                          <Card>
+                            <CardHeader>
+                              <CardTitle className="text-base">Process BCI CSV</CardTitle>
+                              <CardDescription>Mode: {String(bciCsvMode)}</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                              <BCIProjectImport
+                                csvData={bciCsvRows as any}
+                                mode={bciCsvMode}
+                                onImportComplete={() => { setShowBciCsvImport(false); setBciCsvRows([]); }}
+                              />
+                            </CardContent>
+                          </Card>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
           {importType === "employers" && <EmployersManagement />}
           {importType === "projects" && <ProjectsManagement />}
           {importType === "ebas" && <EbaProjectSearch />}
