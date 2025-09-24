@@ -119,9 +119,9 @@ export function useEmployersServerSide(params: EmployersParams) {
       return data;
     },
     
-    // Aggressive caching for better performance
-    staleTime: 2 * 60 * 1000, // 2 minutes - data is fresh
-    gcTime: 10 * 60 * 1000, // 10 minutes - keep in memory
+    // Balanced caching for performance vs freshness
+    staleTime: 30 * 1000, // 30 seconds - data is fresh (reduced from 2 minutes)
+    gcTime: 5 * 60 * 1000, // 5 minutes - keep in memory (reduced from 10 minutes)
     
     // Retry failed requests
     retry: (failureCount, error) => {

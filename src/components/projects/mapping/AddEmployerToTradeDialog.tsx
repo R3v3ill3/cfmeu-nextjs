@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SingleEmployerDialogPicker } from "@/components/projects/SingleEmployerDialogPicker";
+import { supabase } from "@/integrations/supabase/client";
 
 type Stage = "early_works" | "structure" | "finishing" | "other";
 
@@ -30,6 +31,25 @@ export function AddEmployerToTradeDialog({ open, onOpenChange, defaultStage, def
 			setEmployerName("");
 		}
 	}, [open, defaultStage]);
+
+	// Fetch employer name when employer ID changes
+	useEffect(() => {
+		if (employerId) {
+			const fetchEmployerName = async () => {
+				const { data: employer } = await supabase
+					.from("employers")
+					.select("name")
+					.eq("id", employerId)
+					.maybeSingle();
+				if (employer) {
+					setEmployerName(employer.name);
+				}
+			};
+			fetchEmployerName();
+		} else {
+			setEmployerName("");
+		}
+	}, [employerId]);
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
@@ -67,9 +87,8 @@ export function AddEmployerToTradeDialog({ open, onOpenChange, defaultStage, def
 					<Button
 						disabled={!employerId}
 						onClick={() => {
-							// We only have employerId; caller will resolve name after persist if needed
 							onOpenChange(false);
-							onSubmit({ stage, employerId, employerName: employerName || employerId });
+							onSubmit({ stage, employerId, employerName: employerName });
 						}}
 					>
 						Add

@@ -3,8 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
+import { Plus, Edit, UserCheck, Users } from "lucide-react";
+import { DelegateRegistrationDialog } from "./DelegateRegistrationDialog";
 
 type RoleKey = "project_manager" | "site_manager" | "site_delegate" | "site_hsr";
 
@@ -32,6 +35,9 @@ export function MappingSiteContactsTable({ projectId, mainSiteId }: { projectId:
     site_hsr: { role: "site_hsr", name: "", email: "", phone: "" },
   });
   const [saving, setSaving] = useState(false);
+  const [showDelegateDialog, setShowDelegateDialog] = useState(false);
+  const [delegateDialogMode, setDelegateDialogMode] = useState<'add' | 'change' | 'additional' | 'register'>('add');
+  const [selectedRole, setSelectedRole] = useState<'site_delegate' | 'site_hsr'>('site_delegate');
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -97,6 +103,64 @@ export function MappingSiteContactsTable({ projectId, mainSiteId }: { projectId:
 
   const emailInvalid = (val: string) => val && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
 
+  const handleRepresentativeAction = (role: 'site_delegate' | 'site_hsr', mode: 'add' | 'change' | 'additional' | 'register') => {
+    setSelectedRole(role);
+    setDelegateDialogMode(mode);
+    setShowDelegateDialog(true);
+  };
+
+  const getRepresentativeButtons = (role: RoleKey) => {
+    if (role !== 'site_delegate' && role !== 'site_hsr') return null;
+    
+    const hasData = rows[role]?.name?.trim();
+    
+    return (
+      <div className="flex gap-1 mt-1">
+        {!hasData ? (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => handleRepresentativeAction(role, 'add')}
+            className="text-xs"
+          >
+            <Plus className="w-3 h-3 mr-1" />
+            Add Representative
+          </Button>
+        ) : (
+          <>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handleRepresentativeAction(role, 'additional')}
+              className="text-xs"
+            >
+              <Users className="w-3 h-3 mr-1" />
+              Add Additional
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handleRepresentativeAction(role, 'change')}
+              className="text-xs"
+            >
+              <Edit className="w-3 h-3 mr-1" />
+              Change
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handleRepresentativeAction(role, 'register')}
+              className="text-xs"
+            >
+              <UserCheck className="w-3 h-3 mr-1" />
+              Register
+            </Button>
+          </>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="mt-4">
       <div className="font-semibold mb-2 uppercase tracking-wide text-sm">Site Contacts</div>
@@ -108,6 +172,7 @@ export function MappingSiteContactsTable({ projectId, mainSiteId }: { projectId:
               <TableHead>Name</TableHead>
               <TableHead className="w-64">Email</TableHead>
               <TableHead className="w-40">Phone</TableHead>
+              <TableHead className="w-48">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -139,12 +204,30 @@ export function MappingSiteContactsTable({ projectId, mainSiteId }: { projectId:
                       placeholder="Phone"
                     />
                   </TableCell>
+                  <TableCell>
+                    {getRepresentativeButtons(rk)}
+                  </TableCell>
                 </TableRow>
               );
             })}
           </TableBody>
         </Table>
       </div>
+      
+      {showDelegateDialog && (
+        <DelegateRegistrationDialog
+          projectId={projectId}
+          mainSiteId={mainSiteId}
+          role={selectedRole}
+          mode={delegateDialogMode}
+          onClose={() => setShowDelegateDialog(false)}
+          onSuccess={() => {
+            setShowDelegateDialog(false);
+            // Refresh the contacts data
+            window.location.reload();
+          }}
+        />
+      )}
     </div>
   );
 }

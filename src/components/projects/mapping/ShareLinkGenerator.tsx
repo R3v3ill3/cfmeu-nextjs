@@ -36,7 +36,7 @@ export function ShareLinkGenerator({ projectId, projectName }: ShareLinkGenerato
   
   const refreshMappingData = () => {
     // Invalidate and refetch mapping sheet data
-    queryClient.invalidateQueries(['mapping-sheet-data', projectId]);
+    queryClient.invalidateQueries({ queryKey: ['mapping-sheet-data', projectId] });
     toast.success('Mapping sheet data refreshed');
   };
 

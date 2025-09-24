@@ -325,7 +325,7 @@ export async function GET(
             
             const tradeType = t.trade_types?.code || 'other'; // Use the joined trade_types table
             const stage = stageMapping[tradeType] || 'other';
-            const tradeLabel = t.trade_types?.name || tradeType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            const tradeLabel = t.trade_types?.name || tradeType.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
             
             allTradeContractors.push({
               id: `assignment_trade:${t.id}`,
@@ -351,7 +351,7 @@ export async function GET(
             
             const tradeType = t.trade_type || 'other';
             const stage = t.stage || stageMapping[tradeType] || 'other';
-            const tradeLabel = tradeType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            const tradeLabel = tradeType.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
             
             allTradeContractors.push({
               id: `project_trade:${t.id}`,
@@ -377,7 +377,7 @@ export async function GET(
             
             const tradeType = st.trade_type || 'other';
             const stage = stageMapping[tradeType] || 'other';
-            const tradeLabel = tradeType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            const tradeLabel = tradeType.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
             
             allTradeContractors.push({
               id: `site_trade:${st.id}`,

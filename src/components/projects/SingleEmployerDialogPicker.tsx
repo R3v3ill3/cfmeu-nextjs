@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Search, X } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 // import type { Database } from "@/integrations/supabase/types";
 
 // Single selection dialog picker matching the MultiEmployerPicker UX
@@ -41,6 +42,7 @@ export function SingleEmployerDialogPicker({
   const [search, setSearch] = useState("");
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [newEmployer, setNewEmployer] = useState<{ name: string; employer_type: EmployerType | "" }>({ name: "", employer_type: "" });
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     const load = async () => {
@@ -88,18 +90,50 @@ export function SingleEmployerDialogPicker({
 
   const createEmployer = async () => {
     if (!newEmployer.name || !newEmployer.employer_type) return;
-    const { data, error } = await supabase
-      .from("employers")
-      .insert({ name: newEmployer.name, employer_type: newEmployer.employer_type })
-      .select("id, name")
-      .single();
-    if (!error && data) {
-      const emp = data as Employer;
-      setEmployers((prev) => [...prev, emp]);
-      onChange(emp.id);
-      setShowQuickAdd(false);
-      setNewEmployer({ name: "", employer_type: "" });
-      setOpen(false);
+    
+    try {
+      const { data, error } = await supabase
+        .from("employers")
+        .insert({ name: newEmployer.name, employer_type: newEmployer.employer_type })
+        .select("id, name")
+        .single();
+      
+      if (error) {
+        console.error("Error creating employer:", error);
+        alert(`Failed to create employer: ${error.message}`);
+        return;
+      }
+      
+      if (data) {
+        const emp = data as Employer;
+        setEmployers((prev) => [...prev, emp]);
+        onChange(emp.id);
+        setShowQuickAdd(false);
+        setNewEmployer({ name: "", employer_type: "" });
+        setOpen(false);
+        
+        // Invalidate employer-related queries to refresh lists across the app
+        queryClient.invalidateQueries({ queryKey: ['employers-server-side'] });
+        queryClient.invalidateQueries({ queryKey: ['employers'] });
+        queryClient.invalidateQueries({ queryKey: ['employers-list'] });
+        
+        // Force a materialized view refresh for new employers
+        try {
+          await fetch('/api/admin/refresh-views', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ scope: 'employers' })
+          });
+          console.log("Materialized view refresh triggered");
+        } catch (err) {
+          console.warn("Could not trigger view refresh:", err);
+        }
+        
+        console.log("Employer created successfully:", emp);
+      }
+    } catch (err: any) {
+      console.error("Unexpected error creating employer:", err);
+      alert(`Unexpected error: ${err.message}`);
     }
   };
 

@@ -308,30 +308,46 @@ export async function GET(request: NextRequest) {
     // Fetch enhanced data if requested
     let enhancedData: Record<string, any> = {};
     if (includeEnhanced && data && data.length > 0) {
-      const employerIds = data.map((row: any) => row.id);
-      enhancedData = await fetchEnhancedEmployerData(supabase, employerIds);
+      // Deduplicate employer IDs before fetching enhanced data
+      const uniqueEmployerIds = [...new Set(data.map((row: any) => row.id))];
+      console.log(`Fetching enhanced data for ${uniqueEmployerIds.length} unique employers (from ${data.length} total rows)`);
+      enhancedData = await fetchEnhancedEmployerData(supabase, uniqueEmployerIds);
     }
 
     // Transform data to match client expectations
-    const employers: EmployerRecord[] = (data || []).map((row: any) => ({
-      id: row.id,
-      name: row.name,
-      abn: row.abn,
-      employer_type: row.employer_type,
-      website: row.website,
-      email: row.email,
-      phone: row.phone,
-      estimated_worker_count: row.estimated_worker_count,
-      incolink_id: null, // Will be set from enhancedData if available
+    const employerMap = new Map<string, EmployerRecord>();
+    
+    (data || []).forEach((row: any) => {
+      const employerId = row.id;
       
-      // Transform to match existing client structure
-      company_eba_records: row.company_eba_record ? [row.company_eba_record] : [],
-      worker_placements: row.worker_placement_ids.map((id: string) => ({ id })),
-      project_assignments: row.project_assignment_ids.map((id: string) => ({ id })),
+      // If we already have this employer, skip it (deduplication)
+      if (employerMap.has(employerId)) {
+        console.warn(`Duplicate employer detected: ${row.name} (${employerId})`);
+        return;
+      }
       
-      // Add enhanced data if available
-      ...(includeEnhanced && enhancedData[row.id] ? enhancedData[row.id] : {}),
-    }));
+      employerMap.set(employerId, {
+        id: row.id,
+        name: row.name,
+        abn: row.abn,
+        employer_type: row.employer_type,
+        website: row.website,
+        email: row.email,
+        phone: row.phone,
+        estimated_worker_count: row.estimated_worker_count,
+        incolink_id: null, // Will be set from enhancedData if available
+        
+        // Transform to match existing client structure
+        company_eba_records: row.company_eba_record ? [row.company_eba_record] : [],
+        worker_placements: row.worker_placement_ids ? row.worker_placement_ids.map((id: string) => ({ id })) : [],
+        project_assignments: row.project_assignment_ids ? row.project_assignment_ids.map((id: string) => ({ id })) : [],
+        
+        // Add enhanced data if available
+        ...(includeEnhanced && enhancedData[row.id] ? enhancedData[row.id] : {}),
+      });
+    });
+    
+    const employers: EmployerRecord[] = Array.from(employerMap.values());
 
     const totalCount = count || 0;
     const totalPages = Math.ceil(totalCount / pageSize);
@@ -361,9 +377,12 @@ export async function GET(request: NextRequest) {
     };
 
     // Add cache headers for CDN/browser caching
+    // Reduce cache time to help with new employer visibility
     const headers = {
-      'Cache-Control': 'public, s-maxage=120, stale-while-revalidate=300', // 2min cache, 5min stale
-      'Content-Type': 'application/json'
+      'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60', // 30sec cache, 1min stale
+      'Content-Type': 'application/json',
+      'X-Employer-Count': employers.length.toString(),
+      'X-Total-Rows-Processed': (data?.length || 0).toString()
     };
 
     return NextResponse.json(response, { headers });

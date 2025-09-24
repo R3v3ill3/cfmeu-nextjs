@@ -20,7 +20,7 @@ import { Label } from "@/components/ui/label";
 import DateInput from "@/components/ui/date-input";
 
 const unionRoleSchema = z.object({
-  name: z.enum(["site_delegate", "hsr", "shift_delegate", "company_delegate", "member", "contact"]),
+  name: z.enum(["site_delegate", "hsr", "shift_delegate", "company_delegate", "member", "contact", "ohs_committee_chair"]),
   job_site_id: z.string().optional(),
   start_date: z.string().min(1, "Start date is required"),
   end_date: z.string().optional(),
@@ -29,6 +29,10 @@ const unionRoleSchema = z.object({
   rating: z.string().optional(),
   experience_level: z.string().optional(),
   notes: z.string().optional(),
+  elected_by: z.string().optional(),
+  date_elected: z.string().optional(),
+  ohs_training_date: z.string().optional(),
+  ohs_refresher_training_date: z.string().optional(),
 });
 
 // Dues (worker_memberships) schema
@@ -55,6 +59,7 @@ const unionRoleTypes = [
   { value: "hsr", label: "Health & Safety Representative" },
   { value: "shift_delegate", label: "Shift Delegate" },
   { value: "company_delegate", label: "Company Delegate" },
+  { value: "ohs_committee_chair", label: "OHS Committee Chair" },
   { value: "member", label: "Member" },
   { value: "contact", label: "Contact" },
 ];

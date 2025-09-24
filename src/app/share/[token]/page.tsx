@@ -203,7 +203,7 @@ export default function PublicFormPage() {
     },
     onSuccess: () => {
       toast.success('Form submitted successfully!');
-      queryClient.invalidateQueries(['public-form-data', token]);
+      queryClient.invalidateQueries({ queryKey: ['public-form-data', token] });
     },
     onError: (error: any) => {
       toast.error(error.message || 'Failed to submit form');
@@ -957,10 +957,10 @@ export default function PublicFormPage() {
         <div className="flex justify-end gap-3">
           <Button
             onClick={handleSubmit}
-            disabled={submitMutation.isLoading}
+            disabled={submitMutation.isPending}
             className="min-w-32"
           >
-            {submitMutation.isLoading ? 'Submitting...' : 'Submit Updates'}
+            {submitMutation.isPending ? 'Submitting...' : 'Submit Updates'}
           </Button>
         </div>
       </div>
