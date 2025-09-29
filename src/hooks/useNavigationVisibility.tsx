@@ -8,6 +8,7 @@ export interface NavigationVisibility {
   workers: boolean
   map: boolean
   site_visits: boolean
+  lead_console: boolean
   campaigns: boolean
 }
 
@@ -17,10 +18,15 @@ const DEFAULT_VISIBILITY: NavigationVisibility = {
   workers: true,
   map: true,
   site_visits: true,
+  lead_console: true,
   campaigns: true,
 }
 
 const SETTINGS_KEY = "navigation_visibility"
+
+interface NavigationSettingsRow {
+  value: string
+}
 
 export function useNavigationVisibility() {
   const queryClient = useQueryClient()
@@ -32,7 +38,7 @@ export function useNavigationVisibility() {
         .from("app_settings")
         .select("value")
         .eq("key", SETTINGS_KEY)
-        .single()
+        .single<NavigationSettingsRow>()
 
       if (error) {
         if (error.code === "PGRST116") {
@@ -43,7 +49,11 @@ export function useNavigationVisibility() {
       }
 
       try {
-        return JSON.parse(data.value) as NavigationVisibility
+        const parsed = JSON.parse(data.value) as Partial<NavigationVisibility>
+        return {
+          ...DEFAULT_VISIBILITY,
+          ...parsed,
+        }
       } catch {
         return DEFAULT_VISIBILITY
       }

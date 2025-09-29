@@ -1,10 +1,9 @@
 "use client"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Switch } from "@/components/ui/switch"
-import { Label } from "@/components/ui/label"
 import { useNavigationVisibility, NavigationVisibility } from "@/hooks/useNavigationVisibility"
 import { Loader2 } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 interface PageConfig {
   key: keyof NavigationVisibility
@@ -18,6 +17,7 @@ const HIDEABLE_PAGES: PageConfig[] = [
   { key: "workers", label: "Workers", description: "Worker database and membership" },
   { key: "map", label: "Map", description: "Interactive patch and job site maps" },
   { key: "site_visits", label: "Site Visits", description: "Site visit records and reports" },
+  { key: "lead_console", label: "Co-ordinator Console", description: "Lead organiser operations console" },
   { key: "campaigns", label: "Campaigns", description: "Campaign activities and tracking" },
 ]
 
@@ -52,28 +52,64 @@ export function NavigationVisibilityManager() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {HIDEABLE_PAGES.map((page) => (
-          <div key={page.key} className="flex items-center justify-between space-x-4">
-            <div className="flex-1 space-y-0.5">
-              <Label 
-                htmlFor={`nav-${page.key}`} 
-                className="text-base font-medium cursor-pointer"
-              >
-                {page.label}
-              </Label>
-              <p className="text-sm text-muted-foreground">
-                {page.description}
-              </p>
-            </div>
-            <Switch
-              id={`nav-${page.key}`}
-              checked={visibility[page.key]}
-              onCheckedChange={() => handleToggle(page.key)}
+        {HIDEABLE_PAGES.map((page) => {
+          const value = visibility[page.key]
+          const labelId = `nav-${page.key}-label`
+          const descriptionId = `nav-${page.key}-description`
+          return (
+            <button
+              key={page.key}
+              type="button"
+              onClick={() => handleToggle(page.key)}
               disabled={isUpdating}
+              aria-pressed={value}
               aria-label={`Toggle ${page.label} visibility`}
-            />
-          </div>
-        ))}
+              aria-labelledby={labelId}
+              aria-describedby={descriptionId}
+              className={cn(
+                "group w-full rounded-xl border bg-card p-4 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                "hover:border-primary/60 hover:shadow-sm",
+                isUpdating && "pointer-events-none opacity-60",
+              )}
+            >
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1 space-y-1">
+                  <div id={labelId} className="text-base font-medium">
+                    {page.label}
+                  </div>
+                  <p id={descriptionId} className="text-sm text-muted-foreground">
+                    {page.description}
+                  </p>
+                </div>
+                <div className="relative h-10 w-16 shrink-0">
+                  <div
+                    className={cn(
+                      "absolute inset-0 rounded-full border transition-all duration-200",
+                      value
+                        ? "border-primary bg-primary/10"
+                        : "border-muted-foreground/30 bg-muted",
+                    )}
+                  />
+                  <div
+                    className={cn(
+                      "absolute top-1 left-1 h-8 w-8 rounded-full bg-white shadow transition-all duration-200",
+                      value ? "translate-x-6" : "translate-x-0",
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "absolute inset-0 flex items-center justify-center text-xs font-semibold",
+                        value ? "text-primary" : "text-muted-foreground",
+                      )}
+                    >
+                      {value ? "On" : "Off"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </button>
+          )
+        })}
       </CardContent>
     </Card>
   )

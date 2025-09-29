@@ -90,6 +90,10 @@ const Layout = ({ children }: LayoutProps) => {
       items.push({ path: "/campaigns", label: "Campaigns", icon: BarChart3 });
     }
 
+    if ((userRole === "lead_organiser" || userRole === "admin") && visibility.lead_console) {
+      items.push({ path: "/lead", label: "Co-ordinator Console", icon: Crown });
+    }
+
     // User Guide - always show
     items.push({ path: "/guide", label: "User Guide", icon: HelpCircle });
     

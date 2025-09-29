@@ -105,11 +105,11 @@ function useVisibleNavItems(userRole: string | null): NavItem[] {
   // User Guide - always show
   items.push({ path: "/guide", label: "User Guide", icon: HelpCircle, description: "Platform documentation and user guide" })
 
-  // Lead Console - show for lead organisers and admins
-  if (userRole === "lead_organiser" || userRole === "admin") {
+  // Lead Console - show for lead organisers and admins when enabled
+  if ((userRole === "lead_organiser" || userRole === "admin") && visibility.lead_console) {
     items.push({ path: "/lead", label: "Co-ordinator Console", icon: Crown, description: "Manage organisers and patch assignments" })
   }
-  
+
   // Administration - show for admins and lead organisers
   if (userRole === "admin" || userRole === "lead_organiser") {
     const label = userRole === "admin" ? "Administration" : "Management"
