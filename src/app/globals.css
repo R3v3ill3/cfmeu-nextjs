@@ -273,6 +273,112 @@ body {
   background: hsl(var(--background));
   color: hsl(var(--foreground));
   font-family: Arial, Helvetica, sans-serif;
+  /* iPhone safe area support */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* iPhone-specific safe area utilities */
+@supports (padding: max(0px)) {
+  .pb-safe-bottom {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+  
+  .pt-safe-top {
+    padding-top: max(0px, env(safe-area-inset-top));
+  }
+  
+  .px-safe {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+}
+
+/* Extra small screen utilities */
+@media (min-width: 375px) {
+  .xs\:inline {
+    display: inline;
+  }
+}
+
+/* iPhone viewport fixes */
+@media screen and (max-width: 767px) {
+  /* Prevent horizontal scrolling on iPhone */
+  html, body {
+    overflow-x: hidden;
+    width: 100%;
+  }
+  
+  /* Fix iPhone zoom issues */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+  
+  /* Improve touch targets for iPhone */
+  button, [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Fix chart rendering on mobile */
+  .recharts-responsive-container {
+    min-height: 200px !important;
+    min-width: 280px !important;
+  }
+  
+  /* Ensure chart containers have proper dimensions */
+  [data-chart] {
+    min-height: 200px;
+    min-width: 280px;
+    width: 100%;
+  }
+  
+  /* iPhone 16/17 Pro Max specific optimizations */
+  @media screen and (min-width: 430px) {
+    /* Larger iPhone models - more breathing room */
+    .space-y-4 > * + * {
+      margin-top: 1.25rem;
+    }
+    
+    /* Better chart sizing on larger iPhones */
+    .recharts-responsive-container {
+      min-width: 320px !important;
+    }
+    
+    [data-chart] {
+      min-width: 320px;
+    }
+  }
+}
+
+/* iPhone X+ models with notch/Dynamic Island */
+@media screen and (max-width: 767px) and (min-height: 812px) {
+  /* Ensure header doesn't get hidden behind notch */
+  header {
+    padding-top: max(0.5rem, env(safe-area-inset-top));
+  }
+  
+  /* Adjust header height for notch */
+  header .flex.h-16 {
+    min-height: calc(4rem + env(safe-area-inset-top));
+  }
+}
+
+/* iPhone 16/17 Pro Max specific (larger screens) */
+@media screen and (min-width: 430px) and (max-width: 767px) {
+  /* More generous spacing on larger iPhone screens */
+  .px-safe {
+    padding-left: max(1.5rem, env(safe-area-inset-left));
+    padding-right: max(1.5rem, env(safe-area-inset-right));
+  }
+  
+  /* Better button sizing for Pro Max */
+  .AdminPatchSelector button {
+    min-height: 36px;
+    padding: 0.5rem 0.75rem;
+  }
 }
 
 /* Desktop-specific body styles */
@@ -282,5 +388,7 @@ body {
     color: var(--desktop-foreground);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     line-height: 1.6;
+    /* Remove safe area padding on desktop */
+    padding: 0;
   }
 }

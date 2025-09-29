@@ -17,7 +17,7 @@ export default function ProjectMobileMappingPage() {
   }, [])
 
   return (
-    <div className="p-3 space-y-3">
+    <div className="px-safe py-4 pb-safe-bottom space-y-3">
       <div className="flex items-center justify-between">
         <div className="font-semibold">Mapping Sheets</div>
         <div className="flex gap-2">

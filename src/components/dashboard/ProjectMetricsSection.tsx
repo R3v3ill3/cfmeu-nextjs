@@ -7,12 +7,14 @@ import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableCaption, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
-import { FolderOpen, CheckCircle } from "lucide-react"
+import { FolderOpen, CheckCircle, BarChart3, TrendingUp } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DashboardProject, DashboardProjectCounts } from "@/hooks/useNewDashboardData"
 import { PROJECT_TIER_LABELS, ProjectTier } from "@/components/projects/types"
 import { FilterIndicatorBadge } from "./FilterIndicatorBadge"
 import { useActiveFilters } from "@/hooks/useActiveFilters"
+import { useIsMobile } from "@/hooks/use-mobile"
+import { Progress } from "@/components/ui/progress"
 
 interface ProjectMetricsSectionProps {
   data: DashboardProjectCounts;
@@ -22,6 +24,7 @@ interface ProjectMetricsSectionProps {
 }
 
 export function ProjectMetricsSection({ data, projects, isLoading }: ProjectMetricsSectionProps) {
+  const isMobile = useIsMobile()
   const router = useRouter();
   const sp = useSearchParams();
   const { hasActiveFilters, activeFilters } = useActiveFilters();
@@ -108,7 +111,7 @@ export function ProjectMetricsSection({ data, projects, isLoading }: ProjectMetr
   
   if (isLoading) {
     return (
-      <Card className="lg:bg-white lg:border-gray-300 lg:shadow-md">
+      <Card>
         <CardHeader>
           <div className="flex items-center space-x-2">
             <FolderOpen className="h-5 w-5 text-blue-600" />
@@ -127,7 +130,7 @@ export function ProjectMetricsSection({ data, projects, isLoading }: ProjectMetr
   }
 
   return (
-    <Card className="lg:bg-white lg:border-gray-300 lg:shadow-md">
+    <Card>
       <CardHeader>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center space-x-2">
@@ -171,71 +174,92 @@ export function ProjectMetricsSection({ data, projects, isLoading }: ProjectMetr
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Compact horizontal layout */}
-        <div className="grid lg:grid-cols-2 gap-4">
-          {/* Left side: Data table */}
-          <div className="space-y-3">
-            <div className="overflow-x-auto">
-              <Table variant="desktop">
-                <TableHeader variant="desktop">
-                  <TableRow variant="desktop">
-                    <TableHead variant="desktop" className="py-2">Stage</TableHead>
-                    <TableHead variant="desktop" className="py-2">Active</TableHead>
-                    <TableHead variant="desktop" className="py-2">Potential</TableHead>
-                    <TableHead variant="desktop" className="py-2">Excluded</TableHead>
-                    <TableHead variant="desktop" className="py-2">Total</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody variant="desktop">
-                  {filteredStages.map((s) => {
-                    const a = getCount('active', s.key)
-                    const p = getCount('potential', s.key)
-                    const e = getCount('excluded', s.key)
-                    const total = a + p + e
-                    return (
-                      <TableRow key={s.key} variant="desktop-hover">
-                        <TableCell variant="desktop" className="font-medium py-2">{s.label}</TableCell>
-                        <TableCell variant="desktop" className="py-2">
-                          <button
-                            className="text-blue-700 hover:underline"
-                            onClick={() => navigateToProjects('active', s.key)}
-                          >
-                            {a}
-                          </button>
-                        </TableCell>
-                        <TableCell variant="desktop" className="py-2">
-                          <button
-                            className="text-blue-700 hover:underline"
-                            onClick={() => navigateToProjects('potential', s.key)}
-                          >
-                            {p}
-                          </button>
-                        </TableCell>
-                        <TableCell variant="desktop" className="py-2">
-                          <button
-                            className="text-blue-700 hover:underline"
-                            onClick={() => navigateToProjects('excluded', s.key)}
-                          >
-                            {e}
-                          </button>
-                        </TableCell>
-                        <TableCell variant="desktop" className="py-2">
-                          <button
-                            className="text-gray-900 hover:underline"
-                            onClick={() => navigateToProjects(undefined, s.key)}
-                          >
-                            {total}
-                          </button>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-                {filteredStages.length === 0 && (
-                  <TableCaption variant="desktop">No data to display yet.</TableCaption>
-                )}
-              </Table>
+        {isMobile ? (
+          /* Mobile-optimized layout */
+          <div className="space-y-4">
+            {/* Mobile-friendly stage cards */}
+            <div className="space-y-3">
+              {filteredStages.map((s) => {
+                const a = getCount('active', s.key)
+                const p = getCount('potential', s.key)
+                const e = getCount('excluded', s.key)
+                const total = a + p + e
+                
+                return (
+                  <div key={s.key} className="border rounded-lg p-4 bg-gray-50">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="font-medium text-gray-900">{s.label}</h4>
+                      <Badge variant="outline" className="text-xs">
+                        {total} total
+                      </Badge>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      {/* Active projects bar */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-sm bg-blue-500"></div>
+                          <span className="text-sm text-gray-600">Active</span>
+                        </div>
+                        <button
+                          className="text-sm font-medium text-blue-700 hover:underline"
+                          onClick={() => navigateToProjects('active', s.key)}
+                        >
+                          {a}
+                        </button>
+                      </div>
+                      <Progress value={total > 0 ? (a / total) * 100 : 0} className="h-2" />
+                      
+                      {/* Potential projects bar */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-sm bg-orange-500"></div>
+                          <span className="text-sm text-gray-600">Potential</span>
+                        </div>
+                        <button
+                          className="text-sm font-medium text-blue-700 hover:underline"
+                          onClick={() => navigateToProjects('potential', s.key)}
+                        >
+                          {p}
+                        </button>
+                      </div>
+                      <Progress value={total > 0 ? (p / total) * 100 : 0} className="h-2" />
+                      
+                      {/* Excluded projects bar */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-sm bg-gray-500"></div>
+                          <span className="text-sm text-gray-600">Excluded</span>
+                        </div>
+                        <button
+                          className="text-sm font-medium text-blue-700 hover:underline"
+                          onClick={() => navigateToProjects('excluded', s.key)}
+                        >
+                          {e}
+                        </button>
+                      </div>
+                      <Progress value={total > 0 ? (e / total) * 100 : 0} className="h-2" />
+                    </div>
+                    
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      className="w-full mt-3 text-xs"
+                      onClick={() => navigateToProjects(undefined, s.key)}
+                    >
+                      <BarChart3 className="h-3 w-3 mr-1" />
+                      View All {s.label} Projects
+                    </Button>
+                  </div>
+                )
+              })}
             </div>
+            
+            {filteredStages.length === 0 && (
+              <div className="text-center py-8 text-muted-foreground">
+                No data to display yet.
+              </div>
+            )}
             
             <Button 
               variant="outline" 
@@ -247,48 +271,126 @@ export function ProjectMetricsSection({ data, projects, isLoading }: ProjectMetr
               View All Projects
             </Button>
           </div>
-
-          {/* Right side: Compact chart */}
-          <div className="flex flex-col justify-center">
-            {filteredChartData.length > 0 ? (
-              <div className="h-48">
-                <ChartContainer
-                  config={{
-                    active: { label: "Active", color: "hsl(var(--chart-1, 221 83% 53%))" },
-                    potential: { label: "Potential", color: "hsl(var(--chart-2, 39 89% 49%))" },
-                    excluded: { label: "Excluded", color: "hsl(var(--chart-3, 215 16% 47%))" },
-                  }}
-                  className="h-full"
-                >
-                  <BarChart data={filteredChartData}>
-                    <CartesianGrid vertical={false} strokeDasharray="3 3" />
-                    <XAxis 
-                      dataKey="stage" 
-                      tickLine={false} 
-                      axisLine={false}
-                      tick={{ fontSize: 12 }}
-                    />
-                    <YAxis 
-                      allowDecimals={false} 
-                      tick={{ fontSize: 12 }}
-                      width={30}
-                    />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <ChartLegend 
-                      content={<ChartLegendContent />}
-                      wrapperStyle={{ fontSize: '12px' }}
-                    />
-                    <Bar dataKey="active" fill="var(--color-active)" radius={[2,2,0,0]} />
-                    <Bar dataKey="potential" fill="var(--color-potential)" radius={[2,2,0,0]} />
-                    <Bar dataKey="excluded" fill="var(--color-excluded)" radius={[2,2,0,0]} />
-                  </BarChart>
-                </ChartContainer>
+        ) : (
+          /* Desktop layout - original */
+          <div className="grid lg:grid-cols-2 gap-4">
+            {/* Left side: Data table */}
+            <div className="space-y-3">
+              <div className="overflow-x-auto">
+                <Table variant="desktop">
+                  <TableHeader variant="desktop">
+                    <TableRow variant="desktop">
+                      <TableHead variant="desktop" className="py-2">Stage</TableHead>
+                      <TableHead variant="desktop" className="py-2">Active</TableHead>
+                      <TableHead variant="desktop" className="py-2">Potential</TableHead>
+                      <TableHead variant="desktop" className="py-2">Excluded</TableHead>
+                      <TableHead variant="desktop" className="py-2">Total</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody variant="desktop">
+                    {filteredStages.map((s) => {
+                      const a = getCount('active', s.key)
+                      const p = getCount('potential', s.key)
+                      const e = getCount('excluded', s.key)
+                      const total = a + p + e
+                      return (
+                        <TableRow key={s.key} variant="desktop-hover">
+                          <TableCell variant="desktop" className="font-medium py-2">{s.label}</TableCell>
+                          <TableCell variant="desktop" className="py-2">
+                            <button
+                              className="text-blue-700 hover:underline"
+                              onClick={() => navigateToProjects('active', s.key)}
+                            >
+                              {a}
+                            </button>
+                          </TableCell>
+                          <TableCell variant="desktop" className="py-2">
+                            <button
+                              className="text-blue-700 hover:underline"
+                              onClick={() => navigateToProjects('potential', s.key)}
+                            >
+                              {p}
+                            </button>
+                          </TableCell>
+                          <TableCell variant="desktop" className="py-2">
+                            <button
+                              className="text-blue-700 hover:underline"
+                              onClick={() => navigateToProjects('excluded', s.key)}
+                            >
+                              {e}
+                            </button>
+                          </TableCell>
+                          <TableCell variant="desktop" className="py-2">
+                            <button
+                              className="text-gray-900 hover:underline"
+                              onClick={() => navigateToProjects(undefined, s.key)}
+                            >
+                              {total}
+                            </button>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                  {filteredStages.length === 0 && (
+                    <TableCaption variant="desktop">No data to display yet.</TableCaption>
+                  )}
+                </Table>
               </div>
-            ) : (
-              <div className="text-sm text-muted-foreground text-center py-8">No chart data to display.</div>
-            )}
+              
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="w-full"
+                onClick={() => navigateToProjects()}
+              >
+                <FolderOpen className="h-4 w-4 mr-2" />
+                View All Projects
+              </Button>
+            </div>
+
+            {/* Right side: Compact chart */}
+            <div className="flex flex-col justify-center">
+              {filteredChartData.length > 0 ? (
+                <div className="h-48 min-h-[200px] w-full min-w-[280px]">
+                  <ChartContainer
+                    config={{
+                      active: { label: "Active", color: "hsl(var(--chart-1, 221 83% 53%))" },
+                      potential: { label: "Potential", color: "hsl(var(--chart-2, 39 89% 49%))" },
+                      excluded: { label: "Excluded", color: "hsl(var(--chart-3, 215 16% 47%))" },
+                    }}
+                    className="h-full w-full"
+                  >
+                    <BarChart data={filteredChartData}>
+                      <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                      <XAxis 
+                        dataKey="stage" 
+                        tickLine={false} 
+                        axisLine={false}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis 
+                        allowDecimals={false} 
+                        tick={{ fontSize: 12 }}
+                        width={30}
+                      />
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                      <ChartLegend 
+                        content={<ChartLegendContent />}
+                        wrapperStyle={{ fontSize: '12px' }}
+                      />
+                      <Bar dataKey="active" fill="var(--color-active)" radius={[2,2,0,0]} />
+                      <Bar dataKey="potential" fill="var(--color-potential)" radius={[2,2,0,0]} />
+                      <Bar dataKey="excluded" fill="var(--color-excluded)" radius={[2,2,0,0]} />
+                    </BarChart>
+                  </ChartContainer>
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground text-center py-8">No chart data to display.</div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </CardContent>
     </Card>
   );

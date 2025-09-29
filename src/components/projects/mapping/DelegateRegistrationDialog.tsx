@@ -76,6 +76,7 @@ export function DelegateRegistrationDialog({
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
   const [showWorkerSelector, setShowWorkerSelector] = useState(false);
   const [showNewWorkerForm, setShowNewWorkerForm] = useState(false);
+  const [isNewWorker, setIsNewWorker] = useState(false);
   
   // Form data states
   const [workerFormData, setWorkerFormData] = useState<Partial<WorkerData>>({});
@@ -124,7 +125,7 @@ export function DelegateRegistrationDialog({
         .from("project_assignments")
         .select(`
           employer_id,
-          employers (
+          employers!inner (
             id,
             name
           )
@@ -134,8 +135,7 @@ export function DelegateRegistrationDialog({
       if (error) throw error;
       return (data || [])
         .filter(pa => pa.employers)
-        .map(pa => pa.employers as EmployerData[])
-        .flat();
+        .map(pa => pa.employers as unknown as EmployerData);
     },
     enabled: !!projectId
   });
@@ -174,9 +174,11 @@ export function DelegateRegistrationDialog({
   useEffect(() => {
     if (selectedWorker) {
       setWorkerFormData(selectedWorker);
-      setStep('worker-details');
+      if (!isNewWorker) {
+        setStep('worker-details');
+      }
     }
-  }, [selectedWorker]);
+  }, [selectedWorker, isNewWorker]);
 
   // Create/update worker mutation
   const workerMutation = useMutation({
@@ -190,10 +192,14 @@ export function DelegateRegistrationDialog({
         if (error) throw error;
         return selectedWorkerId;
       } else {
-        // Create new worker
+        // Create new worker - ensure required fields have defaults
+        const workerData = {
+          ...data,
+          union_membership_status: data.union_membership_status || 'member',
+        };
         const { data: newWorker, error } = await supabase
           .from("workers")
-          .insert(data)
+          .insert(workerData)
           .select("id")
           .single();
         if (error) throw error;
@@ -202,7 +208,9 @@ export function DelegateRegistrationDialog({
     },
     onSuccess: (workerId) => {
       setSelectedWorkerId(workerId);
+      // After worker is saved (created or updated), proceed to registration
       setStep('registration-details');
+      setIsNewWorker(false);
       toast.success(selectedWorkerId ? "Worker updated" : "Worker created");
     },
     onError: (error: any) => {
@@ -214,8 +222,15 @@ export function DelegateRegistrationDialog({
   const registrationMutation = useMutation({
     mutationFn: async () => {
       if (!selectedWorkerId || !mainSiteId || !selectedEmployerId) {
-        throw new Error("Missing required data");
+        throw new Error("Missing required data for registration");
       }
+
+      console.log("Starting registration for:", {
+        selectedWorkerId,
+        mainSiteId,
+        selectedEmployerId,
+        repType: registrationData.repType
+      });
 
       // Determine union role name based on rep type
       let unionRoleName: string;
@@ -267,35 +282,66 @@ export function DelegateRegistrationDialog({
       }
 
       // Ensure worker is assigned to the employer
-      const { error: assignmentError } = await supabase
+      // First check if placement exists
+      const { data: existingPlacement } = await supabase
         .from("worker_placements")
-        .upsert({
-          worker_id: selectedWorkerId,
-          employer_id: selectedEmployerId,
-          job_site_id: mainSiteId,
-          start_date: new Date().toISOString().split('T')[0],
-          employment_status: 'permanent' // Default, can be updated later
-        }, {
-          onConflict: 'worker_id,employer_id,job_site_id'
-        });
+        .select("id")
+        .eq("worker_id", selectedWorkerId)
+        .eq("employer_id", selectedEmployerId)
+        .eq("job_site_id", mainSiteId)
+        .single();
 
-      if (assignmentError) throw assignmentError;
+      if (!existingPlacement) {
+        const { error: assignmentError } = await supabase
+          .from("worker_placements")
+          .insert({
+            worker_id: selectedWorkerId,
+            employer_id: selectedEmployerId,
+            job_site_id: mainSiteId,
+            start_date: new Date().toISOString().split('T')[0],
+            employment_status: 'permanent' // Default, can be updated later
+          });
+
+        if (assignmentError) throw assignmentError;
+      }
 
       // Update site contact
       const contactName = `${workerFormData.first_name} ${workerFormData.surname}`;
-      const { error: contactError } = await supabase
+      
+      // First check if site contact exists
+      const { data: existingContact } = await supabase
         .from("site_contacts")
-        .upsert({
-          job_site_id: mainSiteId,
-          role: role,
-          name: contactName,
-          email: workerFormData.email || null,
-          phone: workerFormData.mobile_phone || null
-        }, {
-          onConflict: 'job_site_id,role'
-        });
+        .select("id")
+        .eq("job_site_id", mainSiteId)
+        .eq("role", role)
+        .single();
 
-      if (contactError) throw contactError;
+      if (existingContact) {
+        // Update existing contact
+        const { error: contactError } = await supabase
+          .from("site_contacts")
+          .update({
+            name: contactName,
+            email: workerFormData.email || null,
+            phone: workerFormData.mobile_phone || null
+          })
+          .eq("id", existingContact.id);
+
+        if (contactError) throw contactError;
+      } else {
+        // Create new contact
+        const { error: contactError } = await supabase
+          .from("site_contacts")
+          .insert({
+            job_site_id: mainSiteId,
+            role: role,
+            name: contactName,
+            email: workerFormData.email || null,
+            phone: workerFormData.mobile_phone || null
+          });
+
+        if (contactError) throw contactError;
+      }
 
       return unionRole.id;
     },
@@ -304,18 +350,37 @@ export function DelegateRegistrationDialog({
       toast.success("Representative registered successfully");
     },
     onError: (error: any) => {
-      toast.error(error.message || "Failed to register representative");
+      console.error("Registration error:", error);
+      toast.error(`Registration failed: ${error.message || 'Unknown error'}`);
+      
+      // If the error is related to database constraints, provide helpful message
+      if (error.message?.includes('constraint') || error.message?.includes('unique')) {
+        toast.error("This worker may already be assigned to this role. Please check existing assignments.");
+      }
     }
   });
 
   const handleWorkerSelection = (workerId: string) => {
     setSelectedWorkerId(workerId);
     setShowWorkerSelector(false);
+    setShowNewWorkerForm(false);
+    setIsNewWorker(false);
   };
 
   const handleNewWorker = () => {
     setShowNewWorkerForm(true);
     setShowWorkerSelector(false);
+    setIsNewWorker(true);
+    setSelectedWorkerId(null);
+    setWorkerFormData({
+      union_membership_status: 'member' // Default for new workers
+    });
+  };
+
+  const handleSearchExistingWorkers = () => {
+    setShowWorkerSelector(true);
+    setShowNewWorkerForm(false);
+    setIsNewWorker(false);
   };
 
   const handleWorkerFormSubmit = () => {
@@ -412,11 +477,19 @@ export function DelegateRegistrationDialog({
             </div>
             
             <div className="flex gap-2">
-              <Button onClick={() => setShowWorkerSelector(true)} className="flex-1">
+              <Button 
+                onClick={handleSearchExistingWorkers} 
+                variant={showWorkerSelector ? "default" : "outline"}
+                className="flex-1"
+              >
                 <Search className="w-4 h-4 mr-2" />
                 Search Existing Workers
               </Button>
-              <Button onClick={handleNewWorker} variant="outline" className="flex-1">
+              <Button 
+                onClick={handleNewWorker} 
+                variant={showNewWorkerForm ? "default" : "outline"}
+                className="flex-1"
+              >
                 <Plus className="w-4 h-4 mr-2" />
                 Add New Worker
               </Button>
@@ -555,10 +628,13 @@ export function DelegateRegistrationDialog({
           </div>
         )}
 
-        {step === 'worker-details' && selectedWorker && (
+        {step === 'worker-details' && (
           <div className="space-y-4">
             <div className="text-sm text-muted-foreground">
-              Review and update worker details as needed.
+              {isNewWorker || !selectedWorker ? 
+                "Complete all worker details before proceeding to registration." :
+                "Review and update worker details as needed."
+              }
             </div>
             
             <Card>
@@ -573,6 +649,7 @@ export function DelegateRegistrationDialog({
                       id="firstName"
                       value={workerFormData.first_name || ''}
                       onChange={(e) => setWorkerFormData(prev => ({ ...prev, first_name: e.target.value }))}
+                      placeholder="First name"
                     />
                   </div>
                   <div>
@@ -581,17 +658,19 @@ export function DelegateRegistrationDialog({
                       id="surname"
                       value={workerFormData.surname || ''}
                       onChange={(e) => setWorkerFormData(prev => ({ ...prev, surname: e.target.value }))}
+                      placeholder="Surname"
                     />
                   </div>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="mobile">Mobile Phone</Label>
+                    <Label htmlFor="mobile">Mobile Phone *</Label>
                     <Input
                       id="mobile"
                       value={workerFormData.mobile_phone || ''}
                       onChange={(e) => setWorkerFormData(prev => ({ ...prev, mobile_phone: e.target.value }))}
+                      placeholder="Mobile phone"
                     />
                   </div>
                   <div>
@@ -601,26 +680,117 @@ export function DelegateRegistrationDialog({
                       type="email"
                       value={workerFormData.email || ''}
                       onChange={(e) => setWorkerFormData(prev => ({ ...prev, email: e.target.value }))}
+                      placeholder="Email address"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <Label>Home Address</Label>
-                  <div className="text-sm text-muted-foreground">
-                    {[
-                      workerFormData.home_address_line_1,
-                      workerFormData.home_address_line_2,
-                      workerFormData.home_address_suburb,
-                      workerFormData.home_address_postcode,
-                      workerFormData.home_address_state
-                    ].filter(Boolean).join(', ') || 'No address on file'}
+                  <Label htmlFor="address1">Home Address *</Label>
+                  <Input
+                    id="address1"
+                    value={workerFormData.home_address_line_1 || ''}
+                    onChange={(e) => setWorkerFormData(prev => ({ ...prev, home_address_line_1: e.target.value }))}
+                    placeholder="Address line 1"
+                    className="mb-2"
+                  />
+                  <Input
+                    value={workerFormData.home_address_line_2 || ''}
+                    onChange={(e) => setWorkerFormData(prev => ({ ...prev, home_address_line_2: e.target.value }))}
+                    placeholder="Address line 2 (optional)"
+                  />
+                </div>
+                
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <Label htmlFor="suburb">Suburb *</Label>
+                    <Input
+                      id="suburb"
+                      value={workerFormData.home_address_suburb || ''}
+                      onChange={(e) => setWorkerFormData(prev => ({ ...prev, home_address_suburb: e.target.value }))}
+                      placeholder="Suburb"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="postcode">Postcode *</Label>
+                    <Input
+                      id="postcode"
+                      value={workerFormData.home_address_postcode || ''}
+                      onChange={(e) => setWorkerFormData(prev => ({ ...prev, home_address_postcode: e.target.value }))}
+                      placeholder="Postcode"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="state">State *</Label>
+                    <Select
+                      value={workerFormData.home_address_state || ''}
+                      onValueChange={(value) => setWorkerFormData(prev => ({ ...prev, home_address_state: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select state" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="NSW">NSW</SelectItem>
+                        <SelectItem value="VIC">VIC</SelectItem>
+                        <SelectItem value="QLD">QLD</SelectItem>
+                        <SelectItem value="WA">WA</SelectItem>
+                        <SelectItem value="SA">SA</SelectItem>
+                        <SelectItem value="TAS">TAS</SelectItem>
+                        <SelectItem value="ACT">ACT</SelectItem>
+                        <SelectItem value="NT">NT</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 
+                <div>
+                  <Label htmlFor="membershipStatus">Union Membership Status *</Label>
+                  <Select
+                    value={workerFormData.union_membership_status || 'member'}
+                    onValueChange={(value) => setWorkerFormData(prev => ({ ...prev, union_membership_status: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="member">Member</SelectItem>
+                      <SelectItem value="non_member">Non-member</SelectItem>
+                      <SelectItem value="potential">Potential</SelectItem>
+                      <SelectItem value="declined">Declined</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <div className="flex gap-2">
-                  <Button onClick={() => setStep('registration-details')}>
-                    Continue
+                  <Button 
+                    onClick={() => {
+                      // Enhanced validation
+                      const requiredFields = [
+                        'first_name', 'surname', 'mobile_phone', 'home_address_line_1', 
+                        'home_address_suburb', 'home_address_postcode', 'home_address_state'
+                      ];
+                      
+                      const missingFields = requiredFields.filter(field => 
+                        !workerFormData[field as keyof WorkerData]?.toString().trim()
+                      );
+                      
+                      if (missingFields.length > 0) {
+                        toast.error(`Please complete: ${missingFields.map(f => f.replace(/_/g, ' ')).join(', ')}`);
+                        return;
+                      }
+                      
+                      if (selectedWorkerId) {
+                        // Update existing worker
+                        workerMutation.mutate(workerFormData);
+                      } else {
+                        // Save worker details and go to registration
+                        workerMutation.mutate(workerFormData);
+                      }
+                    }}
+                    disabled={workerMutation.isPending}
+                  >
+                    {workerMutation.isPending ? 'Saving...' : 
+                     selectedWorkerId ? 'Update & Continue' : 'Save & Continue'}
                   </Button>
                   <Button variant="outline" onClick={() => setStep('worker-selection')}>
                     Back
@@ -794,7 +964,10 @@ export function DelegateRegistrationDialog({
             projectId={projectId}
             title="Select Worker for Representative Role"
             onSelect={handleWorkerSelection}
-            onClose={() => setShowWorkerSelector(false)}
+            onClose={() => {
+              setShowWorkerSelector(false);
+              // Reset state when closing worker selector
+            }}
           />
         )}
       </DialogContent>

@@ -18,6 +18,7 @@ import { OrganizingUniverseMetricsComponent } from "./OrganizingUniverseMetrics"
 import { PatchSummaryCard } from "./PatchSummaryCard"
 import { LeadOrganizerSummary } from "@/hooks/useLeadOrganizerSummary"
 import { useRouter } from "next/navigation"
+import { useIsMobile } from "@/hooks/use-mobile"
 
 interface LeadOrganizerSummaryCardProps {
   leadSummary: LeadOrganizerSummary
@@ -42,6 +43,7 @@ export function LeadOrganizerSummaryCard({
 }: LeadOrganizerSummaryCardProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
   const router = useRouter()
+  const isMobile = useIsMobile()
   const isPendingLead = !!leadSummary.isPending
   const rawStatus = leadSummary.status || (isPendingLead ? 'pending' : 'active')
   const statusLabel = rawStatus.replace(/_/g, ' ')
@@ -100,63 +102,126 @@ export function LeadOrganizerSummaryCard({
         <CardHeader className="p-4 pb-2">
           <CardTitle className="text-base font-medium">
             <div className="space-y-2">
-              {/* Lead organizer name and expand button */}
-              <div className="flex items-start justify-between">
-                <div className="flex-1 min-w-0">
-                  <button
-                    type="button"
-                    className="hover:underline inline-block rounded border border-dashed border-transparent hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 px-1 truncate min-w-0 text-left"
-                    onClick={handleLeadClick}
-                  >
-                    {leadSummary.leadOrganizerName}
-                  </button>
+              {/* Mobile-optimized layout */}
+              {isMobile ? (
+                <div className="space-y-2">
+                  {/* Name and expand button row */}
+                  <div className="flex items-center justify-between">
+                    <button
+                      type="button"
+                      className="hover:underline inline-block rounded border border-dashed border-transparent hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 px-1 truncate min-w-0 text-left flex-1"
+                      onClick={handleLeadClick}
+                    >
+                      {leadSummary.leadOrganizerName}
+                    </button>
+                    
+                    <CollapsibleTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0 ml-2">
+                        {isExpanded ? (
+                          <ChevronDown className="h-4 w-4" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </CollapsibleTrigger>
+                  </div>
                   
+                  {/* Email row */}
                   {leadSummary.email && (
-                    <div className="flex items-center mt-1 text-xs text-muted-foreground">
-                      <Mail className="h-3 w-3 mr-1" />
+                    <div className="flex items-center text-xs text-muted-foreground">
+                      <Mail className="h-3 w-3 mr-1 flex-shrink-0" />
                       <span className="truncate">{leadSummary.email}</span>
                     </div>
                   )}
-                </div>
-                
-                <div className="flex items-center space-x-2 ml-2 flex-shrink-0">
-                  <Badge variant="outline" className="text-xs border-purple-200 text-purple-700">
-                    <Crown className="h-3 w-3 mr-1" />
-                    {isPendingLead ? 'Draft Co-ordinator' : 'Co-ordinator'}
-                  </Badge>
-                  {statusDisplay && (
-                    <Badge
-                      variant={isPendingLead ? "destructive" : "secondary"}
-                      className={`text-xs ${isPendingLead ? "cursor-pointer focus-visible:ring-amber-500" : ""}`}
-                      onClick={isPendingLead ? handlePendingBadgeClick : undefined}
-                      role={isPendingLead ? "button" : undefined}
-                      tabIndex={isPendingLead ? 0 : undefined}
-                      onKeyDown={
-                        isPendingLead
-                          ? (event) => {
-                              if (event.key === "Enter" || event.key === " ") {
-                                event.preventDefault()
-                                handlePendingBadgeClick()
-                              }
-                          }
-                          : undefined
-                      }
-                    >
-                      {statusDisplay}
-                    </Badge>
-                  )}
                   
-                  <CollapsibleTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                      {isExpanded ? (
-                        <ChevronDown className="h-4 w-4" />
-                      ) : (
-                        <ChevronRight className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </CollapsibleTrigger>
+                  {/* Badges row */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline" className="text-xs border-purple-200 text-purple-700">
+                      <Crown className="h-3 w-3 mr-1" />
+                      {isPendingLead ? 'Draft Co-ordinator' : 'Co-ordinator'}
+                    </Badge>
+                    {statusDisplay && (
+                      <Badge
+                        variant={isPendingLead ? "destructive" : "secondary"}
+                        className={`text-xs ${isPendingLead ? "cursor-pointer focus-visible:ring-amber-500" : ""}`}
+                        onClick={isPendingLead ? handlePendingBadgeClick : undefined}
+                        role={isPendingLead ? "button" : undefined}
+                        tabIndex={isPendingLead ? 0 : undefined}
+                        onKeyDown={
+                          isPendingLead
+                            ? (event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault()
+                                  handlePendingBadgeClick()
+                                }
+                            }
+                            : undefined
+                        }
+                      >
+                        {statusDisplay}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                /* Desktop layout - original */
+                <div className="flex items-start justify-between">
+                  <div className="flex-1 min-w-0">
+                    <button
+                      type="button"
+                      className="hover:underline inline-block rounded border border-dashed border-transparent hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 px-1 truncate min-w-0 text-left"
+                      onClick={handleLeadClick}
+                    >
+                      {leadSummary.leadOrganizerName}
+                    </button>
+                    
+                    {leadSummary.email && (
+                      <div className="flex items-center mt-1 text-xs text-muted-foreground">
+                        <Mail className="h-3 w-3 mr-1" />
+                        <span className="truncate">{leadSummary.email}</span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="flex items-center space-x-2 ml-2 flex-shrink-0">
+                    <Badge variant="outline" className="text-xs border-purple-200 text-purple-700">
+                      <Crown className="h-3 w-3 mr-1" />
+                      {isPendingLead ? 'Draft Co-ordinator' : 'Co-ordinator'}
+                    </Badge>
+                    {statusDisplay && (
+                      <Badge
+                        variant={isPendingLead ? "destructive" : "secondary"}
+                        className={`text-xs ${isPendingLead ? "cursor-pointer focus-visible:ring-amber-500" : ""}`}
+                        onClick={isPendingLead ? handlePendingBadgeClick : undefined}
+                        role={isPendingLead ? "button" : undefined}
+                        tabIndex={isPendingLead ? 0 : undefined}
+                        onKeyDown={
+                          isPendingLead
+                            ? (event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault()
+                                  handlePendingBadgeClick()
+                                }
+                            }
+                            : undefined
+                        }
+                      >
+                        {statusDisplay}
+                      </Badge>
+                    )}
+                    
+                    <CollapsibleTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                        {isExpanded ? (
+                          <ChevronDown className="h-4 w-4" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </CollapsibleTrigger>
+                  </div>
+                </div>
+              )}
             </div>
           </CardTitle>
 

@@ -17,6 +17,13 @@ const geistMono = Roboto_Mono({
 export const metadata: Metadata = {
   title: "CFMEU App",
   description: "Next.js App Router migrated from Vite",
+  viewport: {
+    width: "device-width",
+    initialScale: 1,
+    maximumScale: 1,
+    userScalable: false,
+    viewportFit: "cover", // iPhone X+ safe area support
+  },
   icons: {
     icon: [
       { url: "/favicon.ico", type: "image/x-icon" },

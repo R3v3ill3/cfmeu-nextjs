@@ -495,7 +495,7 @@ function AdminDashboard({
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {leadSummaries.map((leadSummary) => (
               <LeadOrganizerSummaryCard
                 key={leadSummary.leadOrganizerId}

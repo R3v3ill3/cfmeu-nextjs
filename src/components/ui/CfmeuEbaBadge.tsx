@@ -97,7 +97,9 @@ export function CfmeuEbaBadge({
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          {badge}
+          <div>
+            {badge}
+          </div>
         </TooltipTrigger>
         <TooltipContent>
           <p className="max-w-64">{tooltipText}</p>

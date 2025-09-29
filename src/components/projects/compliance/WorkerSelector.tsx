@@ -41,27 +41,33 @@ export function WorkerSelector({ projectId, title, onSelect, onClose }: WorkerSe
         .from("worker_placements")
         .select(`
           worker_id,
-          workers (
+          employer_id,
+          workers!inner (
             id,
             first_name,
             surname,
             mobile_phone,
-            union_membership_status,
-            employers (
-              id,
-              name
-            )
+            union_membership_status
+          ),
+          employers!inner (
+            id,
+            name
           )
         `)
         .in("job_site_id", siteIds);
 
       if (placementsError) throw placementsError;
 
-      // Deduplicate workers
+      // Deduplicate workers and combine employer information
       const uniqueWorkers = new Map();
       (placements || []).forEach((p: any) => {
         if (p.workers && !uniqueWorkers.has(p.workers.id)) {
-          uniqueWorkers.set(p.workers.id, p.workers);
+          // Add employer information to worker
+          const workerWithEmployer = {
+            ...p.workers,
+            currentEmployer: p.employers
+          };
+          uniqueWorkers.set(p.workers.id, workerWithEmployer);
         }
       });
 

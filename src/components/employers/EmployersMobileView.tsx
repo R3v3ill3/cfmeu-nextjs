@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from "react"
 import { useSearchParams, usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Search } from "lucide-react"
 import { useEmployersServerSideCompatible } from "@/hooks/useEmployersServerSide"
 import { EmployerCard, EmployerCardData } from "./EmployerCard"
 import { EmployerDetailModal } from "./EmployerDetailModal"
@@ -143,16 +144,25 @@ export function EmployersMobileView() {
   }))
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="px-safe py-4 pb-safe-bottom space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Employers</h1>
+        <h1 className="text-xl font-semibold">Employers</h1>
       </div>
 
-      <Input 
-        placeholder="Search employers…" 
-        value={sp.get("q") || ""} 
-        onChange={(e) => setParam("q", e.target.value)}
-      />
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input 
+          placeholder="Search employers…" 
+          value={sp.get("q") || ""} 
+          onChange={(e) => setParam("q", e.target.value)}
+          className="pl-10"
+        />
+      </div>
+
+      {/* Results count */}
+      <div className="text-sm text-muted-foreground">
+        Showing {((page - 1) * PAGE_SIZE) + 1}-{Math.min(page * PAGE_SIZE, totalCount)} of {totalCount} employers
+      </div>
 
       {data.length === 0 && !isFetching ? (
         <p className="text-center text-muted-foreground pt-8">No employers found.</p>

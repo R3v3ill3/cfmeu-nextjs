@@ -21,7 +21,7 @@ export function MobileDashboardView() {
 
   if (isLoading) {
     return (
-      <div className="space-y-4 p-4">
+      <div className="space-y-4 px-safe py-4 pb-safe-bottom">
         <div className="h-24 bg-gray-100 rounded-lg animate-pulse"></div>
         <div className="h-48 bg-gray-100 rounded-lg animate-pulse"></div>
         <div className="h-64 bg-gray-100 rounded-lg animate-pulse"></div>
@@ -30,7 +30,7 @@ export function MobileDashboardView() {
   }
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="space-y-4 px-safe py-4 pb-safe-bottom">
       {/* Removed decorative header per request */}
       {data?.errors?.length ? (
         <div className="flex items-center gap-2">
@@ -74,27 +74,31 @@ export function MobileDashboardView() {
       </Card>
 
       {/* Pre-Construction Metrics */}
-      <PreConstructionMetricsComponent 
-        data={data?.active_pre_construction || {
-          total_projects: 0, total_builders: 0, eba_builders: 0, eba_builder_percentage: 0,
-          total_employers: 0, eba_employers: 0, eba_employer_percentage: 0,
-          avg_estimated_workers: 0, avg_assigned_workers: 0, avg_members: 0
-        }} 
-        isLoading={isLoading} 
-      />
+      <div className="hidden">
+        <PreConstructionMetricsComponent 
+          data={data?.active_pre_construction || {
+            total_projects: 0, total_builders: 0, eba_builders: 0, eba_builder_percentage: 0,
+            total_employers: 0, eba_employers: 0, eba_employer_percentage: 0,
+            avg_estimated_workers: 0, avg_assigned_workers: 0, avg_members: 0
+          }} 
+          isLoading={isLoading} 
+        />
+      </div>
       
       {/* Active Construction Metrics */}
-      <ActiveConstructionMetricsComponent 
-        data={data?.active_construction || {
-          total_projects: 0, total_builders: 0, eba_builders: 0, eba_builder_percentage: 0,
-          total_employers: 0, eba_employers: 0, eba_employer_percentage: 0,
-          core_trades: { demolition: 0, piling: 0, concreting: 0, formwork: 0, scaffold: 0, cranes: 0 },
-          projects_with_site_delegates: 0, projects_with_company_delegates: 0, projects_with_hsrs: 0,
-          projects_with_hsr_chair_delegate: 0, projects_with_full_hs_committee: 0,
-          avg_estimated_workers: 0, avg_assigned_workers: 0, avg_members: 0, financial_audit_activities: 0
-        }} 
-        isLoading={isLoading} 
-      />
+      <div className="hidden">
+        <ActiveConstructionMetricsComponent 
+          data={data?.active_construction || {
+            total_projects: 0, total_builders: 0, eba_builders: 0, eba_builder_percentage: 0,
+            total_employers: 0, eba_employers: 0, eba_employer_percentage: 0,
+            core_trades: { demolition: 0, piling: 0, concreting: 0, formwork: 0, scaffold: 0, cranes: 0 },
+            projects_with_site_delegates: 0, projects_with_company_delegates: 0, projects_with_hsrs: 0,
+            projects_with_hsr_chair_delegate: 0, projects_with_full_hs_committee: 0,
+            avg_estimated_workers: 0, avg_assigned_workers: 0, avg_members: 0, financial_audit_activities: 0
+          }} 
+          isLoading={isLoading} 
+        />
+      </div>
     </div>
   )
 }

@@ -18,6 +18,7 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Loader2 } from "lucide-react"
 import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal"
+import { useIsMobile } from "@/hooks/use-mobile"
 
 const DEFAULT_PAGE_SIZE = 25
 
@@ -29,6 +30,7 @@ export default function PatchPage() {
   const { patches, role, isLoading: loadingPatches } = useAccessiblePatches()
   const [lookupOpen, setLookupOpen] = useState(false)
   const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null)
+  const isMobile = useIsMobile()
 
   const handleOpenEmployer = useCallback((employerId: string) => {
     setSelectedEmployerId(employerId)
@@ -187,7 +189,7 @@ export default function PatchPage() {
 
   return (
     <RoleGuard allow={["organiser", "lead_organiser", "admin"]}>
-      <div className="space-y-6 p-6">
+      <div className={`space-y-6 ${isMobile ? 'px-safe py-4 pb-safe-bottom' : 'p-6'}`}>
         <PatchProjectsFilterBar
           patchOptions={patchOptions}
           filters={filters}
@@ -225,7 +227,7 @@ export default function PatchPage() {
               onOpenWalls={goToWalls}
             />
 
-            <PatchMap patchId={selectedPatchId} height="420px" />
+            <PatchMap patchId={selectedPatchId} height={isMobile ? "300px" : "420px"} />
 
             <div className="space-y-4">
               <div className="flex items-center justify-between">

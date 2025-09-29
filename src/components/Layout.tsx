@@ -128,7 +128,7 @@ const Layout = ({ children }: LayoutProps) => {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b sticky top-0 z-30 bg-white shadow-md">
+      <header className="border-b sticky top-0 z-40 bg-white shadow-md">
         <div className="flex h-16 items-center px-4">
           {/* Mobile menu */}
           <Sheet open={isOpen} onOpenChange={setIsOpen}>
@@ -169,15 +169,15 @@ const Layout = ({ children }: LayoutProps) => {
           </Sheet>
 
           {/* Logo */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             <Image
               src={cfmeuLogoLight}
               alt="CFMEU Construction Union Logo"
               width={32}
               height={32}
-              className="h-8 w-auto"
+              className="h-6 w-auto sm:h-8 flex-shrink-0"
             />
-            <h1 className="text-xl font-bold">CFMEU Organiser</h1>
+            <h1 className="text-sm sm:text-xl font-bold truncate">CFMEU Organiser</h1>
           </div>
 
           {/* Desktop navigation */}
@@ -186,26 +186,26 @@ const Layout = ({ children }: LayoutProps) => {
           </nav>
 
           {/* User menu */}
-          <div className="ml-auto flex items-center gap-4">
+          <div className="ml-auto flex items-center gap-2">
             {userRole === "admin" && (
               // Admin-only patch selector next to user name
               // eslint-disable-next-line @typescript-eslint/ban-ts-comment
               // @ts-ignore
               <AdminPatchSelector />
             )}
-            <span className="text-sm text-muted-foreground">
-              {user?.email}
+            <span className="text-xs text-muted-foreground hidden sm:block truncate max-w-[100px]">
+              {user?.email?.split('@')[0]}
             </span>
-            <Button variant="outline" size="sm" onClick={signOut}>
-              <LogOut className="h-4 w-4 mr-2" />
-              Sign Out
+            <Button variant="outline" size="sm" onClick={signOut} className="h-8 px-2">
+              <LogOut className="h-3 w-3 sm:mr-2" />
+              <span className="hidden sm:inline">Sign Out</span>
             </Button>
           </div>
         </div>
       </header>
 
       {/* Main content */}
-      <main className={`flex-1 p-6 transition-opacity duration-200 ${
+      <main className={`flex-1 px-safe py-4 transition-opacity duration-200 ${
         isNavigating ? 'opacity-50 pointer-events-none' : 'opacity-100'
       }`}>
         {children}

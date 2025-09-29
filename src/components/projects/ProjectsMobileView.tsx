@@ -7,8 +7,29 @@ import { supabase } from "@/integrations/supabase/client"
 import { useSearchParams, usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Badge } from "@/components/ui/badge"
+import { 
+  Filter, 
+  ChevronDown, 
+  ChevronUp, 
+  SortAsc, 
+  SortDesc, 
+  Grid3X3, 
+  List,
+  Map as MapIcon,
+  Search,
+  X
+} from "lucide-react"
 import { useProjectsServerSideCompatible } from "@/hooks/useProjectsServerSide"
 import { ProjectCard, ProjectCardData } from "./ProjectCard"
+import { PROJECT_TIER_LABELS, ProjectTier } from "./types"
+import ProjectsMapView from "./ProjectsMapView"
+import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
+import { CfmeuEbaBadge, getProjectEbaStatus } from "@/components/ui/CfmeuEbaBadge"
+import { getOrganisingUniverseBadgeVariant } from "@/utils/organisingUniverse"
+import Link from "next/link"
 
 // State persistence key
 const PROJECTS_STATE_KEY = 'projects-page-state-mobile'
@@ -18,7 +39,15 @@ const saveProjectsState = (params: URLSearchParams) => {
   try {
     const state = {
       q: params.get('q') || '',
-      page: params.get('page') || '1'
+      page: params.get('page') || '1',
+      tier: params.get('tier') || 'all',
+      sort: params.get('sort') || 'name',
+      dir: params.get('dir') || 'asc',
+      view: params.get('view') || 'card',
+      workers: params.get('workers') || 'all',
+      universe: params.get('universe') || 'all',
+      stage: params.get('stage') || 'all',
+      eba: params.get('eba') || 'all',
     }
     sessionStorage.setItem(PROJECTS_STATE_KEY, JSON.stringify(state))
   } catch (e) {
@@ -36,13 +65,80 @@ const loadProjectsState = () => {
   }
 }
 
+// Mobile list item component
+function ProjectListItem({ project }: { project: ProjectCardData }) {
+  const ebaStatus = getProjectEbaStatus(project.builderName)
+  
+  const handleClick = () => {
+    window.location.href = `/projects/${project.id}`;
+  };
+  
+  return (
+    <div className="border rounded-lg p-3 bg-white hover:bg-gray-50 transition-colors cursor-pointer" onClick={handleClick}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <h3 className="font-medium text-sm truncate">{project.name}</h3>
+          {project.full_address && (
+            <p className="text-xs text-muted-foreground truncate mt-1">{project.full_address}</p>
+          )}
+          {project.builderName && (
+            <p className="text-xs text-muted-foreground truncate mt-1">Builder: {project.builderName}</p>
+          )}
+        </div>
+        
+        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+          <ProjectTierBadge tier={project.tier} size="sm" />
+          {ebaStatus.hasActiveEba && (
+            <CfmeuEbaBadge hasActiveEba={true} size="sm" showText={false} />
+          )}
+        </div>
+      </div>
+      
+      <div className="flex items-center justify-between mt-2">
+        <div className="flex items-center gap-2">
+          <Badge 
+            variant={getOrganisingUniverseBadgeVariant(project.organising_universe as any)} 
+            className="text-xs"
+          >
+            {project.organising_universe}
+          </Badge>
+          <Badge variant="outline" className="text-xs">
+            {project.stage_class?.replace('_', ' ')}
+          </Badge>
+        </div>
+        
+        {project.value && (
+          <span className="text-xs text-muted-foreground">
+            ${(project.value / 1000000).toFixed(1)}M
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function ProjectsMobileView() {
   const router = useRouter()
   const pathname = usePathname()
   const sp = useSearchParams()
+  
+  // All the same parameters as desktop version
   const q = (sp.get("q") || "").toLowerCase()
   const page = Math.max(1, parseInt(sp.get('page') || '1', 10) || 1)
-  const PAGE_SIZE = 10
+  const tierFilter = (sp.get("tier") || "all") as ProjectTier | 'all'
+  const sort = sp.get("sort") || "name"
+  const dir = sp.get("dir") || "asc"
+  const view = sp.get("view") || "card"
+  const workersFilter = sp.get("workers") || "all"
+  const universeFilter = sp.get("universe") || sp.get("universeFilter") || "all"
+  const stageFilter = sp.get("stage") || sp.get("stageFilter") || "all"
+  const ebaFilter = sp.get("eba") || "all"
+  
+  const PAGE_SIZE = 12 // Slightly smaller for mobile
+  
+  // Mobile-specific state
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [sortOpen, setSortOpen] = useState(false)
 
   useEffect(() => {
     saveProjectsState(sp)
@@ -53,8 +149,11 @@ export function ProjectsMobileView() {
       const savedState = loadProjectsState()
       if (savedState) {
         const params = new URLSearchParams()
-        if (savedState.q) params.set('q', savedState.q)
-        if (savedState.page && savedState.page !== '1') params.set('page', savedState.page)
+        Object.entries(savedState).forEach(([key, value]) => {
+          if (value && value !== 'all' && value !== '1') {
+            params.set(key, String(value))
+          }
+        })
         if (params.toString()) {
           router.replace(`${pathname}?${params.toString()}`)
         }
@@ -64,7 +163,7 @@ export function ProjectsMobileView() {
 
   const setParam = (key: string, value?: string) => {
     const params = new URLSearchParams(sp.toString())
-    if (!value) {
+    if (!value || value === 'all') {
       params.delete(key)
     } else {
       params.set(key, value)
@@ -79,16 +178,30 @@ export function ProjectsMobileView() {
   const serverSideResult = useProjectsServerSideCompatible({
     page,
     pageSize: PAGE_SIZE,
-    sort: 'name',
-    dir: 'asc',
+    sort: sort as 'name' | 'value' | 'tier' | 'workers' | 'members' | 'delegates' | 'eba_coverage' | 'employers' | 'created_at',
+    dir: dir as 'asc' | 'desc',
     q: q || undefined,
+    tier: tierFilter !== 'all' ? tierFilter.replace('_', '') as any : undefined,
+    workers: workersFilter !== 'all' ? workersFilter as any : undefined,
+    universe: universeFilter !== 'all' ? universeFilter as any : undefined,
+    stage: stageFilter !== 'all' ? stageFilter as any : undefined,
+    eba: ebaFilter !== 'all' ? ebaFilter as any : undefined,
   })
 
   const { projects, totalCount, hasNext, hasPrev, isLoading } = serverSideResult
+  
+  // Count active filters
+  const activeFilters = [
+    tierFilter !== 'all' ? 'tier' : null,
+    workersFilter !== 'all' ? 'workers' : null,
+    universeFilter !== 'all' ? 'universe' : null,
+    stageFilter !== 'all' ? 'stage' : null,
+    ebaFilter !== 'all' ? 'eba' : null,
+  ].filter(Boolean).length
 
   if (isLoading && !projects.length) {
     return (
-      <div className="p-4 space-y-4">
+      <div className="px-safe py-4 pb-safe-bottom space-y-4">
         <h1 className="text-2xl font-semibold">Projects</h1>
         <Input placeholder="Search projects…" disabled />
         <div className="space-y-4">
@@ -112,28 +225,239 @@ export function ProjectsMobileView() {
   }))
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="px-safe py-4 pb-safe-bottom space-y-4">
+      {/* Header with view toggle */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Projects</h1>
-        {/* Potentially add a lightweight filter/sort button here */}
+        <h1 className="text-xl font-semibold">Projects</h1>
+        
+        {/* View toggle buttons */}
+        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+          <Button
+            variant={view === "card" ? "default" : "ghost"}
+            size="sm"
+            className="h-8 px-3"
+            onClick={() => setParam("view", "card")}
+          >
+            <Grid3X3 className="h-4 w-4" />
+          </Button>
+          <Button
+            variant={view === "list" ? "default" : "ghost"}
+            size="sm"
+            className="h-8 px-3"
+            onClick={() => setParam("view", "list")}
+          >
+            <List className="h-4 w-4" />
+          </Button>
+          <Button
+            variant={view === "map" ? "default" : "ghost"}
+            size="sm"
+            className="h-8 px-3"
+            onClick={() => setParam("view", "map")}
+          >
+            <MapIcon className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
-      <Input 
-        placeholder="Search projects…" 
-        value={sp.get("q") || ""} 
-        onChange={(e) => setParam("q", e.target.value)}
-      />
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input 
+          placeholder="Search projects…" 
+          value={sp.get("q") || ""} 
+          onChange={(e) => setParam("q", e.target.value)}
+          className="pl-10"
+        />
+      </div>
 
-      {projects.length === 0 && !isLoading ? (
+      {/* Mobile filters and sort */}
+      <div className="space-y-2">
+        {/* Filters */}
+        <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
+          <CollapsibleTrigger asChild>
+            <Button variant="outline" size="sm" className="w-full">
+              <Filter className="h-4 w-4 mr-2" />
+              Filters
+              {activeFilters > 0 && (
+                <Badge variant="secondary" className="ml-2 px-1.5 py-0 text-xs">
+                  {activeFilters}
+                </Badge>
+              )}
+              {filtersOpen ? <ChevronUp className="h-4 w-4 ml-2" /> : <ChevronDown className="h-4 w-4 ml-2" />}
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+        <div className="space-y-3 p-4 bg-gray-50 rounded-lg">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Tier</label>
+              <Select value={tierFilter} onValueChange={(value) => setParam("tier", value)}>
+                <SelectTrigger className="h-8">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  {Object.entries(PROJECT_TIER_LABELS).map(([tier, label]) => (
+                    <SelectItem key={tier} value={tier}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Stage</label>
+              <Select value={stageFilter} onValueChange={(value) => setParam("stage", value)}>
+                <SelectTrigger className="h-8">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="future">Future</SelectItem>
+                  <SelectItem value="pre_construction">Pre-construction</SelectItem>
+                  <SelectItem value="construction">Construction</SelectItem>
+                  <SelectItem value="archived">Archived</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Universe</label>
+              <Select value={universeFilter} onValueChange={(value) => setParam("universe", value)}>
+                <SelectTrigger className="h-8">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="potential">Potential</SelectItem>
+                  <SelectItem value="excluded">Excluded</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">EBA</label>
+              <Select value={ebaFilter} onValueChange={(value) => setParam("eba", value)}>
+                <SelectTrigger className="h-8">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="active">Active EBA</SelectItem>
+                  <SelectItem value="lodged">Lodged</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="no_eba">No EBA</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          
+          {activeFilters > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setParam("tier", "all")
+                setParam("stage", "all")
+                setParam("universe", "all")
+                setParam("eba", "all")
+                setParam("workers", "all")
+              }}
+              className="w-full text-muted-foreground"
+            >
+              <X className="h-4 w-4 mr-2" />
+              Clear All Filters
+            </Button>
+          )}
+        </div>
+          </CollapsibleContent>
+        </Collapsible>
+
+        {/* Sort */}
+        <Collapsible open={sortOpen} onOpenChange={setSortOpen}>
+          <CollapsibleTrigger asChild>
+            <Button variant="outline" size="sm" className="w-full">
+              {dir === "asc" ? <SortAsc className="h-4 w-4 mr-2" /> : <SortDesc className="h-4 w-4 mr-2" />}
+              Sort
+              {sortOpen ? <ChevronUp className="h-4 w-4 ml-2" /> : <ChevronDown className="h-4 w-4 ml-2" />}
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+        <div className="space-y-3 p-4 bg-gray-50 rounded-lg">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Sort By</label>
+              <Select value={sort} onValueChange={(value) => setParam("sort", value)}>
+                <SelectTrigger className="h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="name">Name</SelectItem>
+                  <SelectItem value="value">Value</SelectItem>
+                  <SelectItem value="tier">Tier</SelectItem>
+                  <SelectItem value="workers">Workers</SelectItem>
+                  <SelectItem value="members">Members</SelectItem>
+                  <SelectItem value="created_at">Created</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Direction</label>
+              <Select value={dir} onValueChange={(value) => setParam("dir", value)}>
+                <SelectTrigger className="h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="asc">Ascending</SelectItem>
+                  <SelectItem value="desc">Descending</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+          </CollapsibleContent>
+        </Collapsible>
+      </div>
+
+      {/* Results count */}
+      <div className="flex items-center justify-between text-sm text-muted-foreground">
+        <span>
+          Showing {((page - 1) * PAGE_SIZE) + 1}-{Math.min(page * PAGE_SIZE, totalCount)} of {totalCount} projects
+        </span>
+        {activeFilters > 0 && (
+          <Badge variant="outline" className="text-xs">
+            {activeFilters} filter{activeFilters > 1 ? 's' : ''} active
+          </Badge>
+        )}
+      </div>
+
+      {/* Content based on view */}
+      {view === "map" ? (
+        <ProjectsMapView
+          projects={projects}
+          summaries={{}}
+          onProjectClick={(id) => router.push(`/projects/${id}`)}
+          searchQuery={q}
+          patchIds={[]}
+          tierFilter={tierFilter}
+          workersFilter={workersFilter}
+        />
+      ) : projects.length === 0 && !isLoading ? (
         <p className="text-center text-muted-foreground pt-8">No projects found.</p>
       ) : (
-        <div className="space-y-4">
+        <div className={view === "list" ? "space-y-2" : "space-y-4"}>
           {cardData.map((p: ProjectCardData) => (
-            <ProjectCard key={p.id} project={p} />
+            view === "list" ? (
+              <ProjectListItem key={p.id} project={p} />
+            ) : (
+              <ProjectCard key={p.id} project={p} />
+            )
           ))}
         </div>
       )}
 
+      {/* Pagination */}
       <div className="flex items-center justify-between pt-4">
         <Button variant="outline" size="sm" disabled={!hasPrev} onClick={() => setParam('page', String(page - 1))}>
           Previous

@@ -183,12 +183,12 @@ export function PreConstructionMetricsComponent({ data, isLoading }: PreConstruc
           {/* Right: Compact chart or additional info */}
           <div className="flex flex-col justify-center">
             {((data.avg_assigned_workers || 0) > 0 || (data.avg_members || 0) > 0) ? (
-              <div className="h-32">
+              <div className="h-32 min-h-[200px] w-full min-w-[280px]">
                 <ChartContainer
                   config={{
                     value: { label: "Value", color: "hsl(var(--chart-1, 221 83% 53%))" },
                   }}
-                  className="h-full"
+                  className="h-full w-full"
                 >
                   <BarChart data={[
                     { metric: "Workers", value: data.avg_assigned_workers },

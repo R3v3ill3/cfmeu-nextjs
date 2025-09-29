@@ -8,9 +8,10 @@ ADD COLUMN cfmeu_registration_submitted_at TIMESTAMP WITH TIME ZONE,
 ADD COLUMN cfmeu_registration_data JSONB;
 
 -- Add OHS Committee Chair as a union role type
-ALTER TYPE union_role_name ADD VALUE 'ohs_committee_chair';
+ALTER TYPE union_role_type ADD VALUE 'ohs_committee_chair';
 
 -- Create a view to link site contacts with actual workers who have union roles
+-- Note: Removed ohs_committee_chair from the immediate view to avoid PostgreSQL enum safety issue
 CREATE OR REPLACE VIEW site_representatives AS
 SELECT 
   sc.id as site_contact_id,
@@ -49,7 +50,7 @@ FROM site_contacts sc
 LEFT JOIN union_roles ur ON (
   ur.job_site_id = sc.job_site_id 
   AND ((sc.role = 'site_delegate' AND ur.name IN ('site_delegate', 'shift_delegate', 'company_delegate'))
-       OR (sc.role = 'site_hsr' AND ur.name IN ('hsr', 'ohs_committee_chair')))
+       OR (sc.role = 'site_hsr' AND ur.name IN ('hsr')))
   AND (ur.end_date IS NULL OR ur.end_date > CURRENT_DATE)
 )
 LEFT JOIN workers w ON w.id = ur.worker_id

@@ -55,14 +55,16 @@ export function MultiSeriesGauge({
 
   return (
     <div className="w-full">
-      <div style={{ height }}>
-        <ChartContainer config={chartConfig as any} className="mx-auto h-full">
+      <div style={{ height, minHeight: height, minWidth: 300 }}>
+        <ChartContainer config={chartConfig as any} className="mx-auto h-full w-full">
           <RadialBarChart
             data={percentData as any}
             startAngle={startAngle}
             endAngle={endAngle}
             innerRadius={innerRadius}
             outerRadius={innerRadius + rings.length * (ringWidth + gap)}
+            width={300}
+            height={height}
           >
             <PolarAngleAxis type="number" domain={[0, 100]} tick={false} />
             {rings.map((r) => (

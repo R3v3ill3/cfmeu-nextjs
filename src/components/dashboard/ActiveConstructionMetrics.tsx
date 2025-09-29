@@ -238,14 +238,14 @@ export function ActiveConstructionMetricsComponent({ data, isLoading }: ActiveCo
             {/* Right side: Compact chart */}
             <div className="flex flex-col justify-center">
               {tradeMetrics && tradeMetrics.trades.length > 0 ? (
-                <div className="h-48">
+                <div className="h-48 min-h-[200px] w-full min-w-[280px]">
                   <ChartContainer
                     config={{
                       projects: { label: 'Projects', color: 'hsl(215 16% 47%)' },
                       known: { label: 'Known', color: 'hsl(142 71% 45%)' },
                       eba: { label: 'EBA', color: 'hsl(221 83% 53%)' },
                     }}
-                    className="h-full"
+                    className="h-full w-full"
                   >
                     <BarChart data={tradeMetrics.trades.map(t => ({
                       trade: t.label,

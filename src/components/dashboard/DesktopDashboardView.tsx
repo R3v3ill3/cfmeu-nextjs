@@ -79,30 +79,36 @@ export function DesktopDashboardView() {
       </div>
 
       {/* Active Pre-Construction Metrics */}
-      <PreConstructionMetricsComponent
-        data={data?.active_pre_construction || {
-          total_projects: 0, total_builders: 0, eba_builders: 0, eba_builder_percentage: 0,
-          total_employers: 0, eba_employers: 0, eba_employer_percentage: 0,
-          avg_estimated_workers: 0, avg_assigned_workers: 0, avg_members: 0
-        }}
-        isLoading={isLoading}
-      />
+      <div className="hidden">
+        <PreConstructionMetricsComponent
+          data={data?.active_pre_construction || {
+            total_projects: 0, total_builders: 0, eba_builders: 0, eba_builder_percentage: 0,
+            total_employers: 0, eba_employers: 0, eba_employer_percentage: 0,
+            avg_estimated_workers: 0, avg_assigned_workers: 0, avg_members: 0
+          }}
+          isLoading={isLoading}
+        />
+      </div>
 
       {/* Debug Info (Development Only) */}
-      <DashboardDebugInfo />
+      <div className="hidden">
+        <DashboardDebugInfo />
+      </div>
 
       {/* Active Construction Metrics (moved to bottom) */}
-      <ActiveConstructionMetricsComponent
-        data={data?.active_construction || {
-          total_projects: 0, total_builders: 0, eba_builders: 0, eba_builder_percentage: 0,
-          total_employers: 0, eba_employers: 0, eba_employer_percentage: 0,
-          core_trades: { demolition: 0, piling: 0, concreting: 0, formwork: 0, scaffold: 0, cranes: 0 },
-          projects_with_site_delegates: 0, projects_with_company_delegates: 0, projects_with_hsrs: 0,
-          projects_with_hsr_chair_delegate: 0, projects_with_full_hs_committee: 0,
-          avg_estimated_workers: 0, avg_assigned_workers: 0, avg_members: 0, financial_audit_activities: 0
-        }}
-        isLoading={isLoading}
-      />
+      <div className="hidden">
+        <ActiveConstructionMetricsComponent
+          data={data?.active_construction || {
+            total_projects: 0, total_builders: 0, eba_builders: 0, eba_builder_percentage: 0,
+            total_employers: 0, eba_employers: 0, eba_employer_percentage: 0,
+            core_trades: { demolition: 0, piling: 0, concreting: 0, formwork: 0, scaffold: 0, cranes: 0 },
+            projects_with_site_delegates: 0, projects_with_company_delegates: 0, projects_with_hsrs: 0,
+            projects_with_hsr_chair_delegate: 0, projects_with_full_hs_committee: 0,
+            avg_estimated_workers: 0, avg_assigned_workers: 0, avg_members: 0, financial_audit_activities: 0
+          }}
+          isLoading={isLoading}
+        />
+      </div>
     </div>
   )
 }
