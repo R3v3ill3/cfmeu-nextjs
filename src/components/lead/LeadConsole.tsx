@@ -1,5 +1,5 @@
 "use client"
-import { useMemo, useState } from "react"
+import { Fragment, useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,8 +8,6 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
-import { useLeadOrganizerSummary } from "@/hooks/useLeadOrganizerSummary"
-import { usePatchOrganiserLabels } from "@/hooks/usePatchOrganiserLabels"
 import { PENDING_USER_DASHBOARD_STATUSES, formatPendingOrganiserName } from "@/utils/organiserDisplay"
 
 export default function LeadConsole() {
@@ -26,15 +24,17 @@ export default function LeadConsole() {
     }
   })
 
+  const leadId = me?.role === 'lead_organiser' ? me.id : null
+
   const { data: patches = [] } = useQuery({
-    queryKey: ["lead-patches"],
-    enabled: !!me,
+    queryKey: ["lead-patches", leadId],
+    enabled: !!leadId,
     queryFn: async () => {
       const { data } = await (supabase as any)
         .from('lead_organiser_patch_assignments')
         .select('patches:patch_id(id,name)')
         .is('effective_to', null)
-        .eq('lead_organiser_id', (me as any)?.id)
+        .eq('lead_organiser_id', leadId)
       return (((data as any[]) || []).map(r => r.patches).filter(Boolean))
     }
   })

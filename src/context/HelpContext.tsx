@@ -1,3 +1,5 @@
+'use client'
+
 import { AppRole } from '@/constants/roles'
 import { createContext, useContext, useMemo, useState } from 'react'
 
