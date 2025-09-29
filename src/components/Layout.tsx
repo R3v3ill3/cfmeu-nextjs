@@ -3,7 +3,9 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Menu, LogOut, Users, Building, MapPin, Activity, Upload, BarChart3, FolderOpen, FileCheck, Shield, AlertTriangle, QrCode } from "lucide-react";
+import {
+  Menu, LogOut, Users, Building, MapPin, Activity, Upload, BarChart3, FolderOpen, FileCheck, Shield, AlertTriangle, QrCode, HelpCircle
+} from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -87,6 +89,9 @@ const Layout = ({ children }: LayoutProps) => {
     if ((userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") && visibility.campaigns) {
       items.push({ path: "/campaigns", label: "Campaigns", icon: BarChart3 });
     }
+
+    // User Guide - always show
+    items.push({ path: "/guide", label: "User Guide", icon: HelpCircle });
     
     // Administration - always show for admins
     if (userRole === "admin") {

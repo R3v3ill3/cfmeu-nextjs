@@ -22,7 +22,7 @@ import {
   SidebarTrigger,
   SidebarInput,
 } from "@/components/ui/sidebar"
-import { LogOut, Users, Building, FolderOpen, FileCheck, Shield, BarChart3, Settings, Home, MapPin, Crown, QrCode, Search as SearchIcon } from "lucide-react"
+import { LogOut, Users, Building, FolderOpen, FileCheck, Shield, BarChart3, Settings, Home, MapPin, Crown, QrCode, Search as SearchIcon, HelpCircle } from "lucide-react"
 import AdminPatchSelector from "@/components/admin/AdminPatchSelector"
 import { supabase } from "@/integrations/supabase/client"
 import { useNavigationVisibility } from "@/hooks/useNavigationVisibility"
@@ -102,6 +102,9 @@ function useVisibleNavItems(userRole: string | null): NavItem[] {
     items.push({ path: "/campaigns", label: "Campaigns", icon: BarChart3, description: "Campaign activities and tracking" })
   }
   
+  // User Guide - always show
+  items.push({ path: "/guide", label: "User Guide", icon: HelpCircle, description: "Platform documentation and user guide" })
+
   // Lead Console - show for lead organisers and admins
   if (userRole === "lead_organiser" || userRole === "admin") {
     items.push({ path: "/lead", label: "Co-ordinator Console", icon: Crown, description: "Manage organisers and patch assignments" })
