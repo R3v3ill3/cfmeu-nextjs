@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { createClient } from '@supabase/supabase-js';
+import { getBaseUrl } from '@/lib/share-links';
 
 const ALLOWED_ROLES = ['organiser', 'lead_organiser', 'admin'] as const;
 type AllowedRole = typeof ALLOWED_ROLES[number];
@@ -124,12 +125,8 @@ export async function POST(
       return NextResponse.json({ error: 'Failed to create secure link' }, { status: 500 });
     }
 
-    // Generate the share URL
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
-                   (process.env.NODE_ENV === 'production' 
-                     ? `https://${process.env.VERCEL_URL}` 
-                     : 'http://localhost:3000');
-    
+    // Generate the share URL using the robust getBaseUrl function
+    const baseUrl = getBaseUrl();
     const shareUrl = `${baseUrl}/share/${tokenRecord.token}`;
 
     const response: GenerateShareLinkResponse = {

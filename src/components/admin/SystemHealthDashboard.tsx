@@ -260,7 +260,10 @@ export function SystemHealthDashboard() {
 
                 <div className="space-y-3">
                   {workerHealth.checks.map((check, index) => (
-                    <div key={index} className="border rounded-lg p-3">
+                    <div
+                      key={`${check.service}-${check.url ?? index}`}
+                      className="border rounded-lg p-3"
+                    >
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
                           {getStatusIcon(check.status)}

@@ -14,14 +14,22 @@ export type ShareResourceType = typeof SHARE_RESOURCE_TYPES[number];
  * Get the base URL for the application
  */
 export function getBaseUrl(): string {
+  // First priority: explicitly set app URL
   if (process.env.NEXT_PUBLIC_APP_URL) {
     return process.env.NEXT_PUBLIC_APP_URL;
   }
   
+  // Second priority: Vercel production URL (better for production)
+  if (process.env.NODE_ENV === 'production' && process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  }
+  
+  // Third priority: standard Vercel URL (for preview deployments)
   if (process.env.NODE_ENV === 'production' && process.env.VERCEL_URL) {
     return `https://${process.env.VERCEL_URL}`;
   }
   
+  // Development fallback
   return 'http://localhost:3000';
 }
 
