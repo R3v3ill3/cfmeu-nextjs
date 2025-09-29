@@ -1,10 +1,10 @@
 "use client"
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ComponentType } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
-  Menu, LogOut, Users, Building, MapPin, Activity, Upload, BarChart3, FolderOpen, FileCheck, Shield, AlertTriangle, QrCode, HelpCircle
+  Menu, LogOut, Users, Building, MapPin, BarChart3, FolderOpen, FileCheck, Shield, AlertTriangle, QrCode, HelpCircle, Crown
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -16,14 +16,6 @@ import { useNavigationLoading } from "@/hooks/useNavigationLoading";
 import { JoinQrDialog } from "@/components/JoinQrDialog";
 // Fallback to generic icon from public since original assets are not present
 const cfmeuLogoLight = "/favicon.svg" as unknown as string;
-
-const navItems = [
-  { path: "/projects", label: "Projects", icon: FolderOpen },
-  { path: "/employers", label: "Employers", icon: Building },
-  { path: "/workers", label: "Workers", icon: Users },
-  { path: "/map", label: "Map", icon: MapPin },
-  { path: "/site-visits", label: "Site Visits", icon: FileCheck },
-];
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -54,8 +46,15 @@ const Layout = ({ children }: LayoutProps) => {
     checkUserRole();
   }, [user]);
 
-  const getVisibleNavItems = () => {
-    const items = [];
+  type NavItem = {
+    path: string;
+    label: string;
+    icon: ComponentType<{ className?: string }>;
+    external?: boolean;
+  };
+
+  const getVisibleNavItems = (): NavItem[] => {
+    const items: NavItem[] = [];
     
     // Always show Projects
     items.push({ path: "/projects", label: "Projects", icon: FolderOpen });
@@ -96,6 +95,9 @@ const Layout = ({ children }: LayoutProps) => {
 
     // User Guide - always show
     items.push({ path: "/guide", label: "User Guide", icon: HelpCircle });
+
+    // Bug Report - external link
+    items.push({ path: "https://fider.uconstruct.app", label: "Bug Report", icon: AlertTriangle, external: true });
     
     // Administration - always show for admins
     if (userRole === "admin") {
@@ -109,22 +111,42 @@ const Layout = ({ children }: LayoutProps) => {
     <div className={`flex ${mobile ? "flex-col" : "flex-row"} gap-2`}>
       {getVisibleNavItems().map((item) => {
         const Icon = item.icon;
-        const isActive = pathname === item.path;
+        const isActive = !item.external && pathname === item.path;
+        const className = `flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+          isActive
+            ? "bg-primary text-primary-foreground"
+            : "hover:bg-accent hover:text-accent-foreground"
+        } ${isNavigating ? 'opacity-50 pointer-events-none' : ''}`;
+
+        if (item.external) {
+          return (
+            <a
+              key={item.path}
+              href={item.path}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => {
+                if (mobile) setIsOpen(false);
+              }}
+              className={className}
+            >
+              <Icon className="h-4 w-4" />
+              {item.label}
+            </a>
+          );
+        }
+
         return (
-            <Link
+          <Link
             key={item.path}
             href={item.path}
-            onClick={(e) => {
+            onClick={() => {
               if (item.path !== pathname) {
-                startNavigation(item.path)
+                startNavigation(item.path);
               }
-              if (mobile) setIsOpen(false)
+              if (mobile) setIsOpen(false);
             }}
-            className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-              isActive
-                ? "bg-primary text-primary-foreground"
-                : "hover:bg-accent hover:text-accent-foreground"
-            } ${isNavigating ? 'opacity-50 pointer-events-none' : ''}`}
+            className={className}
           >
             <Icon className="h-4 w-4" />
             {item.label}

@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type ComponentType } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
@@ -22,7 +22,7 @@ import {
   SidebarTrigger,
   SidebarInput,
 } from "@/components/ui/sidebar"
-import { LogOut, Users, Building, FolderOpen, FileCheck, Shield, BarChart3, Settings, Home, MapPin, Crown, QrCode, Search as SearchIcon, HelpCircle } from "lucide-react"
+import { LogOut, Users, Building, FolderOpen, FileCheck, Shield, BarChart3, Settings, Home, MapPin, Crown, QrCode, Search as SearchIcon, HelpCircle, AlertTriangle } from "lucide-react"
 import AdminPatchSelector from "@/components/admin/AdminPatchSelector"
 import { supabase } from "@/integrations/supabase/client"
 import { useNavigationVisibility } from "@/hooks/useNavigationVisibility"
@@ -31,7 +31,7 @@ import { JoinQrDialog } from "@/components/JoinQrDialog"
 
 const cfmeuLogoLight = "/favicon.svg" as unknown as string
 
-type NavItem = { path: string; label: string; icon: any; description?: string }
+type NavItem = { path: string; label: string; icon: ComponentType<{ className?: string }>; description?: string; external?: boolean }
 
 const baseNavItems: NavItem[] = [
   { path: "/", label: "Dashboard", icon: Home, description: "Overview and analytics" },
@@ -104,6 +104,9 @@ function useVisibleNavItems(userRole: string | null): NavItem[] {
   
   // User Guide - always show
   items.push({ path: "/guide", label: "User Guide", icon: HelpCircle, description: "Platform documentation and user guide" })
+
+  // Bug Report - external link
+  items.push({ path: "https://fider.uconstruct.app", label: "Bug Report", icon: AlertTriangle, description: "Report bugs and platform issues", external: true })
 
   // Lead Console - show for lead organisers and admins when enabled
   if ((userRole === "lead_organiser" || userRole === "admin") && visibility.lead_console) {
@@ -178,7 +181,30 @@ export default function DesktopLayout({ children }: { children: React.ReactNode 
               <SidebarMenu>
                 {filteredItems.map((item) => {
                   const Icon = item.icon
-                  const isActive = pathname === item.path
+                  const isActive = !item.external && pathname === item.path
+
+                  if (item.external) {
+                    return (
+                      <SidebarMenuItem key={item.path}>
+                        <SidebarMenuButton
+                          size="lg"
+                          tooltip={item.label}
+                          className="justify-start rounded-full text-[var(--brand-blue)] hover:text-[var(--brand-blue)]"
+                        >
+                          <a
+                            href={item.path}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-3 w-full"
+                          >
+                            <Icon className="h-4 w-4" />
+                            <span className="truncate">{item.label}</span>
+                          </a>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    )
+                  }
+
                   return (
                     <SidebarMenuItem key={item.path}>
                       <SidebarMenuButton
