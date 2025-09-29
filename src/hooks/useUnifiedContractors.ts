@@ -60,13 +60,42 @@ export function useUnifiedContractors(projectId: string, options: UnifiedContrac
       
       const rows: UnifiedContractorRow[] = [];
 
-      // 1) Project roles from the unified view
-      const { data: roles, error: rolesError } = await supabase
-        .from("v_unified_project_contractors")
-        .select("role, employer_id, source, employers(name, enterprise_agreement_status)")
-        .eq("project_id", projectId);
+      // 1) Project roles from the unified view (with fallback if view doesn't exist)
+      let roles: any[] = [];
+      try {
+        const { data, error } = await supabase
+          .from("v_unified_project_contractors")
+          .select("role, employer_id, source, employers(name, enterprise_agreement_status)")
+          .eq("project_id", projectId);
 
-      if (rolesError) throw rolesError;
+        if (error) {
+          console.warn('v_unified_project_contractors query failed, using fallback:', error);
+          // Fallback to project_assignments for role data
+          const { data: roleAssignments } = await supabase
+            .from("project_assignments")
+            .select(`
+              employer_id,
+              source,
+              match_status,
+              contractor_role_types(code),
+              employers(name, enterprise_agreement_status)
+            `)
+            .eq("project_id", projectId)
+            .eq("assignment_type", "contractor_role");
+          
+          roles = (roleAssignments || []).map((r: any) => ({
+            role: r.contractor_role_types?.code || 'other',
+            employer_id: r.employer_id,
+            source: r.source,
+            employers: r.employers
+          }));
+        } else {
+          roles = data || [];
+        }
+      } catch (err) {
+        console.warn('Failed to query contractor roles, continuing without them:', err);
+        roles = [];
+      }
 
       (roles || []).forEach((r: any, idx: number) => {
         if (!r.employer_id) return;

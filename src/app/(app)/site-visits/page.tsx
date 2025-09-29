@@ -22,13 +22,18 @@ export default function SiteVisitsPage() {
   const { data: rows = [], isFetching, refetch } = useQuery({
     queryKey: ["site-visits"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from("site_visit")
-        .select("id, date, notes, job_sites(name,full_address,location,projects(name)), employers(name), profiles(full_name)")
-        .order("date", { ascending: false })
-        .limit(200)
-      if (error) throw error
-      let list = (data || []) as any[]
+      try {
+        const { data, error } = await (supabase as any)
+          .from("site_visit")
+          .select("id, date, notes, job_sites(name,full_address,location,projects(name)), employers(name), profiles(full_name)")
+          .order("date", { ascending: false })
+          .limit(200)
+        if (error) {
+          console.warn('site_visit query failed:', error);
+          return [];
+        }
+        
+        let list = (data || []) as any[]
       if (status === "stale") {
         const cutoff = Date.now() - 1000*60*60*24*7
         list = list.filter((r) => {
@@ -45,6 +50,10 @@ export default function SiteVisitsPage() {
         })
       }
       return list
+      } catch (err) {
+        console.warn('Failed to query site visits:', err);
+        return [];
+      }
     }
   })
 

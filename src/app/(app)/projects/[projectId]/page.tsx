@@ -329,13 +329,38 @@ export default function ProjectDetailPage() {
     staleTime: 30000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      const { data } = await (supabase as any)
-        .from("site_visit")
-        .select("date")
-        .eq("project_id", projectId)
-        .order("date", { ascending: false })
-        .limit(1)
-      return (data && data[0]?.date) ? format(new Date(data[0].date), "dd/MM/yyyy") : "—"
+      try {
+        // Try the optimized materialized view first
+        const { data, error } = await (supabase as any)
+          .from("site_visit_list_view")
+          .select("scheduled_at, created_at")
+          .eq("project_id", projectId)
+          .order("scheduled_at", { ascending: false, nullsFirst: false })
+          .order("created_at", { ascending: false, nullsFirst: false })
+          .limit(1)
+        
+        if (error) {
+          console.warn('site_visit_list_view query failed, trying fallback:', error);
+          // Fallback: query via job_sites relationship
+          const { data: fallbackData } = await (supabase as any)
+            .from("site_visit")
+            .select("date, scheduled_at, job_sites!inner(project_id)")
+            .eq("job_sites.project_id", projectId)
+            .order("date", { ascending: false })
+            .limit(1)
+          
+          const visitDate = fallbackData && fallbackData[0] ? 
+            (fallbackData[0].scheduled_at || fallbackData[0].date) : null;
+          return visitDate ? format(new Date(visitDate), "dd/MM/yyyy") : "—";
+        }
+        
+        const visitDate = data && data[0] ? 
+          (data[0].scheduled_at || data[0].created_at) : null;
+        return visitDate ? format(new Date(visitDate), "dd/MM/yyyy") : "—";
+      } catch (err) {
+        console.warn('Failed to query site visits, returning fallback:', err);
+        return "—";
+      }
     }
   })
 
