@@ -22,6 +22,9 @@ import { NavigationVisibilityManager } from "@/components/admin/NavigationVisibi
 import { SystemHealthDashboard } from "@/components/admin/SystemHealthDashboard"
 import { useAuth } from "@/hooks/useAuth"
 import { useSearchParams } from "next/navigation"
+import { useIsMobile } from "@/hooks/use-mobile"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { ChevronDown, ChevronUp } from "lucide-react"
 
 export default function AdminPage() {
   const [open, setOpen] = useState(false)
@@ -30,6 +33,7 @@ export default function AdminPage() {
   const [userRole, setUserRole] = useState<string | null>(null)
   const { user } = useAuth()
   const searchParams = useSearchParams()
+  const isMobile = useIsMobile()
 
   // Get user role
   useEffect(() => {
@@ -44,6 +48,20 @@ export default function AdminPage() {
     }
     checkUserRole()
   }, [user])
+
+  // Fetch users for hierarchy manager
+  const { data: users = [] } = useQuery({
+    queryKey: ["admin-users"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, full_name, email, role")
+        .order("full_name")
+      if (error) throw error
+      return data || []
+    },
+    enabled: !!user
+  })
 
   // Determine available tabs based on role
   const isAdmin = userRole === "admin"
@@ -63,19 +81,173 @@ export default function AdminPage() {
 
   return (
     <RoleGuard allow={["admin", "lead_organiser"]}>
-      <div className="p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">
+      <div className={`space-y-4 ${isMobile ? 'px-safe py-4 pb-safe-bottom' : 'p-6'}`}>
+        <div className={`flex ${isMobile ? 'flex-col gap-3' : 'items-center justify-between'}`}>
+          <h1 className={`${isMobile ? 'text-xl' : 'text-2xl'} font-semibold`}>
             {isAdmin ? "Administration" : "Co-ordinator Management"}
           </h1>
-          <div className="flex items-center gap-2">
+          <div className={`flex ${isMobile ? 'flex-col gap-2' : 'items-center gap-2'}`}>
             {isAdmin && (
-              <Button variant="outline" onClick={() => setLookupOpen(true)}>Address Lookup</Button>
+              <Button variant="outline" size={isMobile ? "sm" : "default"} onClick={() => setLookupOpen(true)} className={isMobile ? "w-full" : ""}>
+                Address Lookup
+              </Button>
             )}
-            <Button onClick={() => setOpen(true)}>Invite User</Button>
+            <Button onClick={() => setOpen(true)} size={isMobile ? "sm" : "default"} className={isMobile ? "w-full" : ""}>
+              Invite User
+            </Button>
           </div>
         </div>
-        <Tabs value={tabValue} onValueChange={setTabValue}>
+        
+        {isMobile ? (
+          /* Mobile-optimized accordion layout */
+          <div className="space-y-3">
+            {isAdmin && (
+              <Collapsible>
+                <CollapsibleTrigger asChild>
+                  <Button variant="outline" className="w-full justify-between">
+                    Users
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="mt-3">
+                    <UsersTable />
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+            
+            <Collapsible defaultOpen={!isAdmin}>
+              <CollapsibleTrigger asChild>
+                <Button variant="outline" className="w-full justify-between">
+                  Invites
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="mt-3 space-y-3">
+                  <div className="flex justify-end">
+                    <Button variant="outline" size="sm" onClick={() => setAddDraftOpen(true)}>
+                      Add draft organiser
+                    </Button>
+                  </div>
+                  <PendingUsersTable />
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+            
+            {isAdmin && (
+              <Collapsible>
+                <CollapsibleTrigger asChild>
+                  <Button variant="outline" className="w-full justify-between">
+                    Hierarchy
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="mt-3">
+                    <RoleHierarchyManager users={users} />
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+            
+            <Collapsible>
+              <CollapsibleTrigger asChild>
+                <Button variant="outline" className="w-full justify-between">
+                  Patches
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="mt-3">
+                  <PatchManager />
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+            
+            {isAdmin && (
+              <Collapsible>
+                <CollapsibleTrigger asChild>
+                  <Button variant="outline" className="w-full justify-between">
+                    Spatial Assignment
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="mt-3">
+                    <SpatialAssignmentTool />
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+            
+            <Collapsible>
+              <CollapsibleTrigger asChild>
+                <Button variant="outline" className="w-full justify-between">
+                  Scoping
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="mt-3">
+                  <OrganiserScopeManager />
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+            
+            <Collapsible>
+              <CollapsibleTrigger asChild>
+                <Button variant="outline" className="w-full justify-between">
+                  Data Management
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="mt-3">
+                  <DataUploadTab />
+                  <div className="mt-4">
+                    <DuplicateEmployerManager />
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+            
+            {isAdmin && (
+              <>
+                <Collapsible>
+                  <CollapsibleTrigger asChild>
+                    <Button variant="outline" className="w-full justify-between">
+                      Navigation
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="mt-3">
+                      <NavigationVisibilityManager />
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+                
+                <Collapsible>
+                  <CollapsibleTrigger asChild>
+                    <Button variant="outline" className="w-full justify-between">
+                      System Health
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="mt-3">
+                      <SystemHealthDashboard />
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              </>
+            )}
+          </div>
+        ) : (
+          /* Desktop layout - original tabs */
+          <Tabs value={tabValue} onValueChange={setTabValue}>
           <TabsList>
             {isAdmin && <TabsTrigger value="users">Users</TabsTrigger>}
             <TabsTrigger value="invites">Invites</TabsTrigger>
@@ -101,7 +273,7 @@ export default function AdminPage() {
           </TabsContent>
           {isAdmin && (
             <TabsContent value="hierarchy">
-              <AdminHierarchyTab />
+              <RoleHierarchyManager users={users} />
             </TabsContent>
           )}
           <TabsContent value="patches">
@@ -117,37 +289,27 @@ export default function AdminPage() {
           </TabsContent>
           <TabsContent value="data-management">
             <DataUploadTab />
+            <div className="mt-4">
+              <DuplicateEmployerManager />
+            </div>
           </TabsContent>
           {isAdmin && (
-            <TabsContent value="navigation">
-              <NavigationVisibilityManager />
-            </TabsContent>
+            <>
+              <TabsContent value="navigation">
+                <NavigationVisibilityManager />
+              </TabsContent>
+              <TabsContent value="system-health">
+                <SystemHealthDashboard />
+              </TabsContent>
+            </>
           )}
-          {isAdmin && (
-            <TabsContent value="system-health">
-              <SystemHealthDashboard />
-            </TabsContent>
-          )}
-        </Tabs>
+          </Tabs>
+        )}
+
         <InviteUserDialog open={open} onOpenChange={setOpen} onSuccess={() => {}} />
         {isAdmin && <AddressLookupDialog open={lookupOpen} onOpenChange={setLookupOpen} />}
         <AddDraftUserDialog open={addDraftOpen} onOpenChange={setAddDraftOpen} onSuccess={() => {}} />
       </div>
     </RoleGuard>
   )
-}
-
-function AdminHierarchyTab() {
-  const { data: users = [] } = useQuery({
-    queryKey: ["admin-hierarchy-users"],
-    queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from("profiles")
-        .select("id, full_name, email, role")
-        .order("full_name")
-      if (error) throw error
-      return data || []
-    }
-  })
-  return <RoleHierarchyManager users={users as any} />
 }

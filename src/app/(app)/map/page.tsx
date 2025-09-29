@@ -680,25 +680,25 @@ export default function MapPage() {
   );
 
   return (
-    <div className="space-y-4 relative">
+    <div className={`space-y-4 relative ${isMobile ? 'px-safe py-4 pb-safe-bottom' : ''}`}>
       {/* Print-only elements */}
       <div className="print-only print-title">
         CFMEU Patches Map
         {selectedPatchIds.length > 0 && ` - Selected Patches: ${selectedPatchIds.length}`}
         {projectColorBy !== 'default' && ` - Colored by ${projectColorBy.replace('_', ' ')}`}
       </div>
-      <div className="flex items-center justify-between no-print">
-        <h1 className="text-2xl font-bold">Patches Map</h1>
+      <div className={`flex ${isMobile ? 'flex-col gap-3' : 'items-center justify-between'} no-print`}>
+        <h1 className={`${isMobile ? 'text-xl' : 'text-2xl'} font-bold`}>Patches Map</h1>
         
-        <div className="flex items-center gap-4">
+        <div className={`flex ${isMobile ? 'flex-col gap-2' : 'items-center gap-4'}`}>
           {/* Print Buttons */}
-          <Button variant="outline" onClick={handlePrint} className="print:hidden">
+          <Button variant="outline" onClick={handlePrint} className={`print:hidden ${isMobile ? 'w-full' : ''}`} size={isMobile ? "sm" : "default"}>
             <Printer className="h-4 w-4 mr-2" />
             Print Map
           </Button>
           
           {patchesForKey.length > 0 && (
-            <Button variant="outline" onClick={handleBatchPrint} className="print:hidden">
+            <Button variant="outline" onClick={handleBatchPrint} className={`print:hidden ${isMobile ? 'w-full' : ''}`} size={isMobile ? "sm" : "default"}>
               <FileText className="h-4 w-4 mr-2" />
               Print Patches ({patchesForKey.length})
             </Button>

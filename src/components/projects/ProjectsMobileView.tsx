@@ -175,9 +175,10 @@ export function ProjectsMobileView() {
     router.replace(qs ? `${pathname}?${qs}` : pathname)
   }
 
+  // For map view, fetch all projects; for card/list view, use pagination
   const serverSideResult = useProjectsServerSideCompatible({
-    page,
-    pageSize: PAGE_SIZE,
+    page: view === "map" ? 1 : page,
+    pageSize: view === "map" ? 1000 : PAGE_SIZE, // Large number for map to get all projects
     sort: sort as 'name' | 'value' | 'tier' | 'workers' | 'members' | 'delegates' | 'eba_coverage' | 'employers' | 'created_at',
     dir: dir as 'asc' | 'desc',
     q: q || undefined,
@@ -189,6 +190,11 @@ export function ProjectsMobileView() {
   })
 
   const { projects, totalCount, hasNext, hasPrev, isLoading } = serverSideResult
+  
+  // For pagination display, use the actual page size
+  const displayTotalCount = view === "map" ? projects.length : totalCount
+  const displayHasNext = view === "map" ? false : hasNext
+  const displayHasPrev = view === "map" ? false : hasPrev
   
   // Count active filters
   const activeFilters = [
@@ -423,7 +429,11 @@ export function ProjectsMobileView() {
       {/* Results count */}
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>
-          Showing {((page - 1) * PAGE_SIZE) + 1}-{Math.min(page * PAGE_SIZE, totalCount)} of {totalCount} projects
+          {view === "map" ? (
+            `Showing ${displayTotalCount} projects on map`
+          ) : (
+            `Showing ${((page - 1) * PAGE_SIZE) + 1}-${Math.min(page * PAGE_SIZE, totalCount)} of ${totalCount} projects`
+          )}
         </span>
         {activeFilters > 0 && (
           <Badge variant="outline" className="text-xs">
@@ -434,15 +444,23 @@ export function ProjectsMobileView() {
 
       {/* Content based on view */}
       {view === "map" ? (
-        <ProjectsMapView
-          projects={projects}
-          summaries={{}}
-          onProjectClick={(id) => router.push(`/projects/${id}`)}
-          searchQuery={q}
-          patchIds={[]}
-          tierFilter={tierFilter}
-          workersFilter={workersFilter}
-        />
+        <div className="space-y-3">
+          {projects.length > 0 && (
+            <div className="text-xs text-muted-foreground bg-blue-50 border border-blue-200 rounded-lg p-3">
+              💡 <strong>Map View:</strong> Showing all {projects.length} projects that match your current filters. 
+              Tap on any project marker to view details.
+            </div>
+          )}
+          <ProjectsMapView
+            projects={projects}
+            summaries={{}}
+            onProjectClick={(id) => router.push(`/projects/${id}`)}
+            searchQuery={q}
+            patchIds={[]}
+            tierFilter={tierFilter}
+            workersFilter={workersFilter}
+          />
+        </div>
       ) : projects.length === 0 && !isLoading ? (
         <p className="text-center text-muted-foreground pt-8">No projects found.</p>
       ) : (
@@ -457,18 +475,20 @@ export function ProjectsMobileView() {
         </div>
       )}
 
-      {/* Pagination */}
-      <div className="flex items-center justify-between pt-4">
-        <Button variant="outline" size="sm" disabled={!hasPrev} onClick={() => setParam('page', String(page - 1))}>
-          Previous
-        </Button>
-        <div className="text-sm text-muted-foreground">
-          Page {page} of {Math.ceil(totalCount / PAGE_SIZE)}
+      {/* Pagination - only show for card/list views */}
+      {view !== "map" && (
+        <div className="flex items-center justify-between pt-4">
+          <Button variant="outline" size="sm" disabled={!displayHasPrev} onClick={() => setParam('page', String(page - 1))}>
+            Previous
+          </Button>
+          <div className="text-sm text-muted-foreground">
+            Page {page} of {Math.ceil(totalCount / PAGE_SIZE)}
+          </div>
+          <Button variant="outline" size="sm" disabled={!displayHasNext} onClick={() => setParam('page', String(page + 1))}>
+            Next
+          </Button>
         </div>
-        <Button variant="outline" size="sm" disabled={!hasNext} onClick={() => setParam('page', String(page + 1))}>
-          Next
-        </Button>
-      </div>
+      )}
     </div>
   )
 }
