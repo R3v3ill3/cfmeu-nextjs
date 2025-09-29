@@ -130,9 +130,19 @@ export function loadGuide(force = false): HelpGuide {
 export function getSectionsForRoute(route: string): HelpSection[] {
   const guide = loadGuide()
   const normalizedRoute = route.split('?')[0]
-  return guide.sections.filter((section) =>
+  const exactMatches = guide.sections.filter((section) =>
     section.routeMatches.includes(normalizedRoute)
   )
+  if (exactMatches.length > 0) {
+    return exactMatches
+  }
+  const hintMatches = guide.sections.filter((section) =>
+    section.routeMatches.some((match) => normalizedRoute.startsWith(match))
+  )
+  if (hintMatches.length > 0) {
+    return hintMatches
+  }
+  return guide.sections.filter((section) => section.level <= 2).slice(0, 5)
 }
 
 export function searchGuide(query: string): HelpSection[] {

@@ -80,8 +80,7 @@ export function HelpLauncher({ triggerVariant = 'ghost', size = 'icon' }: { trig
   const searchQuery = useQuery({
     queryKey: ['help', 'search', trimmedQuery],
     queryFn: () => searchHelp(trimmedQuery),
-    enabled: open && isSearchReady,
-    keepPreviousData: true
+    enabled: open && isSearchReady
   })
 
   const shouldShowSearchResults = useMemo(() => activeTab === 'search' && isSearchReady, [activeTab, isSearchReady])
