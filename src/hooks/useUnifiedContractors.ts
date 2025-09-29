@@ -105,7 +105,7 @@ export function useUnifiedContractors(projectId: string, options: UnifiedContrac
           tradeType: roleCode || 'other',
           tradeLabel: roleLabel,
           tradeStage: 'other',
-          source: 'project_assignments',
+          source: 'project_role',
           ebaStatus: r.employers?.enterprise_agreement_status !== 'no_eba',
           hasEba: r.employers?.enterprise_agreement_status !== 'no_eba',
         });
