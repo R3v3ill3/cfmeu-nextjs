@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server'
 import { getSectionsForRoute, loadGuide } from '@/lib/helpGuide'
 import { AppRole } from '@/constants/roles'
 
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 const MAX_TIPS = 5
 
 function roleFilter(sectionTitle: string, role: AppRole | undefined): boolean {
@@ -25,24 +28,35 @@ export async function GET(req: Request) {
   const route = searchParams.get('route') || '/'
   const role = (searchParams.get('role') as AppRole | null) ?? undefined
 
-  const guide = loadGuide()
-  const sections = getSectionsForRoute(route)
+  try {
+    const guide = loadGuide()
+    if (guide.error) {
+      console.error('[help-tips] guide load error:', guide.error)
+      return NextResponse.json({ tips: [], error: guide.error }, { status: 503 })
+    }
 
-  if (sections.length === 0) {
-    return NextResponse.json({ tips: [], lastLoaded: guide.lastLoaded })
+    const sections = getSectionsForRoute(route)
+
+    if (sections.length === 0) {
+      console.warn('[help-tips] no sections found for route', route)
+      return NextResponse.json({ tips: [], lastLoaded: guide.lastLoaded })
+    }
+
+    const tips = sections
+      .filter((section) => roleFilter(section.title, role))
+      .map((section) => ({
+        id: section.id,
+        title: section.title,
+        level: section.level,
+        content: section.content.trim() || 'No additional content yet.',
+        routeMatches: section.routeMatches,
+        keywords: section.keywords
+      }))
+      .slice(0, MAX_TIPS)
+
+    return NextResponse.json({ tips, lastLoaded: guide.lastLoaded })
+  } catch (err) {
+    console.error('[help-tips] unhandled error', err)
+    return NextResponse.json({ tips: [], error: 'Internal error loading help tips' }, { status: 500 })
   }
-
-  const tips = sections
-    .filter((section) => roleFilter(section.title, role))
-    .map((section) => ({
-      id: section.id,
-      title: section.title,
-      level: section.level,
-      content: section.content.trim(),
-      routeMatches: section.routeMatches,
-      keywords: section.keywords
-    }))
-    .slice(0, MAX_TIPS)
-
-  return NextResponse.json({ tips, lastLoaded: guide.lastLoaded })
 }

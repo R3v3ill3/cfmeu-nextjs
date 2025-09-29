@@ -152,6 +152,11 @@ export function HelpLauncher({ triggerVariant = 'ghost', size = 'icon' }: { trig
               {tipsQuery.isError && (
                 <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
                   Unable to load contextual tips. Please try again later.
+                  {process.env.NODE_ENV === 'development' && tipsQuery.error instanceof Error && (
+                    <div className="mt-2 text-xs text-destructive/80">
+                      {tipsQuery.error.message}
+                    </div>
+                  )}
                 </div>
               )}
               {tipsQuery.isSuccess && tipsQuery.data.length === 0 && (

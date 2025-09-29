@@ -14,12 +14,12 @@ export type HelpSection = {
 export type HelpGuide = {
   sections: HelpSection[]
   lastLoaded: number
+  error?: string
 }
-
-const GUIDE_PATH = path.join(process.cwd(), 'USER_GUIDE.md')
 
 let cachedGuide: HelpGuide | null = null
 let cachedMtime: number | null = null
+let resolvedGuidePath: string | null = null
 
 const ROUTE_HINTS: Record<string, string[]> = {
   '/': ['dashboard', 'landing page', 'home'],
@@ -33,6 +33,33 @@ const ROUTE_HINTS: Record<string, string[]> = {
   '/lead': ['co-ordinator', 'lead organiser'],
   '/admin': ['administration', 'management', 'user management'],
   '/guide': ['guide', 'documentation']
+}
+
+function resolveGuidePath(): string | null {
+  if (resolvedGuidePath && fs.existsSync(resolvedGuidePath)) {
+    return resolvedGuidePath
+  }
+
+  const cwd = process.cwd()
+  const candidates = [
+    path.join(cwd, 'USER_GUIDE.md'),
+    path.join(cwd, '..', 'USER_GUIDE.md'),
+    path.join(cwd, 'public', 'USER_GUIDE.md'),
+    path.join(cwd, '..', 'public', 'USER_GUIDE.md')
+  ]
+
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) {
+        resolvedGuidePath = candidate
+        return resolvedGuidePath
+      }
+    } catch (err) {
+      // ignore and try next candidate
+    }
+  }
+
+  return null
 }
 
 function slugify(input: string): string {
@@ -102,26 +129,52 @@ function extractSections(markdown: string): HelpSection[] {
 }
 
 function loadGuideFresh(): HelpGuide {
-  const stats = fs.statSync(GUIDE_PATH)
-  const markdown = fs.readFileSync(GUIDE_PATH, 'utf-8')
-  const sections = extractSections(markdown)
-  cachedGuide = {
-    sections,
-    lastLoaded: Date.now()
+  const guidePath = resolveGuidePath()
+  if (!guidePath) {
+    cachedGuide = {
+      sections: [],
+      lastLoaded: Date.now(),
+      error: 'USER_GUIDE.md not found'
+    }
+    cachedMtime = null
+    return cachedGuide
   }
-  cachedMtime = stats.mtimeMs
-  return cachedGuide
+
+  try {
+    const stats = fs.statSync(guidePath)
+    const markdown = fs.readFileSync(guidePath, 'utf-8')
+    const sections = extractSections(markdown)
+    cachedGuide = {
+      sections,
+      lastLoaded: Date.now()
+    }
+    cachedMtime = stats.mtimeMs
+    return cachedGuide
+  } catch (err) {
+    cachedGuide = {
+      sections: [],
+      lastLoaded: Date.now(),
+      error: err instanceof Error ? err.message : 'Failed to load guide'
+    }
+    cachedMtime = null
+    return cachedGuide
+  }
 }
 
 export function loadGuide(force = false): HelpGuide {
-  if (!force && cachedGuide && cachedMtime) {
+  if (!force && cachedGuide && cachedMtime !== null) {
     try {
-      const stats = fs.statSync(GUIDE_PATH)
-      if (stats.mtimeMs === cachedMtime) {
+      const guidePath = resolveGuidePath()
+      if (guidePath) {
+        const stats = fs.statSync(guidePath)
+        if (stats.mtimeMs === cachedMtime) {
+          return cachedGuide
+        }
+      } else {
         return cachedGuide
       }
     } catch (err) {
-      // fall through to reload
+      // Ignore and fall through to reload
     }
   }
   return loadGuideFresh()
@@ -129,6 +182,9 @@ export function loadGuide(force = false): HelpGuide {
 
 export function getSectionsForRoute(route: string): HelpSection[] {
   const guide = loadGuide()
+  if (guide.sections.length === 0) {
+    return []
+  }
   const normalizedRoute = route.split('?')[0]
   const exactMatches = guide.sections.filter((section) =>
     section.routeMatches.includes(normalizedRoute)
@@ -147,6 +203,9 @@ export function getSectionsForRoute(route: string): HelpSection[] {
 
 export function searchGuide(query: string): HelpSection[] {
   const guide = loadGuide()
+  if (guide.sections.length === 0) {
+    return []
+  }
   const terms = query.toLowerCase().split(/[^a-z0-9]+/g).filter(Boolean)
   if (terms.length === 0) return []
 
