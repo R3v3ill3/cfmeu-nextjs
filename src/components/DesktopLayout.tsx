@@ -28,6 +28,7 @@ import { supabase } from "@/integrations/supabase/client"
 import { useNavigationVisibility } from "@/hooks/useNavigationVisibility"
 import { useNavigationLoading } from "@/hooks/useNavigationLoading"
 import { JoinQrDialog } from "@/components/JoinQrDialog"
+import { HelpLauncher } from '@/components/help/HelpLauncher'
 
 const cfmeuLogoLight = "/favicon.svg" as unknown as string
 
@@ -298,6 +299,7 @@ export default function DesktopLayout({ children }: { children: React.ReactNode 
                 </span>
               </div>
               
+              <HelpLauncher triggerVariant="ghost" size="icon" />
               <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
                 <Settings className="h-4 w-4" />
               </Button>

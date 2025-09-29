@@ -14,6 +14,7 @@ import AdminPatchSelector from "@/components/admin/AdminPatchSelector";
 import { useNavigationVisibility } from "@/hooks/useNavigationVisibility";
 import { useNavigationLoading } from "@/hooks/useNavigationLoading";
 import { JoinQrDialog } from "@/components/JoinQrDialog";
+import { HelpLauncher } from "@/components/help/HelpLauncher";
 // Fallback to generic icon from public since original assets are not present
 const cfmeuLogoLight = "/favicon.svg" as unknown as string;
 
@@ -218,6 +219,7 @@ const Layout = ({ children }: LayoutProps) => {
 
           {/* User menu */}
           <div className="ml-auto flex items-center gap-2">
+            <HelpLauncher triggerVariant="ghost" size="icon" />
             {userRole === "admin" && (
               // Admin-only patch selector next to user name
               // eslint-disable-next-line @typescript-eslint/ban-ts-comment
