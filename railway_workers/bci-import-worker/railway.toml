@@ -1,0 +1,9 @@
+[build]
+command = "npm run build"
+
+[deploy]
+startCommand = "npm start"
+restartPolicyType = "ON_FAILURE"
+
+[environments.production]
+PORT = 3250

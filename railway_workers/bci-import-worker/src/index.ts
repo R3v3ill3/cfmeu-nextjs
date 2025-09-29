@@ -17,7 +17,9 @@ const app = Fastify({
 await app.register(cors, {
   origin: [
     'http://localhost:3000',
-    'http://127.0.0.1:3000'
+    'http://127.0.0.1:3000',
+    // Add your production domain here
+    process.env.ALLOWED_ORIGIN || 'https://your-app.vercel.app'
   ],
   methods: ['POST', 'OPTIONS']
 })
