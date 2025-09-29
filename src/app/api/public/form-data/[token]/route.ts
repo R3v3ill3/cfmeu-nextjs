@@ -296,6 +296,20 @@ export async function GET(
         tradeContractors: (() => {
           const allTradeContractors: any[] = [];
           
+          // Define key contractor trade types (matching MappingSubcontractorsTable.tsx)
+          const KEY_CONTRACTOR_TRADES = new Set([
+            'demolition',
+            'piling', 
+            'concrete',
+            'scaffolding',
+            'form_work',
+            'tower_crane',
+            'mobile_crane',
+            'labour_hire',
+            'earthworks',
+            'traffic_control'
+          ]);
+          
           // Enhanced stage mapping based on trade type enum
           const stageMapping: Record<string, string> = {
             // Early Works
@@ -393,7 +407,30 @@ export async function GET(
             });
           });
           
-          console.log('✅ Final combined trade contractors:', allTradeContractors);
+          // 4. Add empty rows for all key contractor trades that don't have existing entries
+          const existingTradeTypes = new Set(allTradeContractors.map(tc => tc.tradeType));
+          
+          KEY_CONTRACTOR_TRADES.forEach(tradeType => {
+            if (!existingTradeTypes.has(tradeType)) {
+              const stage = stageMapping[tradeType] || 'other';
+              const tradeLabel = tradeType.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
+              
+              allTradeContractors.push({
+                id: `empty_key_trade:${tradeType}`,
+                employerId: null,
+                employerName: null,
+                tradeType,
+                tradeLabel,
+                stage,
+                estimatedWorkforce: null,
+                ebaStatus: null,
+                dataSource: null,
+                matchStatus: null,
+              });
+            }
+          });
+          
+          console.log('✅ Final combined trade contractors (including empty key trades):', allTradeContractors);
           return allTradeContractors;
         })(),
       };
