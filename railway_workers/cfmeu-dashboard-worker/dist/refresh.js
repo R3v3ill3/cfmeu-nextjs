@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.scheduleMaterializedViewRefreshes = scheduleMaterializedViewRefreshes;
+exports.refreshPatchProjectMappingViewInBackground = refreshPatchProjectMappingViewInBackground;
 const node_cron_1 = __importDefault(require("node-cron"));
 const supabase_1 = require("./supabase");
 const config_1 = require("./config");
@@ -22,4 +23,21 @@ function scheduleMaterializedViewRefreshes(logger) {
             logger.error({ err }, 'Failed to refresh materialized views');
         }
     });
+}
+function refreshPatchProjectMappingViewInBackground(logger) {
+    const svc = (0, supabase_1.getServiceRoleClient)();
+    void (async () => {
+        try {
+            const { error } = await svc.rpc('refresh_patch_project_mapping_view');
+            if (error) {
+                logger.warn({ err: error }, 'Failed to auto-refresh patch_project_mapping_view');
+            }
+            else {
+                logger.info('Auto-refreshed patch_project_mapping_view after fallback');
+            }
+        }
+        catch (e) {
+            logger.warn({ err: e }, 'Failed to auto-refresh patch_project_mapping_view');
+        }
+    })();
 }

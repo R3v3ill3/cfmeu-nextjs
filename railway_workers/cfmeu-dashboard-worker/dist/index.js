@@ -120,11 +120,7 @@ app.get('/v1/projects', async (req, res) => {
                 patchProjects = fallbackData || [];
                 usedFallback = true;
                 // Best-effort background refresh using service client (won't block request)
-                const svc = (0, supabase_1.getServiceRoleClient)();
-                svc
-                    .rpc('refresh_patch_project_mapping_view')
-                    .then(() => logger.info('Auto-refreshed patch_project_mapping_view after fallback'))
-                    .catch((e) => logger.warn({ err: e }, 'Failed to auto-refresh patch_project_mapping_view'));
+                (0, refresh_1.refreshPatchProjectMappingViewInBackground)(logger);
             }
             patchProjectCount = patchProjects?.length || 0;
             patchFilteringMethod = usedFallback ? 'fallback_job_sites' : 'materialized_view';

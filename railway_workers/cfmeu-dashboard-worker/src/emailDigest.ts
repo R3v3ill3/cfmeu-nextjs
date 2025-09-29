@@ -1,5 +1,4 @@
 import 'dotenv/config'
-import fetch from 'node-fetch'
 
 // Lightweight scaffold for daily email digest (no-op by default)
 // Uses NEXT_PUBLIC_DASHBOARD_WORKER_URL or local API to query new counts
