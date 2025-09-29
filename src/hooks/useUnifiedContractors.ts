@@ -60,38 +60,30 @@ export function useUnifiedContractors(projectId: string, options: UnifiedContrac
       
       const rows: UnifiedContractorRow[] = [];
 
-      // 1) Project roles from the unified view (with fallback if view doesn't exist)
+      // 1) Project roles directly from project_assignments
       let roles: any[] = [];
       try {
         const { data, error } = await supabase
-          .from("v_unified_project_contractors")
-          .select("role, employer_id, source, employers(name, enterprise_agreement_status)")
-          .eq("project_id", projectId);
+          .from("project_assignments")
+          .select(`
+            id,
+            employer_id,
+            source,
+            match_status,
+            match_confidence,
+            matched_at,
+            confirmed_at,
+            match_notes,
+            contractor_role_types(code, name),
+            employers(name, enterprise_agreement_status)
+          `)
+          .eq("project_id", projectId)
+          .eq("assignment_type", "contractor_role");
 
         if (error) {
-          console.warn('v_unified_project_contractors query failed, using fallback:', error);
-          // Fallback to project_assignments for role data
-          const { data: roleAssignments } = await supabase
-            .from("project_assignments")
-            .select(`
-              employer_id,
-              source,
-              match_status,
-              contractor_role_types(code),
-              employers(name, enterprise_agreement_status)
-            `)
-            .eq("project_id", projectId)
-            .eq("assignment_type", "contractor_role");
-          
-          roles = (roleAssignments || []).map((r: any) => ({
-            role: r.contractor_role_types?.code || 'other',
-            employer_id: r.employer_id,
-            source: r.source,
-            employers: r.employers
-          }));
-        } else {
-          roles = data || [];
+          console.warn('project_assignments role lookup failed:', error);
         }
+        roles = data || [];
       } catch (err) {
         console.warn('Failed to query contractor roles, continuing without them:', err);
         roles = [];
@@ -99,18 +91,21 @@ export function useUnifiedContractors(projectId: string, options: UnifiedContrac
 
       (roles || []).forEach((r: any, idx: number) => {
         if (!r.employer_id) return;
-        const roleLabel = (r.role || 'other').replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
-        
+        const roleCode = r.contractor_role_types?.code || 'other';
+        const roleLabel = r.contractor_role_types?.name
+          ? r.contractor_role_types.name
+          : (roleCode || 'other').replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
+
         rows.push({
-          id: `role:${r.role}:${r.employer_id}:${idx}`,
+          id: `role:${roleCode}:${r.employer_id}:${idx}`,
           employerId: r.employer_id,
           employerName: r.employers?.name || r.employer_id,
           siteName: roleLabel,
           siteId: null,
-          tradeType: r.role || 'other',
+          tradeType: roleCode || 'other',
           tradeLabel: roleLabel,
           tradeStage: 'other',
-          source: 'v_unified_project_contractors',
+          source: 'project_assignments',
           ebaStatus: r.employers?.enterprise_agreement_status !== 'no_eba',
           hasEba: r.employers?.enterprise_agreement_status !== 'no_eba',
         });
