@@ -99,6 +99,7 @@ export function MappingSheetMobile({ projectId }: { projectId: string }) {
   }
 
   return (
+    <>
     <Accordion type="single" collapsible className="w-full">
       <AccordionItem value="section-1">
         <AccordionTrigger>Project Details</AccordionTrigger>
