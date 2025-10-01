@@ -1,7 +1,7 @@
 "use client"
 export const dynamic = 'force-dynamic'
 
-import { useMemo, useState, useEffect } from "react"
+import { useMemo, useState, useEffect, useCallback } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { useSearchParams, usePathname, useRouter } from "next/navigation"
@@ -30,6 +30,7 @@ import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
 import { CfmeuEbaBadge, getProjectEbaStatus } from "@/components/ui/CfmeuEbaBadge"
 import { getOrganisingUniverseBadgeVariant } from "@/utils/organisingUniverse"
 import Link from "next/link"
+import { useNavigationLoading } from "@/hooks/useNavigationLoading"
 
 // State persistence key
 const PROJECTS_STATE_KEY = 'projects-page-state-mobile'
@@ -67,10 +68,16 @@ const loadProjectsState = () => {
 
 // Mobile list item component
 function ProjectListItem({ project }: { project: ProjectCardData }) {
+  const { startNavigation } = useNavigationLoading()
+  const router = useRouter()
   const ebaStatus = getProjectEbaStatus(project.builderName)
   
   const handleClick = () => {
-    window.location.href = `/projects/${project.id}`;
+    startNavigation(`/projects/${project.id}`)
+    // Use setTimeout to ensure loading overlay shows before navigation
+    setTimeout(() => {
+      router.push(`/projects/${project.id}`)
+    }, 50)
   };
   
   return (
@@ -121,9 +128,12 @@ export function ProjectsMobileView() {
   const router = useRouter()
   const pathname = usePathname()
   const sp = useSearchParams()
+  const { startNavigation } = useNavigationLoading()
   
   // All the same parameters as desktop version
-  const q = (sp.get("q") || "").toLowerCase()
+  const [searchInput, setSearchInput] = useState(() => sp.get("q") || "")
+  const qParam = sp.get("q") || ""
+  const q = qParam.toLowerCase()
   const page = Math.max(1, parseInt(sp.get('page') || '1', 10) || 1)
   const tierFilter = (sp.get("tier") || "all") as ProjectTier | 'all'
   const sort = sp.get("sort") || "name"
@@ -145,6 +155,11 @@ export function ProjectsMobileView() {
   }, [sp])
 
   useEffect(() => {
+    const current = sp.get("q") || ""
+    setSearchInput((prev) => (prev === current ? prev : current))
+  }, [sp])
+
+  useEffect(() => {
     if (sp.toString() === '') {
       const savedState = loadProjectsState()
       if (savedState) {
@@ -161,7 +176,7 @@ export function ProjectsMobileView() {
     }
   }, [])
 
-  const setParam = (key: string, value?: string) => {
+  const setParam = useCallback((key: string, value?: string) => {
     const params = new URLSearchParams(sp.toString())
     if (!value || value === 'all') {
       params.delete(key)
@@ -173,7 +188,20 @@ export function ProjectsMobileView() {
     }
     const qs = params.toString()
     router.replace(qs ? `${pathname}?${qs}` : pathname)
-  }
+  }, [pathname, router, sp])
+
+  useEffect(() => {
+    const handler = window.setTimeout(() => {
+      const currentParam = sp.get("q") || ""
+      if (searchInput === currentParam) return
+      const nextValue = searchInput
+      setParam("q", nextValue.length > 0 ? nextValue : undefined)
+    }, 350)
+
+    return () => {
+      window.clearTimeout(handler)
+    }
+  }, [searchInput, setParam, sp])
 
   // For map view, fetch all projects; for card/list view, use pagination
   const serverSideResult = useProjectsServerSideCompatible({
@@ -270,8 +298,8 @@ export function ProjectsMobileView() {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input 
           placeholder="Search projects…" 
-          value={sp.get("q") || ""} 
-          onChange={(e) => setParam("q", e.target.value)}
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
           className="pl-10"
         />
       </div>
@@ -454,7 +482,10 @@ export function ProjectsMobileView() {
           <ProjectsMapView
             projects={projects}
             summaries={{}}
-            onProjectClick={(id) => router.push(`/projects/${id}`)}
+            onProjectClick={(id) => {
+              startNavigation(`/projects/${id}`)
+              setTimeout(() => router.push(`/projects/${id}`), 50)
+            }}
             searchQuery={q}
             patchIds={[]}
             tierFilter={tierFilter}

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "ts-node src/index.ts",
+    "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js"
   },
@@ -19,5 +19,8 @@
     "puppeteer": "^24.22.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.2"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.6"
   }
 }

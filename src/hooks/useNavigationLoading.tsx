@@ -18,19 +18,30 @@ export function NavigationLoadingProvider({ children }: { children: ReactNode })
 
   // Clear navigation loading when pathname changes
   useEffect(() => {
-    if (isNavigating && targetPath && pathname === targetPath) {
-      // Add small delay to ensure smooth transition
-      const timer = setTimeout(() => {
-        setIsNavigating(false)
-        setTargetPath(null)
-      }, 150)
+    if (isNavigating && targetPath) {
+      // Extract the base path (without query params) from targetPath
+      const targetBasePath = targetPath.split('?')[0]
       
-      return () => clearTimeout(timer)
+      // Check if the current pathname matches the target (with or without query params)
+      if (pathname === targetBasePath || pathname === targetPath) {
+        // Add small delay to ensure smooth transition
+        const timer = setTimeout(() => {
+          setIsNavigating(false)
+          setTargetPath(null)
+        }, 150)
+        
+        return () => clearTimeout(timer)
+      }
     }
   }, [pathname, isNavigating, targetPath])
 
   const startNavigation = (path: string) => {
-    if (path !== pathname) {
+    // Extract base paths for comparison
+    const currentBasePath = pathname.split('?')[0]
+    const targetBasePath = path.split('?')[0]
+    
+    // Only start navigation if actually changing pages (ignore query param changes on same page)
+    if (currentBasePath !== targetBasePath) {
       setTargetPath(path)
       setIsNavigating(true)
     }
@@ -95,6 +106,20 @@ function getPageTitle(path: string): string {
     '/campaigns': 'Campaigns',
     '/lead': 'Co-ordinator Console',
     '/admin': 'Administration'
+  }
+  
+  // Check for project pages
+  if (path.startsWith('/projects/')) {
+    if (path.includes('/mappingsheets-mobile')) {
+      return 'Mapping Sheets'
+    }
+    if (path.includes('?tab=mappingsheets')) {
+      return 'Mapping Sheets'
+    }
+    if (path.includes('?tab=contractors')) {
+      return 'Project Contractors'
+    }
+    return 'Project Details'
   }
   
   return routes[path] || 'Page'

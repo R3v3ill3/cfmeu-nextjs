@@ -1,7 +1,7 @@
 "use client"
 export const dynamic = 'force-dynamic'
 
-import { useMemo, useState, useEffect } from "react"
+import { useCallback, useMemo, useState, useEffect } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -28,6 +28,7 @@ import DuplicateEmployerManager from "@/components/admin/DuplicateEmployerManage
 import ProjectsMapView from "@/components/projects/ProjectsMapView"
 import { useMultipleProjectSubsetStats } from "@/hooks/useProjectSubsetStats"
 import { SubsetEbaStats } from "@/components/projects/SubsetEbaStats"
+import { useNavigationLoading } from "@/hooks/useNavigationLoading"
 import { CfmeuEbaBadge, getProjectEbaStatus } from "@/components/ui/CfmeuEbaBadge"
 import { getOrganisingUniverseBadgeVariant } from "@/utils/organisingUniverse";
 
@@ -577,8 +578,11 @@ export function ProjectsDesktopView() {
   const router = useRouter()
   const pathname = usePathname()
   const sp = useSearchParams()
+  const { startNavigation } = useNavigationLoading()
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const q = (sp.get("q") || "").toLowerCase()
+  const [searchInput, setSearchInput] = useState(() => sp.get("q") || "")
+  const qParam = sp.get("q") || ""
+  const q = qParam.toLowerCase()
   const patchParam = sp.get("patch") || ""
   const patchIds = patchParam.split(",").map(s => s.trim()).filter(Boolean)
   const tierFilter = (sp.get("tier") || "all") as ProjectTier | 'all'
@@ -625,7 +629,12 @@ export function ProjectsDesktopView() {
     }
   }, []) // Only run on mount
 
-  const setParam = (key: string, value?: string) => {
+  useEffect(() => {
+    const current = sp.get("q") || ""
+    setSearchInput((prev) => (prev === current ? prev : current))
+  }, [sp])
+
+  const setParam = useCallback((key: string, value?: string) => {
     const params = new URLSearchParams(sp.toString())
     if (!value || value === "all" || value === "") {
       params.delete(key)
@@ -638,7 +647,20 @@ export function ProjectsDesktopView() {
     }
     const qs = params.toString()
     router.replace(qs ? `${pathname}?${qs}` : pathname)
-  }
+  }, [pathname, router, sp])
+
+  useEffect(() => {
+    const handler = window.setTimeout(() => {
+      const currentParam = sp.get("q") || ""
+      if (searchInput === currentParam) return
+      const nextValue = searchInput
+      setParam("q", nextValue.length > 0 ? nextValue : undefined)
+    }, 350)
+
+    return () => {
+      window.clearTimeout(handler)
+    }
+  }, [searchInput, setParam, sp])
   
   // Clear all filters
   const clearAllFilters = () => {
@@ -975,8 +997,8 @@ export function ProjectsDesktopView() {
           <div className="flex-1 max-w-md">
             <Input 
               placeholder="Search projects…" 
-              value={sp.get("q") || ""} 
-              onChange={(e) => setParam("q", e.target.value)}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               className="h-9"
             />
           </div>
@@ -1167,7 +1189,8 @@ export function ProjectsDesktopView() {
             summaries={summaries}
             subsetStats={subsetStats}
             onRowClick={(id) => {
-              window.location.href = `/projects/${id}`
+              startNavigation(`/projects/${id}`)
+              setTimeout(() => router.push(`/projects/${id}`), 50)
             }}
             onOpenEmployer={(id) => {
               setSelectedEmployerId(id)
@@ -1180,7 +1203,8 @@ export function ProjectsDesktopView() {
           projects={filteredAndSortedProjects as any[]}
           summaries={summaries}
           onProjectClick={(id) => {
-            window.location.href = `/projects/${id}`
+            startNavigation(`/projects/${id}`)
+            setTimeout(() => router.push(`/projects/${id}`), 50)
           }}
           searchQuery={q}
           patchIds={patchIds}

@@ -1,0 +1,365 @@
+{
+  "meta": {
+    "version": "1.0.0",
+    "lastUpdated": "2025-09-29",
+    "totalDocuments": 245
+  },
+  "categories": [
+    "getting-started",
+    "core-features",
+    "workflows",
+    "admin-tools",
+    "reference",
+    "troubleshooting"
+  ],
+  "documents": [
+    {
+      "id": "dashboard-overview",
+      "title": "Dashboard Overview",
+      "category": "core-features",
+      "roles": ["all"],
+      "pages": ["/"],
+      "keywords": ["dashboard", "overview", "metrics", "summary", "kpi"],
+      "content": "The Dashboard is your central hub for monitoring organizing activities. It provides role-specific views:\n\n**For Organisers**: View patch summary cards showing projects, EBA coverage, and worker metrics for your assigned patches.\n\n**For Co-ordinators**: Access team oversight with expandable patch details for all organisers you manage.\n\n**For Admins**: See system-wide metrics with hierarchical drill-down capabilities.\n\nThe dashboard includes filtering by tier (1, 2, 3), stage (construction, pre-construction, future, archived), organizing universe (active, potential, excluded), and EBA status.",
+      "related": ["dashboard-filters", "role-based-views", "organizing-universe"],
+      "steps": null,
+      "screenshots": ["/images/help/dashboard-organiser.png", "/images/help/dashboard-admin.png"]
+    },
+    {
+      "id": "dashboard-filters",
+      "title": "Using Dashboard Filters",
+      "category": "core-features",
+      "roles": ["all"],
+      "pages": ["/"],
+      "keywords": ["filters", "tier", "stage", "universe", "eba"],
+      "content": "Dashboard filters allow you to focus on specific subsets of projects:\n\n**Tier Filter**: Select Tier 1, 2, 3, or 'All' to see projects by value classification.\n\n**Stage Filter**: Choose Construction, Pre-construction, Future, or Archived to view projects by their lifecycle stage.\n\n**Universe Filter**: Select Active (target projects), Potential (pipeline), or Excluded to filter by organizing strategy.\n\n**EBA Filter**: Filter by Builder EBA Active, Builder EBA Inactive, or Builder Unknown to focus on agreement coverage.\n\nFilters persist across page navigation and are stored in your session.",
+      "related": ["dashboard-overview", "project-filters"],
+      "steps": [
+        "Open the filters bar at the top of the dashboard",
+        "Select your desired filter criteria",
+        "Click 'Apply' or filters auto-apply",
+        "View filtered metrics in cards below",
+        "Clear filters by clicking 'Reset Filters'"
+      ]
+    },
+    {
+      "id": "project-creation",
+      "title": "Creating a New Project",
+      "category": "workflows",
+      "roles": ["organiser", "lead_organiser", "admin"],
+      "pages": ["/projects"],
+      "keywords": ["create project", "new project", "add project"],
+      "content": "To create a new project, you'll enter essential information that helps classify and organize the construction work.\n\nProjects are automatically classified into the Organizing Universe based on tier rules, but you can manually override if needed.",
+      "related": ["organizing-universe", "project-tiers", "mapping-sheets"],
+      "steps": [
+        "Navigate to the Projects page (/projects)",
+        "Click the 'New Project' button in the top right",
+        "Enter the project name (required)",
+        "Enter the project address or select from map",
+        "Enter the estimated project value",
+        "Select or auto-assign project tier based on value",
+        "Add proposed start and finish dates",
+        "Select the builder if known",
+        "Review the auto-assigned organizing universe",
+        "Click 'Create Project' to save",
+        "You'll be redirected to the project detail page where you can add more information"
+      ],
+      "prerequisites": ["Must have organiser, lead_organiser, or admin role"],
+      "tips": [
+        "Project tier auto-assigns: Tier 1 if value > $50M, Tier 2 if $10M-$50M, Tier 3 if < $10M",
+        "Organizing universe auto-assigns: Tier 1 → Active, Tier 2 → Active or Potential based on stage",
+        "You can change tier and universe manually after creation"
+      ]
+    },
+    {
+      "id": "delegate-registration-workflow",
+      "title": "Registering a Site Delegate or HSR",
+      "category": "workflows",
+      "roles": ["organiser", "lead_organiser", "admin"],
+      "pages": ["/projects/[id]"],
+      "keywords": ["delegate", "hsr", "registration", "representative", "election"],
+      "content": "The delegate registration workflow allows you to register elected site delegates and Health & Safety Representatives with the CFMEU. This is a 4-step guided process that ensures all required information is captured and submitted correctly.",
+      "related": ["mapping-sheets", "workers", "union-roles"],
+      "steps": [
+        "Navigate to a project and go to the 'Mapping Sheets' tab",
+        "In the 'Site Contacts' section, find the 'Site Delegate' or 'Site HSR' row",
+        "Click 'Add Representative' (or 'Register' if someone is already assigned)",
+        "**Step 1 - Worker Selection**: Search for the worker from the project's worker list, or click 'Add New Worker' to create a new worker record",
+        "**Step 2 - Worker Details**: Review and update the worker's contact information (mobile, email, address are required for CFMEU submission)",
+        "**Step 3 - Registration Details**: Select the employer, choose representative type (Delegate Only, OHS Rep Only, or Both), and enter election information (elected by, date elected)",
+        "**Step 4 - Review & Submit**: Review all information and click 'Submit to CFMEU' to complete registration",
+        "The worker is now assigned the delegate/HSR role and their information is submitted to CFMEU NSW"
+      ],
+      "prerequisites": [
+        "Project must exist with assigned employers",
+        "You must have organiser or higher permissions",
+        "Worker must have mobile and email for CFMEU submission"
+      ],
+      "tips": [
+        "You can register multiple delegates for the same site",
+        "Both Delegate and HSR roles can be assigned to the same worker",
+        "Election information is required for CFMEU records",
+        "If the worker isn't on the project yet, use 'Add New Worker' to create their record first"
+      ],
+      "screenshots": ["/images/help/delegate-step1.png", "/images/help/delegate-step4.png"]
+    },
+    {
+      "id": "mapping-sheets-overview",
+      "title": "Understanding Mapping Sheets",
+      "category": "core-features",
+      "roles": ["organiser", "lead_organiser", "admin"],
+      "pages": ["/projects/[id]"],
+      "keywords": ["mapping sheets", "contractors", "trades", "subcontractors"],
+      "content": "Mapping Sheets are the central tool for tracking all contractors and trades on a construction project. They provide a comprehensive view of who is working on site, their EBA status, and trade classifications.\n\n**Key Components:**\n\n**Contractor Roles**: Shows the builder, project manager, and other primary contractors with their EBA status.\n\n**Trade Contractors**: Organized by construction stage:\n- Early Works (demolition, earthworks, piling)\n- Structure (concrete, steel, formwork)\n- Finishing (electrical, plumbing, painting)\n- Other (general construction, plant)\n\n**Site Contacts**: Lists delegates, HSRs, site managers, and foreman with quick registration actions.\n\n**Data Sources**: Mapping sheets intelligently combine data from project assignments, trade records, and imports to show a complete picture.",
+      "related": ["delegate-registration-workflow", "contractor-assignment", "eba-tracking"],
+      "tips": [
+        "Auto-matched contractors from imports show a confidence indicator",
+        "You can print mapping sheets for site visits",
+        "Share links allow external parties to update information securely"
+      ]
+    },
+    {
+      "id": "bci-import-workflow",
+      "title": "Importing BCI Project Data",
+      "category": "workflows",
+      "roles": ["lead_organiser", "admin"],
+      "pages": ["/admin", "/upload"],
+      "keywords": ["bci", "import", "csv", "excel", "building construction"],
+      "content": "The BCI Import tool allows you to import construction project data from Building Construction Information (BCI) CSV or Excel files. The system intelligently processes company data and classifies contractors by role and trade type.",
+      "related": ["project-creation", "employer-matching", "data-upload"],
+      "steps": [
+        "Navigate to Admin → Data Upload",
+        "Click 'BCI Import'",
+        "Upload your BCI CSV or Excel file (must contain 'Project' and 'Company' sheets)",
+        "The worker processes the file and returns normalized data",
+        "Review the project list - projects are auto-classified by stage and value",
+        "Review company classifications (builder, head contractor, subcontractor)",
+        "Review employer matching suggestions",
+        "For fuzzy matches, confirm or reject each match",
+        "For new employers, confirm creation",
+        "Click 'Import' to create projects and relationships",
+        "View import summary showing created projects and contractor assignments"
+      ],
+      "prerequisites": [
+        "Must have lead_organiser or admin role",
+        "BCI file must follow standard template format",
+        "Railway worker 'bci-import-worker' must be running"
+      ],
+      "tips": [
+        "The system filters out non-construction companies (engineers, consultants)",
+        "Trade types are inferred from company names (e.g., 'ABC Cranes' → tower_crane)",
+        "Exact name matches are auto-confirmed, fuzzy matches require review",
+        "You can merge duplicate employers during the import process"
+      ]
+    },
+    {
+      "id": "eba-tracking",
+      "title": "Tracking Enterprise Bargaining Agreements",
+      "category": "core-features",
+      "roles": ["organiser", "lead_organiser", "admin"],
+      "pages": ["/employers", "/projects/[id]"],
+      "keywords": ["eba", "enterprise agreement", "fwc", "expiry", "certification"],
+      "content": "EBA (Enterprise Bargaining Agreement) tracking monitors the status of workplace agreements across all employers.\n\n**EBA Milestones:**\n- **Signed**: Agreement signed by parties\n- **Lodged**: Submitted to Fair Work Commission\n- **Certified**: Approved by FWC (active status)\n- **Expired**: Past nominal expiry date\n\n**EBA Status Colors:**\n- Green: Active certified agreement\n- Yellow: Signed or lodged but not certified\n- Red: Expired or no agreement\n\n**FWC Lookup**: Automated search of Fair Work Commission database to find and update employer EBA records (runs via scraper worker).",
+      "related": ["fwc-lookup", "employer-compliance", "mapping-sheets"],
+      "tips": [
+        "EBA expiry alerts show in dashboard for agreements expiring within 6 weeks, 3 months, and 6 months",
+        "FWC lookup can be run manually for specific employers or in bulk",
+        "EBA status appears on mapping sheets to highlight coverage gaps"
+      ]
+    },
+    {
+      "id": "fwc-lookup",
+      "title": "Running FWC Lookup",
+      "category": "workflows",
+      "roles": ["lead_organiser", "admin"],
+      "pages": ["/employers"],
+      "keywords": ["fwc", "fair work", "lookup", "search", "agreement"],
+      "content": "FWC Lookup automatically searches the Fair Work Commission database for enterprise agreements associated with employers.",
+      "steps": [
+        "Navigate to Employers page",
+        "Select employers to search (or run for all)",
+        "Click 'FWC Lookup' action",
+        "Job is queued and processed by scraper worker",
+        "Monitor job progress in the status indicator",
+        "When complete, review found agreements",
+        "EBA records are automatically created/updated with certification dates, expiry dates, and FWC document links"
+      ],
+      "prerequisites": [
+        "Must have lead_organiser or admin role",
+        "Employers must have valid ABN or company name",
+        "Railway worker 'cfmeu-scraper-worker' must be running"
+      ],
+      "technical": {
+        "worker": "cfmeu-scraper-worker",
+        "jobType": "fwc_lookup",
+        "runtime": "1-5 minutes depending on employer count"
+      }
+    },
+    {
+      "id": "campaigns-overview",
+      "title": "Understanding Campaigns and Activities",
+      "category": "core-features",
+      "roles": ["organiser", "lead_organiser", "admin"],
+      "pages": ["/campaigns"],
+      "keywords": ["campaign", "activities", "organizing", "tracking"],
+      "content": "Campaigns are coordinated organizing efforts with tracked activities, worker participation, and measurable objectives.\n\n**Campaign Structure:**\n- Campaign (overall effort, e.g., 'CBD Tower Campaign 2025')\n- Activities (specific actions within campaign)\n- Worker Universe (workers included in activity)\n- Rating Definitions (1-5 scale: supportive leader → anti-leader)\n- Objectives & Targets (measurable goals)\n\n**Activity Types:**\n- Site visit conversations\n- Union meetings\n- One-on-one discussions\n- Group actions\n- Custom activity types\n\n**Scoping**: Activities can be scoped to specific projects, employers, or job sites. The worker universe is built from placements matching the scope.",
+      "related": ["campaign-creation", "activity-builder", "worker-ratings"],
+      "tips": [
+        "Rating definitions are customizable per activity",
+        "Worker universe auto-populates based on selected scope (projects/employers/sites)",
+        "Objectives can target overall numbers or specific subgroups"
+      ]
+    },
+    {
+      "id": "campaign-activity-builder",
+      "title": "Creating a Campaign Activity",
+      "category": "workflows",
+      "roles": ["organiser", "lead_organiser", "admin"],
+      "pages": ["/campaigns"],
+      "keywords": ["activity", "create", "campaign", "conversation", "rating"],
+      "content": "The Activity Builder creates tracked organizing activities within a campaign.",
+      "steps": [
+        "Open a campaign from the Campaigns page",
+        "Click 'New Activity'",
+        "Select activity date",
+        "Choose activity type (e.g., 'site visit', 'meeting', 'one-on-one')",
+        "Enter call to action (what you're asking workers to do)",
+        "Select scope: Choose projects, employers, or job sites",
+        "Preview worker universe (auto-populated from selected scope)",
+        "Define rating scale: Enter definitions for levels 1-5 (1=supportive leader, 5=anti-leader)",
+        "Optionally add objectives with target values",
+        "Click 'Create Activity'",
+        "Activity is created with all workers added to tracking list",
+        "Navigate to activity detail to record worker conversations and ratings"
+      ],
+      "prerequisites": [
+        "Campaign must exist",
+        "Scope entities (projects/employers/sites) must have worker placements"
+      ],
+      "tips": [
+        "Worker universe preview shows count before creation",
+        "Rating definitions help maintain consistency across multiple organisers",
+        "Objectives can be numeric (e.g., 10 conversations) or percentage (e.g., 75% positive)"
+      ]
+    },
+    {
+      "id": "organizing-universe-rules",
+      "title": "Organizing Universe Auto-Assignment Rules",
+      "category": "reference",
+      "roles": ["lead_organiser", "admin"],
+      "pages": ["/projects", "/admin"],
+      "keywords": ["organizing universe", "active", "potential", "excluded", "tier", "auto-assign"],
+      "content": "The Organizing Universe classifies projects into Active, Potential, or Excluded based on tier and stage.\n\n**Auto-Assignment Rules:**\n- **Tier 1**: Always Active (regardless of stage)\n- **Tier 2 Construction**: Active\n- **Tier 2 Pre-construction**: Potential\n- **Tier 2 Future/Archived**: Potential\n- **Tier 3 Construction**: Potential\n- **Tier 3 Pre-construction**: Potential\n- **Tier 3 Future/Archived**: Excluded\n\n**Manual Override**: You can manually change any project's organizing universe. When you do, it's marked as 'manually set' and won't be auto-updated by rule changes.\n\n**Retrospective Application**: When rules change, existing projects are updated unless they have manual overrides.",
+      "related": ["project-tiers", "project-creation"],
+      "technical": {
+        "function": "assign_organising_universe_default",
+        "trigger": "on INSERT or UPDATE of projects",
+        "migrations": "supabase/sql/organising-universe-rules/"
+      }
+    },
+    {
+      "id": "patch-management",
+      "title": "Managing Organiser Patches",
+      "category": "core-features",
+      "roles": ["lead_organiser", "admin"],
+      "pages": ["/lead", "/patch", "/admin"],
+      "keywords": ["patch", "assignment", "geographic", "organiser", "territory"],
+      "content": "Patches are geographic areas assigned to organisers for organizing work.\n\n**Patch Features:**\n- Geographic boundaries (GeoJSON polygons)\n- Project assignment based on job site locations\n- Organiser assignment (multiple organisers can share a patch)\n- Interactive map visualization\n\n**Managing Patches:**\n- Co-ordinators can assign organisers to patches via the Lead Console (/lead)\n- Admins can create new patches and draw boundaries via Spatial Assignment (/admin)\n- Projects are automatically associated with patches based on job site coordinates\n\n**Patch View (/patch):**\n- Shows all projects within patch boundaries\n- Displays patch metrics (total projects, EBA coverage, workers)\n- Interactive map with project locations\n- Quick actions for site visits and worker lists",
+      "related": ["spatial-assignment", "lead-console", "geojson-upload"],
+      "tips": [
+        "Patch boundaries can be uploaded as GeoJSON files",
+        "Projects can belong to multiple patches if job sites span boundaries",
+        "Organisers see only their assigned patches by default"
+      ]
+    },
+    {
+      "id": "share-links",
+      "title": "Creating Secure Share Links",
+      "category": "workflows",
+      "roles": ["organiser", "lead_organiser", "admin"],
+      "pages": ["/projects/[id]"],
+      "keywords": ["share", "link", "external", "delegate", "form", "token"],
+      "content": "Share Links allow you to grant temporary access to specific project information for external users (like delegates) without requiring platform login.",
+      "steps": [
+        "Navigate to a project's Mapping Sheets tab",
+        "Click 'Share Mapping Sheet' button",
+        "Select expiry time (24h, 48h, 72h, or 1 week)",
+        "Click 'Generate Link'",
+        "Copy the secure URL (e.g., https://app.cfmeu.org/share/abc123...)",
+        "Send link to delegate or external party",
+        "They can access the form without login",
+        "Form pre-fills with project data",
+        "External user can update information and submit",
+        "Token is marked as 'used' after submission"
+      ],
+      "security": {
+        "tokenLength": "48 characters (cryptographically secure)",
+        "expiry": "Configurable, default 48 hours",
+        "singleUse": "Token marked as used after form submission",
+        "resourceScoping": "Access limited to specific project mapping sheet"
+      },
+      "related": ["mapping-sheets", "delegate-registration-workflow"],
+      "tips": [
+        "Links expire automatically after the set time",
+        "You can generate multiple links for the same project",
+        "Used tokens show submission timestamp in admin view"
+      ]
+    },
+    {
+      "id": "incolink-sync",
+      "title": "Syncing Incolink Worker Data",
+      "category": "workflows",
+      "roles": ["lead_organiser", "admin"],
+      "pages": ["/admin"],
+      "keywords": ["incolink", "sync", "workers", "placements", "construction"],
+      "content": "Incolink sync imports worker placement data from the Incolink redundancy scheme, automatically creating worker records and linking them to employers and projects.",
+      "steps": [
+        "Navigate to Admin → Data Upload",
+        "Click 'Incolink Sync'",
+        "Enter Incolink credentials (stored securely)",
+        "Select employers to sync (or run for all)",
+        "Job is queued and processed by scraper worker",
+        "Worker scrapes Incolink for placement data",
+        "New workers are created automatically",
+        "Existing workers are matched by name/details",
+        "Placements are created linking workers to employers",
+        "Review sync summary showing created/matched workers and placements"
+      ],
+      "prerequisites": [
+        "Must have lead_organiser or admin role",
+        "Valid Incolink credentials required",
+        "Railway worker 'cfmeu-scraper-worker' must be running"
+      ],
+      "technical": {
+        "worker": "cfmeu-scraper-worker",
+        "jobType": "incolink_sync",
+        "matching": "Fuzzy name matching with confidence scoring"
+      }
+    },
+    {
+      "id": "user-roles-permissions",
+      "title": "User Roles and Permissions",
+      "category": "reference",
+      "roles": ["all"],
+      "pages": ["*"],
+      "keywords": ["roles", "permissions", "access", "admin", "organiser", "coordinator"],
+      "content": "The platform has 5 user roles with different permission levels:\n\n**Admin**\n- Full system access\n- User management and role assignment\n- System configuration and navigation control\n- Hierarchy management\n- All data import/export functions\n- System health monitoring\n\n**Lead Organiser (Co-ordinator)**\n- Team management within assigned area\n- Organiser patch assignment\n- Data upload (BCI, EBA, Workers, Employers)\n- Invite new organisers\n- View all team activities\n- Duplicate employer resolution\n\n**Organiser**\n- Manage assigned patch(es)\n- Create and edit projects\n- Log site visits\n- Update mapping sheets\n- Register delegates\n- Create campaigns and activities\n- Worker data import (limited)\n\n**Delegate**\n- View assigned projects and sites\n- Update worker information\n- View mapping sheets (read-only)\n\n**Viewer**\n- Read-only access to projects, employers, workers\n- View dashboard metrics\n- No editing capabilities",
+      "related": ["role-based-views", "access-control"],
+      "technical": {
+        "type": "AppRole",
+        "values": ["admin", "lead_organiser", "organiser", "delegate", "viewer"],
+        "database": "profiles.role, user_role_assignments"
+      }
+    },
+    {
+      "id": "troubleshooting-import-errors",
+      "title": "Troubleshooting Import Errors",
+      "category": "troubleshooting",
+      "roles": ["lead_organiser", "admin"],
+      "pages": ["/admin", "/upload"],
+      "keywords": ["error", "import", "upload", "failed", "troubleshoot"],
+      "content": "Common import errors and solutions:\n\n**Template Mismatch Error**\n- Cause: CSV/Excel doesn't match expected format\n- Solution: Re-export from source using standard template, ensure column headers match exactly\n\n**Worker Not Running**\n- Cause: Railway worker is offline\n- Solution: Check Railway dashboard, restart worker if needed\n\n**Duplicate Employer**\n- Cause: Employer already exists with same ABN\n- Solution: Use 'Merge Employers' function to consolidate duplicates before import\n\n**Invalid Date Format**\n- Cause: Dates not in expected format\n- Solution: Ensure dates are DD/MM/YYYY or ISO format (YYYY-MM-DD)\n\n**File Too Large**\n- Cause: File exceeds 1MB limit (BCI worker)\n- Solution: Split file into smaller batches or filter data\n\n**Authorization Error**\n- Cause: User lacks required role\n- Solution: Verify you have lead_organiser or admin role",
+      "related": ["bci-import-workflow", "data-upload"]
+    }
+  ]
+}

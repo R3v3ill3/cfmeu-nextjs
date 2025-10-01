@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { MappingSiteContactsTable } from "@/components/projects/mapping/MappingSiteContactsTable"
 import { useProjectOrganisers } from "@/hooks/useProjectOrganisers"
 import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
+import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal"
 
 type ProjectRow = {
   id: string;
@@ -29,9 +30,12 @@ export function MappingSheetMobile({ projectId }: { projectId: string }) {
   const [project, setProject] = useState<ProjectRow | null>(null)
   const [address, setAddress] = useState<string>("")
   const [builderName, setBuilderName] = useState<string>("—")
+  const [builderId, setBuilderId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const organisers = useProjectOrganisers(projectId).label
+  const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null)
+  const [isEmployerDetailOpen, setIsEmployerDetailOpen] = useState(false)
 
   useEffect(() => {
     const load = async () => {
@@ -47,10 +51,11 @@ export function MappingSheetMobile({ projectId }: { projectId: string }) {
         const { data: site } = await (supabase as any).from("job_sites").select("full_address, location").eq("id", siteId).maybeSingle()
         setAddress((site as any)?.full_address || (site as any)?.location || "")
       }
-      const builderId = (data as any)?.builder_id as string | null
-      if (builderId) {
-        const { data: b } = await supabase.from("employers").select("name").eq("id", builderId).maybeSingle()
-        setBuilderName(((b as any)?.name as string) || builderId)
+      const builderIdVal = (data as any)?.builder_id as string | null
+      setBuilderId(builderIdVal)
+      if (builderIdVal) {
+        const { data: b } = await supabase.from("employers").select("name").eq("id", builderIdVal).maybeSingle()
+        setBuilderName(((b as any)?.name as string) || builderIdVal)
       } else {
         setBuilderName("—")
       }
@@ -192,7 +197,21 @@ export function MappingSheetMobile({ projectId }: { projectId: string }) {
           <div className="grid grid-cols-1 gap-3">
             <div>
               <label className="text-xs font-medium">Builder</label>
-              <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={builderName} readOnly disabled />
+              {builderId ? (
+                <button
+                  onClick={() => {
+                    setSelectedEmployerId(builderId);
+                    setIsEmployerDetailOpen(true);
+                  }}
+                  className="rounded-none border-0 border-b border-black px-0 w-full text-left underline hover:text-primary"
+                >
+                  {builderName}
+                </button>
+              ) : (
+                <div className="rounded-none border-0 border-b border-black px-0 text-gray-400">
+                  {builderName}
+                </div>
+              )}
             </div>
             <div>
               <label className="text-xs font-medium">Preferred email for ROE</label>
@@ -203,6 +222,15 @@ export function MappingSheetMobile({ projectId }: { projectId: string }) {
         </AccordionContent>
       </AccordionItem>
     </Accordion>
+
+    {/* Employer Detail Modal */}
+    <EmployerDetailModal
+      employerId={selectedEmployerId}
+      isOpen={isEmployerDetailOpen}
+      onClose={() => setIsEmployerDetailOpen(false)}
+      initialTab="overview"
+    />
+  </>
   )
 }
 

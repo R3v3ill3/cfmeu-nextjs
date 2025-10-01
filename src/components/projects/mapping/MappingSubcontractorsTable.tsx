@@ -16,6 +16,7 @@ import { getTradeOptionsByStage, getStageLabel, getTradeLabel, getAllStages, typ
 import { useMappingSheetData } from "@/hooks/useMappingSheetData";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal";
 
 type Row = {
   key: string; // stage|trade value
@@ -65,6 +66,10 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
   // Auto-match actions dialog state
   const [autoMatchOpen, setAutoMatchOpen] = useState(false);
   const [autoMatchRow, setAutoMatchRow] = useState<Row | null>(null);
+  
+  // Employer detail modal state
+  const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null);
+  const [isEmployerDetailOpen, setIsEmployerDetailOpen] = useState(false);
   
   // Get unified mapping data which includes trade contractors
   const { data: mappingData, isLoading } = useMappingSheetData(projectId);
@@ -275,13 +280,25 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
   const companyCell = (row: Row) => (
     <div className="flex items-center justify-between gap-2">
       <div className="flex-1 min-w-0 space-y-1">
-        <div className={`font-medium text-base truncate ${
-          row.matchStatus === 'auto_matched' 
-            ? 'italic text-gray-500' 
-            : ''
-        }`}>
-          {row.employer_name || <span className="text-muted-foreground">—</span>}
-        </div>
+        {row.employer_id ? (
+          <button
+            onClick={() => {
+              setSelectedEmployerId(row.employer_id!);
+              setIsEmployerDetailOpen(true);
+            }}
+            className={`font-medium text-base truncate underline hover:text-primary text-left ${
+              row.matchStatus === 'auto_matched' 
+                ? 'italic text-gray-500' 
+                : ''
+            }`}
+          >
+            {row.employer_name || "—"}
+          </button>
+        ) : (
+          <div className="font-medium text-base truncate text-muted-foreground">
+            {row.employer_name || "—"}
+          </div>
+        )}
         {/* Show auto-match indicator if applicable */}
         {row.employer_id && (
           <AutoMatchIndicator
@@ -449,6 +466,14 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
           onAction={handleAutoMatchAction}
         />
       )}
+
+      {/* Employer Detail Modal */}
+      <EmployerDetailModal
+        employerId={selectedEmployerId}
+        isOpen={isEmployerDetailOpen}
+        onClose={() => setIsEmployerDetailOpen(false)}
+        initialTab="overview"
+      />
     </div>
   );
 }

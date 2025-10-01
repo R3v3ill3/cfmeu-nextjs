@@ -13,6 +13,10 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { useMappingSheetData } from "@/hooks/useMappingSheetData";
 import { AutoMatchIndicator } from "@/components/projects/mapping/AutoMatchIndicator";
 import { ShareLinkGenerator } from "./ShareLinkGenerator";
+import { UploadMappingSheetDialog } from "./UploadMappingSheetDialog";
+import { Upload } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal";
 
 type ProjectData = {
   id: string;
@@ -47,6 +51,9 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
   const [saveStatus, setSaveStatus] = useState<'idle' | 'dirty' | 'saving' | 'saved'>('idle');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedMessageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null);
+  const [isEmployerDetailOpen, setIsEmployerDetailOpen] = useState(false);
   
   // Get unified contractor data
   const { data: mappingData, isLoading: isLoadingContractors } = useMappingSheetData(projectData.id);
@@ -123,7 +130,16 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <div className="no-print">
+          <div className="no-print flex items-center gap-2">
+            <Button
+              onClick={() => setShowUploadDialog(true)}
+              variant="outline"
+              size="sm"
+              className="gap-2"
+            >
+              <Upload className="h-4 w-4" />
+              Upload Scanned Sheet
+            </Button>
             <ShareLinkGenerator projectId={projectData.id} projectName={projectData.name} />
           </div>
           <div className="text-right text-xs">
@@ -172,16 +188,25 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
               <div key={contractor.id} className={index === 0 ? "md:col-span-2" : ""}>
                 <label className="text-sm font-semibold">{contractor.roleLabel}</label>
                 <div className="flex items-center gap-2">
-                  <Input 
-                    className={`rounded-none border-0 border-b border-black focus-visible:ring-0 px-0 flex-1 ${
-                      contractor.matchStatus === 'auto_matched' 
-                        ? 'italic text-gray-500' 
-                        : ''
-                    }`}
-                    value={contractor.employerName || "—"} 
-                    readOnly 
-                    disabled 
-                  />
+                  {contractor.employerId ? (
+                    <button
+                      onClick={() => {
+                        setSelectedEmployerId(contractor.employerId!);
+                        setIsEmployerDetailOpen(true);
+                      }}
+                      className={`rounded-none border-0 border-b border-black px-0 flex-1 text-left underline hover:text-primary ${
+                        contractor.matchStatus === 'auto_matched' 
+                          ? 'italic text-gray-500' 
+                          : ''
+                      }`}
+                    >
+                      {contractor.employerName || "—"}
+                    </button>
+                  ) : (
+                    <div className="rounded-none border-0 border-b border-black px-0 flex-1 text-gray-400">
+                      {contractor.employerName || "—"}
+                    </div>
+                  )}
                   {/* Show auto-match indicator */}
                   {contractor.employerName && (
                     <AutoMatchIndicator
@@ -248,16 +273,25 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
                   <div key={contractor.id}>
                     <label className="text-sm font-semibold">{contractor.roleLabel}</label>
                     <div className="flex items-center gap-2">
-                      <Input 
-                        className={`rounded-none border-0 border-b border-black focus-visible:ring-0 px-0 flex-1 ${
-                          contractor.matchStatus === 'auto_matched' 
-                            ? 'italic text-gray-500' 
-                            : ''
-                        }`}
-                        value={contractor.employerName || "—"} 
-                        readOnly 
-                        disabled 
-                      />
+                      {contractor.employerId ? (
+                        <button
+                          onClick={() => {
+                            setSelectedEmployerId(contractor.employerId!);
+                            setIsEmployerDetailOpen(true);
+                          }}
+                          className={`rounded-none border-0 border-b border-black px-0 flex-1 text-left underline hover:text-primary ${
+                            contractor.matchStatus === 'auto_matched' 
+                              ? 'italic text-gray-500' 
+                              : ''
+                          }`}
+                        >
+                          {contractor.employerName || "—"}
+                        </button>
+                      ) : (
+                        <div className="rounded-none border-0 border-b border-black px-0 flex-1 text-gray-400">
+                          {contractor.employerName || "—"}
+                        </div>
+                      )}
                       <span className="text-xs text-muted-foreground flex items-center gap-1">
                         <span>EBA:</span>
                         {contractor.ebaStatus === null ? "—" : (
@@ -361,6 +395,24 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
       <MappingSiteContactsTable projectId={projectData.id} mainSiteId={projectData.main_job_site_id} />
 
       <div className="text-sm text-muted-foreground mt-2" aria-live="polite"><SaveStatus /></div>
+      
+      {/* Upload Scanned Mapping Sheet Dialog */}
+      {showUploadDialog && (
+        <UploadMappingSheetDialog
+          projectId={projectData.id}
+          projectName={projectData.name}
+          open={showUploadDialog}
+          onOpenChange={setShowUploadDialog}
+        />
+      )}
+
+      {/* Employer Detail Modal */}
+      <EmployerDetailModal
+        employerId={selectedEmployerId}
+        isOpen={isEmployerDetailOpen}
+        onClose={() => setIsEmployerDetailOpen(false)}
+        initialTab="overview"
+      />
     </div>
   );
 }

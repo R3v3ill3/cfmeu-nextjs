@@ -1,0 +1,514 @@
+{
+  "meta": {
+    "page": "Projects",
+    "generated": "2025-09-30",
+    "analyzed_by": "Claude Code Analysis",
+    "totalDocuments": 24
+  },
+  "documents": [
+    {
+      "id": "projects-page-overview",
+      "title": "Projects Page - Complete Guide",
+      "category": "core-features",
+      "roles": ["all"],
+      "pages": ["/projects"],
+      "keywords": ["projects", "list", "overview", "construction"],
+      "content": "The Projects page is your central hub for viewing and managing all construction projects in the system.\n\n**What You See:**\n- Complete list of construction projects with key details\n- Project cards showing builder, EBA status, worker counts, and patch assignment\n- Filtering and sorting controls to find specific projects\n- View switcher (Card, List, Map views)\n\n**Key Information Displayed:**\n- Project name and tier (1, 2, or 3)\n- Builder/head contractor name\n- EBA status (green = active EBA, red = no EBA)\n- Organizing universe (Active, Potential, Excluded)\n- Stage (Construction, Pre-construction, Future, Archived)\n- Key contractor coverage percentage\n- Worker and member counts\n- Site delegate name\n- Assigned patch and organiser\n\n**Who Can Access:**\n- All users can view projects\n- Organisers, Co-ordinators, and Admins can create projects\n- Filtering availability varies by role",
+      "related": ["project-creation", "project-filters", "project-views"]
+    },
+    {
+      "id": "projects-view-modes",
+      "title": "Project View Modes (Card, List, Map)",
+      "category": "core-features",
+      "roles": ["all"],
+      "pages": ["/projects"],
+      "keywords": ["view", "card", "list", "map", "display"],
+      "content": "The Projects page offers three view modes to visualize project data:\n\n**Card View (Default):**\n- Shows each project as a detailed card\n- Displays key contractor coverage bars\n- Shows EBA status, worker counts, and delegate info\n- Quick access to 'Mapping Sheets' button\n- Best for: Detailed review of projects\n\n**List View:**\n- Compact table format\n- Shows essential details in columns\n- Easy to scan many projects quickly\n- Sortable columns\n- Best for: Finding specific projects, comparing multiple projects\n\n**Map View:**\n- Interactive map showing project locations\n- Projects plotted by job site coordinates\n- Click markers to see project details\n- Visual geographic distribution\n- Best for: Understanding geographic coverage, planning site visits\n\n**How to Switch Views:**\n- Look for view toggle buttons at top right of projects list\n- Click the grid icon for Card view\n- Click the list icon for List view\n- Click the map pin icon for Map view\n- Your selection persists when you navigate away",
+      "steps": [
+        "Navigate to /projects",
+        "Look for view toggle buttons in the top toolbar",
+        "Click your preferred view icon (grid/list/map)",
+        "The view updates immediately",
+        "Your choice is saved for next visit"
+      ],
+      "related": ["projects-page-overview", "projects-map-view"]
+    },
+    {
+      "id": "projects-filtering-system",
+      "title": "How to Filter Projects",
+      "category": "workflows",
+      "roles": ["all"],
+      "pages": ["/projects"],
+      "keywords": ["filter", "search", "tier", "universe", "stage", "eba", "patch"],
+      "content": "Powerful filtering system to find specific projects:\n\n**Available Filters:**\n\n1. **Search Box** - Find projects by name (text search)\n\n2. **Tier Filter** - Filter by project value classification:\n   - All (show everything)\n   - Tier 1 (>$50M value)\n   - Tier 2 ($10M-$50M)\n   - Tier 3 (<$10M)\n\n3. **Organizing Universe** - Filter by organizing strategy:\n   - All\n   - Active (priority target projects)\n   - Potential (pipeline projects)\n   - Excluded (not currently organizing)\n\n4. **Stage** - Filter by project lifecycle:\n   - All\n   - Construction (currently building)\n   - Pre-construction (planning/design)\n   - Future (not yet started)\n   - Archived (completed or cancelled)\n\n5. **EBA Status** - Filter by builder agreement status:\n   - All\n   - Builder EBA Active (certified agreement)\n   - Builder EBA Inactive (no agreement or expired)\n   - Builder Unknown (builder not identified)\n\n6. **Patch** - Filter by organiser patch (dropdown selection)\n\n7. **Workers** - Filter by worker assignment:\n   - All\n   - Zero workers (no workers mapped yet)\n   - Non-zero workers (has worker assignments)\n\n8. **Special Filters**:\n   - No Builder But Has Employers (needs builder identification)\n\n**How Filters Work:**\n- Filters combine (AND logic) - select multiple to narrow results\n- Filter changes update URL parameters\n- Filter state persists when navigating between pages\n- Clear all filters with 'Reset' or 'X' buttons",
+      "steps": [
+        "Click the Filter icon or expand filters section",
+        "Select your filter criteria from dropdowns",
+        "Enter search text if searching by name",
+        "Results update automatically",
+        "To clear, click 'X' on individual filters or 'Reset Filters'"
+      ],
+      "tips": [
+        "Combine patch + tier filters to see organiser workload by priority",
+        "Use 'No Builder But Has Employers' to find projects needing builder identification",
+        "Worker count filter helps identify unmapped projects",
+        "Filters are saved in your session - they'll persist if you navigate away and come back"
+      ],
+      "related": ["projects-sorting", "projects-search"]
+    },
+    {
+      "id": "projects-sorting",
+      "title": "Sorting Projects",
+      "category": "core-features",
+      "roles": ["all"],
+      "pages": ["/projects"],
+      "keywords": ["sort", "order", "arrange"],
+      "content": "Projects can be sorted by multiple criteria:\n\n**Sort Options:**\n- **Name** (A-Z or Z-A)\n- **Value** ($ amount, high to low or low to high)\n- **Tier** (1, 2, 3)\n- **Workers** (total worker count)\n- **Members** (union member count)\n- **Employers** (engaged employer count)\n- **EBA Coverage** (percentage with active EBAs)\n- **Delegates** (by delegate name)\n\n**How to Sort:**\n- Click the 'Sort' dropdown\n- Select your sorting field\n- Click the arrow icon to toggle ascending/descending\n- List reorders immediately",
+      "steps": [
+        "Find the Sort dropdown in the toolbar",
+        "Select what to sort by (name, value, workers, etc.)",
+        "Click the up/down arrow to change direction",
+        "Projects reorder immediately"
+      ],
+      "related": ["projects-filtering-system"]
+    },
+    {
+      "id": "project-creation-complete-workflow",
+      "title": "How to Create a New Project",
+      "category": "workflows",
+      "roles": ["organiser", "lead_organiser", "admin"],
+      "pages": ["/projects"],
+      "keywords": ["create", "new project", "add project"],
+      "content": "Complete workflow for creating a new construction project in the system.\n\n**Who Can Create Projects:**\n- Organisers, Co-ordinators, and Admins\n- Delegates and Viewers cannot create projects\n\n**What Happens When You Create:**\n1. Project record is created\n2. Main job site is auto-created with the project address\n3. Project tier is auto-assigned based on value\n4. Organizing universe is auto-assigned based on tier (can be changed)\n5. If you select a builder, they're assigned as contractor role\n6. Patch assignment happens automatically based on job site location",
+      "steps": [
+        "Navigate to the Projects page (/projects)",
+        "Click the 'New Project' button (top right corner)",
+        "**Enter Project Name** (required) - The official project name",
+        "**Select Address** - Start typing and choose from Google autocomplete. This creates the main job site and enables patch matching",
+        "**Enter Project Value** - Dollar amount. This auto-calculates tier: >$50M = Tier 1, $10M-$50M = Tier 2, <$10M = Tier 3",
+        "**Select Builder** (optional) - Search and select from existing employers or create new",
+        "**Enter Dates** (optional):",
+        "  - Proposed Start Date",
+        "  - Proposed Finish Date",
+        "**Enter Funding** (optional):",
+        "  - State Funding amount",
+        "  - Federal Funding amount",
+        "**Select Project Type** (optional) - Residential, Commercial, Infrastructure, etc.",
+        "**Enter ROE Email** (optional) - Right of Entry email contact",
+        "**Review Auto-Assignments:**",
+        "  - Tier (shown as badge)",
+        "  - Organizing Universe (auto-assigned, can change later)",
+        "Click 'Create Project'",
+        "You're redirected to the project detail page",
+        "From there, add contractors via 'Mapping Sheets' tab"
+      ],
+      "prerequisites": [
+        "Must have organiser, lead_organiser, or admin role"
+      ],
+      "tips": [
+        "Address is critical - it determines patch assignment via GPS coordinates",
+        "Value determines tier automatically: >$50M=Tier 1, $10M-50M=Tier 2, <$10M=Tier 3",
+        "Tier determines organizing universe: Tier 1 always Active, Tier 2/3 depend on stage",
+        "You can change tier and universe manually after creation",
+        "If builder has an active EBA, it shows immediately on the project card",
+        "Leave builder empty if unknown - you can add later via mapping sheets"
+      ],
+      "related": ["organizing-universe-rules", "mapping-sheets-overview", "project-tiers"]
+    },
+    {
+      "id": "project-card-details",
+      "title": "Understanding Project Cards",
+      "category": "reference",
+      "roles": ["all"],
+      "pages": ["/projects"],
+      "keywords": ["card", "display", "information"],
+      "content": "Each project card displays comprehensive information at a glance:\n\n**Top Section:**\n- Project name (clickable to open detail)\n- 'Mapping Sheets' button (quick access)\n- Tier badge (Tier 1, 2, or 3)\n- EBA badge (green checkmark = active EBA, red = no EBA)\n- Stage badge (Construction, Pre-construction, Future, Archived)\n- Organizing Universe badge (Active=green, Potential=blue, Excluded=red)\n\n**Builder/Contractor Info:**\n- Primary contractor name (clickable to see employer details)\n- Secondary contractor if applicable\n- Trade contractor count (e.g., '+5 trade contractors')\n\n**Patch & Organiser:**\n- Assigned patch name\n- Organiser name(s) responsible for this project\n\n**Metrics (Progress Bars):**\n- **Key Contractor Coverage**: Shows how many of 12 critical contractor roles/trades are mapped (blue bar)\n- **Key Contractor EBA Active**: How many key contractors have active EBAs (green bar)\n- **EBA blocks**: Grid showing each engaged employer's EBA status\n\n**Worker Info:**\n- Linked employers count\n- Site delegate name (or '—' if none)\n- Total workers count\n\n**Actions:**\n- Click project name → Open project detail\n- Click 'Mapping Sheets' → Open mapping sheets directly\n- Click builder/contractor name → View employer details\n- Click progress bars → View contractors tab\n- Click 'Open project' button → Navigate to full detail page",
+      "related": ["projects-page-overview", "key-contractor-coverage"]
+    },
+    {
+      "id": "key-contractor-coverage",
+      "title": "Understanding Key Contractor Coverage",
+      "category": "reference",
+      "roles": ["all"],
+      "pages": ["/projects"],
+      "keywords": ["key contractor", "coverage", "critical", "trades"],
+      "content": "Key Contractor Coverage shows how well a project's critical contractors are mapped and whether they have EBAs.\n\n**What Are 'Key Contractors'?**\nThe 12 most critical roles and trades for project success:\n\n**Key Roles (2):**\n- Builder\n- Project Manager\n\n**Key Trades (10):**\n- Demolition\n- Earthworks\n- Piling\n- Concrete\n- Scaffolding\n- Form Work\n- Tower Crane\n- Mobile Crane\n- Labour Hire\n- Traffic Control\n\n**Coverage Metrics:**\n\n**Key Contractor Coverage** (blue bar):\n- Shows: How many of the 12 key categories are mapped\n- Example: 8/12 (67%) means 8 critical contractors are identified\n- Goal: 100% coverage (all 12 mapped)\n\n**Key Contractor EBA Active** (green bar):\n- Shows: How many mapped key contractors have active EBAs\n- Example: 5/8 (63%) means 5 of 8 mapped key contractors have EBAs\n- Goal: 100% EBA coverage\n\n**Why It Matters:**\n- Key contractors employ the most workers\n- Focusing on these 12 gives maximum organizing leverage\n- EBA coverage of key contractors = significant worker protection\n\n**How to Improve Coverage:**\n- Click the coverage bar to open contractors tab\n- Click 'Add Contractor' to assign missing key contractors\n- Use mapping sheets to identify all contractors on site",
+      "related": ["mapping-sheets-overview", "contractor-assignment"]
+    },
+    {
+      "id": "project-creation-tier-system",
+      "title": "Project Tiers Explained",
+      "category": "reference",
+      "roles": ["all"],
+      "pages": ["/projects"],
+      "keywords": ["tier", "classification", "value", "tier 1", "tier 2", "tier 3"],
+      "content": "Projects are classified into three tiers based on their value, which determines organizing priority and resource allocation.\n\n**Tier Classification:**\n\n**Tier 1** (Major Projects)\n- Value: >$50 million\n- Badge: Blue 'Tier 1'\n- Organizing Universe: ALWAYS Active\n- Priority: Highest - strategic priority projects\n- Examples: Large CBD towers, major infrastructure\n\n**Tier 2** (Significant Projects)\n- Value: $10-50 million\n- Badge: Gray 'Tier 2'\n- Organizing Universe: Active if Construction, Potential if Pre-construction/Future\n- Priority: Medium-High\n- Examples: Mid-size developments, suburban commercial\n\n**Tier 3** (Small Projects)\n- Value: <$10 million\n- Badge: Light gray 'Tier 3'\n- Organizing Universe: Potential if Construction/Pre-construction, Excluded if Future/Archived\n- Priority: Lower - monitored but not primary targets\n- Examples: Small developments, renovations\n\n**Auto-Assignment:**\n- When you enter a project value, tier assigns automatically\n- You can manually override if needed\n- Tier affects organizing universe assignment\n\n**How to Change Tier:**\n- Open project detail page\n- Click 'Edit' button\n- Change the value (tier recalculates) or manually select tier\n- Save changes",
+      "related": ["organizing-universe-rules", "project-creation-complete-workflow"]
+    },
+    {
+      "id": "organizing-universe-explained",
+      "title": "Organizing Universe - Active, Potential, Excluded",
+      "category": "reference",
+      "roles": ["all"],
+      "pages": ["/projects"],
+      "keywords": ["organizing universe", "active", "potential", "excluded", "classification"],
+      "content": "The Organizing Universe categorizes projects by organizing strategy:\n\n**Active (Green Badge):**\n- Definition: Priority target projects for active organizing\n- Characteristics: High value, current construction, strategic importance\n- Auto-assigned when: Tier 1 (always), or Tier 2 in Construction stage\n- Organizing approach: Regular site visits, delegate recruitment, campaign activities\n\n**Potential (Blue Badge):**\n- Definition: Pipeline projects being monitored\n- Characteristics: Future work, pre-construction, or lower-tier active construction\n- Auto-assigned when: Tier 2 Pre-construction/Future, Tier 3 Construction/Pre-construction\n- Organizing approach: Track progress, plan for future engagement\n\n**Excluded (Red Badge):**\n- Definition: Not current organizing targets\n- Characteristics: Very small, archived, or completed projects\n- Auto-assigned when: Tier 3 Future/Archived stages\n- Organizing approach: Minimal monitoring, data retention only\n\n**Auto-Assignment Rules:**\n- Tier 1 → Always Active\n- Tier 2 Construction → Active\n- Tier 2 Pre-construction/Future → Potential\n- Tier 3 Construction/Pre-construction → Potential\n- Tier 3 Future/Archived → Excluded\n\n**Manual Override:**\n- You can manually change any project's universe\n- When manually set, it won't auto-update if rules change\n- Useful for strategic exceptions (e.g., small but politically important project)\n\n**How to Change:**\n- Open project detail page\n- Look for Organizing Universe badge\n- Click 'Edit' and select different universe\n- System marks it as 'manually set'",
+      "related": ["project-creation-tier-system", "organizing-universe-rules"]
+    },
+    {
+      "id": "project-detail-tabs",
+      "title": "Project Detail Page - Tabs Explained",
+      "category": "core-features",
+      "roles": ["all"],
+      "pages": ["/projects/[id]"],
+      "keywords": ["project detail", "tabs", "mapping sheets", "wallcharts", "eba search", "audit"],
+      "content": "When you open a project, you see four main tabs:\n\n**1. Mapping Sheets Tab:**\n- Shows all contractors and trades on the project\n- Organized by construction stage (Early Works, Structure, Finishing, Other)\n- Lists site contacts (delegate, HSR, site manager, foreman)\n- Primary tool for contractor management\n- Printable for site visits\n- Can generate share links for external data collection\n\n**2. Wallcharts Tab:**\n- Visual organization of project information\n- Worker-employer mapping visualization\n- Charts showing membership density\n- Useful for campaign planning\n\n**3. EBA Search Tab:**\n- Search Fair Work Commission database for employer agreements\n- Run FWC lookup for specific employers or all employers\n- View and track EBA milestones\n- Monitor certification and expiry dates\n\n**4. Audit & Compliance Tab:**\n- Track compliance checks (CBUS, Incolink, safety)\n- View site visit history\n- Monitor outstanding compliance items\n- Document verification status\n\n**How to Navigate:**\n- Click tab names at top of project detail page\n- Current tab highlighted\n- Tab selection saved in URL (?tab=mappingsheets)\n- Can bookmark specific tabs",
+      "related": ["mapping-sheets-overview", "eba-search-workflow", "compliance-tracking"]
+    },
+    {
+      "id": "mapping-sheets-complete-guide",
+      "title": "Mapping Sheets - Complete Guide",
+      "category": "workflows",
+      "roles": ["organiser", "lead_organiser", "admin"],
+      "pages": ["/projects/[id]"],
+      "keywords": ["mapping sheets", "contractors", "trades", "subcontractors"],
+      "content": "Mapping Sheets are the primary tool for tracking all contractors and workers on a construction project.\n\n**What Mapping Sheets Show:**\n\n**Section 1: Project Header**\n- Project name, tier, value\n- Address and dates\n- Funding information\n\n**Section 2: Contractor Roles**\n- Builder (primary contractor)\n- Project Manager\n- Other key roles\n- Each shows: Name, EBA status, confidence indicator if auto-matched\n\n**Section 3: Trade Contractors (By Stage)**\n\n**Early Works:**\n- Demolition, Earthworks, Piling, Traffic Control, Site Security\n\n**Structure:**\n- Concrete, Steel, Formwork, Bricklaying, Scaffolding, Cranes\n\n**Finishing:**\n- Electrical, Plumbing, HVAC, Painting, Tiling, Carpentry, Glazing\n\n**Other:**\n- General Construction, Plant & Equipment, Labour Hire, Remediation\n\n**Section 4: Site Contacts**\n- Site Delegate (with 'Add Representative'/'Register' buttons)\n- Site HSR (with 'Add Representative'/'Register' buttons)\n- Site Manager\n- Foreman\n\n**What You Can Do:**\n- Add contractors by clicking 'Add Contractor'\n- Assign trade contractors to specific stages\n- Register delegates via 'Add Representative' workflow\n- Print mapping sheet for site visits\n- Generate secure share links for delegates to update info\n- View EBA status for each contractor\n- See auto-match confidence for imported data",
+      "steps": [
+        "Open a project from Projects page",
+        "Click 'Mapping Sheets' tab",
+        "View current contractor assignments",
+        "To add contractor: Click 'Add Contractor' button",
+        "Select contractor role or trade type",
+        "Search for employer or create new",
+        "Contractor appears in appropriate section",
+        "To register delegate: Find Site Delegate row, click 'Add Representative'",
+        "Follow 4-step registration workflow",
+        "To print: Use browser print (Ctrl/Cmd+P) - formatted for site visits",
+        "To share: Click 'Share Mapping Sheet', set expiry, copy link"
+      ],
+      "prerequisites": [
+        "Project must exist",
+        "Organiser, Co-ordinator, or Admin role required for editing"
+      ],
+      "tips": [
+        "Add contractors as you learn about them during site visits",
+        "Auto-matched contractors (from imports) show confidence percentage",
+        "EBA status updates automatically when FWC lookup runs",
+        "Share links are time-limited (48 hours default) for security",
+        "Print before site visits to have reference handy"
+      ],
+      "related": ["contractor-assignment", "delegate-registration-workflow", "share-links"]
+    },
+    {
+      "id": "contractor-assignment-workflow",
+      "title": "How to Add Contractors to a Project",
+      "category": "workflows",
+      "roles": ["organiser", "lead_organiser", "admin"],
+      "pages": ["/projects/[id]"],
+      "keywords": ["add contractor", "assign", "trade", "subcontractor"],
+      "content": "Step-by-step process for adding contractors to projects via mapping sheets.\n\n**Types of Contractor Assignments:**\n\n1. **Contractor Roles** (project-level):\n   - Builder\n   - Head Contractor\n   - Project Manager\n   - Superintendent\n\n2. **Trade Work** (stage-specific):\n   - Early Works trades (demolition, piling, earthworks)\n   - Structure trades (concrete, steel, formwork)\n   - Finishing trades (electrical, plumbing, painting)\n   - Other trades (labour hire, plant, general construction)",
+      "steps": [
+        "Open project → Mapping Sheets tab",
+        "Click 'Add Contractor' button (top right)",
+        "**Step 1 - Choose Assignment Type:**",
+        "  - Select 'Contractor Role' for builder/PM/superintendent",
+        "  - Select 'Trade Work' for specific trades",
+        "**Step 2 - Select Role or Trade:**",
+        "  - If Contractor Role: Choose Builder, Project Manager, etc.",
+        "  - If Trade Work: Choose trade from stage-organized list",
+        "**Step 3 - Select Employer:**",
+        "  - Search existing employers by name",
+        "  - Or click 'Create New Employer' if not in system",
+        "  - If creating: Enter company name, ABN, contacts",
+        "**Step 4 - Optional Details:**",
+        "  - Estimated workforce for this contractor",
+        "  - Additional notes",
+        "Click 'Assign Contractor'",
+        "Contractor appears in appropriate section of mapping sheet",
+        "If they have an EBA, it shows with green indicator"
+      ],
+      "tips": [
+        "Start with the builder - this is the primary contractor",
+        "Add key trades first: concrete, steel, scaffolding, cranes",
+        "Use FWC lookup after adding contractors to check their EBA status",
+        "Estimated workforce helps calculate total project employment",
+        "If employer isn't in system, create them - better to have partial info than none"
+      ],
+      "related": ["mapping-sheets-complete-guide", "employer-creation"]
+    },
+    {
+      "id": "bci-import-complete-workflow",
+      "title": "How to Import BCI Project Data",
+      "category": "workflows",
+      "roles": ["lead_organiser", "admin"],
+      "pages": ["/admin"],
+      "keywords": ["bci", "import", "csv", "excel", "building construction information"],
+      "content": "The BCI Import tool allows you to bulk import construction project data from Building Construction Information (BCI) reports.\n\n**What is BCI?**\nBuilding Construction Information (BCI) is a commercial service that provides data about construction projects across Australia. They export Excel/CSV files with project and company information.\n\n**What Gets Imported:**\n- Project details (name, address, value, stage, dates)\n- Company assignments (builder, contractors)\n- Automatic classification by role and trade\n- Geographic coordinates for patch matching\n\n**File Requirements:**\n- Format: Excel (.xlsx) or CSV\n- Must contain 'Project' and 'Company' sheets\n- Standard BCI export template format",
+      "steps": [
+        "**Prerequisites Check:**",
+        "  - You must have Lead Organiser or Admin role",
+        "  - Have your BCI export file ready (.xlsx or .csv)",
+        "  - Ensure the railway worker 'bci-import-worker' is running",
+        "Navigate to Admin → Data Upload",
+        "Click 'BCI Import' card",
+        "**Step 1 - Upload File:**",
+        "  - Click 'Choose File' or drag and drop",
+        "  - Select your BCI Excel/CSV file",
+        "  - File is sent to railway worker for processing",
+        "  - Wait for parsing (usually 10-30 seconds)",
+        "**Step 2 - Review Projects:**",
+        "  - Worker returns normalized project list",
+        "  - Each project shows: name, stage, value, address",
+        "  - Projects auto-classified by stage and tier",
+        "  - Review for obvious errors",
+        "**Step 3 - Review Companies:**",
+        "  - Companies are auto-classified: builder, head_contractor, or subcontractor",
+        "  - Trade types inferred from company names (e.g., 'ABC Cranes' → tower_crane)",
+        "  - Non-construction companies filtered out (engineers, consultants)",
+        "**Step 4 - Employer Matching:**",
+        "  - System tries to match companies to existing employers",
+        "  - Exact name matches: Auto-confirmed",
+        "  - Similar names: Shows fuzzy match suggestions with confidence score",
+        "  - No match: Marked for new employer creation",
+        "  - Review each fuzzy match - confirm or reject",
+        "**Step 5 - Handle Duplicates (if any):**",
+        "  - If employer already exists, system shows merge option",
+        "  - Click 'Merge' to consolidate duplicate records",
+        "  - Choose canonical employer (which record to keep)",
+        "  - Relationships transfer to canonical employer",
+        "**Step 6 - Import:**",
+        "  - Review summary: X projects, Y companies, Z new employers",
+        "  - Click 'Import All' to proceed",
+        "  - System creates:",
+        "    • Project records",
+        "    • Job site records (with coordinates)",
+        "    • Employer records (if new)",
+        "    • Project-contractor relationships",
+        "  - Import summary shows results",
+        "Navigate to Projects page to see imported projects"
+      ],
+      "prerequisites": [
+        "Lead Organiser or Admin role",
+        "BCI export file in correct format",
+        "Railway worker 'bci-import-worker' must be running (check Railway dashboard)"
+      ],
+      "tips": [
+        "BCI files typically have 50-500 projects - import can take 2-5 minutes",
+        "Review fuzzy matches carefully - incorrect matches cause data quality issues",
+        "Trade type inference is smart but not perfect - review critical contractors",
+        "System filters out 'Price and Cost Consultant', 'Architect', etc. automatically",
+        "If worker offline, you'll see connection error - check Railway dashboard",
+        "After import, run FWC lookup to populate EBA data for new employers"
+      ],
+      "related": ["employer-matching", "project-creation-complete-workflow", "employer-deduplication"]
+    },
+    {
+      "id": "project-filtering-by-patch",
+      "title": "Filtering Projects by Patch",
+      "category": "workflows",
+      "roles": ["organiser", "lead_organiser", "admin"],
+      "pages": ["/projects"],
+      "keywords": ["patch", "filter", "organiser", "territory"],
+      "content": "Patch filtering lets you view only projects within specific organiser territories.\n\n**How Patch Filtering Works:**\n- Projects are linked to patches via job site GPS coordinates\n- When you select a patch, only projects with sites in that patch boundary appear\n- Organisers typically filter by their own patch\n- Co-ordinators can filter by multiple patches to see team workload\n\n**Steps to Filter by Patch:**\n1. On Projects page, click the Patch filter dropdown\n2. Select one or more patches\n3. List filters to show only projects in selected patches\n4. Patch name shows on each project card\n5. Clear by clicking 'X' on patch filter\n\n**Special Cases:**\n- Projects without job sites won't appear in patch filters\n- Projects with multiple sites may appear in multiple patches\n- New projects auto-assign to patches based on address coordinates",
+      "related": ["patch-management", "projects-filtering-system"]
+    },
+    {
+      "id": "project-eba-status-indicators",
+      "title": "Understanding EBA Status Indicators",
+      "category": "reference",
+      "roles": ["all"],
+      "pages": ["/projects"],
+      "keywords": ["eba", "enterprise agreement", "status", "badge"],
+      "content": "EBA (Enterprise Bargaining Agreement) status shows on every project card:\n\n**Green Checkmark Badge:**\n- Meaning: Builder has active certified EBA\n- Details: Hover to see builder name\n- Impact: Workers covered by union agreement\n- Status: Ideal situation\n\n**Red X Badge:**\n- Meaning: No active builder EBA\n- Reasons: No builder assigned, OR builder has no EBA, OR EBA expired\n- Impact: Workers not protected by agreement\n- Action needed: Organize for EBA coverage\n\n**Gray Unknown Badge:**\n- Meaning: Builder not yet identified\n- Status: Project needs builder assignment\n- Action: Add builder via mapping sheets\n\n**EBA Coverage Metrics:**\n\n**On Project Cards:**\n- EBA Blocks: Grid showing each employer's EBA status\n- Key Contractor EBA: Percentage of critical contractors with EBAs\n\n**How EBA Status Updates:**\n- Automatically when you assign contractors with EBAs\n- After running FWC Lookup to search Fair Work database\n- When admin manually adds EBA records\n- Updates in real-time on the project card",
+      "related": ["eba-tracking", "fwc-lookup", "mapping-sheets-complete-guide"]
+    },
+    {
+      "id": "project-worker-counts",
+      "title": "Worker and Member Counts on Projects",
+      "category": "reference",
+      "roles": ["all"],
+      "pages": ["/projects"],
+      "keywords": ["workers", "members", "count", "placements"],
+      "content": "Project cards show worker statistics:\n\n**Total Workers:**\n- Count of unique workers with placements on project job sites\n- Comes from worker_placements table\n- Updates when workers are assigned to sites\n\n**Total Members:**\n- Subset of workers who are CFMEU members\n- Based on worker union_membership_status field\n- Key metric for organizing success\n\n**How Workers Get Counted:**\n1. Workers are linked to employers\n2. Employers work on job sites\n3. Worker placements table records: worker + employer + job site\n4. Project aggregates all placements across its job sites\n5. Deduplicates if same worker has multiple placements\n\n**Delegate Count:**\n- Shows name of site delegate if assigned\n- Prioritizes: site_delegate > shift_delegate > company_delegate > HSR\n- Shows '—' if no delegate yet\n\n**Where Worker Data Comes From:**\n- Incolink sync (automated import of redundancy scheme data)\n- Manual worker creation\n- Worker imports (CSV/Excel)\n- Delegate registration workflow\n\n**How to Increase Worker Counts:**\n- Run Incolink sync for employers on the project\n- Manually add worker placements\n- Import worker data\n- Register delegates (automatically creates worker + placement)",
+      "related": ["incolink-sync", "worker-placements", "delegate-registration-workflow"]
+    },
+    {
+      "id": "project-search-functionality",
+      "title": "Searching for Projects",
+      "category": "core-features",
+      "roles": ["all"],
+      "pages": ["/projects"],
+      "keywords": ["search", "find", "query"],
+      "content": "The search box at the top of the Projects page finds projects by name.\n\n**How Search Works:**\n- Type in the search box (minimum 1 character)\n- Searches project names (case-insensitive)\n- Results filter in real-time as you type\n- Combines with other filters (AND logic)\n- Clears by clicking X in search box\n\n**Search Tips:**\n- Search is partial match - 'tower' finds 'Central Tower Project'\n- Works with filters - e.g., search 'tower' + filter Tier 1\n- Searches only project name, not builder or contractor names\n- To find projects by contractor, use Employers page instead",
+      "steps": [
+        "Click in the search box at top of Projects page",
+        "Start typing project name",
+        "Results filter as you type",
+        "Click on project card to open details",
+        "Clear search by clicking X icon"
+      ],
+      "related": ["projects-filtering-system"]
+    },
+    {
+      "id": "mapping-sheets-print-format",
+      "title": "Printing Mapping Sheets",
+      "category": "workflows",
+      "roles": ["organiser", "lead_organiser", "admin"],
+      "pages": ["/projects/[id]"],
+      "keywords": ["print", "mapping sheet", "site visit", "pdf"],
+      "content": "Mapping sheets are formatted to print cleanly for site visits.\n\n**How to Print:**\n1. Open project → Mapping Sheets tab\n2. Press Ctrl+P (Windows/Linux) or Cmd+P (Mac)\n3. Or right-click → Print\n4. Print dialog appears\n5. Select printer or 'Save as PDF'\n6. Click Print\n\n**Print Formatting:**\n- Auto-hides navigation and buttons\n- Optimized for A4/Letter paper\n- CFMEU branding in header\n- All contractors and contacts visible\n- EBA status included\n\n**What Prints:**\n- Project header with name, address, tier\n- All contractor roles with EBA badges\n- All trade contractors organized by stage\n- Site contacts section\n- Organiser and patch information\n\n**What Doesn't Print:**\n- Navigation menu\n- Action buttons\n- Share link generator\n- Tabs (only current tab content)\n\n**Best Practices:**\n- Print before site visits for reference\n- Update after visit with new contractor info\n- Print again for file records",
+      "related": ["mapping-sheets-complete-guide", "site-visits-workflow"]
+    },
+    {
+      "id": "share-links-detailed",
+      "title": "Creating Secure Share Links for Mapping Sheets",
+      "category": "workflows",
+      "roles": ["organiser", "lead_organiser", "admin"],
+      "pages": ["/projects/[id]"],
+      "keywords": ["share", "link", "delegate", "external", "token"],
+      "content": "Share Links allow you to give temporary access to project information for people who don't have platform accounts (like delegates).\n\n**What Share Links Are:**\n- Time-limited secure URLs (e.g., https://app.cfmeu.org/share/abc123xyz...)\n- Grant read/update access to specific project mapping sheet\n- No login required for recipient\n- Cryptographically secure (48-character token)\n- Expire automatically after set time\n\n**Security Features:**\n- Token is single-use for updates\n- Configurable expiry (24h, 48h, 72h, 1 week)\n- Access limited to specific project only\n- Tracks who generated link and when it was used\n- Automatic cleanup of expired tokens\n\n**Use Cases:**\n- Delegate updates project information\n- Builder provides contractor details\n- Site manager confirms site contacts\n- External parties contribute data without platform access",
+      "steps": [
+        "Open project → Mapping Sheets tab",
+        "Click 'Share Mapping Sheet' button (top right)",
+        "**Configure Link:**",
+        "  - Select expiry time (24h, 48h, 72h, or 1 week)",
+        "  - Default is 48 hours",
+        "Click 'Generate Link'",
+        "Link appears with copy button",
+        "Click 'Copy Link' to copy to clipboard",
+        "Send link to recipient (email, SMS, etc.)",
+        "**Recipient Experience:**",
+        "  - They click the link",
+        "  - Form opens with current project data pre-filled",
+        "  - They can edit allowed fields",
+        "  - They click Submit",
+        "  - Token marked as 'used'",
+        "  - Data saves to platform",
+        "**Monitoring:**",
+        "  - You can see if link was used (admin view)",
+        "  - Submission timestamp recorded",
+        "  - Changes reflected immediately in mapping sheet"
+      ],
+      "prerequisites": [
+        "Project must exist with mapping sheet",
+        "Organiser, Co-ordinator, or Admin role"
+      ],
+      "tips": [
+        "Use 48-hour expiry for most cases - enough time without leaving link active too long",
+        "Include instructions when sending link: 'Please update by [date]'",
+        "Link expires automatically - no need to manually revoke",
+        "Can generate new link if old one expires",
+        "Recipient sees CFMEU branding and project name for context"
+      ],
+      "related": ["mapping-sheets-complete-guide", "security-features"]
+    },
+    {
+      "id": "project-pagination",
+      "title": "Navigating Project Pages",
+      "category": "core-features",
+      "roles": ["all"],
+      "pages": ["/projects"],
+      "keywords": ["pagination", "pages", "next", "previous"],
+      "content": "Projects are displayed in pages of 24 items (configurable).\n\n**Pagination Controls:**\n- Page numbers at bottom of list\n- Previous/Next buttons\n- Current page highlighted\n- Total pages shown\n\n**Page Size:**\n- Default: 24 projects per page\n- Adjustable via page size selector\n- Options: 12, 24, 48, 96\n\n**State Persistence:**\n- Current page saved in URL (?page=2)\n- Filter + sort + page saved together\n- Bookmark specific filtered views\n- Session storage preserves state when navigating away",
+      "related": ["projects-filtering-system"]
+    },
+    {
+      "id": "organizing-universe-manual-override",
+      "title": "Manually Changing Project Organizing Universe",
+      "category": "workflows",
+      "roles": ["lead_organiser", "admin"],
+      "pages": ["/projects/[id]"],
+      "keywords": ["organizing universe", "manual", "override", "change"],
+      "content": "While the organizing universe auto-assigns based on tier rules, you can manually override for strategic reasons.\n\n**When to Override:**\n- Small project with political importance (Tier 3 but should be Active)\n- Large project to exclude (Tier 2 but Excluded for strategic reasons)\n- Special campaign targets\n- Projects with unique circumstances\n\n**How to Manually Set:**\n1. Open project detail page\n2. Click 'Edit' button\n3. Find 'Organizing Universe' dropdown\n4. Select: Active, Potential, or Excluded\n5. Click 'Save'\n6. System marks as 'manually_set_organizing_universe = true'\n7. Project won't auto-update if tier rules change\n\n**Effects of Manual Setting:**\n- Dashboard metrics include in selected universe\n- Patch statistics reflect your manual choice\n- System respects your decision even if tier/stage changes\n- Badge color changes: Active=green, Potential=blue, Excluded=red\n\n**Reverting to Auto:**\n- Edit project again\n- Select 'Auto-assign based on tier'\n- System recalculates based on current tier and stage",
+      "prerequisites": ["Lead Organiser or Admin role"],
+      "related": ["organizing-universe-explained", "project-creation-tier-system"]
+    },
+    {
+      "id": "project-special-filters",
+      "title": "Special Project Filters",
+      "category": "core-features",
+      "roles": ["all"],
+      "pages": ["/projects"],
+      "keywords": ["special filter", "no builder", "employers"],
+      "content": "Special filters help identify projects needing attention:\n\n**No Builder But Has Employers:**\n- Shows: Projects with assigned contractors but no identified builder\n- Use case: Find projects where builder needs to be identified\n- Common scenario: Imported projects where companies were added but builder role unclear\n- Action needed: Open mapping sheet, identify which contractor is the builder\n\n**How to Use:**\n1. Open Filter panel\n2. Find 'Special' dropdown\n3. Select 'No Builder But Has Employers'\n4. Results show projects needing builder identification\n5. Click into each project\n6. Review contractors in mapping sheet\n7. Assign builder role to appropriate contractor\n\n**Why It Matters:**\n- Builder drives EBA coverage for the project\n- Organizing strategy differs for different builders\n- Dashboard metrics need builder identification for accuracy",
+      "related": ["projects-filtering-system", "contractor-assignment-workflow"]
+    },
+    {
+      "id": "new-projects-banner",
+      "title": "New Projects Notification Banner",
+      "category": "core-features",
+      "roles": ["organiser", "lead_organiser", "admin"],
+      "pages": ["/projects"],
+      "keywords": ["new", "recent", "notification", "alert"],
+      "content": "A banner appears when new projects have been created recently.\n\n**What It Shows:**\n- Count of projects created in last 7 days\n- Dismissible notification\n- Appears at top of projects page\n\n**How to View New Projects:**\n- Click the notification banner\n- Or sort by 'Created At' descending\n- Or filter and look for recent additions\n\n**Why It's Useful:**\n- Alerts you to projects from imports\n- Helps coordinate new project intake\n- Ensures new projects don't get missed",
+      "related": ["projects-sorting", "bci-import-complete-workflow"]
+    },
+    {
+      "id": "project-subset-eba-stats",
+      "title": "Understanding Subset EBA Statistics",
+      "category": "reference",
+      "roles": ["all"],
+      "pages": ["/projects"],
+      "keywords": ["eba", "subset", "statistics", "coverage"],
+      "content": "Subset EBA Stats show detailed breakdown of EBA coverage:\n\n**What It Shows:**\n- Total employers on project\n- Employers with active EBAs\n- Employers with signed but not certified EBAs\n- Employers with no EBA\n\n**Color Coding:**\n- Green: Active certified EBA\n- Yellow: Signed or lodged (in progress)\n- Red: No EBA or expired\n\n**Displayed:**\n- On project cards (compact version)\n- On project detail page (detailed version)\n- Clickable to see contractor list\n\n**How to Improve EBA Coverage:**\n1. Click the EBA stats to see which employers lack EBAs\n2. Run FWC lookup to search for existing agreements\n3. Work with employers without EBAs to negotiate agreements\n4. Track progress via EBA tracking tools",
+      "related": ["eba-tracking", "key-contractor-coverage"]
+    },
+    {
+      "id": "project-value-entry",
+      "title": "Entering Project Values",
+      "category": "reference",
+      "roles": ["organiser", "lead_organiser", "admin"],
+      "pages": ["/projects"],
+      "keywords": ["value", "amount", "tier", "dollar"],
+      "content": "Project value is the estimated total construction cost:\n\n**How to Enter Value:**\n- Enter as number (e.g., 45000000 for $45M)\n- Or with commas (e.g., 45,000,000)\n- System stores as number\n\n**Value Affects:**\n- **Tier Assignment:**\n  • >$50M → Tier 1\n  • $10M-$50M → Tier 2\n  • <$10M → Tier 3\n- **Organizing Universe** (tier determines universe rules)\n- **Priority Level** (higher value = higher priority)\n- **Resource Allocation** (Tier 1 gets more organiser time)\n\n**Updating Value:**\n- Edit project to change value\n- Tier recalculates automatically\n- Organizing universe may auto-update (unless manually set)\n\n**Value Sources:**\n- BCI data (usually reliable)\n- Council DA approvals\n- Builder estimates\n- Public tender notices\n\n**Tips:**\n- Use latest available estimate\n- Round to nearest million for simplicity\n- Update when better information available\n- Note: Value affects organizing strategy - be as accurate as possible",
+      "related": ["project-creation-tier-system", "organizing-universe-explained"]
+    },
+    {
+      "id": "project-mobile-vs-desktop",
+      "title": "Mobile vs Desktop Project Views",
+      "category": "reference",
+      "roles": ["all"],
+      "pages": ["/projects"],
+      "keywords": ["mobile", "desktop", "responsive"],
+      "content": "Projects page adapts to your device:\n\n**Desktop View:**\n- Full card/list/map views\n- All filters visible\n- Multi-column layouts\n- Hover interactions\n- Larger click targets unnecessary\n\n**Mobile View:**\n- Optimized card layout\n- Collapsible filters\n- Single column\n- Larger touch targets\n- Simplified metrics display\n- Mobile-optimized mapping sheets\n\n**Mobile Mapping Sheets:**\n- Separate route: /projects/[id]/mappingsheets-mobile\n- Vertical scrolling layout\n- Touch-friendly contractor selection\n- Same data, optimized interface\n\n**Auto-Detection:**\n- System detects mobile devices automatically\n- Switches to appropriate view\n- Mapping Sheets button links to correct version",
+      "related": ["projects-view-modes"]
+    },
+    {
+      "id": "project-state-persistence",
+      "title": "How Project Page Settings Are Saved",
+      "category": "reference",
+      "roles": ["all"],
+      "pages": ["/projects"],
+      "keywords": ["save", "persist", "remember", "session"],
+      "content": "Your filters, sort, view choice, and page number are automatically saved.\n\n**What's Saved:**\n- Search query\n- Selected filters (tier, universe, stage, patch, EBA)\n- Sort field and direction\n- View mode (card/list/map)\n- Current page number\n\n**Where It's Saved:**\n- URL parameters (can bookmark)\n- Session storage (survives page navigation)\n\n**How Long:**\n- URL parameters: Permanent (bookmark-able)\n- Session storage: Until browser tab closes\n\n**Benefits:**\n- Navigate to project detail and back - filters persist\n- Refresh page - settings restore\n- Bookmark filtered views (e.g., 'My Tier 1 Active Projects')\n\n**Clearing:**\n- Click 'Reset Filters' to clear all\n- Or manually change each filter\n- Or clear session by closing tab",
+      "related": ["projects-filtering-system", "projects-view-modes"]
+    },
+    {
+      "id": "project-desktop-view-component",
+      "title": "Projects Desktop View Features",
+      "category": "core-features",
+      "roles": ["all"],
+      "pages": ["/projects"],
+      "keywords": ["desktop", "layout", "features"],
+      "content": "Desktop view provides the full-featured project management interface:\n\n**Top Toolbar:**\n- Search box (left)\n- New Project button (for organizers+)\n- Filter toggle button\n- View mode switcher (card/list/map)\n- Sort controls\n\n**Filters Panel:**\n- Collapsible advanced filters\n- All filter options visible\n- Applied filters shown as badges\n- Quick clear per filter\n\n**Project Grid:**\n- Responsive card grid (auto-adjusts to window size)\n- 2-4 columns depending on screen width\n- Hover effects on cards\n- Quick actions visible\n\n**Pagination:**\n- Bottom of page\n- Page size selector\n- Jump to page input\n- Previous/Next buttons\n\n**Modals:**\n- Employer detail modal (click contractor names)\n- Worker detail modal (from worker lists)\n- Create project dialog",
+      "related": ["projects-view-modes", "projects-page-overview"]
+    },
+    {
+      "id": "employer-detail-from-projects",
+      "title": "Viewing Employer Details from Projects",
+      "category": "workflows",
+      "roles": ["all"],
+      "pages": ["/projects"],
+      "keywords": ["employer", "contractor", "modal", "details"],
+      "content": "Click any contractor/builder name on a project card to see their complete employer profile.\n\n**What Opens:**\n- Employer Detail Modal (overlay)\n- Shows without leaving projects page\n\n**Information Displayed:**\n- Company name and ABN\n- EBA status and expiry dates\n- All projects they're working on\n- Worker placements and counts\n- Contact information\n- Compliance records\n\n**Actions Available:**\n- View full employer profile\n- See all projects for this contractor\n- Check EBA certification details\n- View worker list for this employer\n\n**How to Use:**\n1. On project card, click contractor/builder name (blue link)\n2. Modal opens\n3. Review employer information\n4. Click 'View Full Profile' to go to employer page\n5. Or click X to close and stay on projects page\n\n**Why It's Useful:**\n- Quick contractor lookup without leaving projects\n- Check EBA status before site visit\n- See if contractor works on other projects\n- Verify contact details",
+      "steps": [
+        "Find a project card",
+        "Click the blue builder/contractor name",
+        "Modal opens with employer details",
+        "Review information",
+        "Close modal or navigate to full employer page"
+      ],
+      "related": ["employers-database", "eba-tracking"]
+    }
+  ]
+}

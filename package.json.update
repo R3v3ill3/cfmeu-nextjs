@@ -1,0 +1,14 @@
+{
+  "scripts": {
+    "embed-docs": "ts-node scripts/embed-docs.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.27.0",
+    "openai": "^4.56.0"
+  }
+}
+
+// Add the above to your package.json:
+// 1. Add "embed-docs" to scripts section
+// 2. Add dependencies to dependencies section
+// 3. Run: npm install

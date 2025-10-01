@@ -9,6 +9,7 @@ import Link from "next/link"
 import { useSearchParams, usePathname, useRouter } from "next/navigation"
 // Progress replaced by custom gradient bar
 import { Badge } from "@/components/ui/badge"
+import { useNavigationLoading } from "@/hooks/useNavigationLoading"
 import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal"
 import { WorkerDetailModal } from "@/components/workers/WorkerDetailModal"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -292,6 +293,9 @@ function EbaPercentBar({ active, total, onClick }: { active: number; total: numb
 }
 
 function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: ProjectWithRoles; summary?: ProjectSummary; subsetStats?: any; onOpenEmployer: (id: string) => void }) {
+  const { startNavigation } = useNavigationLoading()
+  const router = useRouter()
+  
   const builderNames = useMemo(() => {
     // Get all contractor role assignments as potential builders
     const contractors = (p.project_assignments || []).filter((a) => 
@@ -388,7 +392,13 @@ function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: Proje
           <div className="space-y-2">
             {/* Project name and mapping sheets button */}
             <div className="flex items-center justify-between gap-2">
-              <Link href={`/projects/${p.id}`} className="hover:underline inline-block rounded border border-dashed border-transparent hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 px-1 truncate min-w-0 flex-1">
+              <Link 
+                href={`/projects/${p.id}`} 
+                className="hover:underline inline-block rounded border border-dashed border-transparent hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 px-1 truncate min-w-0 flex-1"
+                onClick={() => {
+                  startNavigation(`/projects/${p.id}`)
+                }}
+              >
                 {p.name}
               </Link>
               <button
@@ -399,9 +409,12 @@ function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: Proje
                     const ua = navigator.userAgent.toLowerCase()
                     const isMobile = /iphone|ipad|ipod|android/.test(ua)
                     const href = isMobile ? `/projects/${p.id}/mappingsheets-mobile` : `/projects/${p.id}?tab=mappingsheets`
-                    window.location.href = href
+                    startNavigation(href)
+                    setTimeout(() => router.push(href), 50)
                   } catch {
-                    window.location.href = `/projects/${p.id}?tab=mappingsheets`
+                    const href = `/projects/${p.id}?tab=mappingsheets`
+                    startNavigation(href)
+                    setTimeout(() => router.push(href), 50)
                   }
                 }}
               >
@@ -490,25 +503,37 @@ function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: Proje
             value={keyContractorMetrics.mappedCategories}
             of={keyContractorMetrics.totalKeyCategories}
             color="59,130,246" // Blue for mapping coverage
-            onClick={() => { window.location.href = `/projects/${p.id}?tab=contractors` }}
+            onClick={() => { 
+              startNavigation(`/projects/${p.id}?tab=contractors`)
+              setTimeout(() => router.push(`/projects/${p.id}?tab=contractors`), 50)
+            }}
           />
           <CompactStatBar
             label="Key Contractor EBA Active"
             value={keyContractorMetrics.keyContractorsWithEba}
             of={keyContractorMetrics.totalKeyContractors}
             color="34,197,94" // Green for EBA status
-            onClick={() => { window.location.href = `/projects/${p.id}?tab=contractors` }}
+            onClick={() => { 
+              startNavigation(`/projects/${p.id}?tab=contractors`)
+              setTimeout(() => router.push(`/projects/${p.id}?tab=contractors`), 50)
+            }}
           />
           <EbaPercentBar
             active={ebaActive}
             total={engaged}
-            onClick={() => { window.location.href = `/projects/${p.id}?tab=contractors` }}
+            onClick={() => { 
+              startNavigation(`/projects/${p.id}?tab=contractors`)
+              setTimeout(() => router.push(`/projects/${p.id}?tab=contractors`), 50)
+            }}
           />
           {subsetStats && (
             <SubsetEbaStats
               stats={subsetStats}
               variant="compact"
-              onClick={() => { window.location.href = `/projects/${p.id}?tab=contractors` }}
+              onClick={() => { 
+                startNavigation(`/projects/${p.id}?tab=contractors`)
+                setTimeout(() => router.push(`/projects/${p.id}?tab=contractors`), 50)
+              }}
             />
           )}
         </div>
@@ -534,7 +559,10 @@ function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: Proje
           )}
         </div>
         <div className="pt-2 mt-auto">
-          <Button className="w-full" size="sm" onClick={() => { window.location.href = `/projects/${p.id}` }}>Open project</Button>
+          <Button className="w-full" size="sm" onClick={() => { 
+            startNavigation(`/projects/${p.id}`)
+            setTimeout(() => router.push(`/projects/${p.id}`), 50)
+          }}>Open project</Button>
         </div>
       </CardContent>
     </Card>

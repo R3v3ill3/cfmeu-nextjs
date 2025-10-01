@@ -29,6 +29,8 @@ import { useNavigationVisibility } from "@/hooks/useNavigationVisibility"
 import { useNavigationLoading } from "@/hooks/useNavigationLoading"
 import { JoinQrDialog } from "@/components/JoinQrDialog"
 import { HelpLauncher } from '@/components/help/HelpLauncher'
+import { AiHelpDialog } from '@/components/help/AiHelpDialog'
+import { MessageSquare } from 'lucide-react'
 
 const cfmeuLogoLight = "/favicon.svg" as unknown as string
 
@@ -127,6 +129,7 @@ function useVisibleNavItems(userRole: string | null): NavItem[] {
 }
 
 export default function DesktopLayout({ children }: { children: React.ReactNode }) {
+  const [aiHelpOpen, setAiHelpOpen] = useState(false)
   const pathname = usePathname()
   const { user, signOut } = useAuth()
   const userRole = useUserRole()
@@ -299,6 +302,14 @@ export default function DesktopLayout({ children }: { children: React.ReactNode 
                 </span>
               </div>
               
+              <Button 
+                variant="ghost" 
+                size="icon"
+                onClick={() => setAiHelpOpen(true)}
+                title="AI Help Assistant"
+              >
+                <MessageSquare className="h-5 w-5" />
+              </Button>
               <HelpLauncher triggerVariant="ghost" size="icon" />
               <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
                 <Settings className="h-4 w-4" />
@@ -316,6 +327,7 @@ export default function DesktopLayout({ children }: { children: React.ReactNode 
         </main>
       </SidebarInset>
       <JoinQrDialog open={joinQrOpen} onOpenChange={setJoinQrOpen} />
+      <AiHelpDialog open={aiHelpOpen} onOpenChange={setAiHelpOpen} />
     </SidebarProvider>
   )
 }

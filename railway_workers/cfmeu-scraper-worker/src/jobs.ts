@@ -14,6 +14,7 @@ export async function reserveNextJob(client: SupabaseClient): Promise<ScraperJob
     .from(JOB_TABLE)
     .select('*')
     .eq('status', 'queued')
+    .in('job_type', ['fwc_lookup', 'incolink_sync']) // Only pick up jobs this worker can handle
     .lte('run_at', nowIso)
     .order('priority', { ascending: true })
     .order('created_at', { ascending: true })

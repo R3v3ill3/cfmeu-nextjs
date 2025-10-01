@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge"
 import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
 import { FolderOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useNavigationLoading } from "@/hooks/useNavigationLoading"
+import { useRouter } from "next/navigation"
 
 export type ProjectCardData = {
   id: string;
@@ -19,6 +21,9 @@ export type ProjectCardData = {
 };
 
 export function ProjectCard({ project }: { project: ProjectCardData }) {
+  const { startNavigation } = useNavigationLoading()
+  const router = useRouter()
+  
   const handleDirectionsClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
@@ -26,7 +31,11 @@ export function ProjectCard({ project }: { project: ProjectCardData }) {
   };
 
   const handleCardClick = () => {
-    window.location.href = `/projects/${project.id}`;
+    startNavigation(`/projects/${project.id}`)
+    // Use setTimeout to ensure loading overlay shows before navigation
+    setTimeout(() => {
+      router.push(`/projects/${project.id}`)
+    }, 50)
   };
 
   return (

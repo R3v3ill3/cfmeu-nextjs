@@ -134,43 +134,67 @@ export function useProjectsServerSide(params: ProjectsParams) {
 
       const urlPath = `?${searchParams.toString()}`;
       const useWorker = workerEnabled && workerUrl;
-      const url = useWorker ? `${workerUrl.replace(/\/$/, '')}/v1/projects${urlPath}` : `/api/projects${urlPath}`;
-      console.log('🔄 Fetching projects:', { url, useWorker });
+      const baseHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+      const appUrl = `/api/projects${urlPath}`;
 
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (useWorker) {
-        const token = session?.access_token;
-        if (!token) {
-          throw new Error('No auth token for worker request');
+      const enrichDebug = (data: any, via: 'worker' | 'worker_fallback' | 'app_api') => {
+        if (data && typeof data === 'object') {
+          (data as any).debug = {
+            ...(data.debug || {}),
+            via,
+          };
         }
-        headers['Authorization'] = `Bearer ${token}`;
+        return data;
+      };
+
+      const fetchApp = async () => {
+        console.warn('⚠️ Falling back to app route for projects');
+        const response = await fetch(appUrl, { method: 'GET', headers: baseHeaders });
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Failed to fetch projects: ${response.status} ${errorText}`);
+        }
+        const data = await response.json();
+        return enrichDebug(data, useWorker ? 'worker_fallback' : 'app_api');
+      };
+
+      if (!useWorker) {
+        return fetchApp();
       }
 
-      const response = await fetch(url, { method: 'GET', headers });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to fetch projects: ${response.status} ${errorText}`);
+      const workerHeaders = { ...baseHeaders };
+      const token = session?.access_token;
+      if (!token) {
+        console.warn('⚠️ No auth token available for worker projects request; using app route');
+        return fetchApp();
       }
+      workerHeaders['Authorization'] = `Bearer ${token}`;
 
-      const data = await response.json();
-      // Attach source for debugging UI
-      if (data && typeof data === 'object') {
-        (data as any).debug = {
-          ...(data.debug || {}),
-          via: useWorker ? 'worker' : 'app_api',
-        };
+      const workerEndpoint = `${workerUrl.replace(/\/$/, '')}/v1/projects${urlPath}`;
+      console.log('🔄 Fetching projects:', { url: workerEndpoint, useWorker: workerUrl });
+
+      try {
+        const response = await fetch(workerEndpoint, { method: 'GET', headers: workerHeaders });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          const status = response.status;
+          // Retry locally for network-ish failures (5xx or gateway issues)
+          if (status >= 500 || status === 429) {
+            console.warn(`⚠️ Worker responded with ${status}, falling back to app route`, errorText);
+            return fetchApp();
+          }
+          throw new Error(`Failed to fetch projects: ${status} ${errorText}`);
+        }
+
+        const data = await response.json();
+        return enrichDebug(data, 'worker');
+      } catch (error) {
+        console.warn('⚠️ Worker projects request failed, falling back to app route', error);
+        return fetchApp();
       }
       
-      // Log performance metrics for monitoring
-      if (data.debug) {
-        console.log(`📊 Projects server-side query completed in ${data.debug.queryTime}ms`);
-        if (data.debug.queryTime > 2000) {
-          console.warn('⚠️ Slow projects query detected:', data.debug);
-        }
-      }
-
-      return data;
+      // Log performance metrics for monitoring handled inside fetch paths
     },
     
     // Aggressive caching for better performance (projects change less frequently)
