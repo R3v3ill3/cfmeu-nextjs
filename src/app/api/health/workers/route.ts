@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { createClient } from '@supabase/supabase-js';
+import type { Database } from '@/types/database';
 
 export const dynamic = 'force-dynamic';
 
@@ -141,7 +142,7 @@ export async function GET(request: NextRequest) {
       const queueCheckStart = Date.now();
 
       try {
-        const serviceClient = createClient(supabaseUrl, supabaseServiceKey, {
+        const serviceClient = createClient<Database>(supabaseUrl, supabaseServiceKey, {
           auth: { persistSession: false },
         });
 

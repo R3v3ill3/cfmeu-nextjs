@@ -21,7 +21,8 @@ interface ProjectFieldsReviewProps {
 type FieldDecision = 'keep' | 'replace' | 'custom'
 
 interface FieldConfig {
-  key: string
+  extractedKey: string // Key in extracted_data.project
+  existingKey: string  // Key in database project table
   label: string
   type: 'text' | 'number' | 'date' | 'email' | 'boolean'
   formatValue?: (value: any) => string
@@ -29,10 +30,12 @@ interface FieldConfig {
 }
 
 const FIELD_CONFIGS: FieldConfig[] = [
-  { key: 'organiser', label: 'Organiser', type: 'text' },
-  { key: 'project_name', label: 'Project Name', type: 'text' },
+  { extractedKey: 'organiser', existingKey: 'organiser_names', label: 'Organiser', type: 'text' },
+  { extractedKey: 'builder', existingKey: 'builder_name', label: 'Builder', type: 'text' },
+  { extractedKey: 'project_name', existingKey: 'name', label: 'Project Name', type: 'text' },
   { 
-    key: 'project_value', 
+    extractedKey: 'project_value',
+    existingKey: 'value',
     label: 'Project Value', 
     type: 'number',
     formatValue: (val) => val ? `$${val.toLocaleString()}` : '',
@@ -43,10 +46,11 @@ const FIELD_CONFIGS: FieldConfig[] = [
       return null
     }
   },
-  { key: 'address', label: 'Address', type: 'text' },
-  { key: 'builder', label: 'Builder', type: 'text' },
+  { extractedKey: 'address', existingKey: 'address', label: 'Address', type: 'text' },
+  { extractedKey: 'builder', existingKey: 'builder', label: 'Builder', type: 'text' },
   { 
-    key: 'proposed_start_date', 
+    extractedKey: 'proposed_start_date',
+    existingKey: 'proposed_start_date',
     label: 'Proposed Start Date', 
     type: 'date',
     validate: (val) => {
@@ -60,7 +64,8 @@ const FIELD_CONFIGS: FieldConfig[] = [
     }
   },
   { 
-    key: 'proposed_finish_date', 
+    extractedKey: 'proposed_finish_date',
+    existingKey: 'proposed_finish_date',
     label: 'Proposed Finish Date', 
     type: 'date',
     validate: (val) => {
@@ -73,9 +78,10 @@ const FIELD_CONFIGS: FieldConfig[] = [
       return null
     }
   },
-  { key: 'eba_with_cfmeu', label: 'EBA with CFMEU', type: 'boolean' },
+  { extractedKey: 'eba_with_cfmeu', existingKey: 'eba_with_cfmeu', label: 'EBA with CFMEU', type: 'boolean' },
   { 
-    key: 'roe_email', 
+    extractedKey: 'roe_email',
+    existingKey: 'roe_email',
     label: 'ROE Email', 
     type: 'email',
     validate: (val) => {
@@ -86,7 +92,8 @@ const FIELD_CONFIGS: FieldConfig[] = [
     }
   },
   { 
-    key: 'state_funding', 
+    extractedKey: 'state_funding',
+    existingKey: 'state_funding',
     label: 'State Funding', 
     type: 'number',
     formatValue: (val) => val ? `$${val.toLocaleString()}` : '',
@@ -98,7 +105,8 @@ const FIELD_CONFIGS: FieldConfig[] = [
     }
   },
   { 
-    key: 'federal_funding', 
+    extractedKey: 'federal_funding',
+    existingKey: 'federal_funding',
     label: 'Federal Funding', 
     type: 'number',
     formatValue: (val) => val ? `$${val.toLocaleString()}` : '',
@@ -127,20 +135,20 @@ export function ProjectFieldsReview({
   useEffect(() => {
     const initial: typeof decisions = {}
     FIELD_CONFIGS.forEach(config => {
-      const extracted = extractedData[config.key]
-      const existing = existingData[config.key]
+      const extracted = extractedData[config.extractedKey]
+      const existing = existingData[config.existingKey]
       
       // Auto-select action
       let action: FieldDecision = 'keep'
       if (extracted !== null && extracted !== undefined && extracted !== '') {
         if (existing === null || existing === undefined || existing === '') {
           action = 'replace' // Fill empty field
-        } else if (config.key === 'project_value' && extracted !== existing) {
+        } else if (config.existingKey === 'value' && extracted !== existing) {
           action = 'keep' // Require user decision for value conflicts
         }
       }
       
-      initial[config.key] = {
+      initial[config.existingKey] = {
         action,
         value: action === 'replace' ? extracted : existing,
       }
@@ -159,14 +167,16 @@ export function ProjectFieldsReview({
     onDecisionsChange(finalDecisions)
   }, [decisions, onDecisionsChange])
 
-  const handleDecisionChange = (key: string, action: FieldDecision, customValue?: any) => {
-    const config = FIELD_CONFIGS.find(f => f.key === key)
+  const handleDecisionChange = (existingKey: string, action: FieldDecision, customValue?: any) => {
+    const config = FIELD_CONFIGS.find(f => f.existingKey === existingKey)
+    if (!config) return
+    
     let value: any
     
     if (action === 'keep') {
-      value = existingData[key]
+      value = existingData[config.existingKey]
     } else if (action === 'replace') {
-      value = extractedData[key]
+      value = extractedData[config.extractedKey]
     } else {
       value = customValue
     }
@@ -176,15 +186,15 @@ export function ProjectFieldsReview({
 
     setDecisions(prev => ({
       ...prev,
-      [key]: { action, value, error: error || undefined },
+      [existingKey]: { action, value, error: error || undefined },
     }))
   }
 
   const renderFieldComparison = (config: FieldConfig) => {
-    const extracted = extractedData[config.key]
-    const existing = existingData[config.key]
-    const decision = decisions[config.key]
-    const fieldConfidence = confidence[config.key] || 0
+    const extracted = extractedData[config.extractedKey]
+    const existing = existingData[config.existingKey]
+    const decision = decisions[config.existingKey]
+    const fieldConfidence = confidence[config.extractedKey] || 0
 
     const hasExtracted = extracted !== null && extracted !== undefined && extracted !== ''
     const hasExisting = existing !== null && existing !== undefined && existing !== ''
@@ -199,7 +209,7 @@ export function ProjectFieldsReview({
     }
 
     return (
-      <Card key={config.key} className={decision?.error ? 'border-red-300' : ''}>
+      <Card key={config.existingKey} className={decision?.error ? 'border-red-300' : ''}>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-medium">{config.label}</CardTitle>
@@ -224,7 +234,7 @@ export function ProjectFieldsReview({
           </div>
 
           {/* Show difference indicator */}
-          {hasDifference && config.key === 'project_value' && (
+          {hasDifference && config.existingKey === 'value' && (
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription className="text-sm">
@@ -247,28 +257,28 @@ export function ProjectFieldsReview({
           {/* Decision radio group */}
           <RadioGroup
             value={decision?.action || 'keep'}
-            onValueChange={(value) => handleDecisionChange(config.key, value as FieldDecision)}
+            onValueChange={(value) => handleDecisionChange(config.existingKey, value as FieldDecision)}
           >
             <div className="space-y-2">
               {hasExisting && (
                 <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="keep" id={`${config.key}-keep`} />
-                  <Label htmlFor={`${config.key}-keep`} className="font-normal cursor-pointer">
+                  <RadioGroupItem value="keep" id={`${config.existingKey}-keep`} />
+                  <Label htmlFor={`${config.existingKey}-keep`} className="font-normal cursor-pointer">
                     Keep existing value
                   </Label>
                 </div>
               )}
               {hasExtracted && (
                 <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="replace" id={`${config.key}-replace`} />
-                  <Label htmlFor={`${config.key}-replace`} className="font-normal cursor-pointer">
+                  <RadioGroupItem value="replace" id={`${config.existingKey}-replace`} />
+                  <Label htmlFor={`${config.existingKey}-replace`} className="font-normal cursor-pointer">
                     Use scanned value
                   </Label>
                 </div>
               )}
               <div className="flex items-center space-x-2">
-                <RadioGroupItem value="custom" id={`${config.key}-custom`} />
-                <Label htmlFor={`${config.key}-custom`} className="font-normal cursor-pointer">
+                <RadioGroupItem value="custom" id={`${config.existingKey}-custom`} />
+                <Label htmlFor={`${config.existingKey}-custom`} className="font-normal cursor-pointer">
                   Enter custom value
                 </Label>
               </div>
@@ -281,22 +291,22 @@ export function ProjectFieldsReview({
               {config.type === 'date' ? (
                 <DateInput
                   value={decision.value || ''}
-                  onChange={(value) => handleDecisionChange(config.key, 'custom', value)}
+                  onChange={(value) => handleDecisionChange(config.existingKey, 'custom', value)}
                   className={decision.error ? 'border-red-500' : ''}
                 />
               ) : config.type === 'boolean' ? (
                 <RadioGroup
                   value={decision.value ? 'true' : 'false'}
-                  onValueChange={(value) => handleDecisionChange(config.key, 'custom', value === 'true')}
+                  onValueChange={(value) => handleDecisionChange(config.existingKey, 'custom', value === 'true')}
                 >
                   <div className="flex gap-4">
                     <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="true" id={`${config.key}-yes`} />
-                      <Label htmlFor={`${config.key}-yes`}>Yes</Label>
+                      <RadioGroupItem value="true" id={`${config.existingKey}-yes`} />
+                      <Label htmlFor={`${config.existingKey}-yes`}>Yes</Label>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="false" id={`${config.key}-no`} />
-                      <Label htmlFor={`${config.key}-no`}>No</Label>
+                      <RadioGroupItem value="false" id={`${config.existingKey}-no`} />
+                      <Label htmlFor={`${config.existingKey}-no`}>No</Label>
                     </div>
                   </div>
                 </RadioGroup>
@@ -304,7 +314,7 @@ export function ProjectFieldsReview({
                 <Input
                   type={config.type === 'number' ? 'number' : config.type === 'email' ? 'email' : 'text'}
                   value={decision.value || ''}
-                  onChange={(e) => handleDecisionChange(config.key, 'custom', e.target.value)}
+                  onChange={(e) => handleDecisionChange(config.existingKey, 'custom', e.target.value)}
                   className={decision.error ? 'border-red-500' : ''}
                 />
               )}

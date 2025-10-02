@@ -36,14 +36,20 @@ export function NavigationLoadingProvider({ children }: { children: ReactNode })
   }, [pathname, isNavigating, targetPath])
 
   const startNavigation = (path: string) => {
+    console.log('🚀 startNavigation called:', { path, currentPathname: pathname })
     // Extract base paths for comparison
     const currentBasePath = pathname.split('?')[0]
     const targetBasePath = path.split('?')[0]
     
+    console.log('📍 Path comparison:', { currentBasePath, targetBasePath })
+    
     // Only start navigation if actually changing pages (ignore query param changes on same page)
     if (currentBasePath !== targetBasePath) {
+      console.log('✨ Setting navigation state to true')
       setTargetPath(path)
       setIsNavigating(true)
+    } else {
+      console.log('⏭️  Skipping - same page')
     }
   }
 
@@ -66,10 +72,23 @@ export function useNavigationLoading() {
 export function NavigationLoadingOverlay() {
   const { isNavigating, targetPath } = useNavigationLoading()
 
+  useEffect(() => {
+    if (isNavigating) {
+      console.log('🔄 Navigation loading started:', targetPath)
+    } else {
+      console.log('✅ Navigation loading cleared')
+    }
+  }, [isNavigating, targetPath])
+
   if (!isNavigating) return null
 
+  console.log('🎨 Rendering NavigationLoadingOverlay')
+
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+    <div 
+      className="fixed inset-0 flex items-center justify-center"
+      style={{ zIndex: 99999 }}
+    >
       {/* Dimmed background */}
       <div className="absolute inset-0 bg-black/50" />
       

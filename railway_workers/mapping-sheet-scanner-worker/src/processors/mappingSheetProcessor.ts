@@ -68,7 +68,7 @@ export async function processMappingSheetScan(
         ai_provider: result.provider,
         extraction_completed_at: new Date().toISOString(),
         extraction_cost_usd: result.costUsd,
-        page_count: imageBuffers.length,
+        page_count: selectedPages?.length || result.extractedData?.pages_processed || 1,
       })
       .eq('id', scanId)
 

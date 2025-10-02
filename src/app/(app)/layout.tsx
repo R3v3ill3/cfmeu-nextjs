@@ -5,7 +5,7 @@ import Layout from '@/components/Layout'
 import DesktopLayout from '@/components/DesktopLayout'
 import { headers } from 'next/headers'
 import { isMobileOrTablet } from '@/lib/device'
-import { NavigationLoadingProvider, NavigationLoadingOverlay } from '@/hooks/useNavigationLoading'
+import { NavigationLoadingWrapper } from '@/components/NavigationLoadingWrapper'
 import { HelpContextProvider } from '@/context/HelpContext'
 import { AppRole } from '@/constants/roles'
 
@@ -38,10 +38,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <AuthProvider>
       <HelpContextProvider initialPathname={currentPath || '/'} initialRole={role}>
-        <NavigationLoadingProvider>
+        <NavigationLoadingWrapper>
           {isMobile ? <Layout>{children}</Layout> : <DesktopLayout>{children}</DesktopLayout>}
-          <NavigationLoadingOverlay />
-        </NavigationLoadingProvider>
+        </NavigationLoadingWrapper>
       </HelpContextProvider>
     </AuthProvider>
   )

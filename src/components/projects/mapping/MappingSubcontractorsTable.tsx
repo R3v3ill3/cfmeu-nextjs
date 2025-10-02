@@ -61,7 +61,7 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
   const [activeRow, setActiveRow] = useState<Row | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [addDefaults, setAddDefaults] = useState<{ stage: TradeStage; trade_value: string; trade_label: string; action: "replace" | "add_new" }>({ stage: "other", trade_value: "", trade_label: "", action: "replace" });
-  const [showKeyContractorsOnly, setShowKeyContractorsOnly] = useState(false);
+  const [showKeyContractorsOnly, setShowKeyContractorsOnly] = useState(true);
   
   // Auto-match actions dialog state
   const [autoMatchOpen, setAutoMatchOpen] = useState(false);

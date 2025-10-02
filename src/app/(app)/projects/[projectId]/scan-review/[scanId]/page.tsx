@@ -1,6 +1,5 @@
 "use client"
 
-import { use } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/integrations/supabase/client'
 import { Loader2, AlertCircle } from 'lucide-react'
@@ -8,14 +7,14 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { ScanReviewContainer } from '@/components/projects/mapping/scan-review/ScanReviewContainer'
 
 interface PageProps {
-  params: Promise<{
+  params: {
     projectId: string
     scanId: string
-  }>
+  }
 }
 
 export default function ScanReviewPage({ params }: PageProps) {
-  const { projectId, scanId } = use(params)
+  const { projectId, scanId } = params
 
   // Fetch scan data
   const { data: scanData, isLoading: scanLoading, error: scanError } = useQuery({
@@ -38,15 +37,19 @@ export default function ScanReviewPage({ params }: PageProps) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('projects')
-        .select(`
-          *,
-          job_sites!main_job_site_id(*)
-        `)
+        .select('*')
         .eq('id', projectId)
         .single()
 
       if (error) throw error
-      return data
+      
+      // For now, return basic data - we'll enhance with relationships later
+      return {
+        ...data,
+        builder_name: null, // TODO: Fetch from employers table
+        organiser_names: null, // TODO: Fetch from patch assignments  
+        address: null, // TODO: Fetch from job_sites
+      }
     },
   })
 
@@ -96,6 +99,19 @@ export default function ScanReviewPage({ params }: PageProps) {
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
             This scan is not ready for review yet. Status: {scanData.status}
+          </AlertDescription>
+        </Alert>
+      </div>
+    )
+  }
+
+  if (!projectData) {
+    return (
+      <div className="max-w-4xl mx-auto py-8 px-4">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Failed to load project data.
           </AlertDescription>
         </Alert>
       </div>

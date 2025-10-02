@@ -25,18 +25,21 @@ export async function reserveNextJob(
     return null
   }
 
+  console.log(`[jobs] Found ${candidates?.length || 0} queued mapping_sheet_scan jobs`)
+
   if (!candidates || candidates.length === 0) {
     return null
   }
 
   // Try to lock each candidate
   for (const candidate of candidates) {
+    console.log(`[jobs] Attempting to lock job ${candidate.id}`)
     const lockToken = randomUUID()
     const { data: lockedJob, error: lockError } = await client
       .from(JOB_TABLE)
       .update({
         lock_token: lockToken,
-        status: 'processing',
+        status: 'running',
         attempts: (candidate.attempts ?? 0) + 1,
         locked_at: nowIso,
         last_error: null,
@@ -49,14 +52,19 @@ export async function reserveNextJob(
       .single()
 
     if (lockError) {
+      console.error(`[jobs] Failed to lock job ${candidate.id}:`, lockError)
       continue
     }
 
     if (lockedJob) {
+      console.log(`[jobs] Successfully locked job ${candidate.id}`)
       return lockedJob as MappingSheetScanJob
+    } else {
+      console.log(`[jobs] Job ${candidate.id} was locked by another process`)
     }
   }
 
+  console.log('[jobs] Could not lock any jobs')
   return null
 }
 

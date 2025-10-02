@@ -213,6 +213,7 @@ export function UploadMappingSheetDialog({
         job_type: 'mapping_sheet_scan',
         status: 'queued',
         priority: 5, // Normal priority (scale: 1-10, higher = more important)
+        created_by: userId, // Important for RLS policies
         payload: {
           scanId: scanData.id,
           projectId: projectId,

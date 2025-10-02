@@ -49,7 +49,7 @@ export function EmployerComplianceTable({ projectId }: EmployerComplianceTablePr
   const [selectedEmployerIds, setSelectedEmployerIds] = useState<string[]>([]);
   const [expandedEmployerId, setExpandedEmployerId] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<'all' | 'compliant' | 'non-compliant' | 'pending'>('all');
-  const [showKeyContractorsOnly, setShowKeyContractorsOnly] = useState(false);
+  const [showKeyContractorsOnly, setShowKeyContractorsOnly] = useState(true);
 
   const { data: compliance = [] } = useEmployerCompliance(projectId);
   const { data: mappingData, isLoading } = useMappingSheetData(projectId);

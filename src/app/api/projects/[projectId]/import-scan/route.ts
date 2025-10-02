@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
+import { createServerSupabase } from '@/lib/supabase/server'
+import type { Database } from '@/types/database'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
-const serviceSupabase = createClient(supabaseUrl, supabaseServiceKey, {
+const serviceSupabase = createClient<Database>(supabaseUrl, supabaseServiceKey, {
   auth: { persistSession: false },
 })
 
@@ -19,18 +20,7 @@ export async function POST(
     const { scanId, projectDecisions, contactsDecisions, subcontractorDecisions } = body
 
     // Get user from session
-    const cookieStore = cookies()
-    const supabase = createClient(
-      supabaseUrl,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value
-          },
-        },
-      }
-    )
+    const supabase = await createServerSupabase()
 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {

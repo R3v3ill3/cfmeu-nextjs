@@ -1,12 +1,11 @@
 'use client'
 
 import { createBrowserClient } from '@supabase/ssr'
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '@/types/database'
 
-type GenericDatabase = any
-let browserClient: SupabaseClient<GenericDatabase> | null = null
+let browserClient: ReturnType<typeof createBrowserClient<Database>> | null = null
 
-export function getSupabaseBrowserClient(): SupabaseClient<GenericDatabase> {
+export function getSupabaseBrowserClient() {
   if (browserClient) return browserClient
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -15,10 +14,10 @@ export function getSupabaseBrowserClient(): SupabaseClient<GenericDatabase> {
       throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY')
     }
     // Dev-only fallback
-    browserClient = createBrowserClient('http://localhost', 'public-anon-key')
+    browserClient = createBrowserClient<Database>('http://localhost', 'public-anon-key')
     return browserClient
   }
-  browserClient = createBrowserClient(url, key)
+  browserClient = createBrowserClient<Database>(url, key)
   return browserClient
 }
 

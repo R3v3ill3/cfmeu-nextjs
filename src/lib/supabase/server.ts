@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import type { Database } from '@/types/database'
 
 export async function createServerSupabase() {
   const cookieStore = await cookies()
@@ -10,7 +11,7 @@ export async function createServerSupabase() {
       throw new Error('Missing Supabase environment variables. Please set SUPABASE_URL and SUPABASE_ANON_KEY (or NEXT_PUBLIC_* equivalents).')
     }
     // Development fallback only
-    return createServerClient(
+    return createServerClient<Database>(
       'http://localhost',
       'public-anon-key',
       {
@@ -32,7 +33,7 @@ export async function createServerSupabase() {
       }
     )
   }
-  return createServerClient(
+  return createServerClient<Database>(
     url,
     key,
     {
