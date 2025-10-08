@@ -52,7 +52,7 @@ export default function MapPage() {
       // Filter by selected patches if any
       const allPatches = data || [];
       return selectedPatchIds.length > 0 
-        ? allPatches.filter(p => selectedPatchIds.includes(p.id))
+        ? allPatches.filter(p => p.id && selectedPatchIds.includes(p.id))
         : allPatches;
     },
     enabled: (showPatchNames || showOrganisers),
@@ -61,7 +61,7 @@ export default function MapPage() {
   });
 
   // Get organiser labels for key table
-  const patchIdsForKey = (showPatchNames || showOrganisers) ? patchesForKey.map(p => p.id) : [];
+  const patchIdsForKey = (showPatchNames || showOrganisers) ? patchesForKey.map(p => p.id).filter((id): id is string => id !== null) : [];
   const { byPatchId: organiserNamesByPatchForKey } = usePatchOrganiserLabels(patchIdsForKey);
 
   // Print functionality
