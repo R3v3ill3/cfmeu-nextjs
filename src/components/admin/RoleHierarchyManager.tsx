@@ -9,7 +9,7 @@ import { Link as LinkIcon, Trash2 } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 
 interface RoleHierarchyManagerProps {
-  users: Array<{ id: string; full_name: string; email: string; role: string }>;
+  users: Array<{ id: string; full_name: string | null; email: string | null; role: string | null }>;
 }
 
 export const RoleHierarchyManager = ({ users }: RoleHierarchyManagerProps) => {
