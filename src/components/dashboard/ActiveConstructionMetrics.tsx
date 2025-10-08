@@ -20,6 +20,8 @@ import {
   AlertTriangle
 } from "lucide-react"
 import { useActiveFilters } from "@/hooks/useActiveFilters"
+import { FilterIndicatorBadge } from "./FilterIndicatorBadge"
+import type { ActiveConstructionMetrics } from "@/hooks/useNewDashboardData"
 import { useSearchParams } from "next/navigation"
 import { useMemo } from "react"
 
