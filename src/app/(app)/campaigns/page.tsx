@@ -47,14 +47,14 @@ export default function CampaignsPage() {
     mutationFn: async () => {
       if (!name || !type || !start || !end) throw new Error("Fill all fields")
       const { data: userData } = await supabase.auth.getUser()
-      const createdBy = userData.user?.id ?? null
+      if (!userData.user?.id) throw new Error("Not authenticated")
       const { error } = await supabase.from("campaigns").insert({
         name,
         type,
         start_date: start,
         end_date: end,
         status: 'planned',
-        created_by: createdBy,
+        created_by: userData.user.id,
       })
       if (error) throw error
     },
