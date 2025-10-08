@@ -150,7 +150,7 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
         project_id: projectId,
         employer_id: employerId,
         assignment_type: 'trade_work',
-        trade_type_id: tradeType.id,
+        trade_type_id: (tradeType as any).id,
         source: 'manual',
         match_status: 'confirmed',
         match_confidence: 1.0,
@@ -160,7 +160,7 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
       if (r.id && r.id.startsWith('assignment_trade:')) {
         // Update existing assignment
         const assignmentId = r.id.replace('assignment_trade:', '');
-        const { error } = await supabase
+        const { error } = await (supabase as any)
           .from("project_assignments")
           .update(payload)
           .eq("id", assignmentId);
@@ -173,7 +173,7 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
           .select("id")
           .single();
         if (error) throw error;
-        r.id = `assignment_trade:${data.id}`;
+        r.id = `assignment_trade:${(data as any).id}`;
       }
       
       // Refresh local state with new/updated info
@@ -185,7 +185,7 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
         employer_id: employerId, 
         employer_name: employerName, 
         isSkeleton: false, 
-        eba: emp?.enterprise_agreement_status ?? null,
+        eba: (emp as any)?.enterprise_agreement_status ?? null,
         dataSource: 'manual',
         matchStatus: 'confirmed',
         matchConfidence: 1.0,

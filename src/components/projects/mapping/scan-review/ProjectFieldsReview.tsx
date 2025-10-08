@@ -245,7 +245,7 @@ export function ProjectFieldsReview({
           .eq('id', employerId)
           .single()
         
-        employerEbaStatus = ebaData?.enterprise_agreement_status === true
+        employerEbaStatus = (ebaData as any)?.enterprise_agreement_status === true
         console.log('Matched employer EBA status:', employerEbaStatus)
       } catch (error) {
         console.error('Failed to fetch employer EBA status:', error)

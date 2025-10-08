@@ -126,7 +126,7 @@ function EbaPercentBar({ active, total, onClick }: EbaPercentBarProps) {
   )
 }
 
-function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: ProjectWithRoles; summary?: ProjectSummary; subsetStats?: Record<string, unknown>; onOpenEmployer: (id: string) => void }) {
+function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: ProjectWithRoles; summary?: ProjectSummary; subsetStats?: any; onOpenEmployer: (id: string) => void }) {
   const { startNavigation } = useNavigationLoading()
   const router = useRouter()
   
@@ -739,9 +739,9 @@ export function ProjectsDesktopView() {
     staleTime: 60000, // Cache for 1 minute
     queryFn: async () => {
       const projectIds = allProjects.map(p => p.id);
-      const { data, error } = await supabase.rpc('get_projects_with_builder', { project_ids: projectIds });
+      const { data, error } = await (supabase.rpc as any)('get_projects_with_builder', { project_ids: projectIds });
       if (error) throw error;
-      return new Set((data || []).map((row: any) => row.project_id));
+      return new Set(((data as any[]) || []).map((row: any) => row.project_id));
     }
   });
 
@@ -1116,7 +1116,7 @@ export function ProjectsDesktopView() {
               key={p.id}
               p={p}
               summary={summaries[p.id]}
-              subsetStats={subsetStats[p.id]}
+              subsetStats={subsetStats[p.id] as any}
               onOpenEmployer={(id) => { setSelectedEmployerId(id); setIsEmployerOpen(true) }}
             />
           ))}

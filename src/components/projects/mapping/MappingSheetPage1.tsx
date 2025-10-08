@@ -73,7 +73,7 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
     debounceRef.current = setTimeout(async () => {
       setSaveStatus('saving');
       try {
-        const { error } = await supabase.from("projects").update(patch as any).eq("id", projectData.id);
+        const { error } = await (supabase as any).from("projects").update(patch).eq("id", projectData.id);
         if (error) throw error;
         setSaveStatus('saved');
         savedMessageTimerRef.current = setTimeout(() => setSaveStatus('idle'), 3000);
