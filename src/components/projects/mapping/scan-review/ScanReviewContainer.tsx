@@ -109,41 +109,44 @@ export function ScanReviewContainer({
   const handleConfirmImport = async () => {
     setIsImporting(true)
 
+    const payload = {
+      scanId: scanData.id,
+      projectDecisions,
+      contactsDecisions,
+      subcontractorDecisions,
+    }
+
+    const targetUrl = allowProjectCreation
+      ? `/api/projects/new-from-scan`
+      : `/api/projects/${projectData.id}/import-scan`
+
     try {
-      // Call API route to perform import
-      const response = await fetch(`/api/projects/${projectData.id}/import-scan`, {
+      const response = await fetch(targetUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scanId: scanData.id,
-          projectDecisions,
-          contactsDecisions,
-          subcontractorDecisions,
-        }),
+        body: JSON.stringify(payload),
       })
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || 'Import failed')
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.error || error.message || 'Import failed')
       }
 
       const result = await response.json()
 
-      // Mark scan as confirmed
-      await supabase
-        .from('mapping_sheet_scans')
-        .update({
-          status: 'confirmed',
-          confirmed_at: new Date().toISOString(),
-        })
-        .eq('id', scanData.id)
-
       toast.success('Import completed successfully!', {
-        description: `Updated ${result.updatedFields || 0} fields, ${result.contactsCreated || 0} contacts, ${result.subcontractorsCreated || 0} subcontractors`,
+        description: allowProjectCreation
+          ? `Created new project and staged ${contactsDecisions.length} contacts, ${subcontractorDecisions.length} subcontractors`
+          : `Updated ${result.updatedFields || 0} fields, ${result.contactsCreated || 0} contacts, ${result.subcontractorsCreated || 0} subcontractors`,
       })
 
-      startNavigation(`/projects/${projectData.id}`)
-      setTimeout(() => router.push(`/projects/${projectData.id}`), 50)
+      if (allowProjectCreation && result.projectId) {
+        startNavigation(`/projects/${result.projectId}`)
+        setTimeout(() => router.push(`/projects/${result.projectId}`), 50)
+      } else {
+        startNavigation(`/projects/${projectData.id}`)
+        setTimeout(() => router.push(`/projects/${projectData.id}`), 50)
+      }
     } catch (error) {
       console.error('Import error:', error)
       toast.error('Import failed', {
