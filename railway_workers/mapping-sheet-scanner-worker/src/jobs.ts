@@ -9,7 +9,7 @@ export async function reserveNextJob(
 ): Promise<MappingSheetScanJob | null> {
   const nowIso = new Date().toISOString()
 
-  // Find queued jobs for mapping_sheet_scan
+  // Find queued jobs for mapping sheet scans (both existing and new project)
   const { data: candidates, error } = await client
     .from(JOB_TABLE)
     .select('*')
@@ -25,7 +25,7 @@ export async function reserveNextJob(
     return null
   }
 
-  console.log(`[jobs] Found ${candidates?.length || 0} queued mapping_sheet_scan jobs`)
+  console.log(`[jobs] Found ${candidates?.length || 0} queued mapping sheet scan jobs`)
 
   if (!candidates || candidates.length === 0) {
     return null

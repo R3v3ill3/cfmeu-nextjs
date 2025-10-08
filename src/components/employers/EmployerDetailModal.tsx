@@ -32,6 +32,7 @@ import { WorkerForm } from "@/components/workers/WorkerForm";
 import { FwcEbaSearchModal } from "./FwcEbaSearchModal";
 import { IncolinkActionModal } from "./IncolinkActionModal";
 import { useToast } from "@/hooks/use-toast";
+import { EmployerCategoriesEditor } from "./EmployerCategoriesEditor";
 import { withTimeout } from "@/lib/withTimeout";
 
 type EmployerSite = {
@@ -348,9 +349,10 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
           ) : (
             <>
             <Tabs value={activeTab} onValueChange={(v: string) => setActiveTab(v as "overview" | "eba" | "sites" | "workers")} className="space-y-6">
-              <TabsList className="grid w-full grid-cols-4">
+              <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="eba">EBA Details</TabsTrigger>
+                <TabsTrigger value="categories">Categories</TabsTrigger>
                 <TabsTrigger value="sites">Worksites</TabsTrigger>
                 <TabsTrigger value="workers">Workers</TabsTrigger>
               </TabsList>
@@ -640,6 +642,12 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
                       )}
                     </CardContent>
                   </Card>
+                )}
+              </TabsContent>
+
+              <TabsContent value="categories" className="space-y-4">
+                {employer && (
+                  <EmployerCategoriesEditor employerId={employer.id} />
                 )}
               </TabsContent>
 

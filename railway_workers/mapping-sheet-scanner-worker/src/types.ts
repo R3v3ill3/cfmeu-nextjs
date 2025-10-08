@@ -4,7 +4,7 @@ export interface MappingSheetScanJob {
   status: 'queued' | 'processing' | 'succeeded' | 'failed'
   payload: {
     scanId: string
-    projectId: string
+    projectId?: string
     fileUrl: string
     fileName: string
     pageCount?: number

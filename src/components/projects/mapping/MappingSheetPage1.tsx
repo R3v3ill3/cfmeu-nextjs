@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
+import { formatCurrency, parseCurrencyInput } from "@/utils/formatCurrency";
 import Image from "next/image";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import DateInput from "@/components/ui/date-input";
@@ -16,6 +17,8 @@ import { ShareLinkGenerator } from "./ShareLinkGenerator";
 import { UploadMappingSheetDialog } from "./UploadMappingSheetDialog";
 import { Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useNavigationLoading } from "@/hooks/useNavigationLoading";
+import { useRouter } from "next/navigation";
 import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal";
 
 type ProjectData = {
@@ -54,6 +57,8 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null);
   const [isEmployerDetailOpen, setIsEmployerDetailOpen] = useState(false);
+  const { startNavigation } = useNavigationLoading();
+  const router = useRouter();
   
   // Get unified contractor data
   const { data: mappingData, isLoading: isLoadingContractors } = useMappingSheetData(projectData.id);
@@ -154,9 +159,9 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
         <h2 className="text-2xl font-bold mb-2">{projectData.name}</h2>
         <div className="flex items-center gap-3">
           <ProjectTierBadge tier={projectData.tier || null} size="md" />
-          {projectData.value && (
+          {formatCurrency(projectData.value) && (
             <span className="text-lg text-muted-foreground">
-              ${(projectData.value / 1000000).toFixed(1)}M
+              {formatCurrency(projectData.value)}
             </span>
           )}
         </div>
@@ -170,7 +175,15 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
         </div>
         <div>
           <label className="text-sm font-semibold">Project Value (AUD)</label>
-          <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={String(projectData.value ?? "")} onChange={(e) => scheduleUpdate({ value: e.target.value ? Number(e.target.value) : null })} placeholder="" />
+          <Input
+            className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0"
+            value={formatCurrency(projectData.value)}
+            onChange={(e) => {
+              const parsed = parseCurrencyInput(e.target.value);
+              scheduleUpdate({ value: parsed });
+            }}
+            placeholder=""
+          />
         </div>
 
         {/* Row 2 */}
@@ -399,10 +412,18 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
       {/* Upload Scanned Mapping Sheet Dialog */}
       {showUploadDialog && (
         <UploadMappingSheetDialog
+          mode="existing_project"
           projectId={projectData.id}
           projectName={projectData.name}
           open={showUploadDialog}
           onOpenChange={setShowUploadDialog}
+          onScanReady={(scanId, nextProjectId) => {
+            const destination = nextProjectId
+              ? `/projects/${nextProjectId}/scan-review/${scanId}`
+              : `/projects/${projectData.id}/scan-review/${scanId}`
+            startNavigation(destination)
+            setTimeout(() => router.push(destination), 50)
+          }}
         />
       )}
 

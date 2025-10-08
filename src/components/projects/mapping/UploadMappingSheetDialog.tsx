@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -8,27 +8,41 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Upload, FileText, AlertCircle, CheckCircle2, Loader2, FileCheck } from 'lucide-react'
 import { supabase } from '@/integrations/supabase/client'
 import { toast } from 'sonner'
-import { useRouter } from 'next/navigation'
 import { useDropzone } from 'react-dropzone'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
+// TODO: Re-add PDF thumbnails with Next.js-compatible library
+// import { usePdfThumbnails } from '@/hooks/usePdfThumbnails'
+// import Image from 'next/image'
 
-interface UploadMappingSheetDialogProps {
-  projectId: string
-  projectName: string
+type UploadMode = 'existing_project' | 'new_project'
+
+interface SharedUploadDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  mode: UploadMode
+  onScanReady: (scanId: string, projectId?: string) => void
 }
+
+interface ExistingProjectUploadProps extends SharedUploadDialogProps {
+  mode: 'existing_project'
+  projectId: string
+  projectName: string
+}
+
+interface NewProjectUploadProps extends SharedUploadDialogProps {
+  mode: 'new_project'
+  projectName?: string
+}
+
+type UploadMappingSheetDialogProps = ExistingProjectUploadProps | NewProjectUploadProps
 
 type UploadStage = 'select' | 'page-selection' | 'uploading' | 'processing' | 'complete' | 'error'
 
-export function UploadMappingSheetDialog({
-  projectId,
-  projectName,
-  open,
-  onOpenChange,
-}: UploadMappingSheetDialogProps) {
-  const router = useRouter()
+export function UploadMappingSheetDialog(props: UploadMappingSheetDialogProps) {
+  const { open, onOpenChange, mode, onScanReady } = props
+  const projectId = mode === 'existing_project' ? props.projectId : undefined
+  const projectName = props.projectName || (mode === 'existing_project' ? 'Project' : 'New Project')
   const [stage, setStage] = useState<UploadStage>('select')
   const [uploadProgress, setUploadProgress] = useState(0)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -38,14 +52,41 @@ export function UploadMappingSheetDialog({
   const [scanId, setScanId] = useState<string>('')
   const [processingProgress, setProcessingProgress] = useState(0)
 
+  // TODO: Re-implement with Next.js-compatible PDF library
+  // const { thumbnails, isGenerating: isGeneratingThumbnails, error: thumbnailError } = usePdfThumbnails(
+  //   stage === 'page-selection' ? selectedFile : null,
+  //   10 // Max 10 pages for thumbnail generation
+  // )
+
   // Check if project has pending scan
   const checkPendingScan = async () => {
-    const { data, error } = await supabase.rpc('project_has_pending_scan', {
-      p_project_id: projectId,
+    const { data: userData } = await supabase.auth.getUser()
+    const userId = userData.user?.id
+
+    if (!userId) {
+      toast.error('You must be signed in to upload a scan')
+      return true
+    }
+
+    if (mode === 'existing_project' && projectId) {
+      const { data, error } = await supabase.rpc('project_has_pending_scan', {
+        p_project_id: projectId,
+      })
+
+      if (error) {
+        console.error('Error checking pending scan:', error)
+        return false
+      }
+
+      return data === true
+    }
+
+    const { data, error } = await supabase.rpc('user_has_pending_new_project_scan', {
+      p_user_id: userId,
     })
 
     if (error) {
-      console.error('Error checking pending scan:', error)
+      console.error('Error checking new project pending scan:', error)
       return false
     }
 
@@ -94,7 +135,9 @@ export function UploadMappingSheetDialog({
     const hasPending = await checkPendingScan()
     if (hasPending) {
       setErrorMessage(
-        'This project already has a pending scan. Please complete or cancel the existing scan before uploading another.'
+        mode === 'existing_project'
+          ? 'This project already has a pending scan. Please complete or cancel the existing scan before uploading another.'
+          : 'You already have a new-project scan in progress. Please complete or cancel it before uploading another.'
       )
       setStage('error')
       return
@@ -115,7 +158,7 @@ export function UploadMappingSheetDialog({
       // Auto-select all pages if 3 or fewer
       setSelectedPages(Array.from({ length: pageCount }, (_, i) => i + 1))
     }
-  }, [projectId])
+  }, [mode, projectId])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -168,7 +211,8 @@ export function UploadMappingSheetDialog({
       // Generate unique file path
       const timestamp = Date.now()
       const fileName = selectedFile.name.replace(/[^a-zA-Z0-9.-]/g, '_')
-      const filePath = `${userId}/${projectId}/${timestamp}_${fileName}`
+      const pathSegment = projectId ?? 'new-project'
+      const filePath = `${userId}/${pathSegment}/${timestamp}_${fileName}`
 
       // Upload to Supabase Storage
       const { data: uploadData, error: uploadError } = await supabase.storage
@@ -184,7 +228,7 @@ export function UploadMappingSheetDialog({
 
       setUploadProgress(50)
 
-      // Create scan record with selected pages info
+      // Create scan record
       const { data: scanData, error: scanError } = await supabase
         .from('mapping_sheet_scans')
         .insert({
@@ -209,18 +253,25 @@ export function UploadMappingSheetDialog({
       setScanId(scanData.id)
 
       // Create scraper job
+      const jobType = 'mapping_sheet_scan' // Always use the same job type
+
+      const jobPayload: Record<string, any> = {
+        scanId: scanData.id,
+        fileUrl: uploadData.path,
+        fileName: selectedFile.name,
+        selectedPages,
+      }
+
+      if (scanData.project_id) {
+        jobPayload.projectId = scanData.project_id
+      }
+
       const { error: jobError } = await supabase.from('scraper_jobs').insert({
-        job_type: 'mapping_sheet_scan',
+        job_type: jobType,
         status: 'queued',
         priority: 5, // Normal priority (scale: 1-10, higher = more important)
         created_by: userId, // Important for RLS policies
-        payload: {
-          scanId: scanData.id,
-          projectId: projectId,
-          fileUrl: uploadData.path,
-          fileName: selectedFile.name,
-          selectedPages: selectedPages, // Pass selected pages to worker
-        },
+        payload: jobPayload,
         run_at: new Date().toISOString(),
         max_attempts: 3,
         attempts: 0,
@@ -273,7 +324,7 @@ export function UploadMappingSheetDialog({
         setProcessingProgress(Math.min(50 + pollCount * 2, 90))
       }
 
-      if (data.status === 'completed') {
+      if (data.status === 'completed' || data.status === 'review_new_project') {
         setProcessingProgress(100)
         setStage('complete')
         toast.success('Scan completed!', {
@@ -304,7 +355,8 @@ export function UploadMappingSheetDialog({
   }
 
   const handleViewResults = () => {
-    router.push(`/projects/${projectId}/scan-review/${scanId}`)
+    if (!scanId) return
+    onScanReady(scanId, projectId)
     onOpenChange(false)
   }
 
@@ -337,7 +389,7 @@ export function UploadMappingSheetDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5" />
-            Upload Scanned Mapping Sheet
+            {mode === 'existing_project' ? 'Upload Scanned Mapping Sheet' : 'Upload Scanned Project Data'}
           </DialogTitle>
           <DialogDescription>
             Upload a PDF scan of a handwritten mapping sheet for {projectName}
@@ -478,7 +530,7 @@ export function UploadMappingSheetDialog({
               <Progress value={processingProgress} className="h-2" />
               <div className="space-y-2 text-xs text-gray-600">
                 <p>✓ PDF uploaded successfully</p>
-                <p>✓ Converting pages {selectedPages.join(', ')} to images</p>
+                <p>✓ Focusing on pages {selectedPages.join(', ')}</p>
                 <p>⏳ Extracting handwritten data with AI</p>
                 <p className="text-gray-400">This may take 30-60 seconds...</p>
               </div>
@@ -560,7 +612,7 @@ export function UploadMappingSheetDialog({
               </Button>
               <Button onClick={handleViewResults}>
                 <CheckCircle2 className="h-4 w-4 mr-2" />
-                Review Results
+                {mode === 'existing_project' ? 'Review Results' : 'Review Extracted Data'}
               </Button>
             </>
           )}

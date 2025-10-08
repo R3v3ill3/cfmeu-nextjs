@@ -31,16 +31,57 @@ export async function POST(
     let contactsCreated = 0
     let subcontractorsCreated = 0
 
-    // 1. Update project fields
+    // 1. Update project fields (filter out non-database columns)
     if (projectDecisions && Object.keys(projectDecisions).length > 0) {
-      const { error } = await serviceSupabase
-        .from('projects')
-        .update(projectDecisions)
-        .eq('id', projectId)
+      // Valid columns in projects table
+      const validProjectColumns = [
+        'name', 'value', 'proposed_start_date', 'proposed_finish_date', 
+        'roe_email', 'state_funding', 'federal_funding', 'project_type'
+      ]
+      
+      // Filter to only include valid columns
+      const validUpdates: any = {}
+      Object.entries(projectDecisions).forEach(([key, value]) => {
+        if (validProjectColumns.includes(key)) {
+          validUpdates[key] = value
+        }
+      })
 
-      if (error) {
-        console.error('Failed to update project:', error)
-        throw new Error('Failed to update project fields')
+      // Handle builder_name separately (update builder_id)
+      if (projectDecisions.builder_name && projectDecisions.builder_employer_id) {
+        validUpdates.builder_id = projectDecisions.builder_employer_id
+      }
+
+      // Update project if we have valid fields
+      if (Object.keys(validUpdates).length > 0) {
+        const { error } = await serviceSupabase
+          .from('projects')
+          .update(validUpdates)
+          .eq('id', projectId)
+
+        if (error) {
+          console.error('Failed to update project:', error)
+          throw new Error('Failed to update project fields')
+        }
+      }
+
+      // Handle address update (job_sites table)
+      if (projectDecisions.address) {
+        const { data: project } = await serviceSupabase
+          .from('projects')
+          .select('main_job_site_id')
+          .eq('id', projectId)
+          .single()
+
+        if (project?.main_job_site_id) {
+          await serviceSupabase
+            .from('job_sites')
+            .update({ 
+              full_address: projectDecisions.address,
+              location: projectDecisions.address 
+            })
+            .eq('id', project.main_job_site_id)
+        }
       }
 
       updatedFields = Object.keys(projectDecisions).length

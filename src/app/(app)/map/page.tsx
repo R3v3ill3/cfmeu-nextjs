@@ -253,7 +253,7 @@ export default function MapPage() {
             
             ${showProjects && projectColorBy !== 'default' ? `
               <div class="legend-section">
-                <div class="legend-title">Project Colors (${projectColorBy.replace('_', ' ')})</div>
+                <div class="legend-title">Project Colours (${projectColorBy.replace('_', ' ')})</div>
                 <div class="legend-items">
                   ${getColorSchemeLegend(projectColorBy).map(({ label, color }) => {
                     // Convert hex color to RGB for better print compatibility
@@ -575,13 +575,25 @@ export default function MapPage() {
 
   // Fetch project data for project color key
   const { data: projectsForKey = [] } = useQuery({
-    queryKey: ["projects-for-key"],
+    queryKey: ["projects-for-key", projectColorBy],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("job_sites")
         .select(`
           project_id,
-          projects:projects!fk_job_sites_project(id, name, tier, organising_universe, stage_class)
+          projects:projects!fk_job_sites_project(
+            id, 
+            name, 
+            tier, 
+            organising_universe, 
+            stage_class,
+            builder_id,
+            project_assignments:project_assignments(
+              assignment_type,
+              contractor_role_types(code),
+              employers(name, enterprise_agreement_status)
+            )
+          )
         `)
         .not("latitude", "is", null)
         .not("longitude", "is", null);
@@ -772,7 +784,7 @@ export default function MapPage() {
       {showProjects && projectColorBy !== 'default' && (
         <div className="print-only print-legend">
           <div style={{ fontWeight: 'bold', marginBottom: '8px', fontSize: '12px' }}>
-            Project Colors ({projectColorBy.replace('_', ' ')})
+            Project Colours ({projectColorBy.replace('_', ' ')})
           </div>
           {getColorSchemeLegend(projectColorBy).map(({ label, color }) => (
             <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
@@ -930,13 +942,13 @@ export default function MapPage() {
         </Card>
       )}
 
-      {/* Screen-only Project Color Key Table */}
+      {/* Screen-only Project Colour Key Table */}
       {showProjects && projectColorBy !== 'default' && projectsForKey.length > 0 && (
         <Card className="no-print">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Building className="h-5 w-5" />
-              Project Color Key
+              Project Colour Key
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -944,18 +956,56 @@ export default function MapPage() {
               {projectsForKey.map((project: any) => {
                 const color = getProjectColor(projectColorBy, project);
                 
+                // Derive builder status for display
+                let statusLabel = '';
+                if (projectColorBy === 'builder_eba') {
+                  const builderAssignments = (project.project_assignments || []).filter((pa: any) => {
+                    if (pa?.assignment_type !== 'contractor_role') return false;
+                    const roleTypes = Array.isArray(pa?.contractor_role_types) ? pa.contractor_role_types : (pa?.contractor_role_types ? [pa.contractor_role_types] : []);
+                    return roleTypes.some((rt: any) => rt?.code === 'builder' || rt?.code === 'head_contractor');
+                  });
+                  
+                  let hasActiveEba = false;
+                  let hasBuilder = false;
+                  
+                  for (const assignment of builderAssignments) {
+                    const employers = Array.isArray(assignment?.employers) ? assignment.employers : (assignment?.employers ? [assignment.employers] : []);
+                    for (const emp of employers) {
+                      if (emp?.enterprise_agreement_status === true) {
+                        hasActiveEba = true;
+                      }
+                      if (emp) hasBuilder = true;
+                    }
+                  }
+                  
+                  if (project.builder_id) hasBuilder = true;
+                  
+                  if (hasActiveEba) {
+                    statusLabel = 'Builder = EBA active';
+                  } else if (hasBuilder) {
+                    statusLabel = 'Builder known, EBA inactive';
+                  } else {
+                    statusLabel = 'Builder not known';
+                  }
+                }
+                
                 return (
                   <div key={project.id} className="flex items-center gap-3 p-2 border rounded-lg">
-                    <div 
-                      className="w-6 h-6 rounded-full border-2 border-white shadow-sm flex-shrink-0" 
-                      style={{ backgroundColor: color }}
-                    />
+                    {projectColorBy === 'builder_eba' && statusLabel === 'Builder = EBA active' ? (
+                      <img src="/favicon.ico" alt="Active EBA" className="w-6 h-6 flex-shrink-0" />
+                    ) : (
+                      <div 
+                        className="w-6 h-6 rounded-full border-2 border-white shadow-sm flex-shrink-0" 
+                        style={{ backgroundColor: color }}
+                      />
+                    )}
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-sm truncate">{project.name}</div>
                       <div className="text-xs text-muted-foreground">
                         {projectColorBy === 'tier' && project.tier && `Tier: ${project.tier}`}
                         {projectColorBy === 'organising_universe' && project.organising_universe && `Universe: ${project.organising_universe}`}
                         {projectColorBy === 'stage' && project.stage_class && `Stage: ${project.stage_class}`}
+                        {projectColorBy === 'builder_eba' && statusLabel}
                       </div>
                     </div>
                   </div>

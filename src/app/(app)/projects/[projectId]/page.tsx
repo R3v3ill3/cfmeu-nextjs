@@ -34,6 +34,7 @@ import { getOrganisingUniverseBadgeVariant } from "@/utils/organisingUniverse"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { ComplianceDesktopView } from "@/components/projects/compliance/ComplianceDesktopView"
 import { ComplianceMobileView } from "@/components/projects/compliance/ComplianceMobileView"
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner"
 
 function SiteContactsSummary({ projectId, siteIds }: { projectId: string; siteIds: string[] }) {
   const [delegates, setDelegates] = useState<string[]>([])
@@ -95,7 +96,7 @@ export default function ProjectDetailPage() {
   const [estSaving, setEstSaving] = useState(false)
   const [showContractorAssignment, setShowContractorAssignment] = useState(false)
 
-  const { data: project } = useQuery({
+  const { data: project, isLoading: projectLoading, isFetching: projectFetching } = useQuery({
     queryKey: ["project-detail", projectId],
     enabled: !!projectId,
     staleTime: 30000,
@@ -120,7 +121,7 @@ export default function ProjectDetailPage() {
     }
   })
 
-  const { data: sites = [] } = useQuery({
+  const { data: sites = [], isLoading: sitesLoading, isFetching: sitesFetching } = useQuery({
     queryKey: ["project-sites", projectId],
     enabled: !!projectId,
     staleTime: 30000,
@@ -143,7 +144,7 @@ export default function ProjectDetailPage() {
   )
 
   // Patch and organiser info for this project (via linked job sites)
-  const { data: projectPatches = [] } = useQuery({
+  const { data: projectPatches = [], isLoading: patchesLoading, isFetching: patchesFetching } = useQuery({
     queryKey: ["project-patches", projectId, sortedSiteIds],
     enabled: !!projectId && sortedSiteIds.length > 0,
     staleTime: 30000,
@@ -167,7 +168,7 @@ export default function ProjectDetailPage() {
 
   const { mergedList: patchOrganisers = [] } = usePatchOrganiserLabels(patchIds)
 
-  const { data: contractorSummary = [] } = useQuery({
+  const { data: contractorSummary = [], isLoading: contractorsLoading, isFetching: contractorsFetching } = useQuery({
     queryKey: ["project-contractor-employers", projectId, sortedSiteIds],
     enabled: !!projectId && sortedSiteIds.length > 0,
     staleTime: 30000,
@@ -186,7 +187,7 @@ export default function ProjectDetailPage() {
   })
 
   // Builder and main site address for mapping sheet
-  const { data: mappingSheetData } = useQuery({
+  const { data: mappingSheetData, isLoading: mappingDataLoading, isFetching: mappingDataFetching } = useQuery({
     queryKey: ["project-mapping-details", project?.id, project?.main_job_site_id, project?.builder_id],
     enabled: !!project?.id,
     staleTime: 30000,

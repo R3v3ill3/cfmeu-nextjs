@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator"
 import { Plus, MapPin, Globe } from "lucide-react"
 import { AddDraftUserDialog } from "@/components/admin/AddDraftUserDialog"
 import { useMemo, useState } from "react"
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -271,7 +272,7 @@ export default function PatchManager() {
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">{isLoading ? (<span className="inline-flex items-center gap-2"><img src="/spinner.gif" alt="Loading" className="h-4 w-4" /> Loading…</span>) : `${(patches as any[]).length} patches`}</div>
+          <div className="text-sm text-muted-foreground">{isLoading ? (<span className="inline-flex items-center gap-2"><LoadingSpinner size={16} /> Loading…</span>) : `${(patches as any[]).length} patches`}</div>
           <div className="flex items-center gap-2">
             <Button
               variant="destructive"

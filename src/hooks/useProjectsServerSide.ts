@@ -83,7 +83,6 @@ export function useProjectsServerSide(params: ProjectsParams) {
 
   return useQuery<ProjectsResponse>({
     queryKey: ['projects-server-side', params, workerEnabled],
-    enabled: !workerEnabled || (!!session && !loading),
     queryFn: async () => {
       // Build URL parameters, only including non-default values
       const searchParams = new URLSearchParams();
@@ -217,6 +216,9 @@ export function useProjectsServerSide(params: ProjectsParams) {
     
     // Enable this for real-time updates in the future
     refetchInterval: false,
+
+    // Preserve previous data while fetching new results (prevents UI flicker)
+    keepPreviousData: true,
   });
 }
 

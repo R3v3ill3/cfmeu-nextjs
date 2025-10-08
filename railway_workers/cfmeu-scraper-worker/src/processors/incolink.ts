@@ -126,11 +126,30 @@ export async function processIncolinkJob(client: SupabaseClient, job: ScraperJob
 }
 
 async function getBrowser(): Promise<Browser> {
-  return puppeteer.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-    executablePath: process.env.CHROME_PATH || process.env.PUPPETEER_EXECUTABLE_PATH,
-  })
+  // Detect if we're in a production environment (Railway, Vercel, etc.)
+  const isProduction = process.env.NODE_ENV === 'production' || 
+                       !!process.env.VERCEL_ENV || 
+                       !!process.env.RAILWAY_ENVIRONMENT ||
+                       !!process.env.RAILWAY_DEPLOYMENT_ID
+
+  if (isProduction) {
+    // Production: Use puppeteer-core with @sparticuz/chromium
+    const puppeteerCore = (await import('puppeteer-core')).default
+    const { default: chromium } = await import('@sparticuz/chromium')
+    const executablePath = await chromium.executablePath()
+    return (await puppeteerCore.launch({
+      args: [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      executablePath,
+      headless: true,
+    })) as unknown as Browser
+  } else {
+    // Local development: Use puppeteer with system Chrome
+    return puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      executablePath: process.env.CHROME_PATH || process.env.PUPPETEER_EXECUTABLE_PATH,
+    })
+  }
 }
 
 async function fetchMembersFromIncolink(browser: Browser, incolinkNumber: string, invoiceNumber?: string): Promise<InvoiceResult> {

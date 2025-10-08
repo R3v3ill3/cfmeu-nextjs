@@ -27,7 +27,7 @@ export async function extractWithClaude(
       {
         type: 'text' as const,
         text: selectedPages 
-          ? `Analyze pages ${selectedPages.join(', ')} of this PDF mapping sheet.\n\n${CLAUDE_USER_PROMPT(1, selectedPages.length)}`
+          ? `IMPORTANT: Focus ONLY on pages ${selectedPages.join(', ')} of this PDF. Ignore all other pages completely.\n\n${CLAUDE_USER_PROMPT(1, selectedPages.length)}`
           : `Analyze all pages of this PDF mapping sheet.\n\n${CLAUDE_USER_PROMPT(1, 3)}`,
       },
     ]
@@ -51,10 +51,21 @@ export async function extractWithClaude(
       .map((block: any) => block.text)
       .join('\n')
 
+    // Debug: Log Claude's actual response
+    console.log('[claude] Raw response length:', responseText.length)
+    console.log('[claude] Raw response preview:', responseText.substring(0, 200))
+    
     // Parse JSON (may be wrapped in markdown code blocks)
     let jsonText = responseText.trim()
     if (jsonText.startsWith('```')) {
       jsonText = jsonText.replace(/^```(?:json)?\n/, '').replace(/\n```$/, '')
+    }
+
+    console.log('[claude] Parsing JSON length:', jsonText.length)
+    console.log('[claude] JSON preview:', jsonText.substring(0, 200))
+
+    if (!jsonText || jsonText.length === 0) {
+      throw new Error('Empty response from Claude')
     }
 
     const extractedData: ExtractedMappingSheetData = JSON.parse(jsonText)

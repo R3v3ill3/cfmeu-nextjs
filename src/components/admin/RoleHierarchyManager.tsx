@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { Link as LinkIcon, Trash2 } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 
 interface RoleHierarchyManagerProps {
   users: Array<{ id: string; full_name: string; email: string; role: string }>;
@@ -307,7 +308,7 @@ export const RoleHierarchyManager = ({ users }: RoleHierarchyManagerProps) => {
           </div>
           <div className="flex items-end">
             <Button onClick={addLink} disabled={loading} className="w-full">
-              {loading ? <img src="/spinner.gif" alt="Loading" className="h-4 w-4 mr-2" /> : <LinkIcon className="h-4 w-4 mr-2" />}
+              {loading ? <LoadingSpinner size={16} className="mr-2" /> : <LinkIcon className="h-4 w-4 mr-2" />}
               Link
             </Button>
           </div>
@@ -370,7 +371,7 @@ export const RoleHierarchyManager = ({ users }: RoleHierarchyManagerProps) => {
             </div>
             <div className="flex items-end">
               <Button onClick={addDraftLink} disabled={loading} className="w-full">
-                {loading ? <img src="/spinner.gif" alt="Loading" className="h-4 w-4 mr-2" /> : <LinkIcon className="h-4 w-4 mr-2" />}
+                {loading ? <LoadingSpinner size={16} className="mr-2" /> : <LinkIcon className="h-4 w-4 mr-2" />}
                 Link draft
               </Button>
             </div>

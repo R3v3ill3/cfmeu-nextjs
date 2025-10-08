@@ -19,7 +19,8 @@ interface EmployerMatchDialogProps {
   companyName: string
   suggestedMatch: any
   allEmployers: any[]
-  onConfirm: (employerId: string, employerName: string, isNewEmployer: boolean) => void
+  onConfirm: (employerId: string, employerName: string, isNewEmployer: boolean, extras?: { contractorType?: string }) => void
+  allowContractorTypeSelection?: boolean
 }
 
 export function EmployerMatchDialog({
@@ -29,31 +30,71 @@ export function EmployerMatchDialog({
   suggestedMatch,
   allEmployers,
   onConfirm,
+  allowContractorTypeSelection = false,
 }: EmployerMatchDialogProps) {
   const [selectedOption, setSelectedOption] = useState<'suggested' | 'search' | 'new'>(
     suggestedMatch ? 'suggested' : 'search'
   )
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchQuery, setSearchQuery] = useState(companyName) // Auto-populate with scanned company name
   const [selectedEmployerId, setSelectedEmployerId] = useState(suggestedMatch?.id || '')
   const [newEmployerName, setNewEmployerName] = useState(companyName)
   const [isCreating, setIsCreating] = useState(false)
+  const [contractorType, setContractorType] = useState<string>('builder')
 
   // Search results
   const searchResults = useMemo(() => {
     if (!searchQuery) return []
     
-    const match = findBestEmployerMatch(searchQuery, allEmployers)
-    if (match) {
-      // Return top matches with similar names
-      return allEmployers
-        .filter(emp => {
-          const query = searchQuery.toLowerCase()
-          const name = emp.name.toLowerCase()
-          return name.includes(query) || query.includes(name)
-        })
-        .slice(0, 10)
-    }
-    return []
+    const query = searchQuery.toLowerCase()
+    
+    // Better search logic - includes partial word matching
+    const matches = allEmployers
+      .filter(emp => {
+        const name = emp.name.toLowerCase()
+        
+        // Exact match has priority
+        if (name === query) return true
+        
+        // Contains query
+        if (name.includes(query)) return true
+        
+        // Query contains company name (handles "form" matching "formwork")
+        if (query.includes(name)) return true
+        
+        // Word-based matching (handles "Superior Formwork" when searching "form")
+        const nameWords = name.split(/\s+/)
+        const queryWords = query.split(/\s+/)
+        
+        // Check if any name word starts with any query word
+        for (const nameWord of nameWords) {
+          for (const queryWord of queryWords) {
+            if (nameWord.startsWith(queryWord) || queryWord.startsWith(nameWord)) {
+              return true
+            }
+          }
+        }
+        
+        return false
+      })
+      .sort((a, b) => {
+        // Sort by relevance
+        const aName = a.name.toLowerCase()
+        const bName = b.name.toLowerCase()
+        
+        // Exact matches first
+        if (aName === query && bName !== query) return -1
+        if (bName === query && aName !== query) return 1
+        
+        // Then starts with query
+        if (aName.startsWith(query) && !bName.startsWith(query)) return -1
+        if (bName.startsWith(query) && !aName.startsWith(query)) return 1
+        
+        // Then alphabetical
+        return aName.localeCompare(bName)
+      })
+      .slice(0, 200)
+    
+    return matches
   }, [searchQuery, allEmployers])
 
   const handleCreateNewEmployer = async () => {
@@ -65,19 +106,27 @@ export function EmployerMatchDialog({
     setIsCreating(true)
 
     try {
+      const insertPayload: any = {
+        name: newEmployerName.trim(),
+        enterprise_agreement_status: 'unknown',
+      }
+
+      if (allowContractorTypeSelection && contractorType) {
+        insertPayload.contractor_type = contractorType
+      }
+
       const { data, error } = await supabase
         .from('employers')
-        .insert({
-          name: newEmployerName.trim(),
-          enterprise_agreement_status: 'unknown',
-        })
+        .insert(insertPayload)
         .select('id, name')
         .single()
 
       if (error) throw error
 
       toast.success('New employer created')
-      onConfirm(data.id, data.name, true)
+      onConfirm(data.id, data.name, true, {
+        contractorType: allowContractorTypeSelection ? contractorType : undefined,
+      })
     } catch (error) {
       console.error('Failed to create employer:', error)
       toast.error('Failed to create employer')
@@ -88,11 +137,15 @@ export function EmployerMatchDialog({
 
   const handleConfirm = () => {
     if (selectedOption === 'suggested' && suggestedMatch) {
-      onConfirm(suggestedMatch.id, suggestedMatch.name, false)
+      onConfirm(suggestedMatch.id, suggestedMatch.name, false, {
+        contractorType: allowContractorTypeSelection ? contractorType : undefined,
+      })
     } else if (selectedOption === 'search' && selectedEmployerId) {
       const employer = allEmployers.find(e => e.id === selectedEmployerId)
       if (employer) {
-        onConfirm(employer.id, employer.name, false)
+        onConfirm(employer.id, employer.name, false, {
+          contractorType: allowContractorTypeSelection ? contractorType : employer.contractor_type,
+        })
       }
     } else if (selectedOption === 'new') {
       handleCreateNewEmployer()
@@ -228,6 +281,34 @@ export function EmployerMatchDialog({
             </div>
           </RadioGroup>
         </div>
+
+          {allowContractorTypeSelection && (
+            <div className="space-y-2">
+              <Label className="font-medium">Role for this employer</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { value: 'builder', label: 'Builder / Head Contractor' },
+                  { value: 'trade_contractor', label: 'Trade Contractor' },
+                  { value: 'labour_hire', label: 'Labour Hire' },
+                  { value: 'consultant', label: 'Consultant' },
+                ].map(option => (
+                  <Button
+                    key={option.value}
+                    type="button"
+                    variant={contractorType === option.value ? 'default' : 'outline'}
+                    size="sm"
+                    className="justify-start"
+                    onClick={() => setContractorType(option.value)}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                This helps pre-fill the correct role when importing the employer.
+              </p>
+            </div>
+          )}
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

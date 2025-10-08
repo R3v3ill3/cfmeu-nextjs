@@ -21,6 +21,16 @@ interface ProjectsMapViewProps {
   patchIds: string[]
   tierFilter: string
   workersFilter: string
+  currentFilters?: {
+    q?: string
+    patch?: string
+    tier?: string
+    universe?: string
+    stage?: string
+    workers?: string
+    special?: string
+    eba?: string
+  }
 }
 
 interface PatchData {
@@ -126,7 +136,8 @@ export default function ProjectsMapView({
   searchQuery,
   patchIds,
   tierFilter,
-  workersFilter
+  workersFilter,
+  currentFilters
 }: ProjectsMapViewProps) {
   const [map, setMap] = useState<google.maps.Map | null>(null)
   const [selectedJobSite, setSelectedJobSite] = useState<JobSiteData | null>(null)
@@ -135,6 +146,37 @@ export default function ProjectsMapView({
   const [mapsLoaded, setMapsLoaded] = useState(false)
   const [mapsError, setMapsError] = useState<string | null>(null)
   const [projectColorBy, setProjectColorBy] = useState<'tier' | 'organising_universe' | 'stage' | 'builder_eba' | 'default'>('builder_eba')
+  
+  // Construct URL for Full Map page with preserved filters
+  const fullMapUrl = useMemo(() => {
+    const params = new URLSearchParams()
+    
+    // Pass all available filters (Map page currently only supports patch, but we'll pass them all)
+    if (currentFilters?.patch) {
+      params.set('patch', currentFilters.patch)
+    }
+    if (currentFilters?.q) {
+      params.set('q', currentFilters.q)
+    }
+    if (currentFilters?.tier && currentFilters.tier !== 'all') {
+      params.set('tier', currentFilters.tier)
+    }
+    if (currentFilters?.universe && currentFilters.universe !== 'all') {
+      params.set('universe', currentFilters.universe)
+    }
+    if (currentFilters?.stage && currentFilters.stage !== 'all') {
+      params.set('stage', currentFilters.stage)
+    }
+    if (currentFilters?.workers && currentFilters.workers !== 'all') {
+      params.set('workers', currentFilters.workers)
+    }
+    if (currentFilters?.eba && currentFilters.eba !== 'all') {
+      params.set('eba', currentFilters.eba)
+    }
+    
+    const queryString = params.toString()
+    return queryString ? `/map?${queryString}` : '/map'
+  }, [currentFilters])
 
   // Load Google Maps
   useEffect(() => {
@@ -444,25 +486,36 @@ export default function ProjectsMapView({
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="flex items-center justify-between">
+        <CardTitle className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-2">
             <MapPin className="h-5 w-5" />
-            Projects Map
+            <span>Projects Map</span>
+            <Badge variant="outline" className="text-xs">
+              {jobSites.length} location{jobSites.length !== 1 ? 's' : ''}
+            </Badge>
           </div>
-          <div className="flex items-center gap-2">
-            <Palette className="h-4 w-4 text-gray-500" />
-            <Select value={projectColorBy} onValueChange={(value) => setProjectColorBy(value as typeof projectColorBy)}>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="Color projects by..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="default">Default (Blue)</SelectItem>
-                <SelectItem value="tier">Tier</SelectItem>
-                <SelectItem value="organising_universe">Organising Universe</SelectItem>
-                <SelectItem value="stage">Stage</SelectItem>
-                <SelectItem value="builder_eba">Builder EBA Status</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Link href={fullMapUrl}>
+              <Button variant="outline" size="sm" className="gap-2">
+                <ExternalLink className="h-4 w-4" />
+                Full Map
+              </Button>
+            </Link>
+            <div className="flex items-center gap-2">
+              <Palette className="h-4 w-4 text-gray-500" />
+              <Select value={projectColorBy} onValueChange={(value) => setProjectColorBy(value as typeof projectColorBy)}>
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="Color projects by..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="default">Default (Blue)</SelectItem>
+                  <SelectItem value="tier">Tier</SelectItem>
+                  <SelectItem value="organising_universe">Organising Universe</SelectItem>
+                  <SelectItem value="stage">Stage</SelectItem>
+                  <SelectItem value="builder_eba">Builder EBA Status</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardTitle>
       </CardHeader>

@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
+import Image from 'next/image'
 
 interface NavigationLoadingContextType {
   isNavigating: boolean
@@ -95,9 +96,12 @@ export function NavigationLoadingOverlay() {
       {/* Loading indicator */}
       <div className="relative bg-white rounded-lg shadow-xl p-6 mx-4 max-w-sm w-full border border-gray-200">
         <div className="flex flex-col items-center space-y-4">
-          <img 
+          <Image 
             src="/spinner.gif" 
             alt="Loading" 
+            width={32}
+            height={32}
+            unoptimized
             className="w-8 h-8" 
           />
           <div className="text-center">

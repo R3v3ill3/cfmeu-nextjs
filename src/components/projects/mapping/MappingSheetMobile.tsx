@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { supabase } from "@/integrations/supabase/client"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Input } from "@/components/ui/input"
+import { formatCurrency, parseCurrencyInput } from "@/utils/formatCurrency"
 import DateInput from "@/components/ui/date-input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { MappingSiteContactsTable } from "@/components/projects/mapping/MappingSiteContactsTable"
@@ -110,9 +111,9 @@ export function MappingSheetMobile({ projectId }: { projectId: string }) {
               <h3 className="text-lg font-semibold mb-2">{project?.name}</h3>
               <div className="flex items-center gap-2">
                 <ProjectTierBadge tier={project?.tier || null} size="sm" />
-                {project?.value && (
+                {formatCurrency(project?.value ?? null) && (
                   <span className="text-sm text-muted-foreground">
-                    ${(project.value / 1000000).toFixed(1)}M
+                    {formatCurrency(project?.value ?? null)}
                   </span>
                 )}
               </div>
@@ -149,7 +150,15 @@ export function MappingSheetMobile({ projectId }: { projectId: string }) {
           <div className="grid grid-cols-1 gap-3">
             <div>
               <label className="text-xs font-medium">Project Value (AUD)</label>
-              <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={project ? String(project.value ?? "") : ""} onChange={(e) => scheduleUpdate({ value: e.target.value ? Number(e.target.value) : null })} />
+              <Input
+                className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0"
+                value={formatCurrency(project?.value ?? null)}
+                onChange={(e) => {
+                  const parsed = parseCurrencyInput(e.target.value)
+                  scheduleUpdate({ value: parsed })
+                }}
+                placeholder=""
+              />
             </div>
             <div>
               <label className="text-xs font-medium">State Funding (AUD)</label>

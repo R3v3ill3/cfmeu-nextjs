@@ -15,7 +15,7 @@ export async function processMappingSheetScan(
     // Update status to processing
     await supabase
       .from('mapping_sheet_scans')
-      .update({ 
+      .update({
         status: 'processing',
         extraction_attempted_at: new Date().toISOString(),
       })
@@ -37,7 +37,8 @@ export async function processMappingSheetScan(
     const selectedPages = job.payload.selectedPages as number[] | undefined
 
     // Try Claude (Claude can read PDFs directly!)
-    console.log(`[processor] Attempting extraction with Claude (PDF direct)`)
+    // Note: Claude will process all pages - we'll use text instruction to focus on specific pages
+    console.log(`[processor] Attempting extraction with Claude (PDF direct)${selectedPages ? ` - focus on pages: ${selectedPages.join(', ')}` : ''}`)
     const result: ProcessingResult = await extractWithClaude(pdfBuffer, selectedPages)
 
     if (!result.success) {

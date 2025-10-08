@@ -2,35 +2,34 @@
 export const dynamic = 'force-dynamic'
 
 import { useCallback, useMemo, useState, useEffect } from "react"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import Link from "next/link"
 import { useSearchParams, usePathname, useRouter } from "next/navigation"
 // Progress replaced by custom gradient bar
 import { Badge } from "@/components/ui/badge"
 import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal"
-import { WorkerDetailModal } from "@/components/workers/WorkerDetailModal"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { ArrowUp, ArrowDown, LayoutGrid, List as ListIcon, MapPin, Filter, X, ChevronDown, ChevronUp } from "lucide-react"
+import { ArrowUp, ArrowDown, LayoutGrid, List as ListIcon, MapPin, Filter, X, ChevronDown, ChevronUp, Upload } from "lucide-react"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import CreateProjectDialog from "@/components/projects/CreateProjectDialog"
-import { usePatchOrganiserLabels } from "@/hooks/usePatchOrganiserLabels"
 import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
 import { PROJECT_TIER_LABELS, ProjectTier } from "@/components/projects/types"
+import { UploadMappingSheetDialog } from "@/components/projects/mapping/UploadMappingSheetDialog"
+import { ProjectQuickFinder } from "@/components/projects/ProjectQuickFinder"
 import { useProjectsServerSideCompatible } from "@/hooks/useProjectsServerSide"
 import { ProjectTable } from "@/components/projects/ProjectTable"
-import DuplicateEmployerManager from "@/components/admin/DuplicateEmployerManager"
 import ProjectsMapView from "@/components/projects/ProjectsMapView"
 import { useMultipleProjectSubsetStats } from "@/hooks/useProjectSubsetStats"
 import { SubsetEbaStats } from "@/components/projects/SubsetEbaStats"
 import { useNavigationLoading } from "@/hooks/useNavigationLoading"
 import { CfmeuEbaBadge, getProjectEbaStatus } from "@/components/ui/CfmeuEbaBadge"
-import { getOrganisingUniverseBadgeVariant } from "@/utils/organisingUniverse";
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner"
+import Link from "next/link"
+import { WorkerDetailModal } from "@/components/workers/WorkerDetailModal"
 
 type ProjectWithRoles = {
   id: string
@@ -62,182 +61,13 @@ type ProjectSummary = {
   organiser_names: string | null
 }
 
-function useProjectStats(projectId: string) {
-  // Sites for this project
-  const { data: sites = [] } = useQuery({
-    queryKey: ["project-sites", projectId],
-    staleTime: 30000,
-    refetchOnWindowFocus: false,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("job_sites")
-        .select("id, name")
-        .eq("project_id", projectId)
-      if (error) throw error
-      return data || []
-    }
-  })
-
-  const siteIds = useMemo(() => (sites as any[]).map((s: any) => String(s.id)), [sites])
-
-  // Worker totals and members across these sites, plus assigned counts by employer
-  const { data: totals } = useQuery({
-    queryKey: ["project-worker-totals", projectId, siteIds],
-    enabled: siteIds.length > 0,
-    staleTime: 30000,
-    refetchOnWindowFocus: false,
-    queryFn: async () => {
-      const { data: placementRows } = await (supabase as any)
-        .from("worker_placements")
-        .select("worker_id, employer_id, workers!inner(id, union_membership_status)")
-        .in("job_site_id", siteIds)
-
-      const workerMap: Record<string, { isMember: boolean }> = {}
-      const byEmployerToWorkers = new Map<string, Set<string>>()
-      ;(placementRows || []).forEach((row: any) => {
-        const wid = row.worker_id as string
-        const isMember = row.workers?.union_membership_status === "member"
-        if (!workerMap[wid]) workerMap[wid] = { isMember }
-        else if (isMember) workerMap[wid].isMember = true
-
-        const eid = row.employer_id as string | null
-        if (eid) {
-          if (!byEmployerToWorkers.has(eid)) byEmployerToWorkers.set(eid, new Set<string>())
-          byEmployerToWorkers.get(eid)!.add(wid)
-        }
-      })
-
-      const workerIds = Object.keys(workerMap)
-      const assignedByEmployer: Record<string, number> = {}
-      Array.from(byEmployerToWorkers.entries()).forEach(([eid, set]) => {
-        assignedByEmployer[eid] = set.size
-      })
-      return {
-        totalWorkers: workerIds.length,
-        totalMembers: Object.values(workerMap).filter((w) => w.isMember).length,
-        assignedByEmployer,
-      }
-    }
-  })
-
-  // Engaged contractors (by site trades + head contractor) and project-level estimated workforce
-  const { data: contractorAndEst } = useQuery({
-    queryKey: ["project-contractors-estimate", projectId, siteIds],
-    enabled: true,
-    staleTime: 30000,
-    refetchOnWindowFocus: false,
-    queryFn: async () => {
-      // Contractors via site_contractor_trades (skip query if there are no sites)
-      let sct: any[] = []
-      if (siteIds.length > 0) {
-        const { data } = await (supabase as any)
-          .from("site_contractor_trades")
-          .select("employer_id, job_site_id")
-          .in("job_site_id", siteIds)
-        sct = (data as any[]) || []
-      }
-
-      const employerIdSet = new Set<string>(
-        ((sct || []).map((r: any) => r.employer_id).filter(Boolean)) as string[]
-      )
-
-      // Include head contractor in engaged employer ids
-      try {
-        const { data: assignments } = await (supabase as any)
-          .from("project_assignments")
-          .select("assignment_type, employer_id, contractor_role_types(name)")
-          .eq("project_id", projectId)
-          .eq("assignment_type", "contractor_role") // Get contractor role assignments
-        ;(assignments || []).forEach((a: any) => {
-          if (a?.employer_id) employerIdSet.add(String(a.employer_id))
-        })
-      } catch {}
-
-      const employerIds = Array.from(employerIdSet)
-
-      // Estimated workforce via project_contractor_trades
-      const { data: pct } = await (supabase as any)
-        .from("project_contractor_trades")
-        .select("employer_id, estimated_project_workforce")
-        .eq("project_id", projectId)
-
-      // Sum estimates by employer to avoid double-counting across multiple trade rows
-      const estByEmployer: Record<string, number> = {}
-      ;(pct || []).forEach((r: any) => {
-        const eid = r.employer_id as string
-        const v = Number(r.estimated_project_workforce) || 0
-        if (!estByEmployer[eid]) estByEmployer[eid] = 0
-        estByEmployer[eid] += v
-      })
-
-      const estimatedTotal = Object.values(estByEmployer).reduce((a, b) => a + b, 0)
-
-      return { employerIds, estimatedTotal, estByEmployer }
-    }
-  })
-
-  // EBA employers among engaged contractors (count any employer with an EBA record)
-  const { data: ebaActive } = useQuery({
-    queryKey: ["project-eba-active", projectId, contractorAndEst?.employerIds || []],
-    enabled: (contractorAndEst?.employerIds?.length || 0) > 0,
-    staleTime: 30000,
-    refetchOnWindowFocus: false,
-    queryFn: async () => {
-      const ids = contractorAndEst!.employerIds
-      const { data } = await supabase
-        .from("company_eba_records")
-        .select("employer_id")
-        .in("employer_id", ids)
-      const withEba = new Set<string>((data || []).map((r: any) => r.employer_id as string))
-      return { activeCount: withEba.size, total: ids.length }
-    }
-  })
-
-  // Delegate: prefer site_delegate, else any of shift/company delegate/hsr
-  const { data: delegate } = useQuery({
-    queryKey: ["project-delegate", projectId, siteIds],
-    enabled: siteIds.length > 0,
-    staleTime: 30000,
-    refetchOnWindowFocus: false,
-    queryFn: async () => {
-      const wanted = ["site_delegate", "shift_delegate", "company_delegate", "hsr"]
-      const { data } = await supabase
-        .from("union_roles")
-        .select("worker_id, name, end_date, workers(id, first_name, surname)")
-        .in("job_site_id", siteIds)
-        .in("name", wanted)
-      const active = (data || []).filter((r: any) => !r.end_date || new Date(r.end_date) > new Date())
-      const byPriority = (role: string) => {
-        const order: Record<string, number> = { site_delegate: 0, shift_delegate: 1, company_delegate: 2, hsr: 3 }
-        return order[role] ?? 99
-      }
-      active.sort((a: any, b: any) => byPriority(a.name) - byPriority(b.name))
-      const d = active[0]
-      if (!d) return null
-      const workers: any = (d as any).workers
-      const w = Array.isArray(workers) ? workers[0] : workers
-      const firstName = w?.first_name || ''
-      const surname = w?.surname || ''
-      return { workerId: d.worker_id as string, name: `${firstName} ${surname}`.trim() }
-    }
-  })
-
-  return {
-    sites,
-    totals,
-    contractorAndEst,
-    ebaActive,
-    delegate,
-  }
-}
-
 function GradientBar({ percent, baseRgb }: { percent: number; baseRgb: string }) {
   const pct = Math.max(0, Math.min(100, Math.round(percent)))
   const stops: string[] = []
   for (let i = 0; i < 10; i++) {
     const start = i * 10
     const end = start + 10
-    const alpha = (i + 1) / 10 // 0.1 .. 1.0
+    const alpha = (i + 1) / 10
     stops.push(`rgba(${baseRgb},${alpha}) ${start}%`, `rgba(${baseRgb},${alpha}) ${end}%`)
   }
   const gradient = `linear-gradient(to right, ${stops.join(', ')})`
@@ -248,13 +78,15 @@ function GradientBar({ percent, baseRgb }: { percent: number; baseRgb: string })
   )
 }
 
-function CompactStatBar({ label, value, of, onClick, color = '222,27,18' }: { 
-  label: string; 
-  value: number; 
-  of: number; 
-  onClick?: () => void; 
-  color?: string;
-}) {
+interface CompactStatBarProps {
+  label: string
+  value: number
+  of: number
+  onClick?: () => void
+  color?: string
+}
+
+function CompactStatBar({ label, value, of, onClick, color = '222,27,18' }: CompactStatBarProps) {
   const pct = of > 0 ? (value / of) * 100 : 0
   return (
     <button type="button" onClick={onClick} className="w-full text-left rounded border border-dashed border-muted-foreground/30 hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 px-2 py-1 transition">
@@ -267,7 +99,13 @@ function CompactStatBar({ label, value, of, onClick, color = '222,27,18' }: {
   )
 }
 
-function EbaPercentBar({ active, total, onClick }: { active: number; total: number; onClick?: () => void }) {
+interface EbaPercentBarProps {
+  active: number
+  total: number
+  onClick?: () => void
+}
+
+function EbaPercentBar({ active, total, onClick }: EbaPercentBarProps) {
   const safeTotal = Math.max(0, total)
   const safeActive = Math.max(0, Math.min(active, safeTotal))
   return (
@@ -277,10 +115,10 @@ function EbaPercentBar({ active, total, onClick }: { active: number; total: numb
         <span>{safeTotal}</span>
       </div>
       <div className="w-full h-1 rounded bg-muted/30 overflow-hidden flex gap-px">
-        {Array.from({ length: safeTotal }).map((_, i) => (
+        {Array.from({ length: safeTotal }).map((_, index) => (
           <div
-            key={i}
-            className={`h-full flex-1 ${i < safeActive ? 'bg-green-500' : 'bg-transparent'}`}
+            key={index}
+            className={`h-full flex-1 ${index < safeActive ? 'bg-green-500' : 'bg-transparent'}`}
           />
         ))}
       </div>
@@ -288,7 +126,10 @@ function EbaPercentBar({ active, total, onClick }: { active: number; total: numb
   )
 }
 
-function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: ProjectWithRoles; summary?: ProjectSummary; subsetStats?: any; onOpenEmployer: (id: string) => void }) {
+function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: ProjectWithRoles; summary?: ProjectSummary; subsetStats?: Record<string, unknown>; onOpenEmployer: (id: string) => void }) {
+  const { startNavigation } = useNavigationLoading()
+  const router = useRouter()
+  
   const builderNames = useMemo(() => {
     // Get all contractor role assignments as potential builders
     const contractors = (p.project_assignments || []).filter((a) => 
@@ -385,7 +226,15 @@ function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: Proje
           <div className="space-y-2">
             {/* Project name and mapping sheets button */}
             <div className="flex items-center justify-between gap-2">
-              <Link href={`/projects/${p.id}`} className="hover:underline inline-block rounded border border-dashed border-transparent hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 px-1 truncate min-w-0 flex-1">
+              <Link 
+                href={`/projects/${p.id}`} 
+                className="hover:underline inline-block rounded border border-dashed border-transparent hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 px-1 truncate min-w-0 flex-1"
+                onClick={(e) => {
+                  e.preventDefault()
+                  startNavigation(`/projects/${p.id}`)
+                  setTimeout(() => router.push(`/projects/${p.id}`), 50)
+                }}
+              >
                 {p.name}
               </Link>
               <button
@@ -396,9 +245,12 @@ function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: Proje
                     const ua = navigator.userAgent.toLowerCase()
                     const isMobile = /iphone|ipad|ipod|android/.test(ua)
                     const href = isMobile ? `/projects/${p.id}/mappingsheets-mobile` : `/projects/${p.id}?tab=mappingsheets`
-                    window.location.href = href
+                    startNavigation(href)
+                    setTimeout(() => router.push(href), 50)
                   } catch {
-                    window.location.href = `/projects/${p.id}?tab=mappingsheets`
+                    const href = `/projects/${p.id}?tab=mappingsheets`
+                    startNavigation(href)
+                    setTimeout(() => router.push(href), 50)
                   }
                 }}
               >
@@ -487,25 +339,37 @@ function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: Proje
             value={keyContractorMetrics.mappedCategories}
             of={keyContractorMetrics.totalKeyCategories}
             color="59,130,246" // Blue for mapping coverage
-            onClick={() => { window.location.href = `/projects/${p.id}?tab=contractors` }}
+            onClick={() => { 
+              startNavigation(`/projects/${p.id}?tab=contractors`)
+              setTimeout(() => router.push(`/projects/${p.id}?tab=contractors`), 50)
+            }}
           />
           <CompactStatBar
             label="Key Contractor EBA Active"
             value={keyContractorMetrics.keyContractorsWithEba}
             of={keyContractorMetrics.totalKeyContractors}
             color="34,197,94" // Green for EBA status
-            onClick={() => { window.location.href = `/projects/${p.id}?tab=contractors` }}
+            onClick={() => { 
+              startNavigation(`/projects/${p.id}?tab=contractors`)
+              setTimeout(() => router.push(`/projects/${p.id}?tab=contractors`), 50)
+            }}
           />
           <EbaPercentBar
             active={ebaActive}
             total={engaged}
-            onClick={() => { window.location.href = `/projects/${p.id}?tab=contractors` }}
+            onClick={() => { 
+              startNavigation(`/projects/${p.id}?tab=contractors`)
+              setTimeout(() => router.push(`/projects/${p.id}?tab=contractors`), 50)
+            }}
           />
           {subsetStats && (
             <SubsetEbaStats
               stats={subsetStats}
               variant="compact"
-              onClick={() => { window.location.href = `/projects/${p.id}?tab=contractors` }}
+              onClick={() => { 
+                startNavigation(`/projects/${p.id}?tab=contractors`)
+                setTimeout(() => router.push(`/projects/${p.id}?tab=contractors`), 50)
+              }}
             />
           )}
         </div>
@@ -531,7 +395,16 @@ function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: Proje
           )}
         </div>
         <div className="pt-2 mt-auto">
-          <Button className="w-full" size="sm" onClick={() => { window.location.href = `/projects/${p.id}` }}>Open project</Button>
+          <Button 
+            className="w-full" 
+            size="sm" 
+            onClick={() => { 
+              startNavigation(`/projects/${p.id}`)
+              setTimeout(() => router.push(`/projects/${p.id}`), 50)
+            }}
+          >
+            Open project
+          </Button>
         </div>
       </CardContent>
     </Card>
@@ -604,6 +477,8 @@ export function ProjectsDesktopView() {
   const [isEmployerOpen, setIsEmployerOpen] = useState(false)
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null)
   const [isWorkerOpen, setIsWorkerOpen] = useState(false)
+  const [isQuickUploadOpen, setIsQuickUploadOpen] = useState(false)
+  const [scanToReview, setScanToReview] = useState<{ scanId: string; projectId?: string } | null>(null)
 
   // Enhanced state persistence
   useEffect(() => {
@@ -655,7 +530,7 @@ export function ProjectsDesktopView() {
       if (searchInput === currentParam) return
       const nextValue = searchInput
       setParam("q", nextValue.length > 0 ? nextValue : undefined)
-    }, 350)
+    }, 300)
 
     return () => {
       window.clearTimeout(handler)
@@ -719,9 +594,10 @@ export function ProjectsDesktopView() {
   })
 
   // SERVER-SIDE DATA FETCHING (New implementation)
+  // For map view, fetch all projects; for card/list view, use pagination
   const serverSideResult = useProjectsServerSideCompatible({
-    page,
-    pageSize: PAGE_SIZE,
+    page: view === 'map' ? 1 : page,
+    pageSize: view === 'map' ? 9999 : PAGE_SIZE, // Fetch all projects for map view
     sort: sort as any,
     dir: dir as 'asc' | 'desc',
     q: q || undefined,
@@ -850,6 +726,11 @@ export function ProjectsDesktopView() {
   const allProjects = USE_SERVER_SIDE ? serverSideResult.projects : (clientProjectsData?.projects || [])
   const summaries = USE_SERVER_SIDE ? serverSideResult.summaries : (clientProjectsData?.summaries || {})
   const isLoading = USE_SERVER_SIDE ? serverSideResult.isLoading : clientIsLoading
+  const isFetching = USE_SERVER_SIDE ? serverSideResult.isFetching : clientIsLoading
+  const hasLoadedData = USE_SERVER_SIDE
+    ? (serverSideResult.projects || []).length > 0
+    : (clientProjectsData?.projects || []).length > 0
+  const isInitialLoad = isLoading && !hasLoadedData
 
   // Efficiently check which projects have a builder using the new RPC function
   const projectIdsWithBuilderQuery = useQuery({
@@ -966,15 +847,6 @@ export function ProjectsDesktopView() {
   const hasNext = USE_SERVER_SIDE ? serverSideResult.hasNext : ((page - 1) * PAGE_SIZE + PAGE_SIZE) < totalProjects
   const hasPrev = USE_SERVER_SIDE ? serverSideResult.hasPrev : page > 1
 
-  if (isLoading) {
-    return (
-      <div className="p-6">
-        <h1 className="text-2xl font-semibold mb-4">Projects</h1>
-        <p className="text-sm text-muted-foreground flex items-center gap-2"><img src="/spinner.gif" alt="Loading" className="h-4 w-4" /> Loading projects…</p>
-      </div>
-    )
-  }
-
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
@@ -996,10 +868,12 @@ export function ProjectsDesktopView() {
         <div className="flex items-center gap-3">
           <div className="flex-1 max-w-md">
             <Input 
+              id="project-search-desktop"
               placeholder="Search projects…" 
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               className="h-9"
+              autoComplete="off"
             />
           </div>
           
@@ -1044,6 +918,15 @@ export function ProjectsDesktopView() {
           
           {/* Action Buttons */}
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => setIsQuickUploadOpen(true)}
+            >
+              <Upload className="h-4 w-4" />
+              Upload scanned data
+            </Button>
             <CreateProjectDialog />
           </div>
           
@@ -1179,7 +1062,12 @@ export function ProjectsDesktopView() {
           </CollapsibleContent>
         </Collapsible>
       </div>
-      {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
+      {isInitialLoad && (
+        <div className="text-sm text-muted-foreground flex items-center gap-2"><LoadingSpinner size={16} /> Loading projects…</div>
+      )}
+      {!isInitialLoad && isFetching && (
+        <div className="text-sm text-muted-foreground flex items-center gap-2"><LoadingSpinner size={16} alt="Refreshing" /> Updating projects…</div>
+      )}
       {(projects as any[]).length === 0 && !isLoading ? (
         <p className="text-sm text-muted-foreground">No projects found.</p>
       ) : view === 'list' ? (
@@ -1210,6 +1098,16 @@ export function ProjectsDesktopView() {
           patchIds={patchIds}
           tierFilter={tierFilter}
           workersFilter={workersFilter}
+          currentFilters={{
+            q,
+            patch: patchParam,
+            tier: tierFilter,
+            universe: universeFilter,
+            stage: stageFilter,
+            workers: workersFilter,
+            special: specialFilter,
+            eba: ebaFilter
+          }}
         />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1244,7 +1142,7 @@ export function ProjectsDesktopView() {
       
       {view === 'map' && (
         <div className="text-sm text-muted-foreground">
-          Showing all {totalProjects} projects matching current filters
+          Showing all {filteredAndSortedProjects.length} project location{filteredAndSortedProjects.length !== 1 ? 's' : ''} matching current filters
         </div>
       )}
 
@@ -1258,6 +1156,42 @@ export function ProjectsDesktopView() {
         workerId={selectedWorkerId}
         isOpen={isWorkerOpen}
         onClose={() => setIsWorkerOpen(false)}
+      />
+
+      <UploadMappingSheetDialog
+        mode="new_project"
+        open={isQuickUploadOpen}
+        onOpenChange={(open) => {
+          setIsQuickUploadOpen(open)
+          if (!open) setScanToReview(null)
+        }}
+        onScanReady={(scanId, projectId) => {
+          if (projectId) {
+            startNavigation(`/projects/${projectId}/scan-review/${scanId}`)
+            setTimeout(() => router.push(`/projects/${projectId}/scan-review/${scanId}`), 50)
+            return
+          }
+          setScanToReview({ scanId })
+        }}
+      />
+
+      <ProjectQuickFinder
+        open={scanToReview !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setScanToReview(null)
+          }
+        }}
+        onSelectExistingProject={(projectId) => {
+          if (!scanToReview) return
+          startNavigation(`/projects/${projectId}/scan-review/${scanToReview.scanId}`)
+          setTimeout(() => router.push(`/projects/${projectId}/scan-review/${scanToReview.scanId}`), 50)
+        }}
+        onCreateNewProject={() => {
+          if (!scanToReview) return
+          startNavigation(`/projects/new-scan-review/${scanToReview.scanId}`)
+          setTimeout(() => router.push(`/projects/new-scan-review/${scanToReview.scanId}`), 50)
+        }}
       />
 
     </div>

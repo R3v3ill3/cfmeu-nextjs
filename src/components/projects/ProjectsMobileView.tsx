@@ -28,9 +28,13 @@ import { PROJECT_TIER_LABELS, ProjectTier } from "./types"
 import ProjectsMapView from "./ProjectsMapView"
 import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
 import { CfmeuEbaBadge, getProjectEbaStatus } from "@/components/ui/CfmeuEbaBadge"
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner"
 import { getOrganisingUniverseBadgeVariant } from "@/utils/organisingUniverse"
 import Link from "next/link"
 import { useNavigationLoading } from "@/hooks/useNavigationLoading"
+import { Upload } from "lucide-react"
+import { UploadMappingSheetDialog } from "@/components/projects/mapping/UploadMappingSheetDialog"
+import { ProjectQuickFinder } from "@/components/projects/ProjectQuickFinder"
 
 // State persistence key
 const PROJECTS_STATE_KEY = 'projects-page-state-mobile'
@@ -149,14 +153,11 @@ export function ProjectsMobileView() {
   // Mobile-specific state
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [sortOpen, setSortOpen] = useState(false)
+  const [isQuickUploadOpen, setIsQuickUploadOpen] = useState(false)
+  const [scanToReview, setScanToReview] = useState<{ scanId: string; projectId?: string } | null>(null)
 
   useEffect(() => {
     saveProjectsState(sp)
-  }, [sp])
-
-  useEffect(() => {
-    const current = sp.get("q") || ""
-    setSearchInput((prev) => (prev === current ? prev : current))
   }, [sp])
 
   useEffect(() => {
@@ -175,6 +176,11 @@ export function ProjectsMobileView() {
       }
     }
   }, [])
+
+  useEffect(() => {
+    const current = sp.get("q") || ""
+    setSearchInput((prev) => (prev === current ? prev : current))
+  }, [sp])
 
   const setParam = useCallback((key: string, value?: string) => {
     const params = new URLSearchParams(sp.toString())
@@ -196,17 +202,17 @@ export function ProjectsMobileView() {
       if (searchInput === currentParam) return
       const nextValue = searchInput
       setParam("q", nextValue.length > 0 ? nextValue : undefined)
-    }, 350)
+    }, 300)
 
     return () => {
       window.clearTimeout(handler)
     }
   }, [searchInput, setParam, sp])
 
-  // For map view, fetch all projects; for card/list view, use pagination
+  // For map view, fetch all projects with larger page size; for card/list view, use standard pagination
   const serverSideResult = useProjectsServerSideCompatible({
     page: view === "map" ? 1 : page,
-    pageSize: view === "map" ? 1000 : PAGE_SIZE, // Large number for map to get all projects
+    pageSize: view === "map" ? 9999 : PAGE_SIZE, // Fetch all projects for map view
     sort: sort as 'name' | 'value' | 'tier' | 'workers' | 'members' | 'delegates' | 'eba_coverage' | 'employers' | 'created_at',
     dir: dir as 'asc' | 'desc',
     q: q || undefined,
@@ -217,7 +223,9 @@ export function ProjectsMobileView() {
     eba: ebaFilter !== 'all' ? ebaFilter as any : undefined,
   })
 
-  const { projects, totalCount, hasNext, hasPrev, isLoading } = serverSideResult
+  const { projects, totalCount, hasNext, hasPrev, isLoading, isFetching } = serverSideResult
+  const hasLoadedData = projects.length > 0
+  const isInitialLoad = isLoading && !hasLoadedData
   
   // For pagination display, use the actual page size
   const displayTotalCount = view === "map" ? projects.length : totalCount
@@ -233,7 +241,7 @@ export function ProjectsMobileView() {
     ebaFilter !== 'all' ? 'eba' : null,
   ].filter(Boolean).length
 
-  if (isLoading && !projects.length) {
+  if (isInitialLoad) {
     return (
       <div className="px-safe py-4 pb-safe-bottom space-y-4">
         <h1 className="text-2xl font-semibold">Projects</h1>
@@ -264,8 +272,18 @@ export function ProjectsMobileView() {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Projects</h1>
         
-        {/* View toggle buttons */}
-        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => setIsQuickUploadOpen(true)}
+          >
+            <Upload className="h-4 w-4" />
+            Upload scan
+          </Button>
+          {/* View toggle buttons */}
+          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
           <Button
             variant={view === "card" ? "default" : "ghost"}
             size="sm"
@@ -291,16 +309,19 @@ export function ProjectsMobileView() {
             <MapIcon className="h-4 w-4" />
           </Button>
         </div>
+        </div>
       </div>
 
       {/* Search */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input 
+          id="project-search-mobile"
           placeholder="Search projects…" 
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
           className="pl-10"
+          autoComplete="off"
         />
       </div>
 
@@ -454,6 +475,13 @@ export function ProjectsMobileView() {
         </Collapsible>
       </div>
 
+      {!isInitialLoad && isFetching && (
+        <div className="text-sm text-muted-foreground flex items-center gap-2">
+          <LoadingSpinner size={16} alt="Refreshing" />
+          Updating projects…
+        </div>
+      )}
+
       {/* Results count */}
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>
@@ -490,6 +518,14 @@ export function ProjectsMobileView() {
             patchIds={[]}
             tierFilter={tierFilter}
             workersFilter={workersFilter}
+            currentFilters={{
+              q,
+              tier: tierFilter,
+              universe: universeFilter,
+              stage: stageFilter,
+              workers: workersFilter,
+              eba: ebaFilter
+            }}
           />
         </div>
       ) : projects.length === 0 && !isLoading ? (
@@ -520,6 +556,44 @@ export function ProjectsMobileView() {
           </Button>
         </div>
       )}
+
+      <UploadMappingSheetDialog
+        mode="new_project"
+        open={isQuickUploadOpen}
+        onOpenChange={(open) => {
+          setIsQuickUploadOpen(open)
+          if (!open) {
+            setScanToReview(null)
+          }
+        }}
+        onScanReady={(scanId, projectId) => {
+          if (projectId) {
+            startNavigation(`/projects/${projectId}/scan-review/${scanId}`)
+            setTimeout(() => router.push(`/projects/${projectId}/scan-review/${scanId}`), 50)
+            return
+          }
+          setScanToReview({ scanId })
+        }}
+      />
+
+      <ProjectQuickFinder
+        open={!!scanToReview}
+        onOpenChange={(open) => {
+          if (!open) {
+            setScanToReview(null)
+          }
+        }}
+        onSelectExistingProject={(projectId) => {
+          if (!scanToReview) return
+          startNavigation(`/projects/${projectId}/scan-review/${scanToReview.scanId}`)
+          setTimeout(() => router.push(`/projects/${projectId}/scan-review/${scanToReview.scanId}`), 50)
+        }}
+        onCreateNewProject={() => {
+          if (!scanToReview) return
+          startNavigation(`/projects/new-scan-review/${scanToReview.scanId}`)
+          setTimeout(() => router.push(`/projects/new-scan-review/${scanToReview.scanId}`), 50)
+        }}
+      />
     </div>
   )
 }

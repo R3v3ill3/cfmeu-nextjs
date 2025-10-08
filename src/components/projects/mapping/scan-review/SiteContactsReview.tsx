@@ -25,6 +25,7 @@ interface SiteContactsReviewProps {
   }>
   confidence: number[]
   onDecisionsChange: (decisions: any[]) => void
+  allowProjectCreation?: boolean
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -39,6 +40,7 @@ export function SiteContactsReview({
   existingContacts,
   confidence,
   onDecisionsChange,
+  allowProjectCreation = false,
 }: SiteContactsReviewProps) {
   const [decisions, setDecisions] = useState<any[]>([])
 

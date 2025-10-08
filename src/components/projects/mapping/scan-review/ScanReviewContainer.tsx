@@ -1,19 +1,18 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { 
-  CheckCircle2, 
-  AlertCircle, 
-  FileText, 
-  Users, 
+import {
+  CheckCircle2,
+  AlertCircle,
+  FileText,
+  Users,
   Building2,
   ArrowLeft,
-  Save,
   X,
   Loader2
 } from 'lucide-react'
@@ -25,19 +24,25 @@ import { SiteContactsReview } from './SiteContactsReview'
 import { SubcontractorsReview } from './SubcontractorsReview'
 import { ConfidenceIndicator } from './ConfidenceIndicator'
 import type { ExtractedMappingSheetData } from '@/types/mappingSheetScan'
+import { useNavigationLoading } from '@/hooks/useNavigationLoading'
 
 interface ScanReviewContainerProps {
   scanData: any
   projectData: any
   existingContacts: any[]
+  allowProjectCreation?: boolean
+  onCancel?: () => void
 }
 
 export function ScanReviewContainer({
   scanData,
   projectData,
   existingContacts,
+  allowProjectCreation = false,
+  onCancel,
 }: ScanReviewContainerProps) {
   const router = useRouter()
+  const { startNavigation } = useNavigationLoading()
   const [activeTab, setActiveTab] = useState('project')
   const [isImporting, setIsImporting] = useState(false)
   
@@ -47,6 +52,14 @@ export function ScanReviewContainer({
   const [projectDecisions, setProjectDecisions] = useState<Record<string, any>>({})
   const [contactsDecisions, setContactsDecisions] = useState<any[]>([])
   const [subcontractorDecisions, setSubcontractorDecisions] = useState<any[]>([])
+
+  // Track which tabs have been visited (simpler approach)
+  const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set(['project'])) // Start with project tab visited
+
+  // Check if all tabs have been visited
+  const allTabsVisited = visitedTabs.has('project') && 
+                         visitedTabs.has('contacts') && 
+                         visitedTabs.has('subcontractors')
 
   // Update scan status to under_review when component mounts
   useEffect(() => {
@@ -63,7 +76,12 @@ export function ScanReviewContainer({
   }, [scanData.id, scanData.status])
 
   const handleCancel = () => {
-    router.push(`/projects/${projectData.id}`)
+    if (allowProjectCreation && onCancel) {
+      onCancel()
+      return
+    }
+    startNavigation(`/projects/${projectData.id}`)
+    setTimeout(() => router.push(`/projects/${projectData.id}`), 50)
   }
 
   const handleReject = async () => {
@@ -80,7 +98,8 @@ export function ScanReviewContainer({
       if (error) throw error
 
       toast.success('Scan rejected')
-      router.push(`/projects/${projectData.id}`)
+      startNavigation(`/projects/${projectData.id}`)
+      setTimeout(() => router.push(`/projects/${projectData.id}`), 50)
     } catch (error) {
       console.error('Failed to reject scan:', error)
       toast.error('Failed to reject scan')
@@ -123,7 +142,8 @@ export function ScanReviewContainer({
         description: `Updated ${result.updatedFields || 0} fields, ${result.contactsCreated || 0} contacts, ${result.subcontractorsCreated || 0} subcontractors`,
       })
 
-      router.push(`/projects/${projectData.id}`)
+      startNavigation(`/projects/${projectData.id}`)
+      setTimeout(() => router.push(`/projects/${projectData.id}`), 50)
     } catch (error) {
       console.error('Import error:', error)
       toast.error('Import failed', {
@@ -145,7 +165,7 @@ export function ScanReviewContainer({
             <div className="flex items-center gap-4">
               <Button variant="ghost" size="sm" onClick={handleCancel}>
                 <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to Project
+                {allowProjectCreation ? 'Back to Projects' : 'Back to Project'}
               </Button>
               <div>
                 <h1 className="text-xl font-semibold flex items-center gap-2">
@@ -182,21 +202,43 @@ export function ScanReviewContainer({
         </div>
       )}
 
+      {/* Review Progress Alert */}
+      {!allTabsVisited && (
+        <div className="max-w-7xl mx-auto px-4 pt-4">
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Review Required:</strong> Please visit all tabs before importing.
+              {!visitedTabs.has('project') && ' • Project Details'}
+              {!visitedTabs.has('contacts') && ' • Site Contacts'}
+              {!visitedTabs.has('subcontractors') && ' • Subcontractors'}
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
+
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 py-6">
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <Tabs value={activeTab} onValueChange={(tab) => {
+          setActiveTab(tab)
+          // Mark tab as visited
+          setVisitedTabs(prev => new Set(prev).add(tab))
+        }}>
           <TabsList className="grid w-full grid-cols-3 max-w-2xl">
             <TabsTrigger value="project" className="flex items-center gap-2">
               <Building2 className="h-4 w-4" />
               Project Details
+              {visitedTabs.has('project') && <CheckCircle2 className="h-3 w-3 ml-1 text-green-600" />}
             </TabsTrigger>
             <TabsTrigger value="contacts" className="flex items-center gap-2">
               <Users className="h-4 w-4" />
               Site Contacts
+              {visitedTabs.has('contacts') && <CheckCircle2 className="h-3 w-3 ml-1 text-green-600" />}
             </TabsTrigger>
             <TabsTrigger value="subcontractors" className="flex items-center gap-2">
               <Building2 className="h-4 w-4" />
               Subcontractors
+              {visitedTabs.has('subcontractors') && <CheckCircle2 className="h-3 w-3 ml-1 text-green-600" />}
             </TabsTrigger>
           </TabsList>
 
@@ -206,6 +248,7 @@ export function ScanReviewContainer({
               existingData={projectData}
               confidence={extractedData.confidence?.project || {}}
               onDecisionsChange={setProjectDecisions}
+              allowProjectCreation={allowProjectCreation}
             />
           </TabsContent>
 
@@ -224,6 +267,7 @@ export function ScanReviewContainer({
               projectId={projectData.id}
               confidence={extractedData.confidence?.subcontractors || []}
               onDecisionsChange={setSubcontractorDecisions}
+              allowProjectCreation={allowProjectCreation}
             />
           </TabsContent>
         </Tabs>
@@ -239,9 +283,14 @@ export function ScanReviewContainer({
             </Button>
             <div className="flex items-center gap-3">
               <Button variant="outline" onClick={handleCancel} disabled={isImporting}>
-                Save & Continue Later
+                {allowProjectCreation ? 'Cancel' : 'Save & Continue Later'}
               </Button>
-              <Button onClick={handleConfirmImport} disabled={isImporting} size="lg">
+              <Button 
+                onClick={handleConfirmImport} 
+                disabled={isImporting || !allTabsVisited} 
+                size="lg"
+                className={!allTabsVisited ? 'opacity-50' : ''}
+              >
                 {isImporting ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -250,7 +299,7 @@ export function ScanReviewContainer({
                 ) : (
                   <>
                     <CheckCircle2 className="h-4 w-4 mr-2" />
-                    Confirm & Import
+                    {allTabsVisited ? 'Confirm & Import' : `Visit All Tabs (${visitedTabs.size}/3)`}
                   </>
                 )}
               </Button>
