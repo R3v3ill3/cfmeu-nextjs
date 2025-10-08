@@ -5,6 +5,7 @@ dotenv.config()
 const requiredVars = [
   'SUPABASE_URL',
   'SUPABASE_SERVICE_KEY',
+  'SUPABASE_ANON_KEY',
 ]
 
 for (const key of requiredVars) {
@@ -16,6 +17,7 @@ for (const key of requiredVars) {
 export const config = {
   supabaseUrl: process.env.SUPABASE_URL!,
   supabaseServiceKey: process.env.SUPABASE_SERVICE_KEY!,
+  supabaseAnonKey: process.env.SUPABASE_ANON_KEY!,
   databaseUrl: process.env.DATABASE_URL ?? null,
   refreshCron: process.env.REFRESH_CRON ?? '*/10 * * * *',
   port: Number(process.env.PORT ?? 3000),

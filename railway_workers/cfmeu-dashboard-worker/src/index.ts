@@ -1,6 +1,5 @@
 import express from 'express'
 import pino from 'pino'
-import nodeCron from 'node-cron'
 import { config } from './config'
 import { getServiceRoleClient, getUserClientFromToken } from './supabase'
 import { scheduleMaterializedViewRefreshes, refreshPatchProjectMappingViewInBackground } from './refresh'
@@ -50,6 +49,31 @@ function hashToken(token: string | null): string {
   return crypto.createHash('sha1').update(token).digest('hex').slice(0, 16)
 }
 
+async function ensureAuthorizedUser(token: string) {
+  const client = getUserClientFromToken(token)
+  const { data: auth, error: authError } = await client.auth.getUser()
+  if (authError || !auth?.user) {
+    throw new Error('Unauthorized')
+  }
+
+  const { data: profile, error: profileError } = await client
+    .from('profiles')
+    .select('role, last_seen_projects_at')
+    .eq('id', auth.user.id)
+    .maybeSingle()
+
+  if (profileError) {
+    throw Object.assign(new Error('profile_load_failed'), { cause: profileError })
+  }
+
+  const allowedRoles = new Set(['organiser', 'lead_organiser', 'admin'])
+  if (!profile || !allowedRoles.has(profile.role)) {
+    throw new Error('Forbidden')
+  }
+
+  return { client, profile }
+}
+
 // GET /v1/projects — mirrors Next.js /api/projects semantics, with caching
 app.get('/v1/projects', async (req, res) => {
   const startTime = Date.now()
@@ -75,28 +99,34 @@ app.get('/v1/projects', async (req, res) => {
 
   const patchIds = patchParam ? patchParam.split(',').map((s) => s.trim()).filter(Boolean) : []
 
-  const cacheKey = makeCacheKey('projects', hashToken(token), {
-    page,
-    pageSize,
-    sort,
-    dir,
-    q,
-    patchIds,
-    tier,
-    universe,
-    stage,
-    workers,
-    special,
-    eba,
-  })
-
-  const cached = cache.get(cacheKey)
-  if (cached) {
-    return res.status(200).set({ 'X-Cache': 'HIT' }).json(cached)
-  }
-
   try {
-    const sb = getUserClientFromToken(token)
+    const { client: sb, profile } = await ensureAuthorizedUser(token)
+    const sinceParam = req.query.since ? String(req.query.since) : undefined
+    const newOnlyParam = req.query.newOnly ? String(req.query.newOnly) : undefined
+    const newOnly = newOnlyParam === '1' || newOnlyParam === 'true'
+    const effectiveSince = sinceParam || (profile as any)?.last_seen_projects_at || null
+
+    const cacheKey = makeCacheKey('projects', hashToken(token), {
+      page,
+      pageSize,
+      sort,
+      dir,
+      q,
+      patchIds,
+      tier,
+      universe,
+      stage,
+      workers,
+      special,
+      eba,
+      newOnly,
+      since: effectiveSince,
+    })
+
+    const cached = cache.get(cacheKey)
+    if (cached) {
+      return res.status(200).set({ 'X-Cache': 'HIT' }).json(cached)
+    }
 
     // Base query on materialized view
     let query = sb.from('project_list_comprehensive_view').select('*', { count: 'exact' })
@@ -134,6 +164,10 @@ app.get('/v1/projects', async (req, res) => {
       patchFilteringMethod = usedFallback ? 'fallback_job_sites' : 'materialized_view'
 
       if (patchProjectCount === 0) {
+        const sinceParam = req.query.since ? String(req.query.since) : undefined
+        const newOnlyParam = req.query.newOnly ? String(req.query.newOnly) : undefined
+        const newOnly = newOnlyParam === '1' || newOnlyParam === 'true'
+        const effectiveSince = sinceParam || (profile as any)?.last_seen_projects_at || null
         const response = {
           projects: [],
           summaries: {},
@@ -141,7 +175,20 @@ app.get('/v1/projects', async (req, res) => {
           debug: {
             queryTime: Date.now() - startTime,
             cacheHit: false,
-            appliedFilters: { q, patchIds, tier, universe, stage, workers, special, eba, sort, dir },
+            appliedFilters: {
+              q,
+              patchIds,
+              tier,
+              universe,
+              stage,
+              workers,
+              special,
+              eba,
+              sort,
+              dir,
+              newOnly,
+              since: effectiveSince,
+            },
             patchProjectCount,
             patchFilteringUsed: true,
             patchFilteringMethod,
@@ -184,13 +231,17 @@ app.get('/v1/projects', async (req, res) => {
       else if (eba === 'builder_unknown') query = query.eq('has_builder', false)
     }
 
+    if (newOnly && effectiveSince) {
+      query = query.gt('created_at', effectiveSince)
+    }
+
     // Sorting
     const summarySorts = new Set(['workers', 'members', 'delegates', 'eba_coverage', 'employers'])
     if (!summarySorts.has(sort)) {
       if (sort === 'name') query = query.order('name', { ascending: dir === 'asc' })
       else if (sort === 'value') query = query.order('value', { ascending: dir === 'asc', nullsFirst: false })
       else if (sort === 'tier') query = query.order('tier', { ascending: dir === 'asc', nullsFirst: false })
-      else query = query.order('created_at', { ascending: false })
+      else query = query.order('created_at', { ascending: dir === 'asc' })
     } else {
       if (sort === 'workers') query = query.order('total_workers', { ascending: dir === 'asc' })
       else if (sort === 'members') query = query.order('total_members', { ascending: dir === 'asc' })
@@ -216,6 +267,8 @@ app.get('/v1/projects', async (req, res) => {
       tier: row.tier,
       organising_universe: row.organising_universe,
       stage_class: row.stage_class,
+      builder_name: row.builder_name,
+      created_at: row.created_at,
       full_address: row.full_address,
       project_assignments: row.project_assignments_data || [],
     }))
@@ -246,7 +299,20 @@ app.get('/v1/projects', async (req, res) => {
       debug: {
         queryTime,
         cacheHit: false,
-        appliedFilters: { q, patchIds, tier, universe, stage, workers, special, eba, sort, dir },
+        appliedFilters: {
+          q,
+          patchIds,
+          tier,
+          universe,
+          stage,
+          workers,
+          special,
+          eba,
+          sort,
+          dir,
+          newOnly,
+          since: effectiveSince,
+        },
         patchProjectCount,
         patchFilteringUsed: patchIds.length > 0,
         patchFilteringMethod,
@@ -260,6 +326,16 @@ app.get('/v1/projects', async (req, res) => {
       .set({ 'Cache-Control': 'public, max-age=30', 'X-Cache': 'MISS' })
       .json(response)
   } catch (err: any) {
+    if (err?.message === 'Unauthorized') {
+      return res.status(401).json({ error: 'Unauthorized' })
+    }
+    if (err?.message === 'Forbidden') {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+    if (err?.message === 'profile_load_failed') {
+      logger.error({ err }, 'Profile load failed')
+      return res.status(500).json({ error: 'Unable to load user profile' })
+    }
     logger.error({ err }, 'Projects endpoint error')
     res.status(500).json({ error: 'Failed to fetch projects' })
   }
@@ -342,17 +418,179 @@ app.get('/v1/dashboard', async (req, res) => {
     const activeConstructionIds = projectRows
       .filter((p) => p.organising_universe === 'active' && p.stage_class === 'construction')
       .map((p) => p.id)
+
+    const activePreConstructionIds = projectRows
+      .filter((p) => p.organising_universe === 'active' && p.stage_class === 'pre_construction')
+      .map((p) => p.id)
+
     let total_builders = 0
     let eba_builders = 0
+    let total_employers = 0
+    let eba_employers = 0
+    let avg_estimated_workers = 0
+    let avg_assigned_workers = 0
+    let avg_members = 0
+    let financial_audit_activities = 0
+    let coreTrades = {
+      demolition: 0,
+      piling: 0,
+      concreting: 0,
+      formwork: 0,
+      scaffold: 0,
+      cranes: 0,
+    }
+    let projectsWithSiteDelegates = 0
+    let projectsWithCompanyDelegates = 0
+    let projectsWithHsrs = 0
+    let projectsWithHsrChairDelegate = 0
+    let projectsWithFullHsCommittee = 0
+
     if (activeConstructionIds.length > 0) {
       const { data: activeBuilders } = await sb
         .from('project_assignments')
-        .select('employer_id, employers!inner(id, company_eba_records(id, fwc_certified_date))')
-        .eq('assignment_type', 'contractor_role')
+        .select(
+          `project_id,
+          employer_id,
+          assignment_type,
+          estimated_worker_count,
+          assigned_worker_count,
+          organiser_worker_count,
+          delegate_type,
+          is_hsr,
+          is_hsr_chair_delegate,
+          has_full_health_and_safety_committee,
+          contractor_role_types ( code ),
+          employers!inner(
+            id,
+            company_eba_records(id, fwc_certified_date)
+          )`
+        )
         .in('project_id', activeConstructionIds)
+
       const uniqueBuilders = new Set((activeBuilders || []).map((b: any) => b.employer_id))
       total_builders = uniqueBuilders.size
-      eba_builders = (activeBuilders || []).filter((b: any) => b.employers?.company_eba_records?.length > 0).length
+      eba_builders = new Set(
+        (activeBuilders || [])
+          .filter((b: any) => Array.isArray(b.employers?.company_eba_records) && b.employers.company_eba_records.length > 0)
+          .map((b: any) => b.employer_id)
+      ).size
+
+      const activeEmployerAssignments = (activeBuilders || []).filter((b: any) => b.assignment_type === 'employer')
+      const uniqueActiveEmployers = new Set(activeEmployerAssignments.map((b: any) => b.employer_id))
+      total_employers = uniqueActiveEmployers.size
+      eba_employers = new Set(
+        activeEmployerAssignments
+          .filter(
+            (b: any) => Array.isArray(b.employers?.company_eba_records) && b.employers.company_eba_records.some((eba: any) => eba.fwc_certified_date)
+          )
+          .map((b: any) => b.employer_id)
+      ).size
+
+      const totalsByProject: Record<string, { estimated: number[]; assigned: number[]; members: number[] }> = {}
+      ;(activeBuilders || []).forEach((assignment: any) => {
+        const entry = (totalsByProject[assignment.project_id] ||= { estimated: [], assigned: [], members: [] })
+        if (typeof assignment.estimated_worker_count === 'number') entry.estimated.push(assignment.estimated_worker_count)
+        if (typeof assignment.assigned_worker_count === 'number') entry.assigned.push(assignment.assigned_worker_count)
+        if (typeof assignment.organiser_worker_count === 'number') entry.members.push(assignment.organiser_worker_count)
+
+        if (assignment.delegate_type === 'site_delegate') projectsWithSiteDelegates++
+        if (assignment.delegate_type === 'company_delegate') projectsWithCompanyDelegates++
+        if (assignment.is_hsr) projectsWithHsrs++
+        if (assignment.is_hsr_chair_delegate) projectsWithHsrChairDelegate++
+        if (assignment.has_full_health_and_safety_committee) projectsWithFullHsCommittee++
+
+        // Drill into employer trade assignments if available via RPC or future joins
+      })
+
+      const calcAverage = (values: number[]) => (values.length ? values.reduce((sum, val) => sum + val, 0) / values.length : 0)
+      const estimatedValues = Object.values(totalsByProject).map((vals) => calcAverage(vals.estimated))
+      const assignedValues = Object.values(totalsByProject).map((vals) => calcAverage(vals.assigned))
+      const memberValues = Object.values(totalsByProject).map((vals) => calcAverage(vals.members))
+
+      avg_estimated_workers = calcAverage(estimatedValues)
+      avg_assigned_workers = calcAverage(assignedValues)
+      avg_members = calcAverage(memberValues)
+
+      const { count: faaCount } = await sb
+        .from('union_activities')
+        .select('*', { count: 'exact', head: true })
+        .eq('activity_type', 'financial_audit')
+        .in('project_id', activeConstructionIds)
+
+      financial_audit_activities = faaCount || 0
+    }
+
+    let preConstructionBuilders = 0
+    let preConstructionEbaBuilders = 0
+    let preConstructionTotalEmployers = 0
+    let preConstructionEbaEmployers = 0
+    let preConstructionAvgEstimatedWorkers = 0
+    let preConstructionAvgAssignedWorkers = 0
+    let preConstructionAvgMembers = 0
+
+    if (activePreConstructionIds.length > 0) {
+      const { data: preConstructionAssignments } = await sb
+        .from('project_assignments')
+        .select(
+          `project_id,
+          employer_id,
+          assignment_type,
+          estimated_worker_count,
+          assigned_worker_count,
+          organiser_worker_count,
+          employers!inner(
+            id,
+            company_eba_records(id, fwc_certified_date)
+          )`
+        )
+        .in('project_id', activePreConstructionIds)
+
+      const uniqueBuilders = new Set(
+        (preConstructionAssignments || [])
+          .filter((a: any) => a.assignment_type === 'contractor_role')
+          .map((a: any) => a.employer_id)
+      )
+      preConstructionBuilders = uniqueBuilders.size
+      preConstructionEbaBuilders = new Set(
+        (preConstructionAssignments || [])
+          .filter(
+            (a: any) =>
+              a.assignment_type === 'contractor_role' &&
+              Array.isArray(a.employers?.company_eba_records) &&
+              a.employers.company_eba_records.some((eba: any) => eba.fwc_certified_date)
+          )
+          .map((a: any) => a.employer_id)
+      ).size
+
+      const employerAssignments = (preConstructionAssignments || []).filter((a: any) => a.assignment_type === 'employer')
+      const uniqueEmployers = new Set(employerAssignments.map((a: any) => a.employer_id))
+      preConstructionTotalEmployers = uniqueEmployers.size
+      preConstructionEbaEmployers = new Set(
+        employerAssignments
+          .filter(
+            (a: any) =>
+              Array.isArray(a.employers?.company_eba_records) &&
+              a.employers.company_eba_records.some((eba: any) => eba.fwc_certified_date)
+          )
+          .map((a: any) => a.employer_id)
+      ).size
+
+      const totalsByProject: Record<string, { estimated: number[]; assigned: number[]; members: number[] }> = {}
+      ;(preConstructionAssignments || []).forEach((assignment: any) => {
+        const entry = (totalsByProject[assignment.project_id] ||= { estimated: [], assigned: [], members: [] })
+        if (typeof assignment.estimated_worker_count === 'number') entry.estimated.push(assignment.estimated_worker_count)
+        if (typeof assignment.assigned_worker_count === 'number') entry.assigned.push(assignment.assigned_worker_count)
+        if (typeof assignment.organiser_worker_count === 'number') entry.members.push(assignment.organiser_worker_count)
+      })
+
+      const calcAverage = (values: number[]) => (values.length ? values.reduce((sum, val) => sum + val, 0) / values.length : 0)
+      const estimatedValues = Object.values(totalsByProject).map((vals) => calcAverage(vals.estimated))
+      const assignedValues = Object.values(totalsByProject).map((vals) => calcAverage(vals.assigned))
+      const memberValues = Object.values(totalsByProject).map((vals) => calcAverage(vals.members))
+
+      preConstructionAvgEstimatedWorkers = calcAverage(estimatedValues)
+      preConstructionAvgAssignedWorkers = calcAverage(assignedValues)
+      preConstructionAvgMembers = calcAverage(memberValues)
     }
 
     // Global counts (head-only count for big tables)
@@ -404,11 +642,36 @@ app.get('/v1/dashboard', async (req, res) => {
     const response = {
       project_counts,
       active_construction: {
+        total_projects: activeConstructionIds.length,
         total_builders,
         eba_builders,
+        eba_builder_percentage: total_builders > 0 ? (eba_builders / total_builders) * 100 : 0,
+        total_employers,
+        eba_employers,
+        eba_employer_percentage: total_employers > 0 ? (eba_employers / total_employers) * 100 : 0,
+        core_trades: coreTrades,
+        projects_with_site_delegates: projectsWithSiteDelegates,
+        projects_with_company_delegates: projectsWithCompanyDelegates,
+        projects_with_hsrs: projectsWithHsrs,
+        projects_with_hsr_chair_delegate: projectsWithHsrChairDelegate,
+        projects_with_full_hs_committee: projectsWithFullHsCommittee,
+        avg_estimated_workers,
+        avg_assigned_workers,
+        avg_members,
+        financial_audit_activities,
       },
       active_pre_construction: {
-        avg_members: 0, // Placeholder; compute when needed
+        total_projects: activePreConstructionIds.length,
+        total_builders: preConstructionBuilders,
+        eba_builders: preConstructionEbaBuilders,
+        eba_builder_percentage: preConstructionBuilders > 0 ? (preConstructionEbaBuilders / preConstructionBuilders) * 100 : 0,
+        total_employers: preConstructionTotalEmployers,
+        eba_employers: preConstructionEbaEmployers,
+        eba_employer_percentage:
+          preConstructionTotalEmployers > 0 ? (preConstructionEbaEmployers / preConstructionTotalEmployers) * 100 : 0,
+        avg_estimated_workers: preConstructionAvgEstimatedWorkers,
+        avg_assigned_workers: preConstructionAvgAssignedWorkers,
+        avg_members: preConstructionAvgMembers,
       },
       projects: [], // Optional list, not needed by current UI
       errors: [],

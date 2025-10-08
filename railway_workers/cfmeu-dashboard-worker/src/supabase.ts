@@ -15,8 +15,7 @@ export function getServiceRoleClient() {
 }
 
 export function getUserClientFromToken(jwt: string) {
-  // Use anon key behavior by passing no key, then attach Authorization via global header
-  const client = createClient<Database>(config.supabaseUrl, config.supabaseServiceKey, {
+  const client = createClient<Database>(config.supabaseUrl, config.supabaseAnonKey, {
     auth: { persistSession: false },
     global: { headers: { Authorization: `Bearer ${jwt}` } },
   })
