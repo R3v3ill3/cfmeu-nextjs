@@ -4,7 +4,7 @@ import { MappingSheetScanJob, ProcessingResult } from '../types'
 import { extractWithClaude } from '../ai/claude'
 
 export async function processMappingSheetScan(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   job: MappingSheetScanJob
 ): Promise<{ succeeded: number; failed: number }> {
   const { scanId, fileUrl } = job.payload

@@ -1,4 +1,4 @@
-import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs'
+import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist'
 import { createCanvas } from 'canvas'
 import sharp from 'sharp'
 import { config } from '../config'

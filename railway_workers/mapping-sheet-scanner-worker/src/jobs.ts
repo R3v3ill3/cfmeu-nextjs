@@ -1,11 +1,10 @@
 import { randomUUID } from 'crypto'
-import { SupabaseClient } from '@supabase/supabase-js'
 import { MappingSheetScanJob } from './types'
 
 const JOB_TABLE = 'scraper_jobs'
 
 export async function reserveNextJob(
-  client: SupabaseClient
+  client: any
 ): Promise<MappingSheetScanJob | null> {
   const nowIso = new Date().toISOString()
 
@@ -68,7 +67,7 @@ export async function reserveNextJob(
   return null
 }
 
-export async function releaseJobLock(client: SupabaseClient, jobId: string) {
+export async function releaseJobLock(client: any, jobId: string) {
   await client
     .from('scraper_jobs')
     .update({ lock_token: null, locked_at: null })
@@ -76,7 +75,7 @@ export async function releaseJobLock(client: SupabaseClient, jobId: string) {
 }
 
 export async function markJobStatus(
-  client: SupabaseClient,
+  client: any,
   jobId: string,
   status: 'succeeded' | 'failed',
   updates: Record<string, any> = {}
