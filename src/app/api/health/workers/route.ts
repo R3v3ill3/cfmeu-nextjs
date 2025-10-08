@@ -134,10 +134,85 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Check Scraper Worker queue health via Supabase
+    // Check Mapping Sheet Scanner Worker queue health via Supabase
     const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+    if (supabaseUrl && supabaseServiceKey) {
+      const scannerQueueCheckStart = Date.now();
+
+      try {
+        const serviceClient = createClient<Database>(supabaseUrl, supabaseServiceKey, {
+          auth: { persistSession: false },
+        });
+
+        const staleMinutes = Number(process.env.SCANNER_WORKER_STALE_MINUTES ?? 15);
+        const staleThreshold = new Date(Date.now() - staleMinutes * 60 * 1000).toISOString();
+
+        const { data: staleQueuedScans, error: staleQueuedError } = await serviceClient
+          .from('scraper_jobs')
+          .select('id, job_type, created_at')
+          .eq('status', 'queued')
+          .eq('job_type', 'mapping_sheet_scan')
+          .lte('created_at', staleThreshold)
+          .limit(5);
+
+        if (staleQueuedError) {
+          throw staleQueuedError;
+        }
+
+        const { data: staleRunningScans, error: staleRunningError } = await serviceClient
+          .from('scraper_jobs')
+          .select('id, job_type, locked_at')
+          .eq('status', 'running')
+          .eq('job_type', 'mapping_sheet_scan')
+          .lte('locked_at', staleThreshold)
+          .limit(5);
+
+        if (staleRunningError) {
+          throw staleRunningError;
+        }
+
+        const hasQueuedBacklog = (staleQueuedScans?.length ?? 0) > 0;
+        const hasStaleRunning = (staleRunningScans?.length ?? 0) > 0;
+
+        const scannerStatus: WorkerHealthCheck['status'] = hasQueuedBacklog || hasStaleRunning ? 'unhealthy' : 'healthy';
+
+        const scannerIssues: string[] = [];
+        if (hasQueuedBacklog) {
+          const example = staleQueuedScans?.[0];
+          scannerIssues.push(`Scan jobs queued since ${example?.created_at ?? 'unknown time'}`);
+        }
+        if (hasStaleRunning) {
+          const example = staleRunningScans?.[0];
+          scannerIssues.push(`Scan job locked since ${example?.locked_at ?? 'unknown time'}`);
+        }
+
+        healthChecks.push({
+          service: 'Mapping Sheet Scanner Worker',
+          status: scannerStatus,
+          responseTime: Date.now() - scannerQueueCheckStart,
+          url: 'Supabase scraper_jobs (mapping_sheet_scan)',
+          error: scannerIssues.length > 0 ? scannerIssues.join('; ') : undefined,
+        });
+      } catch (error) {
+        healthChecks.push({
+          service: 'Mapping Sheet Scanner Worker',
+          status: 'error',
+          responseTime: Date.now() - scannerQueueCheckStart,
+          url: 'Supabase scraper_jobs (mapping_sheet_scan)',
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    } else {
+      healthChecks.push({
+        service: 'Mapping Sheet Scanner Worker',
+        status: 'disabled',
+        url: 'Requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY',
+      });
+    }
+
+    // Check Scraper Worker queue health via Supabase (FWC/Incolink jobs)
     if (supabaseUrl && supabaseServiceKey) {
       const queueCheckStart = Date.now();
 
