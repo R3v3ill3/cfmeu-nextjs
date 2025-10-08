@@ -227,8 +227,13 @@ export function ProjectFieldsReview({
     }))
   }
 
-  const handleBuilderMatch = async (employerId: string, employerName: string, isNewEmployer: boolean) => {
-    console.log('Builder match confirmed:', { employerId, employerName, isNewEmployer })
+  const handleBuilderMatch = async (
+    employerId: string, 
+    employerName: string, 
+    isNewEmployer: boolean, 
+    extras?: { contractorType?: string }
+  ) => {
+    console.log('Builder match confirmed:', { employerId, employerName, isNewEmployer, extras })
     
     // Fetch the employer's current EBA status
     let employerEbaStatus = null
@@ -595,6 +600,7 @@ export function ProjectFieldsReview({
           suggestedMatch={builderSuggestedMatch}
           allEmployers={allEmployers}
           onConfirm={handleBuilderMatch}
+          allowContractorTypeSelection={true}
         />
       )}
 
