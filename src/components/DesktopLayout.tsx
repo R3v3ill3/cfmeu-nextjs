@@ -85,6 +85,11 @@ function useVisibleNavItems(userRole: string | null): NavItem[] {
     items.push({ path: "/employers", label: "Employers", icon: Building, description: "Employer information and mapping" })
   }
   
+  // EBA Employers - check visibility
+  if (visibility.eba_employers) {
+    items.push({ path: "/eba-employers", label: "EBA Employers", icon: FileCheck, description: "EBA-active employers by contractor role/trade" })
+  }
+  
   // Workers - check visibility
   if (visibility.workers) {
     items.push({ path: "/workers", label: "Workers", icon: Users, description: "Worker database and membership" })

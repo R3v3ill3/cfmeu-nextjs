@@ -70,6 +70,11 @@ const Layout = ({ children }: LayoutProps) => {
       items.push({ path: "/employers", label: "Employers", icon: Building });
     }
     
+    // EBA Employers - check visibility
+    if (visibility.eba_employers) {
+      items.push({ path: "/eba-employers", label: "EBA Employers", icon: FileCheck });
+    }
+    
     // Workers - check visibility
     if (visibility.workers) {
       items.push({ path: "/workers", label: "Workers", icon: Users });

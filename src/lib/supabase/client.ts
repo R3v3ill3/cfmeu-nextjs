@@ -5,7 +5,7 @@ import type { Database } from '@/types/database'
 
 let browserClient: ReturnType<typeof createBrowserClient<Database>> | null = null
 
-export function getSupabaseBrowserClient() {
+export function getSupabaseBrowserClient(): ReturnType<typeof createBrowserClient<Database>> {
   if (browserClient) return browserClient
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY

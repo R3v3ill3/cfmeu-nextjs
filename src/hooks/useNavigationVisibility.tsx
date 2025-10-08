@@ -5,6 +5,7 @@ import { toast } from "sonner"
 export interface NavigationVisibility {
   patch: boolean
   employers: boolean
+  eba_employers: boolean
   workers: boolean
   map: boolean
   site_visits: boolean
@@ -15,6 +16,7 @@ export interface NavigationVisibility {
 const DEFAULT_VISIBILITY: NavigationVisibility = {
   patch: true,
   employers: true,
+  eba_employers: true,
   workers: true,
   map: true,
   site_visits: true,

@@ -14,6 +14,7 @@ interface PageConfig {
 const HIDEABLE_PAGES: PageConfig[] = [
   { key: "patch", label: "Patch", description: "Patch management and organization" },
   { key: "employers", label: "Employers", description: "Employer information and mapping" },
+  { key: "eba_employers", label: "EBA Employers", description: "Lists EBA-active employers by contractor role/trade" },
   { key: "workers", label: "Workers", description: "Worker database and membership" },
   { key: "map", label: "Map", description: "Interactive patch and job site maps" },
   { key: "site_visits", label: "Site Visits", description: "Site visit records and reports" },
