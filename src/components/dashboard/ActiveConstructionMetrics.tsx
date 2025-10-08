@@ -19,11 +19,9 @@ import {
   CheckCircle,
   AlertTriangle
 } from "lucide-react"
-import { ActiveConstructionMetrics } from "@/hooks/useNewDashboardData"
-import { FilterIndicatorBadge } from "./FilterIndicatorBadge"
 import { useActiveFilters } from "@/hooks/useActiveFilters"
 import { useSearchParams } from "next/navigation"
-import { useKeyContractorTradeMetrics } from "@/hooks/useKeyContractorTradeMetrics"
+import { useMemo } from "react"
 
 interface ActiveConstructionMetricsProps {
   data: ActiveConstructionMetrics;
@@ -43,7 +41,27 @@ export function ActiveConstructionMetricsComponent({ data, isLoading }: ActiveCo
   const { data: serverOUMetrics } = useOrganizingUniverseMetricsServerSideCompatible({ universe: universe || 'active', stage: stage || 'construction', patchIds })
   const ouMetrics = (serverOUMetrics ?? clientOUMetrics) as OrganizingUniverseMetrics | undefined
 
-  const { data: tradeMetrics } = useKeyContractorTradeMetrics({ patchIds, tier, stage, universe })
+  const tradeSummary = useMemo(() => {
+    const trades = [
+      { code: 'demolition', label: 'Demolition' },
+      { code: 'piling', label: 'Piling' },
+      { code: 'concreting', label: 'Concreting' },
+      { code: 'formwork', label: 'Formwork' },
+      { code: 'scaffold', label: 'Scaffold' },
+      { code: 'cranes', label: 'Cranes' },
+    ] as const
+
+    return trades.map(({ code, label }) => {
+      const total = data.core_trades?.[code] ?? 0
+      const eba = data.core_trades_eba?.[code] ?? 0
+      const nonEba = Math.max(total - eba, 0)
+      const ebaPercent = total > 0 ? Math.round((eba / total) * 100) : 0
+
+      return { code, label, total, eba, nonEba, ebaPercent }
+    })
+  }, [data.core_trades, data.core_trades_eba])
+
+  const hasTradeData = tradeSummary.some((trade) => trade.total > 0)
 
   if (isLoading) {
     return (
@@ -204,7 +222,7 @@ export function ActiveConstructionMetricsComponent({ data, isLoading }: ActiveCo
             <Award className="h-5 w-5 text-orange-600" />
             <div>
               <CardTitle>Key Contractor Trades</CardTitle>
-              <CardDescription>Totals by trade: projects, known employers, EBA employers</CardDescription>
+              <CardDescription>Total employers vs EBA employers across key trades</CardDescription>
             </div>
           </div>
         </CardHeader>
@@ -217,18 +235,39 @@ export function ActiveConstructionMetricsComponent({ data, isLoading }: ActiveCo
                 <TableHeader variant="desktop">
                   <TableRow variant="desktop">
                     <TableHead variant="desktop" className="py-2">Trade</TableHead>
-                    <TableHead variant="desktop" className="py-2">Projects</TableHead>
-                    <TableHead variant="desktop" className="py-2">Known</TableHead>
-                    <TableHead variant="desktop" className="py-2">EBA</TableHead>
+                    <TableHead variant="desktop" className="py-2">Employers (total / EBA / non-EBA)</TableHead>
+                    <TableHead variant="desktop" className="py-2">EBA %</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody variant="desktop">
-                  {(tradeMetrics?.trades || []).map(t => (
-                    <TableRow key={t.code} variant="desktop-hover">
-                      <TableCell variant="desktop" className="font-medium py-2">{t.label}</TableCell>
-                      <TableCell variant="desktop" className="py-2">{t.totalProjects}</TableCell>
-                      <TableCell variant="desktop" className="py-2">{t.knownEmployers}</TableCell>
-                      <TableCell variant="desktop" className="py-2">{t.ebaEmployers}</TableCell>
+                  {tradeSummary.map((trade) => (
+                    <TableRow key={trade.code} variant="desktop-hover">
+                      <TableCell variant="desktop" className="font-medium py-2">{trade.label}</TableCell>
+                      <TableCell variant="desktop" className="py-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Total</span>
+                          <span className="font-semibold">{trade.total}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm text-green-600">
+                          <span>EBA</span>
+                          <span className="font-semibold">{trade.eba}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm text-amber-600">
+                          <span>Non-EBA</span>
+                          <span className="font-semibold">{trade.nonEba}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell variant="desktop" className="py-2">
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-2 rounded-full bg-gray-200 overflow-hidden">
+                            <div
+                              className="h-full bg-green-500"
+                              style={{ width: `${trade.ebaPercent}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-muted-foreground w-10 text-right">{trade.ebaPercent}%</span>
+                        </div>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -237,21 +276,19 @@ export function ActiveConstructionMetricsComponent({ data, isLoading }: ActiveCo
 
             {/* Right side: Compact chart */}
             <div className="flex flex-col justify-center">
-              {tradeMetrics && tradeMetrics.trades.length > 0 ? (
+              {hasTradeData ? (
                 <div className="h-48 min-h-[200px] w-full min-w-[280px]">
                   <ChartContainer
                     config={{
-                      projects: { label: 'Projects', color: 'hsl(215 16% 47%)' },
-                      known: { label: 'Known', color: 'hsl(142 71% 45%)' },
-                      eba: { label: 'EBA', color: 'hsl(221 83% 53%)' },
+                      total: { label: 'Total', color: 'hsl(215 16% 47%)' },
+                      eba: { label: 'EBA', color: 'hsl(142 71% 45%)' },
                     }}
                     className="h-full w-full"
                   >
-                    <BarChart data={tradeMetrics.trades.map(t => ({
-                      trade: t.label,
-                      projects: t.totalProjects,
-                      known: t.knownEmployers,
-                      eba: t.ebaEmployers,
+                    <BarChart data={tradeSummary.map(trade => ({
+                      trade: trade.label,
+                      total: trade.total,
+                      eba: trade.eba,
                     }))}>
                       <CartesianGrid vertical={false} strokeDasharray="3 3" />
                       <XAxis 
@@ -270,8 +307,7 @@ export function ActiveConstructionMetricsComponent({ data, isLoading }: ActiveCo
                         content={<ChartLegendContent />}
                         wrapperStyle={{ fontSize: '12px' }}
                       />
-                      <Bar dataKey="projects" fill="var(--color-projects)" radius={[2,2,0,0]} />
-                      <Bar dataKey="known" fill="var(--color-known)" radius={[2,2,0,0]} />
+                      <Bar dataKey="total" fill="var(--color-total)" radius={[2,2,0,0]} />
                       <Bar dataKey="eba" fill="var(--color-eba)" radius={[2,2,0,0]} />
                     </BarChart>
                   </ChartContainer>

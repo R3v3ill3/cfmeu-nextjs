@@ -42,6 +42,7 @@ export interface ActiveConstructionMetrics {
   eba_employers: number;
   eba_employer_percentage: number;
   core_trades: CoreTradeEmployers;
+  core_trades_eba?: CoreTradeEmployers;
   projects_with_site_delegates: number;
   projects_with_company_delegates: number;
   projects_with_hsrs: number;

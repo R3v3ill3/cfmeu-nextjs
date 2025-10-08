@@ -76,7 +76,6 @@ export function useKeyContractorTradeMetrics(opts: KeyContractorTradeMetricsOpti
       for (const code of tradeCodes) {
         const aliases = TRADE_ALIASES[code] || [code]
         const byTrade = rows.filter(r => aliases.includes(r.trade_type))
-        const projectSet = new Set(byTrade.map(r => r.job_sites?.project_id).filter(Boolean))
         const employerIds = new Set(byTrade.map(r => r.employer_id).filter(Boolean))
         const ebaEmployerIds = new Set(
           byTrade

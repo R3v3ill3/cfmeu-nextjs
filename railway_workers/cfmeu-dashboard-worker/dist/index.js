@@ -53,6 +53,78 @@ function hashToken(token) {
         return 'anon';
     return crypto_1.default.createHash('sha1').update(token).digest('hex').slice(0, 16);
 }
+const CORE_TRADE_CODE_MAP = {
+    demolition: ['demolition'],
+    piling: ['piling'],
+    concreting: ['concrete', 'concreting'],
+    formwork: ['form_work', 'formwork'],
+    scaffold: ['scaffolding', 'scaffold'],
+    cranes: ['tower_crane', 'mobile_crane', 'crane', 'cranes'],
+};
+function createCoreTradeSetRecord() {
+    return {
+        demolition: new Set(),
+        piling: new Set(),
+        concreting: new Set(),
+        formwork: new Set(),
+        scaffold: new Set(),
+        cranes: new Set(),
+    };
+}
+function createEmptyCoreTradeCounts() {
+    return {
+        demolition: 0,
+        piling: 0,
+        concreting: 0,
+        formwork: 0,
+        scaffold: 0,
+        cranes: 0,
+    };
+}
+function aggregateCoreTradeSets(record) {
+    const counts = createEmptyCoreTradeCounts();
+    for (const key of Object.keys(counts)) {
+        counts[key] = record[key].size;
+    }
+    return counts;
+}
+function mapTradeCodeToCore(code) {
+    if (!code)
+        return null;
+    const normalized = code.toLowerCase();
+    for (const [key, codes] of Object.entries(CORE_TRADE_CODE_MAP)) {
+        if (codes.some((c) => c === normalized)) {
+            return key;
+        }
+    }
+    return null;
+}
+function getOrCreateProjectCoreSet(map, projectId) {
+    let record = map.get(projectId);
+    if (!record) {
+        record = createCoreTradeSetRecord();
+        map.set(projectId, record);
+    }
+    return record;
+}
+function normalizeEmployerField(raw) {
+    if (!raw)
+        return null;
+    if (Array.isArray(raw))
+        return raw[0];
+    return raw;
+}
+function employerHasActiveEba(employer) {
+    if (!employer)
+        return false;
+    if (employer.enterprise_agreement_status === true)
+        return true;
+    const records = employer.company_eba_records;
+    if (Array.isArray(records)) {
+        return records.some((record) => record?.fwc_certified_date);
+    }
+    return false;
+}
 async function ensureAuthorizedUser(token) {
     const client = (0, supabase_1.getUserClientFromToken)(token);
     const { data: auth, error: authError } = await client.auth.getUser();
@@ -414,18 +486,13 @@ app.get('/v1/dashboard', async (req, res) => {
         let eba_builders = 0;
         let total_employers = 0;
         let eba_employers = 0;
+        const projectCoreTradeEmployers = new Map();
+        const projectCoreTradeEbaEmployers = new Map();
         let avg_estimated_workers = 0;
         let avg_assigned_workers = 0;
         let avg_members = 0;
         let financial_audit_activities = 0;
-        let coreTrades = {
-            demolition: 0,
-            piling: 0,
-            concreting: 0,
-            formwork: 0,
-            scaffold: 0,
-            cranes: 0,
-        };
+        let coreTrades = createEmptyCoreTradeCounts();
         let projectsWithSiteDelegates = 0;
         let projectsWithCompanyDelegates = 0;
         let projectsWithHsrs = 0;
@@ -445,8 +512,10 @@ app.get('/v1/dashboard', async (req, res) => {
           is_hsr_chair_delegate,
           has_full_health_and_safety_committee,
           contractor_role_types ( code ),
+          trade_types ( code ),
           employers!inner(
             id,
+            enterprise_agreement_status,
             company_eba_records(id, fwc_certified_date)
           )`)
                 .in('project_id', activeConstructionIds);
@@ -481,7 +550,18 @@ app.get('/v1/dashboard', async (req, res) => {
                     projectsWithHsrChairDelegate++;
                 if (assignment.has_full_health_and_safety_committee)
                     projectsWithFullHsCommittee++;
-                // Drill into employer trade assignments if available via RPC or future joins
+                if (assignment.assignment_type === 'trade_work' && assignment.trade_types?.code) {
+                    const coreKey = mapTradeCodeToCore(assignment.trade_types.code);
+                    if (coreKey) {
+                        const projectSets = getOrCreateProjectCoreSet(projectCoreTradeEmployers, assignment.project_id);
+                        projectSets[coreKey].add(assignment.employer_id);
+                        const employer = normalizeEmployerField(assignment.employers);
+                        if (employerHasActiveEba(employer)) {
+                            const ebaSets = getOrCreateProjectCoreSet(projectCoreTradeEbaEmployers, assignment.project_id);
+                            ebaSets[coreKey].add(assignment.employer_id);
+                        }
+                    }
+                }
             });
             const calcAverage = (values) => (values.length ? values.reduce((sum, val) => sum + val, 0) / values.length : 0);
             const estimatedValues = Object.values(totalsByProject).map((vals) => calcAverage(vals.estimated));
@@ -544,6 +624,18 @@ app.get('/v1/dashboard', async (req, res) => {
                     entry.assigned.push(assignment.assigned_worker_count);
                 if (typeof assignment.organiser_worker_count === 'number')
                     entry.members.push(assignment.organiser_worker_count);
+                if (assignment.assignment_type === 'trade_work' && assignment.trade_types?.code) {
+                    const coreKey = mapTradeCodeToCore(assignment.trade_types.code);
+                    if (coreKey) {
+                        const projectSets = getOrCreateProjectCoreSet(projectCoreTradeEmployers, assignment.project_id);
+                        projectSets[coreKey].add(assignment.employer_id);
+                        const employer = normalizeEmployerField(assignment.employers);
+                        if (employerHasActiveEba(employer)) {
+                            const ebaSets = getOrCreateProjectCoreSet(projectCoreTradeEbaEmployers, assignment.project_id);
+                            ebaSets[coreKey].add(assignment.employer_id);
+                        }
+                    }
+                }
             });
             const calcAverage = (values) => (values.length ? values.reduce((sum, val) => sum + val, 0) / values.length : 0);
             const estimatedValues = Object.values(totalsByProject).map((vals) => calcAverage(vals.estimated));
@@ -602,6 +694,22 @@ app.get('/v1/dashboard', async (req, res) => {
         const avgMemberDensity = mappedEmployers.length
             ? mappedEmployers.reduce((sum, emp) => sum + (emp.member_density_percent || 0), 0) / mappedEmployers.length
             : 0;
+        const aggregatedCoreTrades = createEmptyCoreTradeCounts();
+        const aggregatedEbaCoreTrades = createEmptyCoreTradeCounts();
+        for (const projectId of projectCoreTradeEmployers.keys()) {
+            const employerSets = projectCoreTradeEmployers.get(projectId);
+            const counts = aggregateCoreTradeSets(employerSets);
+            for (const key of Object.keys(counts)) {
+                aggregatedCoreTrades[key] += counts[key];
+            }
+            const ebaSets = projectCoreTradeEbaEmployers.get(projectId);
+            if (ebaSets) {
+                const ebaCounts = aggregateCoreTradeSets(ebaSets);
+                for (const key of Object.keys(ebaCounts)) {
+                    aggregatedEbaCoreTrades[key] += ebaCounts[key];
+                }
+            }
+        }
         const response = {
             project_counts,
             active_construction: {
@@ -612,7 +720,8 @@ app.get('/v1/dashboard', async (req, res) => {
                 total_employers,
                 eba_employers,
                 eba_employer_percentage: total_employers > 0 ? (eba_employers / total_employers) * 100 : 0,
-                core_trades: coreTrades,
+                core_trades: aggregatedCoreTrades,
+                core_trades_eba: aggregatedEbaCoreTrades,
                 projects_with_site_delegates: projectsWithSiteDelegates,
                 projects_with_company_delegates: projectsWithCompanyDelegates,
                 projects_with_hsrs: projectsWithHsrs,

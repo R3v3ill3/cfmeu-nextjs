@@ -49,6 +49,86 @@ function hashToken(token: string | null): string {
   return crypto.createHash('sha1').update(token).digest('hex').slice(0, 16)
 }
 
+type CoreTradeKey = 'demolition' | 'piling' | 'concreting' | 'formwork' | 'scaffold' | 'cranes'
+
+const CORE_TRADE_CODE_MAP: Record<CoreTradeKey, string[]> = {
+  demolition: ['demolition'],
+  piling: ['piling'],
+  concreting: ['concrete', 'concreting'],
+  formwork: ['form_work', 'formwork'],
+  scaffold: ['scaffolding', 'scaffold'],
+  cranes: ['tower_crane', 'mobile_crane', 'crane', 'cranes'],
+}
+
+function createCoreTradeSetRecord(): Record<CoreTradeKey, Set<string>> {
+  return {
+    demolition: new Set<string>(),
+    piling: new Set<string>(),
+    concreting: new Set<string>(),
+    formwork: new Set<string>(),
+    scaffold: new Set<string>(),
+    cranes: new Set<string>(),
+  }
+}
+
+function createEmptyCoreTradeCounts(): Record<CoreTradeKey, number> {
+  return {
+    demolition: 0,
+    piling: 0,
+    concreting: 0,
+    formwork: 0,
+    scaffold: 0,
+    cranes: 0,
+  }
+}
+
+function aggregateCoreTradeSets(record: Record<CoreTradeKey, Set<string>>): Record<CoreTradeKey, number> {
+  const counts = createEmptyCoreTradeCounts()
+  for (const key of Object.keys(counts) as CoreTradeKey[]) {
+    counts[key] = record[key].size
+  }
+  return counts
+}
+
+function mapTradeCodeToCore(code?: string | null): CoreTradeKey | null {
+  if (!code) return null
+  const normalized = code.toLowerCase()
+  for (const [key, codes] of Object.entries(CORE_TRADE_CODE_MAP) as Array<[CoreTradeKey, string[]]>) {
+    if (codes.some((c) => c === normalized)) {
+      return key
+    }
+  }
+  return null
+}
+
+function getOrCreateProjectCoreSet(
+  map: Map<string, Record<CoreTradeKey, Set<string>>>,
+  projectId: string
+): Record<CoreTradeKey, Set<string>> {
+  let record = map.get(projectId)
+  if (!record) {
+    record = createCoreTradeSetRecord()
+    map.set(projectId, record)
+  }
+  return record
+}
+
+function normalizeEmployerField(raw: any): any {
+  if (!raw) return null
+  if (Array.isArray(raw)) return raw[0]
+  return raw
+}
+
+function employerHasActiveEba(employer: any): boolean {
+  if (!employer) return false
+  if (employer.enterprise_agreement_status === true) return true
+  const records = employer.company_eba_records
+  if (Array.isArray(records)) {
+    return records.some((record: any) => record?.fwc_certified_date)
+  }
+  return false
+}
+
 async function ensureAuthorizedUser(token: string) {
   const client = getUserClientFromToken(token)
   const { data: auth, error: authError } = await client.auth.getUser()
@@ -427,18 +507,13 @@ app.get('/v1/dashboard', async (req, res) => {
     let eba_builders = 0
     let total_employers = 0
     let eba_employers = 0
+    const projectCoreTradeEmployers = new Map<string, Record<CoreTradeKey, Set<string>>>()
+    const projectCoreTradeEbaEmployers = new Map<string, Record<CoreTradeKey, Set<string>>>()
     let avg_estimated_workers = 0
     let avg_assigned_workers = 0
     let avg_members = 0
     let financial_audit_activities = 0
-    let coreTrades = {
-      demolition: 0,
-      piling: 0,
-      concreting: 0,
-      formwork: 0,
-      scaffold: 0,
-      cranes: 0,
-    }
+    let coreTrades = createEmptyCoreTradeCounts()
     let projectsWithSiteDelegates = 0
     let projectsWithCompanyDelegates = 0
     let projectsWithHsrs = 0
@@ -460,8 +535,10 @@ app.get('/v1/dashboard', async (req, res) => {
           is_hsr_chair_delegate,
           has_full_health_and_safety_committee,
           contractor_role_types ( code ),
+          trade_types ( code ),
           employers!inner(
             id,
+            enterprise_agreement_status,
             company_eba_records(id, fwc_certified_date)
           )`
         )
@@ -499,7 +576,19 @@ app.get('/v1/dashboard', async (req, res) => {
         if (assignment.is_hsr_chair_delegate) projectsWithHsrChairDelegate++
         if (assignment.has_full_health_and_safety_committee) projectsWithFullHsCommittee++
 
-        // Drill into employer trade assignments if available via RPC or future joins
+        if (assignment.assignment_type === 'trade_work' && assignment.trade_types?.code) {
+          const coreKey = mapTradeCodeToCore(assignment.trade_types.code)
+          if (coreKey) {
+            const projectSets = getOrCreateProjectCoreSet(projectCoreTradeEmployers, assignment.project_id)
+            projectSets[coreKey].add(assignment.employer_id)
+
+            const employer = normalizeEmployerField(assignment.employers)
+            if (employerHasActiveEba(employer)) {
+              const ebaSets = getOrCreateProjectCoreSet(projectCoreTradeEbaEmployers, assignment.project_id)
+              ebaSets[coreKey].add(assignment.employer_id)
+            }
+          }
+        }
       })
 
       const calcAverage = (values: number[]) => (values.length ? values.reduce((sum, val) => sum + val, 0) / values.length : 0)
@@ -581,6 +670,20 @@ app.get('/v1/dashboard', async (req, res) => {
         if (typeof assignment.estimated_worker_count === 'number') entry.estimated.push(assignment.estimated_worker_count)
         if (typeof assignment.assigned_worker_count === 'number') entry.assigned.push(assignment.assigned_worker_count)
         if (typeof assignment.organiser_worker_count === 'number') entry.members.push(assignment.organiser_worker_count)
+
+        if (assignment.assignment_type === 'trade_work' && assignment.trade_types?.code) {
+          const coreKey = mapTradeCodeToCore(assignment.trade_types.code)
+          if (coreKey) {
+            const projectSets = getOrCreateProjectCoreSet(projectCoreTradeEmployers, assignment.project_id)
+            projectSets[coreKey].add(assignment.employer_id)
+
+            const employer = normalizeEmployerField(assignment.employers)
+            if (employerHasActiveEba(employer)) {
+              const ebaSets = getOrCreateProjectCoreSet(projectCoreTradeEbaEmployers, assignment.project_id)
+              ebaSets[coreKey].add(assignment.employer_id)
+            }
+          }
+        }
       })
 
       const calcAverage = (values: number[]) => (values.length ? values.reduce((sum, val) => sum + val, 0) / values.length : 0)
@@ -639,6 +742,25 @@ app.get('/v1/dashboard', async (req, res) => {
       ? mappedEmployers.reduce((sum: number, emp: any) => sum + (emp.member_density_percent || 0), 0) / mappedEmployers.length
       : 0
 
+    const aggregatedCoreTrades = createEmptyCoreTradeCounts()
+    const aggregatedEbaCoreTrades = createEmptyCoreTradeCounts()
+
+    for (const projectId of projectCoreTradeEmployers.keys()) {
+      const employerSets = projectCoreTradeEmployers.get(projectId)!
+      const counts = aggregateCoreTradeSets(employerSets)
+      for (const key of Object.keys(counts) as CoreTradeKey[]) {
+        aggregatedCoreTrades[key] += counts[key]
+      }
+
+      const ebaSets = projectCoreTradeEbaEmployers.get(projectId)
+      if (ebaSets) {
+        const ebaCounts = aggregateCoreTradeSets(ebaSets)
+        for (const key of Object.keys(ebaCounts) as CoreTradeKey[]) {
+          aggregatedEbaCoreTrades[key] += ebaCounts[key]
+        }
+      }
+    }
+
     const response = {
       project_counts,
       active_construction: {
@@ -649,7 +771,8 @@ app.get('/v1/dashboard', async (req, res) => {
         total_employers,
         eba_employers,
         eba_employer_percentage: total_employers > 0 ? (eba_employers / total_employers) * 100 : 0,
-        core_trades: coreTrades,
+        core_trades: aggregatedCoreTrades,
+        core_trades_eba: aggregatedEbaCoreTrades,
         projects_with_site_delegates: projectsWithSiteDelegates,
         projects_with_company_delegates: projectsWithCompanyDelegates,
         projects_with_hsrs: projectsWithHsrs,
