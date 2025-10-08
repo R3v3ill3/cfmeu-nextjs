@@ -362,7 +362,7 @@ app.get('/v1/dashboard', async (req, res) => {
   }
 
   try {
-    const sb = getUserClientFromToken(token)
+    const { client: sb } = await ensureAuthorizedUser(token)
 
     // Optional scoping: patch -> project ids (using mapping view, fallback if needed)
     let scopedProjectIds: string[] | null = null
@@ -692,6 +692,16 @@ app.get('/v1/dashboard', async (req, res) => {
     cache.set(cacheKey, response, 30_000)
     res.status(200).set({ 'Cache-Control': 'public, max-age=30', 'X-Cache': 'MISS' }).json(response)
   } catch (err: any) {
+    if (err?.message === 'Unauthorized') {
+      return res.status(401).json({ error: 'Unauthorized' })
+    }
+    if (err?.message === 'Forbidden') {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+    if (err?.message === 'profile_load_failed') {
+      logger.error({ err }, 'Profile load failed for dashboard')
+      return res.status(500).json({ error: 'Unable to load user profile' })
+    }
     logger.error({ err }, 'Dashboard endpoint error')
     res.status(500).json({ error: 'Failed to fetch dashboard' })
   }

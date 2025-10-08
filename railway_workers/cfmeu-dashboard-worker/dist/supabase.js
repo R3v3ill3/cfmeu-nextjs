@@ -14,8 +14,7 @@ function getServiceRoleClient() {
     return cachedServiceClient;
 }
 function getUserClientFromToken(jwt) {
-    // Use anon key behavior by passing no key, then attach Authorization via global header
-    const client = (0, supabase_js_1.createClient)(config_1.config.supabaseUrl, config_1.config.supabaseServiceKey, {
+    const client = (0, supabase_js_1.createClient)(config_1.config.supabaseUrl, config_1.config.supabaseAnonKey, {
         auth: { persistSession: false },
         global: { headers: { Authorization: `Bearer ${jwt}` } },
     });
