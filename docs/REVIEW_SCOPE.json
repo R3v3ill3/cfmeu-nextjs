@@ -1,0 +1,124 @@
+{
+  "apps": [
+    {
+      "name": "web-app",
+      "path": "./",
+      "framework": "nextjs-app-router",
+      "entrypoints": [
+        "src/app/layout.tsx",
+        "src/app/(app)/layout.tsx",
+        "src/middleware.ts",
+        "src/app/api/**/route.ts"
+      ],
+      "envsRequired": [
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_GOOGLE_MAPS_API_KEY",
+        "NEXT_PUBLIC_USE_WORKER_DASHBOARD",
+        "NEXT_PUBLIC_DASHBOARD_WORKER_URL",
+        "SUPABASE_URL",
+        "SUPABASE_ANON_KEY",
+        "SUPABASE_SERVICE_ROLE_KEY"
+      ],
+      "externalServices": ["Supabase", "Google Maps"],
+      "webhooks": [],
+      "notes": "Feature flags toggle worker-backed endpoints for projects and dashboard."
+    }
+  ],
+  "workers": [
+    {
+      "name": "cfmeu-dashboard-worker",
+      "path": "railway_workers/cfmeu-dashboard-worker",
+      "entry": "src/index.ts",
+      "health": "/health",
+      "envsRequired": [
+        "SUPABASE_URL",
+        "SUPABASE_SERVICE_KEY",
+        "SUPABASE_ANON_KEY",
+        "PORT",
+        "CORS_ORIGIN"
+      ],
+      "externalServices": ["Supabase"],
+      "queues": [],
+      "notes": "Caches dashboard/projects queries; background refresh via cron."
+    },
+    {
+      "name": "cfmeu-scraper-worker",
+      "path": "railway_workers/cfmeu-scraper-worker",
+      "entry": "src/index.ts",
+      "envsRequired": [
+        "SUPABASE_URL",
+        "SUPABASE_SERVICE_KEY",
+        "INCOLINK_EMAIL",
+        "INCOLINK_PASSWORD",
+        "POLL_INTERVAL_MS",
+        "LOCK_TIMEOUT_MS",
+        "CHROME_PATH",
+        "PUPPETEER_EXECUTABLE_PATH"
+      ],
+      "externalServices": ["Supabase", "Incolink", "FWC", "Chromium"],
+      "queues": [
+        {
+          "table": "scraper_jobs",
+          "types": ["fwc_lookup", "incolink_sync"]
+        }
+      ]
+    },
+    {
+      "name": "mapping-sheet-scanner-worker",
+      "path": "railway_workers/mapping-sheet-scanner-worker",
+      "entry": "src/index.ts",
+      "envsRequired": [
+        "SUPABASE_URL",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "CLAUDE_API_KEY or ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY",
+        "POLL_INTERVAL_MS"
+      ],
+      "externalServices": ["Supabase", "Anthropic", "OpenAI"],
+      "queues": [
+        {
+          "table": "scraper_jobs",
+          "types": ["mapping_sheet_scan"]
+        }
+      ]
+    },
+    {
+      "name": "bci-import-worker",
+      "path": "railway_workers/bci-import-worker",
+      "entry": "src/index.ts",
+      "health": "/health",
+      "envsRequired": [
+        "PORT",
+        "ALLOWED_ORIGIN"
+      ],
+      "externalServices": [],
+      "webhooks": [],
+      "notes": "CORS allows app origin; normalizes .xlsx to JSON"
+    }
+  ],
+  "infra": {
+    "vercel": {
+      "app": "web-app",
+      "headers": "next.config.mjs (CSP)",
+      "typecheck": "ignoreBuildErrors=true (should be disabled in CI)"
+    },
+    "railway": [
+      "cfmeu-dashboard-worker",
+      "cfmeu-scraper-worker",
+      "mapping-sheet-scanner-worker",
+      "bci-import-worker"
+    ],
+    "supabase": {
+      "auth": "browser + SSR via @supabase/ssr",
+      "rls": "enforced for user tables",
+      "rpc": [
+        "refresh_patch_project_mapping_view",
+        "apply_pending_user_on_login",
+        "search_employers_by_exact_name"
+      ]
+    }
+  }
+}
+
+

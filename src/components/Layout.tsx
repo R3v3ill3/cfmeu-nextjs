@@ -105,9 +105,10 @@ const Layout = ({ children }: LayoutProps) => {
     // Bug Report - external link
     items.push({ path: "https://fider.uconstruct.app", label: "Bug Report", icon: AlertTriangle, external: true });
     
-    // Administration - always show for admins
-    if (userRole === "admin") {
-      items.push({ path: "/admin", label: "Administration", icon: Shield });
+    // Administration / Management - show for admins and lead organisers
+    if (userRole === "admin" || userRole === "lead_organiser") {
+      const label = userRole === "admin" ? "Administration" : "Management";
+      items.push({ path: "/admin", label, icon: Shield });
     }
     
     return items;
