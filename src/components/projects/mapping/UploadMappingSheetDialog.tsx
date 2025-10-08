@@ -324,7 +324,7 @@ export function UploadMappingSheetDialog(props: UploadMappingSheetDialogProps) {
         setProcessingProgress(Math.min(50 + pollCount * 2, 90))
       }
 
-      if (data.status === 'completed' || data.status === 'review_new_project') {
+      if (data.status === 'completed' || data.status === 'under_review' || data.status === 'review_new_project') {
         setProcessingProgress(100)
         setStage('complete')
         toast.success('Scan completed!', {

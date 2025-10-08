@@ -69,10 +69,12 @@ export default function NewProjectScanReviewPage({ params }: PageProps) {
     )
   }
 
+  const placeholder = projectData || placeholderProject
+
   return (
     <ScanReviewContainer
       scanData={scanData}
-      projectData={projectData || placeholderProject}
+      projectData={placeholder}
       existingContacts={[]}
       allowProjectCreation
       onCancel={() => {
