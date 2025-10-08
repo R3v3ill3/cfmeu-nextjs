@@ -1,12 +1,31 @@
-# Vercel Build Cache Fix
+# Vercel Build Fix - RESOLVED ✅
 
 ## Issue
-Vercel builds failing with:
-1. "pnpm-lock.yaml is not up to date" (but it IS up to date locally)
-2. TypeScript errors about campaigns table not existing (but types ARE correct locally)
+Vercel builds failing with TypeScript error:
+```
+Type error: No overload matches this call.
+supabase.from("campaigns").insert({ ... })
+```
 
-## Root Cause
-**Vercel's build cache is corrupted/stale** after switching from npm to pnpm and making multiple rapid commits.
+The campaigns table exists in the database and types, but TypeScript treats it as `never`.
+
+## Root Cause - FOUND ✅
+**The `supabase` client export was missing explicit type annotations!**
+
+In `src/integrations/supabase/client.ts`, the client was exported as:
+```ts
+export let supabase = getSupabaseBrowserClient()
+```
+
+This caused TypeScript to lose the Database type information, making all table operations fail type checking.
+
+## Solution - FIXED ✅
+Added explicit Database types to the supabase client export:
+```ts
+export let supabase: SupabaseClient<Database> = getSupabaseBrowserClient()
+```
+
+**Status:** Fixed in commit 0bdc14b
 
 ## Solution: Clear Vercel Build Cache
 
