@@ -29,7 +29,7 @@ import ProjectsMapView from "./ProjectsMapView"
 import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
 import { CfmeuEbaBadge, getProjectEbaStatus } from "@/components/ui/CfmeuEbaBadge"
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner"
-import { getOrganisingUniverseBadgeVariant } from "@/utils/organisingUniverse"
+import { OrganizingUniverseBadge } from "@/components/ui/OrganizingUniverseBadge"
 import Link from "next/link"
 import { useNavigationLoading } from "@/hooks/useNavigationLoading"
 import { Upload } from "lucide-react"
@@ -107,12 +107,11 @@ function ProjectListItem({ project }: { project: ProjectCardData }) {
       
       <div className="flex items-center justify-between mt-2">
         <div className="flex items-center gap-2">
-          <Badge 
-            variant={getOrganisingUniverseBadgeVariant(project.organising_universe as any)} 
-            className="text-xs"
-          >
-            {project.organising_universe}
-          </Badge>
+          <OrganizingUniverseBadge
+            projectId={project.id}
+            currentStatus={project.organising_universe as any}
+            size="sm"
+          />
           <Badge variant="outline" className="text-xs">
             {project.stage_class?.replace('_', ' ')}
           </Badge>

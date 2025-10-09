@@ -7,6 +7,7 @@ import Image from 'next/image'
 interface NavigationLoadingContextType {
   isNavigating: boolean
   startNavigation: (targetPath: string) => void
+  setNavigationLoading: (loading: boolean, path?: string) => void
   targetPath: string | null
 }
 
@@ -41,9 +42,9 @@ export function NavigationLoadingProvider({ children }: { children: ReactNode })
     // Extract base paths for comparison
     const currentBasePath = pathname.split('?')[0]
     const targetBasePath = path.split('?')[0]
-    
+
     console.log('📍 Path comparison:', { currentBasePath, targetBasePath })
-    
+
     // Only start navigation if actually changing pages (ignore query param changes on same page)
     if (currentBasePath !== targetBasePath) {
       console.log('✨ Setting navigation state to true')
@@ -54,8 +55,17 @@ export function NavigationLoadingProvider({ children }: { children: ReactNode })
     }
   }
 
+  // Direct method to set loading state (for page-level loading that bypasses navigation logic)
+  const setNavigationLoading = (loading: boolean, path?: string) => {
+    console.log('🔧 setNavigationLoading called:', { loading, path })
+    setIsNavigating(loading)
+    if (path) {
+      setTargetPath(path)
+    }
+  }
+
   return (
-    <NavigationLoadingContext.Provider value={{ isNavigating, startNavigation, targetPath }}>
+    <NavigationLoadingContext.Provider value={{ isNavigating, startNavigation, setNavigationLoading, targetPath }}>
       {children}
     </NavigationLoadingContext.Provider>
   )

@@ -5,7 +5,7 @@ import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
 import { CfmeuEbaBadge, getProjectEbaStatus } from "@/components/ui/CfmeuEbaBadge"
 import Link from "next/link"
 import { useMemo } from "react"
-import { getOrganisingUniverseBadgeVariant } from "@/utils/organisingUniverse"
+import { OrganizingUniverseBadge } from "@/components/ui/OrganizingUniverseBadge"
 import { useNavigationLoading } from "@/hooks/useNavigationLoading"
 import { usePatchOrganiserLabels } from "@/hooks/usePatchOrganiserLabels"
 import { useQuery } from "@tanstack/react-query"
@@ -198,7 +198,11 @@ export function ProjectTable({
                     <Badge variant="secondary" className="text-[10px] capitalize">{String(project.stage_class).replace('_',' ')}</Badge>
                   )}
                   {project.organising_universe && (
-                    <Badge variant={getOrganisingUniverseBadgeVariant(project.organising_universe as any)} className="text-[10px] capitalize">{String(project.organising_universe)}</Badge>
+                    <OrganizingUniverseBadge
+                      projectId={project.id}
+                      currentStatus={project.organising_universe as any}
+                      size="sm"
+                    />
                   )}
                 </div>
               </TableCell>

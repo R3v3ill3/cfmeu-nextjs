@@ -4,6 +4,7 @@ import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
+import { OrganizingUniverseBadge } from "@/components/ui/OrganizingUniverseBadge"
 import { FolderOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useNavigationLoading } from "@/hooks/useNavigationLoading"
@@ -65,7 +66,11 @@ export function ProjectCard({ project }: { project: ProjectCardData }) {
             <Badge variant="secondary" className="capitalize">{project.stage_class.replace(/_/g, ' ')}</Badge>
           )}
           {project.organising_universe && (
-            <Badge variant="outline">{project.organising_universe}</Badge>
+            <OrganizingUniverseBadge
+              projectId={project.id}
+              currentStatus={project.organising_universe as any}
+              size="sm"
+            />
           )}
         </div>
         {project.full_address && (

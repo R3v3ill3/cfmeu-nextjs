@@ -4,7 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { CfmeuEbaBadge, getProjectEbaStatus } from "@/components/ui/CfmeuEbaBadge"
-import { getOrganisingUniverseBadgeVariant } from "@/utils/organisingUniverse"
+import { OrganizingUniverseBadge } from "@/components/ui/OrganizingUniverseBadge"
 import { Building2, FileUp, List, ExternalLink } from "lucide-react"
 import { ProjectSummary, ProjectRecord } from "@/hooks/useProjectsServerSide"
 
@@ -98,9 +98,11 @@ export function PatchProjectsTable({ projects, summaries, onAction, onOpenEmploy
                 </TableCell>
                 <TableCell>
                   {organisingUniverse ? (
-                    <Badge variant={getOrganisingUniverseBadgeVariant(organisingUniverse as any)} className="capitalize">
-                      {organisingUniverse.replace(/_/g, " ")}
-                    </Badge>
+                    <OrganizingUniverseBadge
+                      projectId={project.id}
+                      currentStatus={organisingUniverse as any}
+                      size="sm"
+                    />
                   ) : (
                     <span className="text-muted-foreground">—</span>
                   )}

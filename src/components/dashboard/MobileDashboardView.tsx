@@ -1,6 +1,7 @@
 "use client"
 
 import { useSearchParams } from "next/navigation"
+import { useEffect } from "react"
 import { useNewDashboardData } from "@/hooks/useNewDashboardData"
 import { AlertTriangle } from "lucide-react"
 import { ComplianceAlertsCard } from "@/components/dashboard/ComplianceAlertsCard"
@@ -11,6 +12,7 @@ import { ActiveConstructionMetricsComponent } from "@/components/dashboard/Activ
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { FilterIndicatorBadge } from "@/components/dashboard/FilterIndicatorBadge"
 import { useActiveFilters } from "@/hooks/useActiveFilters"
+import { useNavigationLoading } from "@/hooks/useNavigationLoading"
 
 export function MobileDashboardView() {
   const sp = useSearchParams()
@@ -18,15 +20,15 @@ export function MobileDashboardView() {
   const patchIds = patchParam.split(",").map(s => s.trim()).filter(Boolean)
   const { data, isLoading } = useNewDashboardData({ patchIds })
   const { hasActiveFilters, activeFilters } = useActiveFilters()
+  const { setNavigationLoading } = useNavigationLoading()
+
+  // Show navigation loading overlay while data is loading
+  useEffect(() => {
+    setNavigationLoading(isLoading, "/")
+  }, [isLoading, setNavigationLoading])
 
   if (isLoading) {
-    return (
-      <div className="space-y-4 px-safe py-4 pb-safe-bottom">
-        <div className="h-24 bg-gray-100 rounded-lg animate-pulse"></div>
-        <div className="h-48 bg-gray-100 rounded-lg animate-pulse"></div>
-        <div className="h-64 bg-gray-100 rounded-lg animate-pulse"></div>
-      </div>
-    )
+    return null
   }
 
   return (

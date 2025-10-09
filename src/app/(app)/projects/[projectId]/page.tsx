@@ -30,7 +30,7 @@ import { useUnifiedContractors } from "@/hooks/useUnifiedContractors"
 import { useProjectSubsetStats } from "@/hooks/useProjectSubsetStats"
 import { SubsetEbaStats } from "@/components/projects/SubsetEbaStats"
 import SelectiveEbaSearchManager from "@/components/projects/SelectiveEbaSearchManager"
-import { getOrganisingUniverseBadgeVariant } from "@/utils/organisingUniverse"
+import { OrganizingUniverseBadge } from "@/components/ui/OrganizingUniverseBadge"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { ComplianceDesktopView } from "@/components/projects/compliance/ComplianceDesktopView"
 import { ComplianceMobileView } from "@/components/projects/compliance/ComplianceMobileView"
@@ -620,7 +620,10 @@ export default function ProjectDetailPage() {
               <Badge variant="secondary" className="capitalize">{String(project.stage_class).replace('_',' ')}</Badge>
             )}
             {project?.organising_universe && (
-              <Badge variant={getOrganisingUniverseBadgeVariant(project.organising_universe)} className="capitalize">{String(project.organising_universe)}</Badge>
+              <OrganizingUniverseBadge
+                projectId={project.id}
+                currentStatus={project.organising_universe}
+              />
             )}
             {project?.value && (
               <span className="text-lg text-muted-foreground">

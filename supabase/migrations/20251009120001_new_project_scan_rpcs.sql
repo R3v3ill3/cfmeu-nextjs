@@ -312,8 +312,8 @@ GRANT EXECUTE ON FUNCTION create_project_from_scan(uuid, uuid, jsonb, jsonb, jso
 -- 3. Comments
 -- ==========================================
 
-COMMENT ON FUNCTION assign_contractor_role IS
+COMMENT ON FUNCTION assign_contractor_role(uuid, uuid, text, text, boolean, text, numeric, text) IS
   'Assigns a contractor role to a project. Used internally by project creation workflows.';
 
-COMMENT ON FUNCTION create_project_from_scan IS
+COMMENT ON FUNCTION create_project_from_scan(uuid, uuid, jsonb, jsonb, jsonb, jsonb) IS
   'Creates a complete project from a mapping sheet scan, including job sites, contacts, and subcontractor assignments. Handles all operations in a transaction.';

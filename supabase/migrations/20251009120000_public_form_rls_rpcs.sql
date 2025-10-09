@@ -689,14 +689,14 @@ GRANT EXECUTE ON FUNCTION log_help_interaction(uuid, text, text, numeric, jsonb,
 -- 5. Comments
 -- ==========================================
 
-COMMENT ON FUNCTION validate_public_token IS
+COMMENT ON FUNCTION validate_public_token(text) IS
   'Validates a public access token and returns resource information. Used by public form APIs.';
 
-COMMENT ON FUNCTION get_public_form_data IS
+COMMENT ON FUNCTION get_public_form_data(text) IS
   'Fetches public form data for a valid token. Returns minimal project data securely without service-role key.';
 
-COMMENT ON FUNCTION submit_public_form IS
+COMMENT ON FUNCTION submit_public_form(text, jsonb) IS
   'Submits public form updates for a valid token. Handles project, address, and site contact updates securely.';
 
-COMMENT ON FUNCTION log_help_interaction IS
+COMMENT ON FUNCTION log_help_interaction(uuid, text, text, numeric, jsonb, jsonb, text, integer, integer) IS
   'Logs a help chat interaction. Used by help chat API to avoid service-role key exposure. Validates that user can only log their own interactions.';

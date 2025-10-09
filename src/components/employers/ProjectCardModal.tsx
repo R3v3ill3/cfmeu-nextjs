@@ -7,7 +7,6 @@ import { Building, ExternalLink, Users, MapPin } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
 import { CfmeuEbaBadge, getProjectEbaStatus } from "@/components/ui/CfmeuEbaBadge"
-import { getOrganisingUniverseBadgeVariant } from "@/utils/organisingUniverse"
 
 interface ProjectCardModalProps {
   isOpen: boolean
