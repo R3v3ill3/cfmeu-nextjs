@@ -1,0 +1,63 @@
+CFMEU Organiser Platform - Sidebar Interface Description
+
+The image displays a user interface for the "CFMEU Organiser Platform," featuring a left-hand navigation sidebar and a main content area with various data summaries and charts.
+
+**High-Level Description:**
+The screenshot shows a web application dashboard. On the left is a navigation sidebar with several menu items and user information. The main content area on the right presents an "EBA Coverage" summary with a circular progress chart, a "Project Overview" table, and a partially visible "Organising Universe Summary" section.
+
+**Detailed Description:**
+
+1.  **Top Header Bar:**
+    *   At the very top left, there's a square icon with a smaller square inside, followed by the text "CFMEU Organiser Platform".
+
+2.  **Left Sidebar (Navigation Panel):**
+    *   Below the main header, there's a section labeled "Union platform".
+    *   A "Search" bar with a magnifying glass icon is present.
+    *   **EBA Coverage Section:**
+        *   A document icon is next to the title "EBA Coverage".
+        *   A descriptive text reads: "Enterprise Bargaining Agreement coverage across employers".
+        *   A sub-heading states: "Builders on Active Construction".
+    *   **Main Navigation Menu:**
+        *   **Dashboard:** This item is highlighted in dark blue, indicating it's the currently active view. It has a house icon.
+        *   **Projects:** Accompanied by a folder icon.
+        *   **Patch:** Accompanied by a person icon.
+            *   Under "Patch", there are two sub-items: "Known builders" (with a green dot) and "Builders with EBA" (with a blue dot).
+        *   **Employers:** Accompanied by a building icon.
+    *   **Project Overview Section:**
+        *   A map pin icon is next to the title "Project Overview".
+        *   A description reads: "Summary by stage and universe. Click any number to drill in."
+    *   **Additional Links/Sections:**
+        *   **User Guide:** With a question mark icon.
+        *   **Bug Report Construction:** With a warning triangle icon.
+        *   **Administration Pre-construction:** With a shield icon.
+        *   **Join CFMEU:** With an icon depicting multiple people.
+    *   **User Account Information (Bottom of Sidebar):**
+        *   "Signed in as"
+        *   "troyburton@gmail.com"
+        *   A "Logout" button with an arrow pointing out of a square icon.
+
+3.  **Main Content Area:**
+    *   **EBA Coverage Summary:**
+        *   A large, incomplete circular progress chart is displayed. It has a grey background ring, with a blue segment and a green segment indicating progress.
+        *   To the right of this chart, there's a legend or summary:
+            *   "272 / 278 (98%)" with a green dot, likely corresponding to "Known builders".
+            *   "103 / 278 (37%)" with a blue dot, likely corresponding to "Builders with EBA".
+            *   The text "Key" is partially visible above these numbers.
+    *   **Project Overview Table:**
+        *   This table has four columns: "STAGE", "ACTIVE", "POTENTIAL", and "EXCL" (presumably "Excluded").
+        *   **Row 1 (Construction):**
+            *   STAGE: "Construction"
+            *   ACTIVE: "125"
+            *   POTENTIAL: "274"
+            *   EXCL: "2"
+        *   **Row 2 (Pre-construction):**
+            *   STAGE: "Pre-construction"
+            *   ACTIVE: "53"
+            *   POTENTIAL: "102"
+            *   EXCL: "1"
+        *   Below the table, there's a "View All Projects" link with a folder icon.
+    *   **Organising Universe Summary (Partially Visible):**
+        *   A large heading reads "Organising Universe Summary".
+        *   A descriptive text below it says: "Role-based project organising metrics and patch summaries".
+
+The overall aesthetic is clean and modern, with a white background for the content area and a dark blue highlight for the active navigation item.
