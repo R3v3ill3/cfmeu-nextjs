@@ -261,7 +261,19 @@ export async function GET(request: NextRequest) {
       phone,
       estimated_worker_count,
       incolink_id,
-      company_eba_records!left(id, eba_status, eba_expiry_date, date_lodged),
+      enterprise_agreement_status,
+      company_eba_records!left(
+        id,
+        status,
+        nominal_expiry_date,
+        fwc_certified_date,
+        eba_lodged_fwc,
+        date_eba_signed,
+        date_vote_occurred,
+        eba_data_form_received,
+        date_draft_signing_sent,
+        date_barg_docs_sent
+      ),
       worker_placements!left(id),
       project_assignments!left(id)
     `, { count: 'exact' });
@@ -330,6 +342,7 @@ export async function GET(request: NextRequest) {
       phone: row.phone,
       estimated_worker_count: row.estimated_worker_count,
       incolink_id: row.incolink_id,
+      enterprise_agreement_status: row.enterprise_agreement_status,
 
       // Transform to match existing client structure
       company_eba_records: row.company_eba_records || [],
@@ -355,15 +368,50 @@ export async function GET(request: NextRequest) {
 
     // Post-filter for EBA status (until we have a view with precomputed column)
     if (eba !== 'all') {
+      const parseDate = (value?: string | null) => {
+        if (!value) return null;
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? null : date;
+      };
+
+      const withinMonths = (value: string | null | undefined, months: number) => {
+        const date = parseDate(value);
+        if (!date) return false;
+        const cutoff = new Date();
+        cutoff.setMonth(cutoff.getMonth() - months);
+        return date >= cutoff;
+      };
+
+      const withinYears = (value: string | null | undefined, years: number) => withinMonths(value, years * 12);
+
       employers = employers.filter(emp => {
         const records = emp.company_eba_records || [];
+
+        const hasActiveOverride = emp.enterprise_agreement_status === true;
+        const hasRecentCertified = records.some((r: any) => withinYears(r.fwc_certified_date, 4));
+        const hasRecentLodged = records.some((r: any) => withinYears(r.eba_lodged_fwc, 1));
+        const hasRecentSigned = records.some((r: any) => withinMonths(r.date_eba_signed, 6));
+        const hasRecentVote = records.some((r: any) => withinMonths(r.date_vote_occurred, 6));
+        const hasInProgress = records.some((r: any) =>
+          r.eba_data_form_received || r.date_draft_signing_sent || r.date_barg_docs_sent
+        );
+
         if (eba === 'active') {
-          return records.some((r: any) => r.eba_status === 'active');
-        } else if (eba === 'lodged') {
-          return records.some((r: any) => r.date_lodged);
-        } else if (eba === 'no') {
-          return records.length === 0;
+          return hasActiveOverride || hasRecentCertified;
         }
+
+        if (eba === 'lodged') {
+          return hasRecentLodged;
+        }
+
+        if (eba === 'pending') {
+          return hasRecentSigned || hasRecentVote || hasInProgress;
+        }
+
+        if (eba === 'no') {
+          return !hasActiveOverride && !hasRecentCertified && !hasRecentLodged && !hasRecentSigned && !hasRecentVote && !hasInProgress;
+        }
+
         return true;
       });
     }
