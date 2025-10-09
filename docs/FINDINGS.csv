@@ -1,0 +1,12 @@
+id,severity,path,rationale,repro,impact
+F-001,Critical,src/app/api/public/form-data/[token]/route.ts,"Service role key used in a public API route; risks data exposure if endpoint abused.","See lines where createClient uses SUPABASE_SERVICE_ROLE_KEY; curl GET/POST to /api/public/form-data/[token]","Potential privilege escalation; bypass RLS; data modification by unauthenticated actors if token guessed/leaked"
+F-002,Serious,src/app/api/projects/route.ts,"Materialized view refresh attempted on hot path during fallback, adds latency under load.","Patch ids with empty mapping triggers rpc('refresh_patch_project_mapping_view')","Increased p95 latency; potential timeouts under 25 concurrent users during patch filters"
+F-003,Serious,src/components/employers/EmployersDesktopView.tsx,"Client fetch selects large dataset and limit 5000 in browser.","Open employers page; observe network and memory; see .limit(5000)","High bandwidth and slow rendering; worsens on low-end devices; risks rate limits"
+F-004,Serious,src/hooks/useProjectsServerSide.ts,"Worker fallback logic OK, but depends on NEXT_PUBLIC_* worker URL; ensure feature flags and token availability.","Toggle NEXT_PUBLIC_USE_WORKER_PROJECTS and worker URL absent","Silent fallback may mask worker outages; inconsistent performance"
+F-005,Serious,next.config.mjs,"CSP allows 'unsafe-inline' and 'unsafe-eval'.", "Inspect headers() CSP","XSS risk in prod; policy too permissive"
+F-006,Serious,Repository-wide,"Typecheck reports numerous TS errors (incompatible table types, RPC names, enums).", "Run: tsc --noEmit","Hidden production defects due to ignoreBuildErrors; unexpected runtime failures"
+F-007,Moderate,src/app/api/projects/new-from-scan/route.ts,"RPC 'perform_transaction' not in generated types; JSON shape mismatches; service key usage in app route.","Run: tsc --noEmit; inspect errors","Route likely broken in prod; transaction handling brittle; secret usage in serverless"
+F-008,Moderate,src/app/api/help/chat/route.ts,"Insert payload types incompatible with table (user_id/context).","Run: tsc --noEmit","Help chat persistence broken; silent failures at runtime"
+F-009,Moderate,src/hooks/useProjectsServerSide.ts,"React Query option keepPreviousData is removed in v5.","Run: tsc --noEmit","Build warnings; behavior changes under navigation"
+F-010,Moderate,src/components/patchwall/EmployerWorkerChart.tsx,"Multiple sequential queries with .in() against large arrays; N+1-ish pattern.","Load employer chart for large selection","Slow responses; rate limiting"
+

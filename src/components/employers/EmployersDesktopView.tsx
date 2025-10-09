@@ -163,7 +163,7 @@ export function EmployersDesktopView() {
       // Apply sorting
       const scoreDate = (x: any) => {
         const r = x.company_eba_records?.[0] || {}
-        const dates = [r.fwc_certified_date, r.eba_lodged_fwc, r.date_eba_signed, r.date_vote_occurred, r.date_vote_occured]
+        const dates = [r.fwc_certified_date, r.eba_lodged_fwc, r.date_eba_signed, r.date_vote_occurred]
           .map((d: any) => (d ? new Date(d).getTime() : 0))
         return Math.max(0, ...dates)
       }

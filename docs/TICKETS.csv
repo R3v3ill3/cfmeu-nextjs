@@ -1,0 +1,10 @@
+id,title,severity,owner,steps,est_hours,deps,status
+F-001,Remove service-role from public form API,Critical,unassigned,"1) Create RLS-backed RPC or worker proxy 2) Replace route client with anon SSR 3) Add signed token verification/idempotency 4) Tests",12,,open
+F-011,Remove service-role from help chat route,Critical,unassigned,"1) Move inserts to worker or RPC 2) Restrict Next route to anon auth 3) Tests",16,,open
+F-002,Stop matview refresh on /api/projects fallback,Serious,unassigned,"1) Delete hot-path RPC 2) Ensure worker cron refresh 3) Verify patch filter perf",10,,open
+F-003,Paginate employers and reduce payload,Serious,unassigned,"1) Add paginated API/worker endpoint 2) Update EmployersDesktopView 3) Implement typed employer search endpoint returning up to 100 results (async typeahead, optional infinite scroll) 4) Tests",12,,open
+F-006,Re-enable CI type/lint gates and fix top TS errors,Serious,unassigned,"1) Update CI to fail on tsc/eslint 2) Fix top 25 errors 3) Block merge until green",24,,open
+F-005,Harden production CSP (nonce, no inline/eval),Serious,unassigned,"1) Implement nonce CSP 2) Whitelist Maps 3) Verify headers",8,,open
+F-012,Fix new-from-scan RPC/types and move tx to worker,Critical,unassigned,"1) Create missing RPCs 2) Regenerate types 3) Move service-role to worker 4) Tests",18,,open
+F-020,Type the employer merge RPC and wire UI,Serious,unassigned,"1) Regenerate types 2) Use typed RPC or worker 3) Tests",10,,open
+

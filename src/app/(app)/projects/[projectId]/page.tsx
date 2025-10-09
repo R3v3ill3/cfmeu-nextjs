@@ -454,7 +454,7 @@ export default function ProjectDetailPage() {
       if (ids.length === 0) return {}
       const { data } = await supabase
         .from("company_eba_records")
-        .select("employer_id, fwc_certified_date, eba_lodged_fwc, date_eba_signed, date_vote_occurred, date_vote_occured")
+        .select("employer_id, fwc_certified_date, eba_lodged_fwc, date_eba_signed, date_vote_occurred")
         .in("employer_id", ids)
       const byId = new Map<string, any>()
       ;(data || []).forEach((r: any) => {

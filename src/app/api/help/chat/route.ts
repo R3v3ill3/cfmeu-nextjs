@@ -1,16 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
-import { createClient } from '@supabase/supabase-js'
-import type { Database } from '@/types/database'
+import { createServerSupabase } from '@/lib/supabase/server'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
 })
-
-const supabase = createClient<Database>(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
 
 interface HelpContext {
   page: string
@@ -33,7 +27,7 @@ interface Source {
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
-  
+
   try {
     // 1. Parse request
     const body = await request.json()
@@ -50,18 +44,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 2. Get authenticated user
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
+    // 2. Get authenticated user using anon SSR client
+    const supabase = await createServerSupabase()
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace('Bearer ', '')
-    )
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
 
     if (authError || !user) {
       return NextResponse.json(
@@ -124,17 +110,18 @@ export async function POST(request: NextRequest) {
     // 7. If confidence too low, return fallback
     if (confidence < 0.6) {
       const fallbackAnswer = "I don't have enough information to answer that question accurately. Please refer to the user guide at /guide or contact support for assistance."
-      
-      // Log low-confidence interaction
-      await supabase.from('help_interactions').insert({
-        user_id: user.id,
-        question: message,
-        answer: fallbackAnswer,
-        confidence: confidence,
-        context: context,
-        sources: [],
-        ai_provider: 'claude',
-        response_time_ms: Date.now() - startTime,
+
+      // Log low-confidence interaction via RPC
+      await supabase.rpc('log_help_interaction', {
+        p_user_id: user.id,
+        p_question: message,
+        p_answer: fallbackAnswer,
+        p_confidence: confidence,
+        p_context: context as any,
+        p_sources: [],
+        p_ai_provider: 'claude',
+        p_tokens_used: null,
+        p_response_time_ms: Date.now() - startTime,
       })
 
       return NextResponse.json({
@@ -236,17 +223,17 @@ Remember: Only answer based on the documentation above. If you're not sure, say 
     // 13. Extract suggested actions from documents
     const suggestedActions = extractSuggestedActions(context, relevantDocs)
 
-    // 14. Log interaction
-    await supabase.from('help_interactions').insert({
-      user_id: user.id,
-      question: message,
-      answer: answer,
-      confidence: confidence,
-      context: context,
-      sources: sources,
-      ai_provider: 'claude',
-      tokens_used: claudeResponse.usage.input_tokens + claudeResponse.usage.output_tokens,
-      response_time_ms: Date.now() - startTime,
+    // 14. Log interaction via RPC
+    await supabase.rpc('log_help_interaction', {
+      p_user_id: user.id,
+      p_question: message,
+      p_answer: answer,
+      p_confidence: confidence,
+      p_context: context as any,
+      p_sources: sources as any,
+      p_ai_provider: 'claude',
+      p_tokens_used: claudeResponse.usage.input_tokens + claudeResponse.usage.output_tokens,
+      p_response_time_ms: Date.now() - startTime,
     })
 
     // 15. Return response

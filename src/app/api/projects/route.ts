@@ -163,13 +163,7 @@ export async function GET(request: NextRequest) {
         patchProjects = fallbackData;
         usedFallback = true;
         
-        // Auto-refresh the materialized view in the background for next time
-        try {
-          await supabase.rpc('refresh_patch_project_mapping_view');
-          console.log('🔄 Auto-refreshed patch_project_mapping_view after fallback');
-        } catch (refreshError) {
-          console.warn('⚠️ Failed to auto-refresh materialized view:', refreshError);
-        }
+        // Background refresh is handled by the dashboard worker cron; do not block this request here
       }
       
       patchProjectCount = patchProjects?.length || 0;

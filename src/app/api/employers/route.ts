@@ -249,27 +249,31 @@ export async function GET(request: NextRequest) {
     const eba = (searchParams.get('eba') || 'all') as EmployersRequest['eba'];
     const type = (searchParams.get('type') || 'all') as EmployersRequest['type'];
 
-    // Build query using the optimized materialized view plus additional data
-    let query = supabase.from('employer_list_view').select('*', { count: 'exact' });
+    // Build query - use employer_list_view if available, otherwise fall back to employers table
+    // TODO: Create employer_list_view for optimal performance
+    let query = supabase.from('employers').select(`
+      id,
+      name,
+      abn,
+      employer_type,
+      website,
+      email,
+      phone,
+      estimated_worker_count,
+      incolink_id,
+      company_eba_records!left(id, eba_status, eba_expiry_date, date_lodged),
+      worker_placements!left(id),
+      project_assignments!left(id)
+    `, { count: 'exact' });
     
     // Add parameter to control whether to include enhanced data (projects, organisers)
     const includeEnhanced = searchParams.get('enhanced') === 'true';
 
-    // Apply filters exactly like client-side logic
-    
-    // Text search filter - replicate the client-side haystack logic
+    // Apply filters
+
+    // Text search filter (name only for now; full-text search would require a view)
     if (q) {
-      query = query.ilike('search_text', `%${q}%`);
-    }
-
-    // Engagement filter - use pre-computed column
-    if (engaged !== undefined) {
-      query = query.eq('is_engaged', engaged);
-    }
-
-    // EBA status filter - use pre-computed column
-    if (eba !== 'all') {
-      query = query.eq('eba_category', eba);
+      query = query.ilike('name', `%${q}%`);
     }
 
     // Employer type filter
@@ -277,17 +281,18 @@ export async function GET(request: NextRequest) {
       query = query.eq('employer_type', type);
     }
 
-    // Apply sorting with exact same logic as client
-    const sortMapping = {
-      name: 'name',
-      estimated: 'estimated_worker_count',
-      eba_recency: 'eba_recency_score'
-    };
-    
-    query = query.order(sortMapping[sort], { 
-      ascending: dir === 'asc',
-      nullsFirst: false 
-    });
+    // Note: Engagement and EBA filters will be applied post-query
+    // For better performance, create employer_list_view with precomputed columns
+
+    // Apply sorting
+    if (sort === 'name') {
+      query = query.order('name', { ascending: dir === 'asc' });
+    } else if (sort === 'estimated') {
+      query = query.order('estimated_worker_count', { ascending: dir === 'asc', nullsFirst: false });
+    } else {
+      // eba_recency requires complex logic, default to name sort
+      query = query.order('name', { ascending: true });
+    }
 
     // Apply pagination
     const from = (page - 1) * pageSize;
@@ -314,40 +319,54 @@ export async function GET(request: NextRequest) {
       enhancedData = await fetchEnhancedEmployerData(supabase, uniqueEmployerIds);
     }
 
-    // Transform data to match client expectations
-    const employerMap = new Map<string, EmployerRecord>();
-    
-    (data || []).forEach((row: any) => {
-      const employerId = row.id;
-      
-      // If we already have this employer, skip it (deduplication)
-      if (employerMap.has(employerId)) {
-        console.warn(`Duplicate employer detected: ${row.name} (${employerId})`);
-        return;
-      }
-      
-      employerMap.set(employerId, {
-        id: row.id,
-        name: row.name,
-        abn: row.abn,
-        employer_type: row.employer_type,
-        website: row.website,
-        email: row.email,
-        phone: row.phone,
-        estimated_worker_count: row.estimated_worker_count,
-        incolink_id: null, // Will be set from enhancedData if available
-        
-        // Transform to match existing client structure
-        company_eba_records: row.company_eba_record ? [row.company_eba_record] : [],
-        worker_placements: row.worker_placement_ids ? row.worker_placement_ids.map((id: string) => ({ id })) : [],
-        project_assignments: row.project_assignment_ids ? row.project_assignment_ids.map((id: string) => ({ id })) : [],
-        
-        // Add enhanced data if available
-        ...(includeEnhanced && enhancedData[row.id] ? enhancedData[row.id] : {}),
+    // Transform data to match client expectations and apply post-filters
+    let employers: EmployerRecord[] = (data || []).map((row: any) => ({
+      id: row.id,
+      name: row.name,
+      abn: row.abn,
+      employer_type: row.employer_type,
+      website: row.website,
+      email: row.email,
+      phone: row.phone,
+      estimated_worker_count: row.estimated_worker_count,
+      incolink_id: row.incolink_id,
+
+      // Transform to match existing client structure
+      company_eba_records: row.company_eba_records || [],
+      worker_placements: row.worker_placements || [],
+      project_assignments: row.project_assignments || [],
+
+      // Add enhanced data if available
+      ...(includeEnhanced && enhancedData[row.id] ? enhancedData[row.id] : {}),
+    }));
+
+    // Post-filter for engagement (until we have a view with precomputed column)
+    if (engaged) {
+      employers = employers.filter(emp =>
+        (emp.project_assignments && emp.project_assignments.length > 0) ||
+        (emp.worker_placements && emp.worker_placements.length > 0)
+      );
+    } else if (engaged === false) {
+      employers = employers.filter(emp =>
+        (!emp.project_assignments || emp.project_assignments.length === 0) &&
+        (!emp.worker_placements || emp.worker_placements.length === 0)
+      );
+    }
+
+    // Post-filter for EBA status (until we have a view with precomputed column)
+    if (eba !== 'all') {
+      employers = employers.filter(emp => {
+        const records = emp.company_eba_records || [];
+        if (eba === 'active') {
+          return records.some((r: any) => r.eba_status === 'active');
+        } else if (eba === 'lodged') {
+          return records.some((r: any) => r.date_lodged);
+        } else if (eba === 'no') {
+          return records.length === 0;
+        }
+        return true;
       });
-    });
-    
-    const employers: EmployerRecord[] = Array.from(employerMap.values());
+    }
 
     const totalCount = count || 0;
     const totalPages = Math.ceil(totalCount / pageSize);
@@ -400,14 +419,14 @@ export async function GET(request: NextRequest) {
 export async function HEAD() {
   try {
     const supabase = await createServerSupabase();
-    
+
     // Quick health check - just count employers
     const { count, error } = await supabase
-      .from('employer_list_view')
+      .from('employers')
       .select('*', { count: 'exact', head: true });
-    
+
     if (error) throw error;
-    
+
     return new NextResponse(null, {
       status: 200,
       headers: {

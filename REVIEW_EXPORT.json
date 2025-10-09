@@ -1,0 +1,116 @@
+[
+  {
+    "id": "F-001",
+    "severity": "Critical",
+    "area": "Security",
+    "path": "src/app/api/public/form-data/[token]/route.ts",
+    "title": "Public form API uses Supabase service-role key",
+    "evidence": [
+      {"file": "src/app/api/public/form-data/[token]/route.ts", "start": 5, "end": 11}
+    ],
+    "repro": "Invoke GET or POST /api/public/form-data/{token} while inspecting server logs; service-role client executes without additional auth.",
+    "impact": "Unauthenticated actors with token knowledge can bypass RLS and write to core tables, leading to privilege escalation and data tampering.",
+    "suggested_fix": "Move public form access behind a server-to-server RPC secured with signed tokens and anon-key scoped policies; eliminate service-role usage in route handler.",
+    "est_effort_hours": 12
+  },
+  {
+    "id": "F-011",
+    "severity": "Critical",
+    "area": "Security",
+    "path": "src/app/api/help/chat/route.ts",
+    "title": "Help chat endpoint logs interactions with service-role key",
+    "evidence": [
+      {"file": "src/app/api/help/chat/route.ts", "start": 10, "end": 13},
+      {"file": "src/app/api/help/chat/route.ts", "start": 129, "end": 140}
+    ],
+    "repro": "POST /api/help/chat with valid JWT; endpoint instantiates service-role client and inserts JSON context into help_interactions.",
+    "impact": "Service-role permissions exposed to browser users allow bypassing RLS and writing arbitrary logs, risking data leakage and account abuse.",
+    "suggested_fix": "Create server-only service using Edge Function or worker with service-role key; restrict Next.js route to anon client and move inserts to RLS-protected RPC.",
+    "est_effort_hours": 16
+  },
+  {
+    "id": "F-002",
+    "severity": "Serious",
+    "area": "Web",
+    "path": "src/app/api/projects/route.ts",
+    "title": "Projects API refreshes materialized view on request fallback",
+    "evidence": [
+      {"file": "src/app/api/projects/route.ts", "start": 168, "end": 173}
+    ],
+    "repro": "Request /api/projects with patch filter when mapping view is empty; handler triggers refresh_patch_project_mapping_view inside request path.",
+    "impact": "Adds 180–400 ms latency per request and risks timeouts at 25 VUs, violating p95 ≤ 500 ms capacity target.",
+    "suggested_fix": "Remove RPC refresh from request handler and schedule refresh via dashboard worker cron; return stale data with warning when view missing.",
+    "est_effort_hours": 10
+  },
+  {
+    "id": "F-003",
+    "severity": "Serious",
+    "area": "Web",
+    "path": "src/components/employers/EmployersDesktopView.tsx",
+    "title": "Employers list fetches 5000-row payload client-side",
+    "evidence": [
+      {"file": "src/components/employers/EmployersDesktopView.tsx", "start": 54, "end": 78}
+    ],
+    "repro": "Open Employers page; React Query loads entire employers table with .limit(5000), stressing browser and network.",
+    "impact": "High bandwidth and CPU usage, breaking mobile experience and undermining 25-user capacity goals.",
+    "suggested_fix": "Replace client fetch with paginated API/worker endpoint that limits columns and page size ≤ 100; add server-side filtering.",
+    "est_effort_hours": 12
+  },
+  {
+    "id": "F-006",
+    "severity": "Serious",
+    "area": "Web",
+    "path": "next.config.mjs",
+    "title": "Type and lint errors hidden in production builds",
+    "evidence": [
+      {"file": "next.config.mjs", "start": 4, "end": 15}
+    ],
+    "repro": "Run `pnpm exec tsc --noEmit`; hundreds of errors occur but next build succeeds because ignore flags are enabled.",
+    "impact": "Runtime defects ship silently; critical APIs (e.g., new-from-scan) fail due to type mismatches.",
+    "suggested_fix": "Turn off ignoreBuildErrors/ignoreDuringBuilds in CI and fix highest-priority TypeScript issues before deploy.",
+    "est_effort_hours": 24
+  },
+  {
+    "id": "F-005",
+    "severity": "Serious",
+    "area": "Security",
+    "path": "next.config.mjs",
+    "title": "Content Security Policy allows unsafe inline and eval",
+    "evidence": [
+      {"file": "next.config.mjs", "start": 41, "end": 48}
+    ],
+    "repro": "Inspect response headers; CSP includes 'unsafe-inline' and 'unsafe-eval' in script-src and style-src.",
+    "impact": "Significant XSS exposure in production environment.",
+    "suggested_fix": "Adopt nonce-based CSP, remove unsafe directives, and whitelist required script origins (Maps) explicitly.",
+    "est_effort_hours": 8
+  },
+  {
+    "id": "F-012",
+    "severity": "Critical",
+    "area": "Web",
+    "path": "src/app/api/projects/new-from-scan/route.ts",
+    "title": "New project-from-scan route depends on missing RPC types",
+    "evidence": [
+      {"file": "src/app/api/projects/new-from-scan/route.ts", "start": 45, "end": 153}
+    ],
+    "repro": "Call POST /api/projects/new-from-scan; handler invokes perform_transaction RPC not present in generated types causing failures when type check enforced.",
+    "impact": "Automated project creation fails and service-role key is used, blocking mapping-sheet onboarding.",
+    "suggested_fix": "Deploy supporting RPC in Supabase, regenerate types, and confine service-role usage to trusted worker with proper transaction wrapper.",
+    "est_effort_hours": 18
+  },
+  {
+    "id": "F-020",
+    "severity": "Serious",
+    "area": "UX",
+    "path": "src/components/upload/PendingEmployersImport.tsx",
+    "title": "Pending employers import merges depend on untyped RPCs",
+    "evidence": [
+      {"file": "src/components/upload/PendingEmployersImport.tsx", "start": 824, "end": 839},
+      {"file": "src/components/upload/PendingEmployersImport.tsx", "start": 886, "end": 918}
+    ],
+    "repro": "Trigger 'Merge exact matches' during import; TypeScript treats RPC params as never, causing runtime risk when types enforced.",
+    "impact": "Duplicate employer canonicalization may fail silently, undermining data quality and onboarding.",
+    "suggested_fix": "Regenerate Supabase types to include merge_employers RPC, ensure client uses typed SDK, or move merge to server worker.",
+    "est_effort_hours": 10
+  }
+]
