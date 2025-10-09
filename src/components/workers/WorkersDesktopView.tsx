@@ -127,7 +127,7 @@ export function WorkersDesktopView() {
         </div>
       </div>
 
-      <div className="sticky top-0 z-30 -mx-6 px-6 py-3 bg-background/95 supports-[backdrop-filter]:bg-background/80 backdrop-blur border-y space-y-3">
+      <div className="sticky top-0 z-30 -mx-6 px-6 py-3 bg-white shadow-sm border-b space-y-3">
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[220px] max-w-md">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

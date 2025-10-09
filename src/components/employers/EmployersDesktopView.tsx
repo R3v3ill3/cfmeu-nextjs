@@ -208,7 +208,7 @@ export function EmployersDesktopView() {
           </div>
         )}
       </div>
-      <div className="sticky top-0 z-30 -mx-6 px-6 py-3 bg-background/40 backdrop-blur supports-[backdrop-filter]:bg-background/30 border-b">
+      <div className="sticky top-0 z-30 -mx-6 px-6 py-3 bg-white shadow-sm border-b">
         <div className="flex flex-wrap items-center gap-3">
           <div className="min-w-[240px] flex-1">
             <div className="text-xs text-muted-foreground mb-1">Search</div>

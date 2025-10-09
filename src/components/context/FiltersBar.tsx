@@ -114,7 +114,7 @@ export function FiltersBar({ patchOptions, statusOptions }: FiltersBarProps) {
   })
 
   return (
-    <div className="sticky top-0 z-30 flex flex-col gap-3 border-b bg-background/95 supports-[backdrop-filter]:bg-background/80 backdrop-blur p-3">
+    <div className="sticky top-0 z-30 flex flex-col gap-3 border-b bg-white shadow-sm p-3">
       <Breadcrumb>
         <BreadcrumbList>
           <BreadcrumbItem>

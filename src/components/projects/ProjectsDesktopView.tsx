@@ -863,7 +863,7 @@ export function ProjectsDesktopView() {
         )}
       </div>
       {/* Improved Header with Search and Quick Actions */}
-      <div className="sticky top-0 z-30 -mx-6 px-6 py-3 bg-background/40 backdrop-blur supports-[backdrop-filter]:bg-background/30 border-b space-y-3">
+      <div className="sticky top-0 z-30 -mx-6 px-6 py-3 bg-white shadow-sm border-b space-y-3">
         {/* Top Row: Search, Actions, and View Toggle */}
         <div className="flex items-center gap-3">
           <div className="flex-1 max-w-md">
