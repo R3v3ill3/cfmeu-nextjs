@@ -59,11 +59,32 @@ export async function processMappingSheetScan(
       processing_time_ms: result.processingTimeMs,
     })
 
+    // Fetch scan record to check upload_mode
+    const { data: scanRecord, error: scanError } = await supabase
+      .from('mapping_sheet_scans')
+      .select('upload_mode')
+      .eq('id', scanId)
+      .single()
+
+    if (scanError) {
+      console.error(`[processor] Failed to fetch scan record:`, scanError)
+      throw new Error(`Failed to fetch scan record: ${scanError.message}`)
+    }
+
+    // Determine final status based on upload_mode
+    // - new_project scans: review_new_project (triggers quick finder dialog)
+    // - existing_project scans: completed (goes straight to under_review)
+    const finalStatus = scanRecord?.upload_mode === 'new_project'
+      ? 'review_new_project'
+      : 'completed'
+
+    console.log(`[processor] Setting final status to '${finalStatus}' (upload_mode: ${scanRecord?.upload_mode})`)
+
     // Update scan record with results
     await supabase
       .from('mapping_sheet_scans')
       .update({
-        status: 'completed',
+        status: finalStatus,
         extracted_data: result.extractedData,
         confidence_scores: result.extractedData?.confidence,
         ai_provider: result.provider,

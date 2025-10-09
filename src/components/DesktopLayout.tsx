@@ -1,9 +1,10 @@
 "use client"
-import { useEffect, useMemo, useState, type ComponentType } from "react"
+import { useMemo, useState, type ComponentType } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/hooks/useAuth"
+import { useUserRole } from "@/hooks/useUserRole"
 import { Button } from "@/components/ui/button"
 import {
   Sidebar,
@@ -24,7 +25,6 @@ import {
 } from "@/components/ui/sidebar"
 import { LogOut, Users, Building, FolderOpen, FileCheck, Shield, BarChart3, Settings, Home, MapPin, Crown, QrCode, Search as SearchIcon, HelpCircle, AlertTriangle } from "lucide-react"
 import AdminPatchSelector from "@/components/admin/AdminPatchSelector"
-import { supabase } from "@/integrations/supabase/client"
 import { useNavigationVisibility } from "@/hooks/useNavigationVisibility"
 import { useNavigationLoading } from "@/hooks/useNavigationLoading"
 import { JoinQrDialog } from "@/components/JoinQrDialog"
@@ -45,27 +45,7 @@ const baseNavItems: NavItem[] = [
   { path: "/site-visits", label: "Site Visits", icon: FileCheck, description: "Site visit records and reports" },
 ]
 
-function useUserRole() {
-  const { user } = useAuth()
-  const [userRole, setUserRole] = useState<string | null>(null)
-
-  useEffect(() => {
-    const checkUserRole = async () => {
-      if (!user) return
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single()
-      setUserRole((profile as { role?: string } | null)?.role || null)
-    }
-    checkUserRole()
-  }, [user])
-
-  return userRole
-}
-
-function useVisibleNavItems(userRole: string | null): NavItem[] {
+function useVisibleNavItems(userRole: string | null, isLoadingRole: boolean): NavItem[] {
   const { visibility } = useNavigationVisibility()
   const items: NavItem[] = []
   
@@ -75,9 +55,12 @@ function useVisibleNavItems(userRole: string | null): NavItem[] {
   // Always show Projects
   items.push({ path: "/projects", label: "Projects", icon: FolderOpen, description: "Manage construction projects" })
   
-  // Patch - check role and visibility
-  if ((userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") && visibility.patch) {
-    items.push({ path: "/patch", label: "Patch", icon: Users, description: "Patch management and organization" })
+  // Wait for role to load before showing role-dependent items
+  if (!isLoadingRole && userRole) {
+    // Patch - check role and visibility
+    if ((userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") && visibility.patch) {
+      items.push({ path: "/patch", label: "Patch", icon: Users, description: "Patch management and organization" })
+    }
   }
   
   // Employers - check visibility
@@ -100,14 +83,17 @@ function useVisibleNavItems(userRole: string | null): NavItem[] {
     items.push({ path: "/map", label: "Map", icon: MapPin, description: "Interactive patch and job site maps" })
   }
   
-  // Site Visits - check role and visibility
-  if ((userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") && visibility.site_visits) {
-    items.push({ path: "/site-visits", label: "Site Visits", icon: FileCheck, description: "Site visit records and reports" })
-  }
-  
-  // Campaigns - check role and visibility
-  if ((userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") && visibility.campaigns) {
-    items.push({ path: "/campaigns", label: "Campaigns", icon: BarChart3, description: "Campaign activities and tracking" })
+  // Wait for role to load before showing role-dependent items
+  if (!isLoadingRole && userRole) {
+    // Site Visits - check role and visibility
+    if ((userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") && visibility.site_visits) {
+      items.push({ path: "/site-visits", label: "Site Visits", icon: FileCheck, description: "Site visit records and reports" })
+    }
+    
+    // Campaigns - check role and visibility
+    if ((userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") && visibility.campaigns) {
+      items.push({ path: "/campaigns", label: "Campaigns", icon: BarChart3, description: "Campaign activities and tracking" })
+    }
   }
   
   // User Guide - always show
@@ -116,18 +102,21 @@ function useVisibleNavItems(userRole: string | null): NavItem[] {
   // Bug Report - external link
   items.push({ path: "https://fider.uconstruct.app", label: "Bug Report", icon: AlertTriangle, description: "Report bugs and platform issues", external: true })
 
-  // Lead Console - show for lead organisers and admins when enabled
-  if ((userRole === "lead_organiser" || userRole === "admin") && visibility.lead_console) {
-    items.push({ path: "/lead", label: "Co-ordinator Console", icon: Crown, description: "Manage organisers and patch assignments" })
-  }
+  // Wait for role to load before showing role-dependent items
+  if (!isLoadingRole && userRole) {
+    // Lead Console - show for lead organisers and admins when enabled
+    if ((userRole === "lead_organiser" || userRole === "admin") && visibility.lead_console) {
+      items.push({ path: "/lead", label: "Co-ordinator Console", icon: Crown, description: "Manage organisers and patch assignments" })
+    }
 
-  // Administration - show for admins and lead organisers
-  if (userRole === "admin" || userRole === "lead_organiser") {
-    const label = userRole === "admin" ? "Administration" : "Management"
-    const description = userRole === "admin" 
-      ? "System administration and user management" 
-      : "Co-ordinator management and data operations"
-    items.push({ path: "/admin", label, icon: Shield, description })
+    // Administration - show for admins and lead organisers
+    if (userRole === "admin" || userRole === "lead_organiser") {
+      const label = userRole === "admin" ? "Administration" : "Management"
+      const description = userRole === "admin" 
+        ? "System administration and user management" 
+        : "Co-ordinator management and data operations"
+      items.push({ path: "/admin", label, icon: Shield, description })
+    }
   }
   
   return items
@@ -137,8 +126,8 @@ export default function DesktopLayout({ children }: { children: React.ReactNode 
   const [aiHelpOpen, setAiHelpOpen] = useState(false)
   const pathname = usePathname()
   const { user, signOut } = useAuth()
-  const userRole = useUserRole()
-  const items = useVisibleNavItems(userRole)
+  const { data: userRole, isLoading: isLoadingRole } = useUserRole()
+  const items = useVisibleNavItems(userRole ?? null, isLoadingRole)
   const { isNavigating, startNavigation } = useNavigationLoading()
   const [query, setQuery] = useState("")
   const [joinQrOpen, setJoinQrOpen] = useState(false)

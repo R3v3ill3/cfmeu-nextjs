@@ -14,6 +14,7 @@ import { EmployerMatchDialog } from './EmployerMatchDialog'
 import { FwcEbaSearchModal } from '@/components/employers/FwcEbaSearchModal'
 import { supabase } from '@/integrations/supabase/client'
 import DateInput from '@/components/ui/date-input'
+import { GoogleAddressInput, GoogleAddress } from '@/components/projects/GoogleAddressInput'
 
 interface ProjectFieldsReviewProps {
   extractedData: Record<string, any>
@@ -207,9 +208,9 @@ export function ProjectFieldsReview({
   const handleDecisionChange = (existingKey: string, action: FieldDecision, customValue?: any) => {
     const config = FIELD_CONFIGS.find(f => f.existingKey === existingKey)
     if (!config) return
-    
+
     let value: any
-    
+
     if (action === 'keep') {
       value = existingData[config.existingKey]
     } else if (action === 'replace') {
@@ -224,6 +225,35 @@ export function ProjectFieldsReview({
     setDecisions(prev => ({
       ...prev,
       [existingKey]: { action, value, error: error || undefined },
+    }))
+  }
+
+  // Special handler for address field with geocoding
+  const handleAddressChange = (addressData: GoogleAddress | null) => {
+    if (!addressData) {
+      handleDecisionChange('address', 'custom', '')
+      return
+    }
+
+    // Store both the formatted address and lat/lng coordinates
+    setDecisions(prev => ({
+      ...prev,
+      address: {
+        action: 'custom',
+        value: addressData.formatted,
+        error: undefined,
+      },
+      // Store geocoding data separately for the API
+      address_latitude: {
+        action: 'custom',
+        value: addressData.lat,
+        error: undefined,
+      },
+      address_longitude: {
+        action: 'custom',
+        value: addressData.lng,
+        error: undefined,
+      },
     }))
   }
 
@@ -531,6 +561,12 @@ export function ProjectFieldsReview({
                     </div>
                   </div>
                 </RadioGroup>
+              ) : config.existingKey === 'address' ? (
+                <GoogleAddressInput
+                  value={decision.value || ''}
+                  onChange={handleAddressChange}
+                  placeholder="Start typing an address..."
+                />
               ) : (
                 <Input
                   type={config.type === 'number' ? 'number' : config.type === 'email' ? 'email' : 'text'}

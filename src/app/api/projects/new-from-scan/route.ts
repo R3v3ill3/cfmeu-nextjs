@@ -37,6 +37,8 @@ export async function POST(request: NextRequest) {
       state_funding: projectDecisions?.state_funding,
       federal_funding: projectDecisions?.federal_funding,
       address: projectDecisions?.address,
+      latitude: projectDecisions?.address_latitude,
+      longitude: projectDecisions?.address_longitude,
       builder: projectDecisions?.builder ? {
         matchedEmployerId: projectDecisions.builder.matchedEmployer?.id,
         createNew: projectDecisions.builder.createNew,

@@ -13,9 +13,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
 import { calculateProjectTier } from "@/components/projects/types"
 import { GoogleAddressInput, GoogleAddress } from "@/components/projects/GoogleAddressInput"
+import { UploadMappingSheetDialog } from "@/components/projects/mapping/UploadMappingSheetDialog"
+import { ProjectQuickFinder } from "@/components/projects/ProjectQuickFinder"
+import { FileText, Edit } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { useNavigationLoading } from "@/hooks/useNavigationLoading"
+
+type DialogMode = 'choice' | 'manual' | 'scan'
 
 export default function CreateProjectDialog() {
+  const router = useRouter()
+  const { startNavigation } = useNavigationLoading()
   const [open, setOpen] = useState(false);
+  const [dialogMode, setDialogMode] = useState<DialogMode>('choice');
   const [name, setName] = useState("");
   const [addressData, setAddressData] = useState<GoogleAddress | null>(null);
   const [value, setValue] = useState("");
@@ -28,8 +38,18 @@ export default function CreateProjectDialog() {
   const [builderId, setBuilderId] = useState<string>("");
   const [jvStatus, setJvStatus] = useState<"yes" | "no" | "unsure">("no");
   const [jvLabel, setJvLabel] = useState<string>("");
+  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
+  const [scanToReview, setScanToReview] = useState<{ scanId: string; projectId?: string } | null>(null);
 
   const canSubmit = useMemo(() => name.trim() && addressData?.formatted, [name, addressData]);
+
+  // Reset dialog mode when dialog opens/closes
+  useEffect(() => {
+    if (!open) {
+      setDialogMode('choice')
+      setScanToReview(null)
+    }
+  }, [open])
 
   // Calculate tier based on value
   const calculatedTier = useMemo(() => {
@@ -119,15 +139,63 @@ export default function CreateProjectDialog() {
   });
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="xl" className="font-medium">New Project</Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle className="text-xl font-semibold text-gray-900">Create Project</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
+    <>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
+          <Button size="xl" className="font-medium">New Project</Button>
+        </DialogTrigger>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold text-gray-900">Create Project</DialogTitle>
+          </DialogHeader>
+
+          {/* Choice Screen */}
+          {dialogMode === 'choice' && (
+            <div className="space-y-4 py-4">
+              <p className="text-sm text-muted-foreground">
+                Choose how you'd like to create a new project:
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Manual Creation Option */}
+                <button
+                  type="button"
+                  onClick={() => setDialogMode('manual')}
+                  className="flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-lg hover:border-primary hover:bg-accent/50 transition-colors text-center group"
+                >
+                  <Edit className="h-12 w-12 mb-3 text-muted-foreground group-hover:text-primary transition-colors" />
+                  <h3 className="font-semibold text-lg mb-2">Create Manually</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Enter project details manually using a form
+                  </p>
+                </button>
+
+                {/* Scan Upload Option */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false)
+                    setIsUploadDialogOpen(true)
+                  }}
+                  className="flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-lg hover:border-primary hover:bg-accent/50 transition-colors text-center group"
+                >
+                  <FileText className="h-12 w-12 mb-3 text-muted-foreground group-hover:text-primary transition-colors" />
+                  <h3 className="font-semibold text-lg mb-2">Create from Scanned Data</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Upload a scanned mapping sheet and let AI extract the data
+                  </p>
+                </button>
+              </div>
+
+              <div className="flex justify-end pt-4">
+                <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+              </div>
+            </div>
+          )}
+
+          {/* Manual Creation Form */}
+          {dialogMode === 'manual' && (
+            <div className="space-y-4">
           <div>
             <Label htmlFor="cp_name" className="text-sm font-medium text-gray-700">Project Name</Label>
             <Input id="cp_name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" className="h-12 px-4 py-3 text-gray-900 bg-white border-gray-300 focus:border-blue-500 focus:ring-blue-500" />
@@ -208,11 +276,55 @@ export default function CreateProjectDialog() {
           </div>
           <JVSelector status={jvStatus} label={jvLabel} onChangeStatus={setJvStatus} onChangeLabel={setJvLabel} />
           <div className="flex justify-end gap-4 pt-6">
-            <Button variant="outline" onClick={() => setOpen(false)} size="xl" className="font-medium">Cancel</Button>
+            <Button variant="outline" onClick={() => setDialogMode('choice')} size="xl" className="font-medium">Back</Button>
             <Button disabled={!canSubmit || createMutation.isPending} onClick={() => createMutation.mutate()} size="xl" className="font-medium">Create</Button>
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Upload Mapping Sheet Dialog */}
+      <UploadMappingSheetDialog
+        mode="new_project"
+        open={isUploadDialogOpen}
+        onOpenChange={(open) => {
+          setIsUploadDialogOpen(open)
+          if (!open) {
+            setScanToReview(null)
+            setOpen(true) // Re-open main dialog when upload is cancelled
+          }
+        }}
+        onScanReady={(scanId, projectId) => {
+          if (projectId) {
+            startNavigation(`/projects/${projectId}/scan-review/${scanId}`)
+            setTimeout(() => router.push(`/projects/${projectId}/scan-review/${scanId}`), 50)
+            return
+          }
+          setScanToReview({ scanId })
+        }}
+      />
+
+      {/* Project Quick Finder */}
+      <ProjectQuickFinder
+        open={scanToReview !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setScanToReview(null)
+            setOpen(true) // Re-open main dialog when finder is cancelled
+          }
+        }}
+        onSelectExistingProject={(projectId) => {
+          if (!scanToReview) return
+          startNavigation(`/projects/${projectId}/scan-review/${scanToReview.scanId}`)
+          setTimeout(() => router.push(`/projects/${projectId}/scan-review/${scanToReview.scanId}`), 50)
+        }}
+        onCreateNewProject={() => {
+          if (!scanToReview) return
+          startNavigation(`/projects/new-scan-review/${scanToReview.scanId}`)
+          setTimeout(() => router.push(`/projects/new-scan-review/${scanToReview.scanId}`), 50)
+        }}
+      />
+    </>
   );
 }

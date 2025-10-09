@@ -10,18 +10,19 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Badge } from "@/components/ui/badge"
-import { 
-  Filter, 
-  ChevronDown, 
-  ChevronUp, 
-  SortAsc, 
-  SortDesc, 
-  Grid3X3, 
+import {
+  Filter,
+  ChevronDown,
+  ChevronUp,
+  SortAsc,
+  SortDesc,
+  Grid3X3,
   List,
   Map as MapIcon,
   Search,
   X
 } from "lucide-react"
+import CreateProjectDialog from "@/components/projects/CreateProjectDialog"
 import { useProjectsServerSideCompatible } from "@/hooks/useProjectsServerSide"
 import { ProjectCard, ProjectCardData } from "./ProjectCard"
 import { PROJECT_TIER_LABELS, ProjectTier } from "./types"
@@ -32,9 +33,6 @@ import { LoadingSpinner } from "@/components/ui/LoadingSpinner"
 import { OrganizingUniverseBadge } from "@/components/ui/OrganizingUniverseBadge"
 import Link from "next/link"
 import { useNavigationLoading } from "@/hooks/useNavigationLoading"
-import { Upload } from "lucide-react"
-import { UploadMappingSheetDialog } from "@/components/projects/mapping/UploadMappingSheetDialog"
-import { ProjectQuickFinder } from "@/components/projects/ProjectQuickFinder"
 
 // State persistence key
 const PROJECTS_STATE_KEY = 'projects-page-state-mobile'
@@ -152,8 +150,6 @@ export function ProjectsMobileView() {
   // Mobile-specific state
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [sortOpen, setSortOpen] = useState(false)
-  const [isQuickUploadOpen, setIsQuickUploadOpen] = useState(false)
-  const [scanToReview, setScanToReview] = useState<{ scanId: string; projectId?: string } | null>(null)
 
   useEffect(() => {
     saveProjectsState(sp)
@@ -270,17 +266,9 @@ export function ProjectsMobileView() {
       {/* Header with view toggle */}
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Projects</h1>
-        
+
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-2"
-            onClick={() => setIsQuickUploadOpen(true)}
-          >
-            <Upload className="h-4 w-4" />
-            Upload scan
-          </Button>
+          <CreateProjectDialog />
           {/* View toggle buttons */}
           <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
           <Button
@@ -555,44 +543,6 @@ export function ProjectsMobileView() {
           </Button>
         </div>
       )}
-
-      <UploadMappingSheetDialog
-        mode="new_project"
-        open={isQuickUploadOpen}
-        onOpenChange={(open) => {
-          setIsQuickUploadOpen(open)
-          if (!open) {
-            setScanToReview(null)
-          }
-        }}
-        onScanReady={(scanId, projectId) => {
-          if (projectId) {
-            startNavigation(`/projects/${projectId}/scan-review/${scanId}`)
-            setTimeout(() => router.push(`/projects/${projectId}/scan-review/${scanId}`), 50)
-            return
-          }
-          setScanToReview({ scanId })
-        }}
-      />
-
-      <ProjectQuickFinder
-        open={!!scanToReview}
-        onOpenChange={(open) => {
-          if (!open) {
-            setScanToReview(null)
-          }
-        }}
-        onSelectExistingProject={(projectId) => {
-          if (!scanToReview) return
-          startNavigation(`/projects/${projectId}/scan-review/${scanToReview.scanId}`)
-          setTimeout(() => router.push(`/projects/${projectId}/scan-review/${scanToReview.scanId}`), 50)
-        }}
-        onCreateNewProject={() => {
-          if (!scanToReview) return
-          startNavigation(`/projects/new-scan-review/${scanToReview.scanId}`)
-          setTimeout(() => router.push(`/projects/new-scan-review/${scanToReview.scanId}`), 50)
-        }}
-      />
     </div>
   )
 }

@@ -13,13 +13,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { ArrowUp, ArrowDown, LayoutGrid, List as ListIcon, MapPin, Filter, X, ChevronDown, ChevronUp, Upload } from "lucide-react"
+import { ArrowUp, ArrowDown, LayoutGrid, List as ListIcon, MapPin, Filter, X, ChevronDown, ChevronUp } from "lucide-react"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import CreateProjectDialog from "@/components/projects/CreateProjectDialog"
 import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
 import { PROJECT_TIER_LABELS, ProjectTier } from "@/components/projects/types"
-import { UploadMappingSheetDialog } from "@/components/projects/mapping/UploadMappingSheetDialog"
-import { ProjectQuickFinder } from "@/components/projects/ProjectQuickFinder"
 import { useProjectsServerSideCompatible } from "@/hooks/useProjectsServerSide"
 import { ProjectTable } from "@/components/projects/ProjectTable"
 import ProjectsMapView from "@/components/projects/ProjectsMapView"
@@ -477,8 +475,6 @@ export function ProjectsDesktopView() {
   const [isEmployerOpen, setIsEmployerOpen] = useState(false)
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null)
   const [isWorkerOpen, setIsWorkerOpen] = useState(false)
-  const [isQuickUploadOpen, setIsQuickUploadOpen] = useState(false)
-  const [scanToReview, setScanToReview] = useState<{ scanId: string; projectId?: string } | null>(null)
 
   // Enhanced state persistence
   useEffect(() => {
@@ -915,21 +911,12 @@ export function ProjectsDesktopView() {
               <ToggleGroupItem value="desc" aria-label="Descending"><ArrowDown className="h-4 w-4" /></ToggleGroupItem>
             </ToggleGroup>
           </div>
-          
+
           {/* Action Buttons */}
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-2"
-              onClick={() => setIsQuickUploadOpen(true)}
-            >
-              <Upload className="h-4 w-4" />
-              Upload scanned data
-            </Button>
             <CreateProjectDialog />
           </div>
-          
+
           {/* View Toggle */}
           <ToggleGroup type="single" variant="outline" size="sm" value={view} onValueChange={(v) => v && setParam("view", v)}>
             <ToggleGroupItem value="card" aria-label="Card view" className="gap-1"><LayoutGrid className="h-4 w-4" /> Card</ToggleGroupItem>
@@ -1157,43 +1144,6 @@ export function ProjectsDesktopView() {
         isOpen={isWorkerOpen}
         onClose={() => setIsWorkerOpen(false)}
       />
-
-      <UploadMappingSheetDialog
-        mode="new_project"
-        open={isQuickUploadOpen}
-        onOpenChange={(open) => {
-          setIsQuickUploadOpen(open)
-          if (!open) setScanToReview(null)
-        }}
-        onScanReady={(scanId, projectId) => {
-          if (projectId) {
-            startNavigation(`/projects/${projectId}/scan-review/${scanId}`)
-            setTimeout(() => router.push(`/projects/${projectId}/scan-review/${scanId}`), 50)
-            return
-          }
-          setScanToReview({ scanId })
-        }}
-      />
-
-      <ProjectQuickFinder
-        open={scanToReview !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setScanToReview(null)
-          }
-        }}
-        onSelectExistingProject={(projectId) => {
-          if (!scanToReview) return
-          startNavigation(`/projects/${projectId}/scan-review/${scanToReview.scanId}`)
-          setTimeout(() => router.push(`/projects/${projectId}/scan-review/${scanToReview.scanId}`), 50)
-        }}
-        onCreateNewProject={() => {
-          if (!scanToReview) return
-          startNavigation(`/projects/new-scan-review/${scanToReview.scanId}`)
-          setTimeout(() => router.push(`/projects/new-scan-review/${scanToReview.scanId}`), 50)
-        }}
-      />
-
     </div>
   )
 }

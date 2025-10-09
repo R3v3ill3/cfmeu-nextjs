@@ -1,70 +1,8 @@
--- Migration: New Project from Scan RPCs (F-012)
--- Creates RPCs for automated project creation from mapping sheet scans
--- Removes need for service-role key in new-from-scan route
+-- Migration: Add Geocoding Support to New Project from Scan
+-- Updates the create_project_from_scan RPC to accept and store latitude/longitude
 
--- ==========================================
--- 1. Assign Contractor Role RPC
--- ==========================================
-
-CREATE OR REPLACE FUNCTION assign_contractor_role(
-  p_project_id uuid,
-  p_employer_id uuid,
-  p_role_code text,
-  p_company_name text,
-  p_is_primary boolean DEFAULT false,
-  p_source text DEFAULT 'manual',
-  p_match_confidence numeric DEFAULT 1.0,
-  p_match_notes text DEFAULT null
-)
-RETURNS uuid
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  v_role_type_id uuid;
-  v_assignment_id uuid;
-BEGIN
-  -- Get contractor role type ID from code
-  SELECT id INTO v_role_type_id
-  FROM contractor_role_types
-  WHERE code = p_role_code
-  LIMIT 1;
-
-  IF v_role_type_id IS NULL THEN
-    RAISE EXCEPTION 'Invalid contractor role code: %', p_role_code;
-  END IF;
-
-  -- Insert project assignment
-  INSERT INTO project_assignments (
-    project_id,
-    employer_id,
-    assignment_type,
-    contractor_role_type_id,
-    source,
-    match_status,
-    match_confidence,
-    match_notes
-  ) VALUES (
-    p_project_id,
-    p_employer_id,
-    'contractor_role',
-    v_role_type_id,
-    p_source,
-    'confirmed',
-    p_match_confidence,
-    p_match_notes
-  )
-  RETURNING id INTO v_assignment_id;
-
-  RETURN v_assignment_id;
-END;
-$$;
-
-GRANT EXECUTE ON FUNCTION assign_contractor_role(uuid, uuid, text, text, boolean, text, numeric, text) TO authenticated;
-
--- ==========================================
--- 2. Create Project from Scan RPC
--- ==========================================
+-- Drop and recreate the function with geocoding support
+DROP FUNCTION IF EXISTS create_project_from_scan(uuid, uuid, jsonb, jsonb, jsonb, jsonb);
 
 CREATE OR REPLACE FUNCTION create_project_from_scan(
   p_user_id uuid,
@@ -312,12 +250,5 @@ $$;
 
 GRANT EXECUTE ON FUNCTION create_project_from_scan(uuid, uuid, jsonb, jsonb, jsonb, jsonb) TO authenticated;
 
--- ==========================================
--- 3. Comments
--- ==========================================
-
-COMMENT ON FUNCTION assign_contractor_role(uuid, uuid, text, text, boolean, text, numeric, text) IS
-  'Assigns a contractor role to a project. Used internally by project creation workflows.';
-
 COMMENT ON FUNCTION create_project_from_scan(uuid, uuid, jsonb, jsonb, jsonb, jsonb) IS
-  'Creates a complete project from a mapping sheet scan, including job sites, contacts, and subcontractor assignments. Handles all operations in a transaction.';
+  'Creates a complete project from a mapping sheet scan with geocoding support. Accepts latitude/longitude for patch matching. Handles all operations in a transaction.';

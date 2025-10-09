@@ -238,7 +238,8 @@ export function UploadMappingSheetDialog(props: UploadMappingSheetDialogProps) {
           file_name: selectedFile.name,
           file_size_bytes: selectedFile.size,
           status: 'pending',
-          notes: pdfPageCount > 3 
+          upload_mode: mode, // 'existing_project' or 'new_project'
+          notes: pdfPageCount > 3
             ? `Selected pages: ${selectedPages.join(', ')} of ${pdfPageCount} total pages`
             : null,
         })

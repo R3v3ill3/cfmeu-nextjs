@@ -1,6 +1,7 @@
 "use client"
-import { useState, useEffect, type ComponentType } from "react";
+import { useState, type ComponentType } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserRole } from "@/hooks/useUserRole";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
@@ -9,7 +10,6 @@ import {
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { supabase } from "@/integrations/supabase/client";
 import AdminPatchSelector from "@/components/admin/AdminPatchSelector";
 import { useNavigationVisibility } from "@/hooks/useNavigationVisibility";
 import { useNavigationLoading } from "@/hooks/useNavigationLoading";
@@ -26,26 +26,10 @@ const Layout = ({ children }: LayoutProps) => {
   const { user, signOut } = useAuth();
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
-  const [userRole, setUserRole] = useState<string | null>(null);
+  const { data: userRole, isLoading: isLoadingRole } = useUserRole();
   const { visibility } = useNavigationVisibility();
   const { isNavigating, startNavigation } = useNavigationLoading();
   const [joinQrOpen, setJoinQrOpen] = useState(false);
-
-  useEffect(() => {
-    const checkUserRole = async () => {
-      if (!user) return;
-      
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-      
-      setUserRole((profile as { role?: string } | null)?.role || null);
-    };
-
-    checkUserRole();
-  }, [user]);
 
   type NavItem = {
     path: string;
@@ -60,9 +44,12 @@ const Layout = ({ children }: LayoutProps) => {
     // Always show Projects
     items.push({ path: "/projects", label: "Projects", icon: FolderOpen });
     
-    // Patch - check role and visibility
-    if ((userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") && visibility.patch) {
-      items.push({ path: "/patch", label: "Patch", icon: Users });
+    // Wait for role to load before showing role-dependent items
+    if (!isLoadingRole && userRole) {
+      // Patch - check role and visibility
+      if ((userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") && visibility.patch) {
+        items.push({ path: "/patch", label: "Patch", icon: Users });
+      }
     }
     
     // Employers - check visibility
@@ -85,18 +72,28 @@ const Layout = ({ children }: LayoutProps) => {
       items.push({ path: "/map", label: "Map", icon: MapPin });
     }
     
-    // Site Visits - check role and visibility
-    if ((userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") && visibility.site_visits) {
-      items.push({ path: "/site-visits", label: "Site Visits", icon: FileCheck });
-    }
-    
-    // Campaigns - check role and visibility
-    if ((userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") && visibility.campaigns) {
-      items.push({ path: "/campaigns", label: "Campaigns", icon: BarChart3 });
-    }
+    // Wait for role to load before showing role-dependent items
+    if (!isLoadingRole && userRole) {
+      // Site Visits - check role and visibility
+      if ((userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") && visibility.site_visits) {
+        items.push({ path: "/site-visits", label: "Site Visits", icon: FileCheck });
+      }
+      
+      // Campaigns - check role and visibility
+      if ((userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") && visibility.campaigns) {
+        items.push({ path: "/campaigns", label: "Campaigns", icon: BarChart3 });
+      }
 
-    if ((userRole === "lead_organiser" || userRole === "admin") && visibility.lead_console) {
-      items.push({ path: "/lead", label: "Co-ordinator Console", icon: Crown });
+      // Lead Console - show for lead organisers and admins when enabled
+      if ((userRole === "lead_organiser" || userRole === "admin") && visibility.lead_console) {
+        items.push({ path: "/lead", label: "Co-ordinator Console", icon: Crown });
+      }
+
+      // Administration / Management - show for admins and lead organisers
+      if (userRole === "admin" || userRole === "lead_organiser") {
+        const label = userRole === "admin" ? "Administration" : "Management";
+        items.push({ path: "/admin", label, icon: Shield });
+      }
     }
 
     // User Guide - always show
@@ -104,12 +101,6 @@ const Layout = ({ children }: LayoutProps) => {
 
     // Bug Report - external link
     items.push({ path: "https://fider.uconstruct.app", label: "Bug Report", icon: AlertTriangle, external: true });
-    
-    // Administration / Management - show for admins and lead organisers
-    if (userRole === "admin" || userRole === "lead_organiser") {
-      const label = userRole === "admin" ? "Administration" : "Management";
-      items.push({ path: "/admin", label, icon: Shield });
-    }
     
     return items;
   };
