@@ -43,12 +43,14 @@ async function handleJob(job: MappingSheetScanJob) {
 async function workerLoop() {
   const client = getAdminClient()
   console.log('[worker] Starting mapping sheet scanner worker')
-  console.log('[worker] Configuration:', {
-    supabaseUrl: config.supabaseUrl,
-    pollIntervalMs: config.pollIntervalMs,
-    maxRetries: config.maxRetries,
-    claudeModel: config.claudeModel,
-  })
+  if (config.verboseLogs) {
+    console.log('[worker] Configuration:', {
+      supabaseUrl: config.supabaseUrl,
+      pollIntervalMs: config.pollIntervalMs,
+      maxRetries: config.maxRetries,
+      claudeModel: config.claudeModel,
+    })
+  }
 
   for (;;) {
     try {

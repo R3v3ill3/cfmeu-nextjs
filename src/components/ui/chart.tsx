@@ -65,10 +65,13 @@ const ChartContainer = React.forwardRef<
 })
 ChartContainer.displayName = "Chart"
 
+type ColorEntry = [key: string, value: ChartConfig[string]]
+
 const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
-  const colorConfig = Object.entries(config).filter(
-    ([_, config]) => config.theme || config.color
-  )
+  const colorConfig = Object.entries(config).filter((entry): entry is ColorEntry => {
+    const [, value] = entry
+    return Boolean(value.theme || value.color)
+  })
 
   if (!colorConfig.length) {
     return null
@@ -100,10 +103,33 @@ ${colorConfig
 
 const ChartTooltip = RechartsPrimitive.Tooltip
 
+type TooltipPayload = {
+  value?: number | string
+  color?: string
+  payload: Record<string, unknown>
+  dataKey?: string | number
+  name?: string
+}
+
+type TooltipFormatter = (
+  value: number | string,
+  name: string,
+  item: TooltipPayload,
+  index: number,
+  payload: Record<string, unknown>
+) => React.ReactNode
+
+type TooltipLabelFormatter = (
+  value: string | number | Date | null | undefined,
+  payload?: TooltipPayload[]
+) => React.ReactNode
+
+type TooltipLabel = string | number | Date | null | undefined
+
 type CustomTooltipProps = {
   active?: boolean
-  payload?: any[]
-  label?: any
+  payload?: TooltipPayload[]
+  label?: TooltipLabel
   className?: string
   hideLabel?: boolean
   hideIndicator?: boolean
@@ -111,8 +137,8 @@ type CustomTooltipProps = {
   nameKey?: string
   labelKey?: string
   color?: string
-  formatter?: any
-  labelFormatter?: any
+  formatter?: TooltipFormatter
+  labelFormatter?: TooltipLabelFormatter
   labelClassName?: string
 }
 
@@ -120,7 +146,7 @@ const ChartTooltipContent = React.forwardRef<
   HTMLDivElement,
   CustomTooltipProps
 >(
-  (rawProps: CustomTooltipProps, ref) => {
+  (rawProps, ref) => {
     const {
       active,
       payload,
@@ -263,12 +289,19 @@ ChartTooltipContent.displayName = "ChartTooltip"
 
 const ChartLegend = RechartsPrimitive.Legend
 
+type LegendPayloadItem = {
+  value: string
+  color: string
+  dataKey?: string
+  payload: Record<string, unknown>
+}
+
 type CustomLegendProps = {
   className?: string
   hideIcon?: boolean
   nameKey?: string
   verticalAlign?: "top" | "middle" | "bottom"
-  payload?: any[]
+  payload?: LegendPayloadItem[]
 }
 
 const ChartLegendContent = React.forwardRef<

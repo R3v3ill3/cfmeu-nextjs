@@ -4,19 +4,26 @@ export async function middleware(req: NextRequest) {
   // Generate a cryptographically secure nonce for CSP
   const nonce = Buffer.from(crypto.randomUUID()).toString('base64')
 
-  const res = NextResponse.next()
+  const requestHeaders = new Headers(req.headers)
+  requestHeaders.set('x-nonce', nonce)
+
+  const res = NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  })
 
   // Pass nonce to the request so it can be used in layouts/components
   res.headers.set('x-nonce', nonce)
 
   // Build CSP with nonce
-  const csp = buildCSP(nonce, req)
+  const csp = buildCSP(nonce)
   res.headers.set('Content-Security-Policy', csp)
 
   return res
 }
 
-function buildCSP(nonce: string, req: NextRequest): string {
+function buildCSP(nonce: string): string {
   const isDev = process.env.NODE_ENV !== 'production'
 
   // Build connect-src with required origins

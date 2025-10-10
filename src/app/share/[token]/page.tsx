@@ -421,18 +421,18 @@ export default function PublicFormPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-6xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Image src="/cfmeu-logo.png" alt="CFMEU" width={120} height={40} className="object-contain" />
+      <div className="bg-white shadow-sm border-b sticky top-0 z-10">
+        <div className="max-w-6xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <Image src="/cfmeu-logo.png" alt="CFMEU" width={100} height={33} className="object-contain sm:w-[120px] sm:h-[40px]" />
               <div>
-                <h1 className="text-xl font-bold">Project Mapping Sheet</h1>
-                <p className="text-sm text-muted-foreground">Shared Access Form</p>
+                <h1 className="text-base sm:text-xl font-bold leading-tight">Project Mapping Sheet</h1>
+                <p className="text-xs sm:text-sm text-muted-foreground">Shared Access Form</p>
               </div>
             </div>
-            <div className="text-right">
-              <Badge variant={expiryInfo.variant} className="gap-1">
+            <div className="self-start sm:self-auto">
+              <Badge variant={expiryInfo.variant} className="gap-1 text-xs">
                 <Clock className="h-3 w-3" />
                 {expiryInfo.text}
               </Badge>
@@ -441,73 +441,78 @@ export default function PublicFormPage() {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">
+      <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-8 space-y-4 sm:space-y-8">
         
         {/* Project Information */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Building className="h-5 w-5" />
+          <CardHeader className="pb-3 sm:pb-6">
+            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <Building className="h-4 w-4 sm:h-5 sm:w-5" />
               Project Information
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <CardContent className="space-y-4 sm:space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
               <div className="md:col-span-2">
-                <Label htmlFor="name">Project Name</Label>
+                <Label htmlFor="name" className="text-sm">Project Name</Label>
                 <Input
                   id="name"
                   value={formData.name}
                   onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                   placeholder="Enter project name"
+                  className="h-11 text-base"
                 />
               </div>
               <div>
-                <Label htmlFor="value">Project Value (AUD)</Label>
+                <Label htmlFor="value" className="text-sm">Project Value (AUD)</Label>
                 <Input
                   id="value"
                   type="number"
                   value={formData.value}
                   onChange={(e) => setFormData(prev => ({ ...prev, value: e.target.value }))}
                   placeholder="Enter project value"
+                  className="h-11 text-base"
                 />
               </div>
             </div>
 
-            <div className="md:col-span-3">
-              <Label htmlFor="address">Project Address</Label>
+            <div>
+              <Label htmlFor="address" className="text-sm">Project Address</Label>
               <Input
                 id="address"
                 value={formData.address}
                 onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
                 placeholder="Enter project address"
+                className="h-11 text-base"
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
               <div>
-                <Label htmlFor="start-date">Proposed Start Date</Label>
+                <Label htmlFor="start-date" className="text-sm">Proposed Start Date</Label>
                 <DateInput
                   id="start-date"
                   value={formData.proposed_start_date}
                   onChange={(e) => setFormData(prev => ({ ...prev, proposed_start_date: e.target.value }))}
+                  className="h-11 text-base"
                 />
               </div>
               <div>
-                <Label htmlFor="finish-date">Proposed Finish Date</Label>
+                <Label htmlFor="finish-date" className="text-sm">Proposed Finish Date</Label>
                 <DateInput
                   id="finish-date"
                   value={formData.proposed_finish_date}
                   onChange={(e) => setFormData(prev => ({ ...prev, proposed_finish_date: e.target.value }))}
+                  className="h-11 text-base"
                 />
               </div>
               <div>
-                <Label htmlFor="project-type">Funding Type</Label>
+                <Label htmlFor="project-type" className="text-sm">Funding Type</Label>
                 <Select
                   value={formData.project_type}
                   onValueChange={(value) => setFormData(prev => ({ ...prev, project_type: value }))}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="h-11 text-base">
                     <SelectValue placeholder="Select funding type" />
                   </SelectTrigger>
                   <SelectContent>
@@ -519,35 +524,38 @@ export default function PublicFormPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
               <div>
-                <Label htmlFor="state-funding">State Funding (AUD)</Label>
+                <Label htmlFor="state-funding" className="text-sm">State Funding (AUD)</Label>
                 <Input
                   id="state-funding"
                   type="number"
                   value={formData.state_funding}
                   onChange={(e) => setFormData(prev => ({ ...prev, state_funding: e.target.value }))}
                   placeholder="0"
+                  className="h-11 text-base"
                 />
               </div>
               <div>
-                <Label htmlFor="federal-funding">Federal Funding (AUD)</Label>
+                <Label htmlFor="federal-funding" className="text-sm">Federal Funding (AUD)</Label>
                 <Input
                   id="federal-funding"
                   type="number"
                   value={formData.federal_funding}
                   onChange={(e) => setFormData(prev => ({ ...prev, federal_funding: e.target.value }))}
                   placeholder="0"
+                  className="h-11 text-base"
                 />
               </div>
               <div>
-                <Label htmlFor="roe-email">ROE Contact Email</Label>
+                <Label htmlFor="roe-email" className="text-sm">ROE Contact Email</Label>
                 <Input
                   id="roe-email"
                   type="email"
                   value={formData.roe_email}
                   onChange={(e) => setFormData(prev => ({ ...prev, roe_email: e.target.value }))}
                   placeholder="Enter contact email"
+                  className="h-11 text-base"
                 />
               </div>
             </div>
@@ -556,14 +564,15 @@ export default function PublicFormPage() {
 
         {/* Site Contacts */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5" />
+          <CardHeader className="pb-3 sm:pb-6">
+            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <Users className="h-4 w-4 sm:h-5 sm:w-5" />
               Site Contacts
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -625,18 +634,82 @@ export default function PublicFormPage() {
                 </TableBody>
               </Table>
             </div>
+
+            {/* Mobile Card View */}
+            <div className="md:hidden space-y-4">
+              {SITE_CONTACT_ROLES.map((role) => {
+                const contact = formData.siteContacts[role.value];
+                return (
+                  <div key={role.value} className="p-4 border rounded-lg bg-card space-y-3">
+                    <div className="font-semibold text-sm">{role.label}</div>
+                    <div className="space-y-2">
+                      <div>
+                        <Label htmlFor={`${role.value}-name`} className="text-xs">Name</Label>
+                        <Input
+                          id={`${role.value}-name`}
+                          value={contact?.name || ''}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            siteContacts: {
+                              ...prev.siteContacts,
+                              [role.value]: { ...prev.siteContacts[role.value], name: e.target.value }
+                            }
+                          }))}
+                          placeholder="Full name"
+                          className="h-11 text-base"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor={`${role.value}-email`} className="text-xs">Email</Label>
+                        <Input
+                          id={`${role.value}-email`}
+                          type="email"
+                          value={contact?.email || ''}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            siteContacts: {
+                              ...prev.siteContacts,
+                              [role.value]: { ...prev.siteContacts[role.value], email: e.target.value }
+                            }
+                          }))}
+                          placeholder="email@example.com"
+                          className="h-11 text-base"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor={`${role.value}-phone`} className="text-xs">Phone</Label>
+                        <Input
+                          id={`${role.value}-phone`}
+                          type="tel"
+                          value={contact?.phone || ''}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            siteContacts: {
+                              ...prev.siteContacts,
+                              [role.value]: { ...prev.siteContacts[role.value], phone: e.target.value }
+                            }
+                          }))}
+                          placeholder="Phone"
+                          className="h-11 text-base"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </CardContent>
         </Card>
 
         {/* Contractor Roles */}
         <Card>
-          <CardHeader>
-            <CardTitle>Contractor Roles</CardTitle>
+          <CardHeader className="pb-3 sm:pb-6">
+            <CardTitle className="text-base sm:text-lg">Contractor Roles</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3 sm:space-y-4">
             {/* Existing contractor roles */}
             {publicData.mappingSheetData?.contractorRoles?.length === 0 && (
-              <div className="text-muted-foreground text-center py-4">
+              <div className="text-muted-foreground text-center py-4 text-sm">
                 No existing contractor roles found
               </div>
             )}
@@ -645,11 +718,11 @@ export default function PublicFormPage() {
               const needsReview = contractor.matchStatus === 'auto_matched' && contractor.dataSource === 'bci_import';
               
               return (
-                <div key={contractor.id} className="p-4 border rounded-lg bg-card">
-                  <div className="flex items-start justify-between">
+                <div key={contractor.id} className="p-3 sm:p-4 border rounded-lg bg-card">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-0">
                     <div className="flex-1">
-                      <div className="font-medium">{contractor.roleLabel}</div>
-                      <div className="text-sm text-muted-foreground">
+                      <div className="font-medium text-sm sm:text-base">{contractor.roleLabel}</div>
+                      <div className="text-xs sm:text-sm text-muted-foreground mt-1">
                         {contractorAction?.action === 'change' && contractorAction.newEmployerName ? 
                           contractorAction.newEmployerName : contractor.employerName
                         }
@@ -676,14 +749,14 @@ export default function PublicFormPage() {
                   
                   {/* Action buttons for BCI matches that need review */}
                   {needsReview && !contractorAction?.action && (
-                    <div className="flex gap-2 mt-3 pt-3 border-t">
+                    <div className="flex flex-col sm:flex-row gap-2 mt-3 pt-3 border-t">
                       <Button 
                         size="sm" 
                         variant="outline"
                         onClick={() => handleContractorAction(contractor.id, 'confirm')}
-                        className="text-green-600 border-green-200 hover:bg-green-50"
+                        className="text-green-600 border-green-200 hover:bg-green-50 h-10 sm:h-9"
                       >
-                        <Check className="h-3 w-3 mr-1" />
+                        <Check className="h-4 w-4 sm:h-3 sm:w-3 mr-1" />
                         Confirm
                       </Button>
                       <Button 
@@ -697,18 +770,18 @@ export default function PublicFormPage() {
                             handleContractorAction(contractor.id, 'change', newEmployerId, employer?.name || 'Selected Employer');
                           }
                         }}
-                        className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                        className="text-blue-600 border-blue-200 hover:bg-blue-50 h-10 sm:h-9"
                       >
-                        <Edit className="h-3 w-3 mr-1" />
+                        <Edit className="h-4 w-4 sm:h-3 sm:w-3 mr-1" />
                         Change
                       </Button>
                       <Button 
                         size="sm" 
                         variant="outline"
                         onClick={() => handleContractorAction(contractor.id, 'wrong')}
-                        className="text-red-600 border-red-200 hover:bg-red-50"
+                        className="text-red-600 border-red-200 hover:bg-red-50 h-10 sm:h-9"
                       >
-                        <X className="h-3 w-3 mr-1" />
+                        <X className="h-4 w-4 sm:h-3 sm:w-3 mr-1" />
                         Mark as Wrong
                       </Button>
                     </div>
@@ -748,10 +821,10 @@ export default function PublicFormPage() {
             })}
 
             {/* Add new contractor role */}
-            <div className="border-2 border-dashed border-muted rounded-lg p-4">
-              <div className="flex items-center gap-4">
+            <div className="border-2 border-dashed border-muted rounded-lg p-3 sm:p-4">
+              <div className="flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-4">
                 <div className="flex-1">
-                  <Label>Employer</Label>
+                  <Label className="text-sm">Employer</Label>
                   <EmployerSearch
                     employers={publicData.employers || []}
                     value={newContractorRole.employerId}
@@ -759,15 +832,16 @@ export default function PublicFormPage() {
                       setNewContractorRole(prev => ({ ...prev, employerId, employerName }));
                     }}
                     placeholder="Search and select employer..."
+                    className="h-11 sm:h-10"
                   />
                 </div>
                 <div className="flex-1">
-                  <Label>Role</Label>
+                  <Label className="text-sm">Role</Label>
                   <Select
                     value={newContractorRole.roleCode}
                     onValueChange={(value) => setNewContractorRole(prev => ({ ...prev, roleCode: value }))}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="h-11 sm:h-10">
                       <SelectValue placeholder="Select role" />
                     </SelectTrigger>
                     <SelectContent>
@@ -779,7 +853,7 @@ export default function PublicFormPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={addContractorRole} size="sm">
+                <Button onClick={addContractorRole} size="sm" className="h-11 sm:h-10 w-full sm:w-auto">
                   <Plus className="h-4 w-4 mr-1" />
                   Add
                 </Button>
@@ -790,10 +864,10 @@ export default function PublicFormPage() {
 
         {/* Trade Contractors */}
         <Card>
-          <CardHeader>
-            <CardTitle>Trade Contractors</CardTitle>
+          <CardHeader className="pb-3 sm:pb-6">
+            <CardTitle className="text-base sm:text-lg">Trade Contractors</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 sm:space-y-5">
             {/* Group by stage */}
             {['early_works', 'structure', 'finishing', 'other'].map(stage => {
               const stageContractors = publicData.mappingSheetData?.tradeContractors?.filter(tc => tc.stage === stage) || [];
@@ -808,19 +882,19 @@ export default function PublicFormPage() {
 
               return (
                 <div key={stage}>
-                  <h4 className="font-semibold text-lg mb-2">{stageLabels[stage]}</h4>
-                  <div className="space-y-2">
+                  <h4 className="font-semibold text-base sm:text-lg mb-2 sm:mb-3">{stageLabels[stage]}</h4>
+                  <div className="space-y-2 sm:space-y-3">
                     {stageContractors.map((contractor) => {
                       const contractorAction = contractorActions[contractor.id];
                       const needsReview = contractor.matchStatus === 'auto_matched' && contractor.dataSource === 'bci_import';
                       const isEmpty = !contractor.employerId; // Check if this is an empty key contractor trade
                       
                       return (
-                        <div key={contractor.id} className="p-3 border rounded-lg bg-card">
-                          <div className="flex items-start justify-between">
+                        <div key={contractor.id} className="p-3 sm:p-4 border rounded-lg bg-card">
+                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-0">
                             <div className="flex-1">
-                              <div className="font-medium">{contractor.tradeLabel}</div>
-                              <div className="text-sm text-muted-foreground">
+                              <div className="font-medium text-sm sm:text-base">{contractor.tradeLabel}</div>
+                              <div className="text-xs sm:text-sm text-muted-foreground mt-1">
                                 {isEmpty ? (
                                   <span className="italic text-gray-400">No contractor assigned</span>
                                 ) : (
@@ -829,7 +903,7 @@ export default function PublicFormPage() {
                                 )}
                               </div>
                               {contractor.estimatedWorkforce && (
-                                <div className="text-xs text-muted-foreground">
+                                <div className="text-xs text-muted-foreground mt-1">
                                   Est. workforce: {contractor.estimatedWorkforce}
                                 </div>
                               )}
@@ -869,9 +943,9 @@ export default function PublicFormPage() {
                                     handleContractorAction(contractor.id, 'add', newEmployerId, employer?.name || 'Selected Employer');
                                   }
                                 }}
-                                className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                                className="text-blue-600 border-blue-200 hover:bg-blue-50 h-10 sm:h-9 flex-1 sm:flex-initial"
                               >
-                                <Plus className="h-3 w-3 mr-1" />
+                                <Plus className="h-4 w-4 sm:h-3 sm:w-3 mr-1" />
                                 Add Contractor
                               </Button>
                             </div>
@@ -879,14 +953,14 @@ export default function PublicFormPage() {
                           
                           {/* Action buttons for BCI matches that need review */}
                           {needsReview && !contractorAction?.action && (
-                            <div className="flex gap-2 mt-3 pt-3 border-t">
+                            <div className="flex flex-col sm:flex-row gap-2 mt-3 pt-3 border-t">
                               <Button 
                                 size="sm" 
                                 variant="outline"
                                 onClick={() => handleContractorAction(contractor.id, 'confirm')}
-                                className="text-green-600 border-green-200 hover:bg-green-50"
+                                className="text-green-600 border-green-200 hover:bg-green-50 h-10 sm:h-9"
                               >
-                                <Check className="h-3 w-3 mr-1" />
+                                <Check className="h-4 w-4 sm:h-3 sm:w-3 mr-1" />
                                 Confirm
                               </Button>
                               <Button 
@@ -900,18 +974,18 @@ export default function PublicFormPage() {
                                     handleContractorAction(contractor.id, 'change', newEmployerId, employer?.name || 'Selected Employer');
                                   }
                                 }}
-                                className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                                className="text-blue-600 border-blue-200 hover:bg-blue-50 h-10 sm:h-9"
                               >
-                                <Edit className="h-3 w-3 mr-1" />
+                                <Edit className="h-4 w-4 sm:h-3 sm:w-3 mr-1" />
                                 Change
                               </Button>
                               <Button 
                                 size="sm" 
                                 variant="outline"
                                 onClick={() => handleContractorAction(contractor.id, 'wrong')}
-                                className="text-red-600 border-red-200 hover:bg-red-50"
+                                className="text-red-600 border-red-200 hover:bg-red-50 h-10 sm:h-9"
                               >
-                                <X className="h-3 w-3 mr-1" />
+                                <X className="h-4 w-4 sm:h-3 sm:w-3 mr-1" />
                                 Mark as Wrong
                               </Button>
                             </div>
@@ -955,61 +1029,69 @@ export default function PublicFormPage() {
             })}
 
             {/* Add new trade contractor */}
-            <div className="border-2 border-dashed border-muted rounded-lg p-4">
-              <div className="flex items-center gap-4">
-                <div className="flex-1">
-                  <Label>Employer</Label>
-                  <EmployerSearch
-                    employers={publicData.employers || []}
-                    value={newTradeContractor.employerId}
-                    onSelect={(employerId, employerName) => {
-                      setNewTradeContractor(prev => ({ ...prev, employerId, employerName }));
-                    }}
-                    placeholder="Search and select employer..."
-                  />
+            <div className="border-2 border-dashed border-muted rounded-lg p-3 sm:p-4">
+              <div className="flex flex-col gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-sm">Employer</Label>
+                    <EmployerSearch
+                      employers={publicData.employers || []}
+                      value={newTradeContractor.employerId}
+                      onSelect={(employerId, employerName) => {
+                        setNewTradeContractor(prev => ({ ...prev, employerId, employerName }));
+                      }}
+                      placeholder="Search and select employer..."
+                      className="h-11 sm:h-10"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-sm">Trade Type</Label>
+                    <Select
+                      value={newTradeContractor.tradeType}
+                      onValueChange={(value) => setNewTradeContractor(prev => ({ ...prev, tradeType: value }))}
+                    >
+                      <SelectTrigger className="h-11 sm:h-10">
+                        <SelectValue placeholder="Select trade" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {publicData.tradeOptions?.map(trade => (
+                          <SelectItem key={trade.value} value={trade.value}>
+                            {trade.label} ({trade.stage.replace('_', ' ')})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <Label>Trade Type</Label>
-                  <Select
-                    value={newTradeContractor.tradeType}
-                    onValueChange={(value) => setNewTradeContractor(prev => ({ ...prev, tradeType: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select trade" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {publicData.tradeOptions?.map(trade => (
-                        <SelectItem key={trade.value} value={trade.value}>
-                          {trade.label} ({trade.stage.replace('_', ' ')})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <Label className="text-sm">Workforce</Label>
+                    <Input
+                      type="number"
+                      placeholder="Est."
+                      value={newTradeContractor.estimatedWorkforce}
+                      onChange={(e) => setNewTradeContractor(prev => ({ ...prev, estimatedWorkforce: e.target.value }))}
+                      className="h-11 sm:h-10"
+                    />
+                  </div>
+                  <div className="flex-1 flex items-end">
+                    <Button onClick={addTradeContractor} size="sm" className="h-11 sm:h-10 w-full">
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add
+                    </Button>
+                  </div>
                 </div>
-                <div className="w-32">
-                  <Label>Workforce</Label>
-                  <Input
-                    type="number"
-                    placeholder="Est."
-                    value={newTradeContractor.estimatedWorkforce}
-                    onChange={(e) => setNewTradeContractor(prev => ({ ...prev, estimatedWorkforce: e.target.value }))}
-                  />
-                </div>
-                <Button onClick={addTradeContractor} size="sm">
-                  <Plus className="h-4 w-4 mr-1" />
-                  Add
-                </Button>
               </div>
             </div>
           </CardContent>
         </Card>
 
         {/* Submit Button */}
-        <div className="flex justify-end gap-3">
+        <div className="flex justify-end gap-3 pb-4 sm:pb-0">
           <Button
             onClick={handleSubmit}
             disabled={submitMutation.isPending}
-            className="min-w-32"
+            className="min-w-32 w-full sm:w-auto h-12 sm:h-10 text-base sm:text-sm"
           >
             {submitMutation.isPending ? 'Submitting...' : 'Submit Updates'}
           </Button>

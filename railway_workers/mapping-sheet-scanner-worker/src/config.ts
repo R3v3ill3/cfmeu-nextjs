@@ -32,6 +32,7 @@ export const config = {
   // Worker settings
   pollIntervalMs: parseInt(process.env.POLL_INTERVAL_MS || '5000', 10),
   maxRetries: parseInt(process.env.MAX_RETRIES || '3', 10),
+  verboseLogs: process.env.SCANNER_VERBOSE_LOGS === 'true',
   
   // PDF settings
   maxPdfPages: 3,

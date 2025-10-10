@@ -26,6 +26,7 @@ Required:
 Optional:
 - `POLL_INTERVAL_MS` - Job polling interval (default: 5000)
 - `MAX_RETRIES` - Max retry attempts (default: 3)
+- `SCANNER_VERBOSE_LOGS` - Set to `true` to enable detailed polling logs (default: `false`)
 
 ## Local Development
 

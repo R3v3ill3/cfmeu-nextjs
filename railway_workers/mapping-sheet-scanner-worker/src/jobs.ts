@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto'
 import { MappingSheetScanJob } from './types'
+import { config } from './config'
 
 const JOB_TABLE = 'scraper_jobs'
 
@@ -24,15 +25,21 @@ export async function reserveNextJob(
     return null
   }
 
-  console.log(`[jobs] Found ${candidates?.length || 0} queued mapping sheet scan jobs`)
+  const candidateCount = candidates?.length ?? 0
 
-  if (!candidates || candidates.length === 0) {
+  if (!candidates || candidateCount === 0) {
     return null
+  }
+
+  if (config.verboseLogs) {
+    console.debug(`[jobs] Found ${candidateCount} queued mapping sheet scan job${candidateCount === 1 ? '' : 's'}`)
   }
 
   // Try to lock each candidate
   for (const candidate of candidates) {
-    console.log(`[jobs] Attempting to lock job ${candidate.id}`)
+    if (config.verboseLogs) {
+      console.debug(`[jobs] Attempting to lock job ${candidate.id}`)
+    }
     const lockToken = randomUUID()
     const { data: lockedJob, error: lockError } = await client
       .from(JOB_TABLE)
@@ -56,14 +63,16 @@ export async function reserveNextJob(
     }
 
     if (lockedJob) {
-      console.log(`[jobs] Successfully locked job ${candidate.id}`)
+      if (config.verboseLogs) {
+        console.debug(`[jobs] Successfully locked job ${candidate.id}`)
+      }
       return lockedJob as MappingSheetScanJob
     } else {
-      console.log(`[jobs] Job ${candidate.id} was locked by another process`)
+      if (config.verboseLogs) {
+        console.debug(`[jobs] Job ${candidate.id} was locked by another process`)
+      }
     }
   }
-
-  console.log('[jobs] Could not lock any jobs')
   return null
 }
 
