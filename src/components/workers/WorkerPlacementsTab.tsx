@@ -22,8 +22,8 @@ const placementSchema = z.object({
   job_title: z.string().optional(),
   employment_status: z.enum(["permanent", "casual", "subcontractor", "apprentice", "trainee"]),
   shift: z.enum(["day", "night", "split", "weekend"]).optional(),
-  start_date: z.string().min(1, "Start date is required"),
-  end_date: z.string().optional(),
+  start_date: z.coerce.date().pipe(z.string()),
+  end_date: z.coerce.date().pipe(z.string()).optional(),
 });
 
 type PlacementFormData = z.infer<typeof placementSchema>;

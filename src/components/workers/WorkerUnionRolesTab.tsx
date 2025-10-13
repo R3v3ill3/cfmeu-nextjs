@@ -22,17 +22,17 @@ import DateInput from "@/components/ui/date-input";
 const unionRoleSchema = z.object({
   name: z.enum(["site_delegate", "hsr", "shift_delegate", "company_delegate", "member", "contact", "ohs_committee_chair"]),
   job_site_id: z.string().optional(),
-  start_date: z.string().min(1, "Start date is required"),
-  end_date: z.string().optional(),
+  start_date: z.coerce.date().pipe(z.string()),
+  end_date: z.coerce.date().pipe(z.string()).optional(),
   is_senior: z.boolean().default(false),
   gets_paid_time: z.boolean().default(false),
   rating: z.string().optional(),
   experience_level: z.string().optional(),
   notes: z.string().optional(),
   elected_by: z.string().optional(),
-  date_elected: z.string().optional(),
-  ohs_training_date: z.string().optional(),
-  ohs_refresher_training_date: z.string().optional(),
+  date_elected: z.coerce.date().pipe(z.string()).optional(),
+  ohs_training_date: z.coerce.date().pipe(z.string()).optional(),
+  ohs_refresher_training_date: z.coerce.date().pipe(z.string()).optional(),
 });
 
 // Dues (worker_memberships) schema
@@ -41,7 +41,7 @@ const duesSchema = z.object({
   dd_status: z.enum(["not_started", "in_progress", "active", "failed"]),
   dd_mandate_id: z.string().optional(),
   arrears_amount: z.string().optional(),
-  last_payment_at: z.string().optional(),
+  last_payment_at: z.coerce.date().pipe(z.string()).optional(),
   notes: z.string().optional(),
 });
 

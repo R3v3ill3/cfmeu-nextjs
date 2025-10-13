@@ -6,6 +6,7 @@ export interface UploadedSplitPdf {
   url: string
   fileName: string
   size: number
+  pageCount: number
   definition: SplitResult['definition']
 }
 
@@ -54,6 +55,7 @@ export async function uploadSplitPdfs(
       url: urlData.publicUrl,
       fileName: result.fileName,
       size: result.pdfBytes.length,
+      pageCount: result.pageCount,
       definition: result.definition,
     })
   }

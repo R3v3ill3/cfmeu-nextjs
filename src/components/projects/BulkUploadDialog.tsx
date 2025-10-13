@@ -351,7 +351,7 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
         startPage: def.startPage,
         endPage: def.endPage,
         tentativeName: def.tentativeName || `Project ${index + 1}`,
-        mode: def.mode,
+        mode: def.mode === 'match' ? 'existing_project' : 'new_project',
         projectId: def.projectId,
       }))
 

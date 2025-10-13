@@ -20,7 +20,7 @@ import DateInput from "@/components/ui/date-input";
 const activitySchema = z.object({
   activity_type: z.enum(["meeting", "training", "action", "strike", "conversation"]),
   job_site_id: z.string().optional(),
-  date: z.string().min(1, "Date is required"),
+  date: z.coerce.date().pipe(z.string()),
   topic: z.string().optional(),
   notes: z.string().optional(),
 });

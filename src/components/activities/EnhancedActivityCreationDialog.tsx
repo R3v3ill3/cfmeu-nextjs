@@ -24,7 +24,7 @@ const activitySchema = z.object({
   template_id: z.string().optional(),
   custom_activity_type: z.string().optional(),
   activity_type: z.string().min(1, "Activity type is required"),
-  date: z.date({
+  date: z.coerce.date({
     message: "Date is required",
   }),
   job_site_id: z.string().optional(),
