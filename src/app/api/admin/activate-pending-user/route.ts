@@ -65,9 +65,7 @@ export async function POST(request: NextRequest) {
 
     if (!pendingEmail) {
       return NextResponse.json(
-        { error: 'pending
-
-Email is required' },
+        { error: 'pendingEmail is required' },
         { status: 400 }
       )
     }
