@@ -1,7 +1,6 @@
 "use client"
 
 import { useSearchParams } from "next/navigation"
-import { useEffect } from "react"
 import { useNewDashboardData } from "@/hooks/useNewDashboardData"
 import { AlertTriangle } from "lucide-react"
 import { ComplianceAlertsCard } from "@/components/dashboard/ComplianceAlertsCard"
@@ -12,7 +11,7 @@ import { ActiveConstructionMetricsComponent } from "@/components/dashboard/Activ
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { FilterIndicatorBadge } from "@/components/dashboard/FilterIndicatorBadge"
 import { useActiveFilters } from "@/hooks/useActiveFilters"
-import { useNavigationLoading } from "@/hooks/useNavigationLoading"
+import Image from "next/image"
 
 export function MobileDashboardView() {
   const sp = useSearchParams()
@@ -20,15 +19,23 @@ export function MobileDashboardView() {
   const patchIds = patchParam.split(",").map(s => s.trim()).filter(Boolean)
   const { data, isLoading } = useNewDashboardData({ patchIds })
   const { hasActiveFilters, activeFilters } = useActiveFilters()
-  const { setNavigationLoading } = useNavigationLoading()
-
-  // Show navigation loading overlay while data is loading
-  useEffect(() => {
-    setNavigationLoading(isLoading, "/")
-  }, [isLoading, setNavigationLoading])
 
   if (isLoading) {
-    return null
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center space-y-4">
+          <Image 
+            src="/spinner.gif" 
+            alt="Loading" 
+            width={32} 
+            height={32} 
+            unoptimized 
+            className="w-8 h-8 mx-auto" 
+          />
+          <p className="text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    )
   }
 
   return (

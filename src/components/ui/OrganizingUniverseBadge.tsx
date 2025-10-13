@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { Badge } from "@/components/ui/badge"
@@ -28,7 +28,12 @@ export function OrganizingUniverseBadge({
   className = "",
 }: OrganizingUniverseBadgeProps) {
   const [open, setOpen] = useState(false)
+  const [displayStatus, setDisplayStatus] = useState(currentStatus)
   const queryClient = useQueryClient()
+
+  useEffect(() => {
+    setDisplayStatus(currentStatus)
+  }, [currentStatus])
 
   const updateMutation = useMutation({
     mutationFn: async (newStatus: 'active' | 'potential' | 'excluded') => {
@@ -39,24 +44,35 @@ export function OrganizingUniverseBadge({
 
       if (error) throw error
     },
+    onMutate: async (newStatus) => {
+      const previousStatus = displayStatus
+      setDisplayStatus(newStatus)
+      setOpen(false)
+      return { previousStatus }
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["projects"] })
       queryClient.invalidateQueries({ queryKey: ["project-detail", projectId] })
       toast.success("Organizing universe updated")
     },
-    onError: (err) => {
+    onError: (err, _newStatus, context) => {
+      if (context?.previousStatus !== undefined) {
+        setDisplayStatus(context.previousStatus)
+      }
       toast.error("Failed to update: " + (err as Error).message)
     },
   })
 
   const handleStatusChange = (newStatus: 'active' | 'potential' | 'excluded') => {
-    if (newStatus !== currentStatus) {
-      updateMutation.mutate(newStatus)
+    if (newStatus === displayStatus) {
+      setOpen(false)
+      return
     }
-    setOpen(false)
+
+    updateMutation.mutate(newStatus)
   }
 
-  const badgeVariant = getOrganisingUniverseBadgeVariant(currentStatus)
+  const badgeVariant = getOrganisingUniverseBadgeVariant(displayStatus)
   const sizeClass = size === "sm" ? "text-[10px]" : "text-xs"
 
   return (
@@ -65,14 +81,21 @@ export function OrganizingUniverseBadge({
         <Badge
           variant={badgeVariant}
           className={`${sizeClass} capitalize cursor-pointer hover:opacity-80 transition-opacity ${className}`}
+          role="button"
+          tabIndex={0}
+          aria-haspopup="menu"
+          aria-expanded={open}
           onClick={(e) => {
             e.stopPropagation()
           }}
         >
           {updateMutation.isPending ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
+            <span className="flex items-center gap-1">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              <span>{displayStatus || 'potential'}</span>
+            </span>
           ) : (
-            currentStatus || 'potential'
+            displayStatus || 'potential'
           )}
         </Badge>
       </DropdownMenuTrigger>
@@ -82,19 +105,19 @@ export function OrganizingUniverseBadge({
         onPointerDown={(e) => e.stopPropagation()}
       >
         <DropdownMenuCheckboxItem
-          checked={currentStatus === 'active'}
+          checked={displayStatus === 'active'}
           onCheckedChange={() => handleStatusChange('active')}
         >
           Active
         </DropdownMenuCheckboxItem>
         <DropdownMenuCheckboxItem
-          checked={currentStatus === 'potential'}
+          checked={displayStatus === 'potential'}
           onCheckedChange={() => handleStatusChange('potential')}
         >
           Potential
         </DropdownMenuCheckboxItem>
         <DropdownMenuCheckboxItem
-          checked={currentStatus === 'excluded'}
+          checked={displayStatus === 'excluded'}
           onCheckedChange={() => handleStatusChange('excluded')}
         >
           Excluded

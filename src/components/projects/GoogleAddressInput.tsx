@@ -81,10 +81,12 @@ export function GoogleAddressInput({
   value,
   onChange,
   placeholder = "Start typing an address...",
+  showLabel = true,
 }: {
   value?: string;
   onChange: (addr: GoogleAddress) => void;
   placeholder?: string;
+  showLabel?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -194,7 +196,7 @@ export function GoogleAddressInput({
   return (
     <div className="space-y-2">
       <div className="space-y-1">
-        <Label>Address</Label>
+        {showLabel && <Label>Address</Label>}
         <Input
           ref={inputRef}
           defaultValue={text}

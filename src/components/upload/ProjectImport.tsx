@@ -74,6 +74,12 @@ export default function ProjectImport({ csvData, onImportComplete, onBack }: Pro
     const results: ProjectImportResults = { successful: 0, failed: 0, errors: [], newEmployers: 0 };
 
     try {
+      const { data: authData } = await supabase.auth.getUser();
+      if (!authData?.user) {
+        throw new Error('User not authenticated');
+      }
+      const userId = authData.user.id;
+
       // Step 1: Geocode all addresses (always include geocoding)
       setCurrentStep("geocoding");
       setGeocodingProgress(0);
@@ -170,7 +176,7 @@ export default function ProjectImport({ csvData, onImportComplete, onBack }: Pro
               state_funding: row.state_funding ?? 0,
               federal_funding: row.federal_funding ?? 0,
               builder_id: employerId || null,
-              // Note: organising_universe will be auto-assigned by trigger based on tier/EBA/patch rules
+              // organising_universe is set to Active via manual override after import completes
             })
             .select("id")
             .single();
@@ -220,6 +226,22 @@ export default function ProjectImport({ csvData, onImportComplete, onBack }: Pro
               .upsert({ project_id: projectId, status: String(row.jv_status).toLowerCase(), label: row.jv_status === 'yes' ? (row.jv_label || null) : null }, { onConflict: "project_id" });
           }
 
+          const { data: ouResult, error: universeErr } = await supabase
+            .rpc('set_organising_universe_manual', {
+              p_project_id: projectId,
+              p_universe: 'active',
+              p_user_id: userId,
+              p_reason: 'Set to active via bulk project import',
+            });
+
+          if (universeErr) {
+            throw new Error(universeErr.message || 'Failed to set organising universe to active');
+          }
+
+          if (!(ouResult as any)?.success) {
+            throw new Error((ouResult as any)?.error || 'Failed to set organising universe to active');
+          }
+
           results.successful++;
         } catch (e: any) {
           results.failed++;
@@ -230,7 +252,7 @@ export default function ProjectImport({ csvData, onImportComplete, onBack }: Pro
       if (results.failed > 0) {
         toast.error(`Import completed with errors. ${results.successful} succeeded, ${results.failed} failed.`);
       } else {
-        toast.success(`Imported ${results.successful} projects with patch matching enabled`);
+        toast.success(`Imported ${results.successful} projects (Organising universe set to Active)`);
       }
 
       // Refresh materialized views so uploaded projects appear immediately

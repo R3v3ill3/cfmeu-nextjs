@@ -134,10 +134,24 @@ export function ScanReviewContainer({
 
       const result = await response.json()
 
+      const descriptionParts: string[] = []
+
+      if (allowProjectCreation) {
+        descriptionParts.push(
+          `Created new project and staged ${contactsDecisions.length} contacts, ${subcontractorDecisions.length} subcontractors`
+        )
+      } else {
+        descriptionParts.push(
+          `Updated ${result.updatedFields || 0} fields, ${result.contactsCreated || 0} contacts, ${result.subcontractorsCreated || 0} subcontractors`
+        )
+      }
+
+      if (result.organisingUniverseUpdated) {
+        descriptionParts.push('Organising universe set to Active')
+      }
+
       toast.success('Import completed successfully!', {
-        description: allowProjectCreation
-          ? `Created new project and staged ${contactsDecisions.length} contacts, ${subcontractorDecisions.length} subcontractors`
-          : `Updated ${result.updatedFields || 0} fields, ${result.contactsCreated || 0} contacts, ${result.subcontractorsCreated || 0} subcontractors`,
+        description: descriptionParts.join(' • '),
       })
 
       if (allowProjectCreation && result.projectId) {

@@ -5,9 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Mail, Trash2, Pencil } from "lucide-react";
+import { Mail, Trash2, Pencil, UserCheck } from "lucide-react";
 import EditPendingUserDialog from "@/components/admin/EditPendingUserDialog";
+import ActivatePendingUserDialog from "@/components/admin/ActivatePendingUserDialog";
 import { format } from "date-fns";
+import { canActivatePendingUser } from "@/utils/emailConversion";
 
 interface PendingUser {
   id: string;
@@ -17,6 +19,7 @@ interface PendingUser {
   status: string;
   created_at: string;
   invited_at: string | null;
+  assigned_patch_ids: string[];
 }
 
 export const PendingUsersTable = () => {
@@ -26,13 +29,15 @@ export const PendingUsersTable = () => {
   const [invitingId, setInvitingId] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editingRow, setEditingRow] = useState<PendingUser | null>(null);
+  const [activateOpen, setActivateOpen] = useState(false);
+  const [activatingUser, setActivatingUser] = useState<PendingUser | null>(null);
 
   const load = async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase
         .from("pending_users")
-        .select("id,email,full_name,role,status,created_at,invited_at")
+        .select("id,email,full_name,role,status,created_at,invited_at,assigned_patch_ids")
         .order("created_at", { ascending: false });
       if (error) throw error;
       setPending(data || []);
@@ -94,6 +99,11 @@ export const PendingUsersTable = () => {
     setEditOpen(true);
   };
 
+  const openActivate = (row: PendingUser) => {
+    setActivatingUser(row);
+    setActivateOpen(true);
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -141,10 +151,20 @@ export const PendingUsersTable = () => {
                   </TableCell>
                   <TableCell>{format(new Date(row.created_at), "dd/MM/yyyy")}</TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       {row.status === "draft" && (
                         <Button size="sm" variant="outline" onClick={() => openEdit(row)}>
                           <Pencil className="h-4 w-4 mr-2" /> Edit
+                        </Button>
+                      )}
+                      {canActivatePendingUser(row.email, row.status) && (
+                        <Button 
+                          size="sm" 
+                          variant="default"
+                          onClick={() => openActivate(row)}
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          <UserCheck className="h-4 w-4 mr-2" /> Activate
                         </Button>
                       )}
                       <Button size="sm" onClick={() => sendInvite(row)} disabled={invitingId === row.id}>
@@ -173,6 +193,18 @@ export const PendingUsersTable = () => {
           onOpenChange={(o) => { setEditOpen(o); if (!o) setEditingRow(null) }}
           pendingUser={editingRow}
           onSaved={() => load()}
+        />
+        <ActivatePendingUserDialog
+          open={activateOpen}
+          onOpenChange={(o) => { setActivateOpen(o); if (!o) setActivatingUser(null) }}
+          pendingUser={activatingUser}
+          onSuccess={() => {
+            load();
+            toast({ 
+              title: "Success", 
+              description: "User successfully activated with all relationships migrated." 
+            });
+          }}
         />
       </CardContent>
     </Card>

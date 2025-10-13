@@ -188,7 +188,26 @@ export async function POST(
       }
     }
 
-    // 4. Update scan record
+    // 4. Apply organising universe override (set to active)
+    const { data: ouResult, error: ouError } = await serviceSupabase.rpc('set_organising_universe_manual', {
+      p_project_id: projectId,
+      p_universe: 'active',
+      p_user_id: user.id,
+      p_reason: 'Set to active via mapping sheet upload',
+    })
+
+    if (ouError) {
+      console.error('Failed to set organising universe to active for project import:', ouError)
+      throw new Error(ouError.message || 'Failed to set organising universe to active')
+    }
+
+    if (!(ouResult as any)?.success) {
+      const details = (ouResult as any)?.error
+      console.error('Failed to set organising universe to active for project import:', details)
+      throw new Error(details || 'Failed to set organising universe to active')
+    }
+
+    // 5. Update scan record
     await serviceSupabase
       .from('mapping_sheet_scans')
       .update({
@@ -204,6 +223,7 @@ export async function POST(
       updatedFields,
       contactsCreated,
       subcontractorsCreated,
+      organisingUniverseUpdated: true,
     })
   } catch (error) {
     console.error('Import error:', error)

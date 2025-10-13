@@ -33,6 +33,11 @@ import { LoadingSpinner } from "@/components/ui/LoadingSpinner"
 import { OrganizingUniverseBadge } from "@/components/ui/OrganizingUniverseBadge"
 import Link from "next/link"
 import { useNavigationLoading } from "@/hooks/useNavigationLoading"
+import { GoogleAddressInput, GoogleAddress } from "@/components/projects/GoogleAddressInput"
+import { useAddressSearch } from "@/hooks/useAddressSearch"
+import { AddressSearchResults } from "@/components/projects/AddressSearchResults"
+import { toast } from "sonner"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 // State persistence key
 const PROJECTS_STATE_KEY = 'projects-page-state-mobile'
@@ -151,6 +156,32 @@ export function ProjectsMobileView() {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [sortOpen, setSortOpen] = useState(false)
 
+  // Address search state
+  const searchMode = (sp.get("searchMode") || "name") as "name" | "address"
+  const addressLat = sp.get("addressLat") ? parseFloat(sp.get("addressLat")!) : null
+  const addressLng = sp.get("addressLng") ? parseFloat(sp.get("addressLng")!) : null
+  const addressQuery = sp.get("addressQuery") || ""
+
+  // Address search query
+  const addressSearchQuery = useAddressSearch({
+    lat: addressLat,
+    lng: addressLng,
+    address: addressQuery,
+    enabled: searchMode === "address" && addressLat !== null && addressLng !== null
+  })
+
+  // Auto-navigate to exact match
+  useEffect(() => {
+    if (searchMode === "address" && addressSearchQuery.data && addressSearchQuery.data.length > 0) {
+      const exactMatch = addressSearchQuery.data.find(r => r.is_exact_match)
+      if (exactMatch) {
+        toast.success(`Found exact match: ${exactMatch.project_name}`)
+        startNavigation(`/projects/${exactMatch.project_id}`)
+        setTimeout(() => router.push(`/projects/${exactMatch.project_id}`), 300)
+      }
+    }
+  }, [addressSearchQuery.data, searchMode, router, startNavigation])
+
   useEffect(() => {
     saveProjectsState(sp)
   }, [sp])
@@ -189,6 +220,36 @@ export function ProjectsMobileView() {
     }
     const qs = params.toString()
     router.replace(qs ? `${pathname}?${qs}` : pathname)
+  }, [pathname, router, sp])
+
+  const handleSearchModeChange = useCallback((mode: string) => {
+    const params = new URLSearchParams(sp.toString())
+    if (mode === "address") {
+      params.set("searchMode", "address")
+      params.delete("q")
+    } else {
+      params.delete("searchMode")
+      params.delete("addressLat")
+      params.delete("addressLng")
+      params.delete("addressQuery")
+    }
+    params.delete('page')
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname)
+  }, [pathname, router, sp])
+
+  const handleAddressSelect = useCallback((address: GoogleAddress) => {
+    if (address.lat && address.lng) {
+      const params = new URLSearchParams(sp.toString())
+      params.set("searchMode", "address")
+      params.set("addressLat", address.lat.toString())
+      params.set("addressLng", address.lng.toString())
+      params.set("addressQuery", address.formatted)
+      params.delete("q")
+      params.delete('page')
+      const qs = params.toString()
+      router.replace(qs ? `${pathname}?${qs}` : pathname)
+    }
   }, [pathname, router, sp])
 
   useEffect(() => {
@@ -300,17 +361,40 @@ export function ProjectsMobileView() {
       </div>
 
       {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input 
-          id="project-search-mobile"
-          placeholder="Search projects…" 
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          className="pl-10"
-          autoComplete="off"
-        />
-      </div>
+      <Tabs value={searchMode} onValueChange={handleSearchModeChange} className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="name">
+            <Search className="h-4 w-4 mr-2" />
+            By Name
+          </TabsTrigger>
+          <TabsTrigger value="address">
+            <MapIcon className="h-4 w-4 mr-2" />
+            By Address
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="name" className="mt-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input 
+              id="project-search-mobile"
+              placeholder="Search projects…" 
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="pl-10"
+              autoComplete="off"
+            />
+          </div>
+        </TabsContent>
+        <TabsContent value="address" className="mt-2">
+          <GoogleAddressInput
+            value={addressQuery}
+            onChange={handleAddressSelect}
+            placeholder="Enter an address..."
+            showLabel={false}
+          />
+        </TabsContent>
+      </Tabs>
+
 
       {/* Mobile filters and sort */}
       <div className="space-y-2">
@@ -469,6 +553,43 @@ export function ProjectsMobileView() {
         </div>
       )}
 
+      {/* Address Search Results */}
+      {searchMode === "address" && addressLat && addressLng && view !== 'map' && (
+        <div className="space-y-3">
+          {addressSearchQuery.isLoading && (
+            <div className="text-sm text-muted-foreground flex items-center gap-2 p-4 justify-center">
+              <LoadingSpinner size={16} /> Searching nearby…
+            </div>
+          )}
+          {addressSearchQuery.error && (
+            <div className="border border-red-300 bg-red-50 rounded-lg p-3">
+              <p className="text-red-800 text-sm">Error searching for projects. Please try again.</p>
+            </div>
+          )}
+          {addressSearchQuery.data && addressSearchQuery.data.length > 0 && !addressSearchQuery.data.some(r => r.is_exact_match) && (
+            <AddressSearchResults
+              searchAddress={addressQuery}
+              searchLat={addressLat}
+              searchLng={addressLng}
+              results={addressSearchQuery.data}
+              onProjectClick={(projectId) => {
+                startNavigation(`/projects/${projectId}`)
+                setTimeout(() => router.push(`/projects/${projectId}`), 50)
+              }}
+              onShowOnMap={() => setParam("view", "map")}
+              isMobile
+            />
+          )}
+          {addressSearchQuery.data && addressSearchQuery.data.length === 0 && !addressSearchQuery.isLoading && (
+            <div className="text-center py-6">
+              <MapIcon className="h-10 w-10 text-gray-400 mx-auto mb-3" />
+              <p className="text-gray-600 text-sm">No projects found within 100km.</p>
+            </div>
+          )}
+        </div>
+      )}
+
+
       {/* Results count */}
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>
@@ -513,6 +634,16 @@ export function ProjectsMobileView() {
               workers: workersFilter,
               eba: ebaFilter
             }}
+            addressSearchPin={
+              searchMode === "address" && addressLat && addressLng
+                ? { lat: addressLat, lng: addressLng, address: addressQuery }
+                : undefined
+            }
+            highlightedProjectIds={
+              searchMode === "address" && addressSearchQuery.data
+                ? addressSearchQuery.data.map(r => r.project_id)
+                : []
+            }
           />
         </div>
       ) : projects.length === 0 && !isLoading ? (

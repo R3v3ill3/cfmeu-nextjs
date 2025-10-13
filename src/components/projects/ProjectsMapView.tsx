@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useMemo, useCallback } from "react"
-import { GoogleMap, Polygon, Marker, InfoWindow } from "@react-google-maps/api"
+import { GoogleMap, Polygon, Marker, InfoWindow, Circle } from "@react-google-maps/api"
 import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { Badge } from "@/components/ui/badge"
@@ -15,7 +15,6 @@ import { getProjectColor, getColorSchemeLegend } from "@/utils/projectColors"
 
 interface ProjectsMapViewProps {
   projects: any[]
-  summaries: Record<string, any>
   onProjectClick: (projectId: string) => void
   searchQuery: string
   patchIds: string[]
@@ -31,6 +30,12 @@ interface ProjectsMapViewProps {
     special?: string
     eba?: string
   }
+  addressSearchPin?: {
+    lat: number
+    lng: number
+    address: string
+  }
+  highlightedProjectIds?: string[]
 }
 
 interface PatchData {
@@ -86,9 +91,9 @@ function loadGoogleMaps(apiKey: string): Promise<void> {
       setTimeout(() => {
         clearInterval(check)
         if (!isMapsReady()) {
-          reject(new Error("Google Maps failed to load"))
+          reject(new Error("Google Maps failed to load (timeout after 30s)"))
         }
-      }, 10000)
+      }, 30000) // Increased from 10s to 30s
       return
     }
 
@@ -112,9 +117,9 @@ function loadGoogleMaps(apiKey: string): Promise<void> {
       setTimeout(() => {
         clearInterval(check)
         if (!(window.google && window.google.maps && window.google.maps.geometry)) {
-          reject(new Error("Google Maps failed to load"))
+          reject(new Error("Google Maps geometry library failed to load (timeout after 30s)"))
         }
-      }, 10000)
+      }, 30000) // Increased from 10s to 30s
     }
     script.onerror = () => reject(new Error("Failed to load Google Maps"))
     document.head.appendChild(script)
@@ -131,13 +136,14 @@ const patchColors = {
 
 export default function ProjectsMapView({
   projects,
-  summaries,
   onProjectClick,
   searchQuery,
   patchIds,
   tierFilter,
   workersFilter,
-  currentFilters
+  currentFilters,
+  addressSearchPin,
+  highlightedProjectIds = []
 }: ProjectsMapViewProps) {
   const [map, setMap] = useState<google.maps.Map | null>(null)
   const [selectedJobSite, setSelectedJobSite] = useState<JobSiteData | null>(null)
@@ -185,14 +191,20 @@ export default function ProjectsMapView({
       try {
         const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY as string | undefined
         if (!key) {
+          console.error("Google Maps API key not found in environment variables")
           setMapsError("Google Maps API key not configured")
           return
         }
+        console.log("Loading Google Maps API...")
         await loadGoogleMaps(key)
-        if (!cancelled) setMapsLoaded(true)
+        if (!cancelled) {
+          console.log("Google Maps loaded successfully")
+          setMapsLoaded(true)
+        }
       } catch (e) {
-        console.error(e)
-        setMapsError("Failed to load Google Maps")
+        console.error("Google Maps loading error:", e)
+        const errorMessage = e instanceof Error ? e.message : "Failed to load Google Maps"
+        setMapsError(errorMessage)
       }
     })()
     return () => { cancelled = true }
@@ -356,10 +368,17 @@ export default function ProjectsMapView({
 
   // Auto-fit bounds when data changes - focus on first project and ensure all are visible
   useEffect(() => {
-    if (!map || jobSites.length === 0) return
+    if (!map) return
+    if (jobSites.length === 0 && !addressSearchPin) return
 
     const bounds = new google.maps.LatLngBounds()
     let hasPoints = false
+
+    // Add address search pin bounds (highest priority)
+    if (addressSearchPin) {
+      bounds.extend({ lat: addressSearchPin.lat, lng: addressSearchPin.lng })
+      hasPoints = true
+    }
 
     // Add job site bounds
     jobSites.forEach(site => {
@@ -379,21 +398,17 @@ export default function ProjectsMapView({
     })
 
     if (hasPoints) {
-      // If we have a first project, center on it but ensure all are visible
-      if (jobSites.length > 0) {
-        const firstSite = jobSites[0]
-        map.fitBounds(bounds)
-        
-        // After fitting bounds, ensure minimum zoom to show all projects
-        setTimeout(() => {
-          const currentZoom = map.getZoom() || 10
-          if (currentZoom > 15) {
-            map.setZoom(15) // Max zoom to keep context
-          }
-        }, 100)
-      }
+      map.fitBounds(bounds)
+
+      // After fitting bounds, ensure minimum zoom to show all projects
+      setTimeout(() => {
+        const currentZoom = map.getZoom() || 10
+        if (currentZoom > 15) {
+          map.setZoom(15) // Max zoom to keep context
+        }
+      }, 100)
     }
-  }, [map, jobSites, patches, extractPolygonsFromGeoJSON])
+  }, [map, jobSites, patches, addressSearchPin, extractPolygonsFromGeoJSON])
 
   // Deterministic color per patch id
   const colorForPatch = useCallback((patchId: string) => {
@@ -461,26 +476,7 @@ export default function ProjectsMapView({
   }
 
   const deriveBuilderStatus = (project: any): 'active_builder' | 'inactive_builder' | 'unknown_builder' => {
-    try {
-      if (!project) return 'unknown_builder'
-      const assignmentsRaw = project.project_assignments || []
-      const assignments = Array.isArray(assignmentsRaw) ? assignmentsRaw : [assignmentsRaw]
-      const builderAssignments = assignments.filter((pa: any) => {
-        if (pa?.assignment_type !== 'contractor_role') return false
-        const roleTypes = Array.isArray(pa?.contractor_role_types) ? pa.contractor_role_types : (pa?.contractor_role_types ? [pa.contractor_role_types] : [])
-        return roleTypes.some((rt: any) => rt?.code === 'builder' || rt?.code === 'head_contractor')
-      })
-      for (const assignment of builderAssignments) {
-        const employers = Array.isArray(assignment?.employers) ? assignment.employers : (assignment?.employers ? [assignment.employers] : [])
-        for (const emp of employers) {
-          if (emp?.enterprise_agreement_status === true) return 'active_builder'
-          if (emp && (emp?.enterprise_agreement_status === false || emp?.enterprise_agreement_status === 'no_eba')) return 'inactive_builder'
-        }
-        if (employers.length > 0) return 'inactive_builder'
-      }
-      if (project.builder_id) return 'unknown_builder'
-    } catch {}
-    return 'unknown_builder'
+    return project?.builder_status || 'unknown_builder';
   }
 
   return (
@@ -528,13 +524,52 @@ export default function ProjectsMapView({
           onLoad={setMap}
           onClick={handleMapClick}
         >
+          {/* Render Address Search Pin and Radius */}
+          {addressSearchPin && (
+            <>
+              {/* Search Radius Circle (100km) */}
+              <Circle
+                center={{ lat: addressSearchPin.lat, lng: addressSearchPin.lng }}
+                radius={100000} // 100km in meters
+                options={{
+                  fillColor: "#3b82f6",
+                  fillOpacity: 0.1,
+                  strokeColor: "#3b82f6",
+                  strokeOpacity: 0.4,
+                  strokeWeight: 2,
+                  clickable: false
+                }}
+              />
+
+              {/* Search Pin Marker */}
+              <Marker
+                position={{ lat: addressSearchPin.lat, lng: addressSearchPin.lng }}
+                icon={{
+                  url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
+                    <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <circle cx="16" cy="16" r="12" fill="#ef4444" stroke="#ffffff" stroke-width="3"/>
+                      <path d="M16 8 L20 14 L12 14 Z" fill="#ffffff"/>
+                    </svg>
+                  `),
+                  scaledSize: new google.maps.Size(32, 32),
+                  anchor: new google.maps.Point(16, 16)
+                }}
+                onClick={() => {
+                  setInfoWindowPosition({ lat: addressSearchPin.lat, lng: addressSearchPin.lng })
+                  setSelectedJobSite(null)
+                  setSelectedPatch(null)
+                }}
+              />
+            </>
+          )}
+
           {/* Render Patches as Polygons */}
           {patches.map(patch => {
             if (!patch.geom_geojson) return null
-            
+
             const polygons = extractPolygonsFromGeoJSON(patch.geom_geojson)
             if (polygons.length === 0) return null
-            
+
             const color = colorForPatch(patch.id)
             return (
               <div key={patch.id}>

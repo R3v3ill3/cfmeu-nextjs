@@ -56,11 +56,7 @@ CREATE POLICY "Admins can view all approval history"
   ON approval_history FOR SELECT
   TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM user_roles
-      WHERE user_roles.user_id = auth.uid()
-      AND user_roles.role IN ('admin', 'lead_organiser')
-    )
+    has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'lead_organiser')
   );
 
 CREATE POLICY "Users can view approval history for their submissions"
@@ -100,11 +96,7 @@ DECLARE
   v_is_admin boolean;
 BEGIN
   -- Verify user is admin or lead_organiser
-  SELECT EXISTS (
-    SELECT 1 FROM user_roles
-    WHERE user_id = p_admin_user_id
-    AND role IN ('admin', 'lead_organiser')
-  ) INTO v_is_admin;
+  v_is_admin := has_role(p_admin_user_id, 'admin') OR has_role(p_admin_user_id, 'lead_organiser');
 
   IF NOT v_is_admin THEN
     RETURN jsonb_build_object(
@@ -185,11 +177,7 @@ DECLARE
   v_is_admin boolean;
 BEGIN
   -- Verify user is admin or lead_organiser
-  SELECT EXISTS (
-    SELECT 1 FROM user_roles
-    WHERE user_id = p_admin_user_id
-    AND role IN ('admin', 'lead_organiser')
-  ) INTO v_is_admin;
+  v_is_admin := has_role(p_admin_user_id, 'admin') OR has_role(p_admin_user_id, 'lead_organiser');
 
   IF NOT v_is_admin THEN
     RETURN jsonb_build_object(
@@ -271,11 +259,7 @@ DECLARE
   v_is_admin boolean;
 BEGIN
   -- Verify user is admin or lead_organiser
-  SELECT EXISTS (
-    SELECT 1 FROM user_roles
-    WHERE user_id = p_admin_user_id
-    AND role IN ('admin', 'lead_organiser')
-  ) INTO v_is_admin;
+  v_is_admin := has_role(p_admin_user_id, 'admin') OR has_role(p_admin_user_id, 'lead_organiser');
 
   IF NOT v_is_admin THEN
     RETURN jsonb_build_object(
@@ -356,11 +340,7 @@ DECLARE
   v_is_admin boolean;
 BEGIN
   -- Verify user is admin or lead_organiser
-  SELECT EXISTS (
-    SELECT 1 FROM user_roles
-    WHERE user_id = p_admin_user_id
-    AND role IN ('admin', 'lead_organiser')
-  ) INTO v_is_admin;
+  v_is_admin := has_role(p_admin_user_id, 'admin') OR has_role(p_admin_user_id, 'lead_organiser');
 
   IF NOT v_is_admin THEN
     RETURN jsonb_build_object(
@@ -446,11 +426,9 @@ CREATE POLICY "Users cannot see pending projects unless creator"
       AND mss.uploaded_by = auth.uid()
     )
     OR
-    EXISTS (
-      SELECT 1 FROM user_roles
-      WHERE user_roles.user_id = auth.uid()
-      AND user_roles.role IN ('admin', 'lead_organiser')
-    )
+    has_role(auth.uid(), 'admin')
+    OR
+    has_role(auth.uid(), 'lead_organiser')
   );
 
 -- Employers: Regular users cannot see pending employers
@@ -459,11 +437,9 @@ CREATE POLICY "Users cannot see pending employers unless admin"
   USING (
     approval_status != 'pending'
     OR
-    EXISTS (
-      SELECT 1 FROM user_roles
-      WHERE user_roles.user_id = auth.uid()
-      AND user_roles.role IN ('admin', 'lead_organiser')
-    )
+    has_role(auth.uid(), 'admin')
+    OR
+    has_role(auth.uid(), 'lead_organiser')
   );
 
 -- ==========================================

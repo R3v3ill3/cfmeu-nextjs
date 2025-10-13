@@ -4,9 +4,12 @@ export const dynamic = 'force-dynamic'
 import { PendingUsersTable } from "@/components/admin/PendingUsersTable"
 import { InviteUserDialog } from "@/components/admin/InviteUserDialog"
 import { AddDraftUserDialog } from "@/components/admin/AddDraftUserDialog"
+import { PendingProjectsTable } from "@/components/admin/PendingProjectsTable"
+import { PendingEmployersTable } from "@/components/admin/PendingEmployersTable"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { Badge } from "@/components/ui/badge"
 import UsersTable from "@/components/admin/UsersTable"
 import RoleGuard from "@/components/guards/RoleGuard"
 import { useQuery } from "@tanstack/react-query"
@@ -25,6 +28,7 @@ import { useSearchParams } from "next/navigation"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { ChevronDown, ChevronUp } from "lucide-react"
+import { toast } from "sonner"
 
 export default function AdminPage() {
   const [open, setOpen] = useState(false)
@@ -79,6 +83,111 @@ export default function AdminPage() {
     }
   }, [tabParam, defaultTab])
 
+  // Pending approvals state
+  const [pendingProjects, setPendingProjects] = useState<any[]>([])
+  const [pendingEmployers, setPendingEmployers] = useState<any[]>([])
+  const [isLoadingPending, setIsLoadingPending] = useState(false)
+
+  const fetchPendingItems = async () => {
+    setIsLoadingPending(true)
+    try {
+      const response = await fetch('/api/admin/pending-items')
+      if (response.ok) {
+        const data = await response.json()
+        setPendingProjects(data.projects || [])
+        setPendingEmployers(data.employers || [])
+      }
+    } catch (error) {
+      console.error('Error fetching pending items:', error)
+    } finally {
+      setIsLoadingPending(false)
+    }
+  }
+
+  useEffect(() => {
+    if (user && (isAdmin || isLeadOrganiser)) {
+      fetchPendingItems()
+    }
+  }, [user, isAdmin, isLeadOrganiser])
+
+  const handleApproveProject = async (projectId: string, notes?: string) => {
+    try {
+      const response = await fetch('/api/admin/approve-project', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId, notes }),
+      })
+      if (response.ok) {
+        toast.success('Project approved')
+        await fetchPendingItems()
+      } else {
+        toast.error('Failed to approve project')
+      }
+    } catch (error) {
+      console.error('Error approving project:', error)
+      toast.error('Failed to approve project')
+    }
+  }
+
+  const handleRejectProject = async (projectId: string, reason: string) => {
+    try {
+      const response = await fetch('/api/admin/reject-project', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId, reason }),
+      })
+      if (response.ok) {
+        toast.success('Project rejected')
+        await fetchPendingItems()
+      } else {
+        toast.error('Failed to reject project')
+      }
+    } catch (error) {
+      console.error('Error rejecting project:', error)
+      toast.error('Failed to reject project')
+    }
+  }
+
+  const handleApproveEmployer = async (employerId: string, notes?: string) => {
+    try {
+      const response = await fetch('/api/admin/approve-employer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ employerId, notes }),
+      })
+      if (response.ok) {
+        toast.success('Employer approved')
+        await fetchPendingItems()
+      } else {
+        toast.error('Failed to approve employer')
+      }
+    } catch (error) {
+      console.error('Error approving employer:', error)
+      toast.error('Failed to approve employer')
+    }
+  }
+
+  const handleRejectEmployer = async (employerId: string, reason: string) => {
+    try {
+      const response = await fetch('/api/admin/reject-employer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ employerId, reason }),
+      })
+      if (response.ok) {
+        toast.success('Employer rejected')
+        await fetchPendingItems()
+      } else {
+        toast.error('Failed to reject employer')
+      }
+    } catch (error) {
+      console.error('Error rejecting employer:', error)
+      toast.error('Failed to reject employer')
+    }
+  }
+
+  const totalPendingCount = pendingProjects.length + pendingEmployers.length
+
   return (
     <RoleGuard allow={["admin", "lead_organiser"]}>
       <div className={`space-y-4 ${isMobile ? 'px-safe py-4 pb-safe-bottom' : 'p-6'}`}>
@@ -101,6 +210,46 @@ export default function AdminPage() {
         {isMobile ? (
           /* Mobile-optimized accordion layout */
           <div className="space-y-3">
+            <Collapsible defaultOpen>
+              <CollapsibleTrigger asChild>
+                <Button variant="outline" className="w-full justify-between">
+                  Pending Approvals
+                  {totalPendingCount > 0 && (
+                    <Badge variant="destructive" className="ml-2">
+                      {totalPendingCount}
+                    </Badge>
+                  )}
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="mt-3 space-y-6">
+                  <div>
+                    <h3 className="text-base font-semibold mb-3">
+                      Pending Projects ({pendingProjects.length})
+                    </h3>
+                    <PendingProjectsTable
+                      projects={pendingProjects}
+                      onApprove={handleApproveProject}
+                      onReject={handleRejectProject}
+                      onRefresh={fetchPendingItems}
+                    />
+                  </div>
+
+                  <div>
+                    <h3 className="text-base font-semibold mb-3">
+                      Pending Employers ({pendingEmployers.length})
+                    </h3>
+                    <PendingEmployersTable
+                      employers={pendingEmployers}
+                      onApprove={handleApproveEmployer}
+                      onReject={handleRejectEmployer}
+                    />
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+
             {isAdmin && (
               <Collapsible>
                 <CollapsibleTrigger asChild>
@@ -249,6 +398,14 @@ export default function AdminPage() {
           /* Desktop layout - original tabs */
           <Tabs value={tabValue} onValueChange={setTabValue}>
           <TabsList>
+            <TabsTrigger value="pending">
+              Pending Approvals
+              {totalPendingCount > 0 && (
+                <Badge variant="destructive" className="ml-2">
+                  {totalPendingCount}
+                </Badge>
+              )}
+            </TabsTrigger>
             {isAdmin && <TabsTrigger value="users">Users</TabsTrigger>}
             <TabsTrigger value="invites">Invites</TabsTrigger>
             {isAdmin && <TabsTrigger value="hierarchy">Hierarchy</TabsTrigger>}
@@ -259,6 +416,32 @@ export default function AdminPage() {
             {isAdmin && <TabsTrigger value="navigation">Navigation</TabsTrigger>}
             {isAdmin && <TabsTrigger value="system-health">System Health</TabsTrigger>}
           </TabsList>
+          <TabsContent value="pending">
+            <div className="space-y-8">
+              <div>
+                <h3 className="text-lg font-semibold mb-4">
+                  Pending Projects ({pendingProjects.length})
+                </h3>
+                <PendingProjectsTable
+                  projects={pendingProjects}
+                  onApprove={handleApproveProject}
+                  onReject={handleRejectProject}
+                  onRefresh={fetchPendingItems}
+                />
+              </div>
+
+              <div>
+                <h3 className="text-lg font-semibold mb-4">
+                  Pending Employers ({pendingEmployers.length})
+                </h3>
+                <PendingEmployersTable
+                  employers={pendingEmployers}
+                  onApprove={handleApproveEmployer}
+                  onReject={handleRejectEmployer}
+                />
+              </div>
+            </div>
+          </TabsContent>
           {isAdmin && (
             <TabsContent value="users">
               <UsersTable />

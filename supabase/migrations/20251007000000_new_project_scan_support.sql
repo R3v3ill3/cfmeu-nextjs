@@ -2,6 +2,9 @@
 -- Mapping Sheet Scanner Enhancements: Support new project upload workflow
 -- ============================================================================
 
+-- Enable unaccent extension for text search
+CREATE EXTENSION IF NOT EXISTS unaccent;
+
 -- Allow mapping sheet scans without an existing project context
 ALTER TABLE mapping_sheet_scans
   ALTER COLUMN project_id DROP NOT NULL;
@@ -34,10 +37,18 @@ END $$;
 ALTER TABLE mapping_sheet_scans
   ADD COLUMN IF NOT EXISTS upload_mode TEXT;
 
-ALTER TABLE mapping_sheet_scans
-  ADD CONSTRAINT IF NOT EXISTS valid_upload_mode CHECK (
-    upload_mode IN ('existing_project', 'new_project')
-  );
+DO $$
+BEGIN
+  ALTER TABLE mapping_sheet_scans
+    DROP CONSTRAINT IF EXISTS valid_upload_mode;
+
+  ALTER TABLE mapping_sheet_scans
+    ADD CONSTRAINT valid_upload_mode CHECK (
+      upload_mode IN ('existing_project', 'new_project')
+    );
+EXCEPTION WHEN duplicate_object THEN
+  NULL;
+END $$;
 
 ALTER TABLE mapping_sheet_scans
   ADD COLUMN IF NOT EXISTS created_project_id UUID REFERENCES projects(id);
@@ -107,8 +118,7 @@ SELECT
   to_tsvector('simple', unaccent(coalesce(e.name, ''))) AS search_vector
 FROM projects p
 LEFT JOIN job_sites js ON js.id = p.main_job_site_id
-LEFT JOIN employers e ON e.id = p.builder_id
-WHERE p.deleted_at IS NULL;
+LEFT JOIN employers e ON e.id = p.builder_id;
 
 GRANT SELECT ON public.projects_quick_search TO authenticated;
 

@@ -57,6 +57,7 @@ export async function POST(request: NextRequest) {
       p_contacts: (contactsDecisions || []) as any,
       p_subcontractors: (subcontractorDecisions || []) as any,
       p_employer_creations: (employerCreations || []) as any,
+      p_require_approval: true,  // NEW - always require approval for scan uploads
     })
 
     if (rpcError) {
@@ -74,10 +75,41 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    let organisingUniverseUpdated = false
+
+    if (result?.projectId) {
+      const { data: ouResult, error: ouError } = await supabase.rpc('set_organising_universe_manual', {
+        p_project_id: result.projectId,
+        p_universe: 'active',
+        p_user_id: user.id,
+        p_reason: 'Set to active via mapping sheet upload',
+      })
+
+      if (ouError) {
+        console.error('Failed to set organising universe to active:', ouError)
+        return NextResponse.json(
+          { error: ouError.message || 'Failed to set organising universe to active' },
+          { status: 500 }
+        )
+      }
+
+      if (!(ouResult as any)?.success) {
+        const details = (ouResult as any)?.error
+        console.error('Failed to set organising universe to active:', details)
+        return NextResponse.json(
+          { error: details || 'Failed to set organising universe to active' },
+          { status: 500 }
+        )
+      }
+
+      organisingUniverseUpdated = true
+    }
+
     return NextResponse.json({
       success: result.success,
       projectId: result.projectId,
-      jobSiteId: result.jobSiteId
+      jobSiteId: result.jobSiteId,
+      organisingUniverseUpdated,
     })
 
   } catch (error) {
@@ -88,4 +120,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

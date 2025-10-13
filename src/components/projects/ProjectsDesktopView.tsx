@@ -13,9 +13,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { ArrowUp, ArrowDown, LayoutGrid, List as ListIcon, MapPin, Filter, X, ChevronDown, ChevronUp } from "lucide-react"
+import { ArrowUp, ArrowDown, LayoutGrid, List as ListIcon, MapPin, Filter, X, ChevronDown, ChevronUp, Upload, Navigation, Search } from "lucide-react"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import CreateProjectDialog from "@/components/projects/CreateProjectDialog"
+import { BulkUploadDialog } from "@/components/projects/BulkUploadDialog"
 import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
 import { PROJECT_TIER_LABELS, ProjectTier } from "@/components/projects/types"
 import { useProjectsServerSideCompatible } from "@/hooks/useProjectsServerSide"
@@ -25,9 +26,26 @@ import { useMultipleProjectSubsetStats } from "@/hooks/useProjectSubsetStats"
 import { SubsetEbaStats } from "@/components/projects/SubsetEbaStats"
 import { useNavigationLoading } from "@/hooks/useNavigationLoading"
 import { CfmeuEbaBadge, getProjectEbaStatus } from "@/components/ui/CfmeuEbaBadge"
+import { OrganizingUniverseBadge } from "@/components/ui/OrganizingUniverseBadge"
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner"
 import Link from "next/link"
 import { WorkerDetailModal } from "@/components/workers/WorkerDetailModal"
+import { GoogleAddressInput, GoogleAddress } from "@/components/projects/GoogleAddressInput"
+import { useAddressSearch } from "@/hooks/useAddressSearch"
+import { AddressSearchResults } from "@/components/projects/AddressSearchResults"
+import { toast } from "sonner"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+
+type MapProjectData = {
+  id: string
+  name: string
+  latitude: number
+  longitude: number
+  tier: string | null
+  organising_universe: string | null
+  stage_class: string | null
+  builder_status: 'active_builder' | 'inactive_builder' | 'unknown_builder'
+}
 
 type ProjectWithRoles = {
   id: string
@@ -275,20 +293,12 @@ function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: Proje
                 <Badge variant="secondary" className="text-[10px] capitalize">{String((p as any).stage_class).replace('_',' ')}</Badge>
               )}
               {('organising_universe' in p && (p as any).organising_universe) && (
-                <Badge 
-                  variant="outline" 
-                  className={`text-[10px] capitalize border-2 font-medium ${
-                    (p as any).organising_universe === 'active' 
-                      ? 'bg-green-50 text-green-800 border-green-300 hover:bg-green-100'
-                      : (p as any).organising_universe === 'potential'
-                      ? 'bg-blue-50 text-blue-800 border-blue-300 hover:bg-blue-100'
-                      : (p as any).organising_universe === 'excluded'
-                      ? 'bg-red-50 text-red-800 border-red-300 hover:bg-red-100'
-                      : 'bg-gray-50 text-gray-800 border-gray-300 hover:bg-gray-100'
-                  }`}
-                >
-                  {String((p as any).organising_universe)}
-                </Badge>
+                <OrganizingUniverseBadge
+                  projectId={p.id}
+                  currentStatus={(p as any).organising_universe as any}
+                  size="sm"
+                  className="text-[10px]"
+                />
               )}
             </div>
           </div>
@@ -475,6 +485,49 @@ export function ProjectsDesktopView() {
   const [isEmployerOpen, setIsEmployerOpen] = useState(false)
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null)
   const [isWorkerOpen, setIsWorkerOpen] = useState(false)
+  const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false)
+
+  // Query for map-specific data, only when map view is active
+  const { data: mapData, isLoading: isMapDataLoading } = useQuery<MapProjectData[]>({
+    queryKey: ['projects-map-data'],
+    queryFn: async () => {
+      const response = await fetch('/api/projects/map-data')
+      if (!response.ok) {
+        throw new Error('Failed to fetch map data')
+      }
+      return response.json()
+    },
+    enabled: view === 'map',
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    refetchOnWindowFocus: false,
+  })
+
+  // Address search state
+  const searchMode = (sp.get("searchMode") || "name") as "name" | "address"
+  const addressLat = sp.get("addressLat") ? parseFloat(sp.get("addressLat")!) : null
+  const addressLng = sp.get("addressLng") ? parseFloat(sp.get("addressLng")!) : null
+  const addressQuery = sp.get("addressQuery") || ""
+  const [selectedAddress, setSelectedAddress] = useState<GoogleAddress | null>(null)
+
+  // Address search query
+  const addressSearchQuery = useAddressSearch({
+    lat: addressLat,
+    lng: addressLng,
+    address: addressQuery,
+    enabled: searchMode === "address" && addressLat !== null && addressLng !== null
+  })
+
+  // Auto-navigate to exact match if only one result and it's exact
+  useEffect(() => {
+    if (searchMode === "address" && addressSearchQuery.data && addressSearchQuery.data.length > 0) {
+      const exactMatch = addressSearchQuery.data.find(r => r.is_exact_match)
+      if (exactMatch) {
+        toast.success(`Found exact match: ${exactMatch.project_name}`)
+        startNavigation(`/projects/${exactMatch.project_id}`)
+        setTimeout(() => router.push(`/projects/${exactMatch.project_id}`), 300)
+      }
+    }
+  }, [addressSearchQuery.data, searchMode, router, startNavigation])
 
   // Enhanced state persistence
   useEffect(() => {
@@ -518,6 +571,44 @@ export function ProjectsDesktopView() {
     }
     const qs = params.toString()
     router.replace(qs ? `${pathname}?${qs}` : pathname)
+  }, [pathname, router, sp])
+
+  // Handle search mode change
+  const handleSearchModeChange = useCallback((mode: string) => {
+    const params = new URLSearchParams(sp.toString())
+    if (mode === "address") {
+      params.set("searchMode", "address")
+      // Clear name search
+      params.delete("q")
+    } else {
+      params.delete("searchMode")
+      // Clear address search params
+      params.delete("addressLat")
+      params.delete("addressLng")
+      params.delete("addressQuery")
+    }
+    params.delete('page')
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname)
+  }, [pathname, router, sp])
+
+  // Handle address selection from Google autocomplete
+  const handleAddressSelect = useCallback((address: GoogleAddress) => {
+    setSelectedAddress(address)
+
+    // Only process if we have coordinates (means user selected from autocomplete)
+    if (address.lat && address.lng) {
+      const params = new URLSearchParams(sp.toString())
+      params.set("searchMode", "address")
+      params.set("addressLat", address.lat.toString())
+      params.set("addressLng", address.lng.toString())
+      params.set("addressQuery", address.formatted)
+      params.delete("q")
+      params.delete('page')
+      const qs = params.toString()
+      router.replace(qs ? `${pathname}?${qs}` : pathname)
+    }
+    // Don't show error toast for partial typing - only if explicitly missing coordinates
   }, [pathname, router, sp])
 
   useEffect(() => {
@@ -593,7 +684,7 @@ export function ProjectsDesktopView() {
   // For map view, fetch all projects; for card/list view, use pagination
   const serverSideResult = useProjectsServerSideCompatible({
     page: view === 'map' ? 1 : page,
-    pageSize: view === 'map' ? 9999 : PAGE_SIZE, // Fetch all projects for map view
+    pageSize: view === 'map' ? 1 : PAGE_SIZE, // For map view, we now use mapData, so we only need to fetch 1 to get total count for pagination text.
     sort: sort as any,
     dir: dir as 'asc' | 'desc',
     q: q || undefined,
@@ -611,7 +702,7 @@ export function ProjectsDesktopView() {
     queryKey: ["projects-list+summary", patchIds, patchProjectIds, tierFilter, universeFilter, stageFilter, ebaFilter, q],
     staleTime: 30000,
     refetchOnWindowFocus: false,
-    enabled: !USE_SERVER_SIDE, // Only run when server-side is disabled
+    enabled: !USE_SERVER_SIDE && view !== 'map', // Disable when map view is active
     queryFn: async () => {
       // Load projects first
       let qy: any = supabase
@@ -721,17 +812,17 @@ export function ProjectsDesktopView() {
   // Conditional data selection based on feature flag
   const allProjects = USE_SERVER_SIDE ? serverSideResult.projects : (clientProjectsData?.projects || [])
   const summaries = USE_SERVER_SIDE ? serverSideResult.summaries : (clientProjectsData?.summaries || {})
-  const isLoading = USE_SERVER_SIDE ? serverSideResult.isLoading : clientIsLoading
-  const isFetching = USE_SERVER_SIDE ? serverSideResult.isFetching : clientIsLoading
+  const isLoading = USE_SERVER_SIDE ? (view === 'map' ? isMapDataLoading : serverSideResult.isLoading) : clientIsLoading
+  const isFetching = USE_SERVER_SIDE ? (view === 'map' ? isMapDataLoading : serverSideResult.isFetching) : clientIsLoading
   const hasLoadedData = USE_SERVER_SIDE
-    ? (serverSideResult.projects || []).length > 0
+    ? (serverSideResult.projects || []).length > 0 || (mapData || []).length > 0
     : (clientProjectsData?.projects || []).length > 0
   const isInitialLoad = isLoading && !hasLoadedData
 
   // Efficiently check which projects have a builder using the new RPC function
   const projectIdsWithBuilderQuery = useQuery({
     queryKey: ["projects-with-builder", allProjects.map(p => p.id)],
-    enabled: allProjects.length > 0,
+    enabled: allProjects.length > 0 && view !== 'map', // Disable for map view as builder status is in mapData
     staleTime: 60000, // Cache for 1 minute
     queryFn: async () => {
       const projectIds = allProjects.map(p => p.id);
@@ -750,7 +841,8 @@ export function ProjectsDesktopView() {
   // Apply client-side filtering and sorting (only for client-side mode)
   const filteredAndSortedProjects = useMemo(() => {
     if (USE_SERVER_SIDE) {
-      // SERVER-SIDE: Data is already filtered and sorted
+      // SERVER-SIDE: Data is already filtered and sorted for non-map views
+      // For map view, we will filter the dedicated mapData
       return allProjects
     } else {
       // CLIENT-SIDE: Apply original filtering and sorting logic
@@ -838,10 +930,38 @@ export function ProjectsDesktopView() {
   }, [USE_SERVER_SIDE, allProjects, summaries, workersFilter, specialFilter, projectsWithBuilder, sort, dir])
   
   // Apply pagination (conditional based on implementation)
-  const totalProjects = USE_SERVER_SIDE ? serverSideResult.totalCount : filteredAndSortedProjects.length
+  const totalProjects = USE_SERVER_SIDE ? (view === 'map' ? (mapData?.length ?? serverSideResult.totalCount) : serverSideResult.totalCount) : filteredAndSortedProjects.length
   const projects = USE_SERVER_SIDE ? filteredAndSortedProjects : filteredAndSortedProjects.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   const hasNext = USE_SERVER_SIDE ? serverSideResult.hasNext : ((page - 1) * PAGE_SIZE + PAGE_SIZE) < totalProjects
   const hasPrev = USE_SERVER_SIDE ? serverSideResult.hasPrev : page > 1
+
+  const filteredMapProjects = useMemo(() => {
+    if (view !== 'map' || !mapData) return []
+    // Apply client-side filters on map data
+    return mapData.filter(p => {
+      if (q && !p.name.toLowerCase().includes(q)) return false
+      if (tierFilter !== 'all' && p.tier !== tierFilter) return false
+      if (universeFilter !== 'all' && p.organising_universe !== universeFilter) return false
+      if (stageFilter !== 'all' && p.stage_class !== stageFilter) return false
+      // Note: workers, special, and eba filters are more complex and would require more data.
+      // For now, we only filter by the simple properties available in mapData.
+      // The patch filter will be handled separately via patchProjectIds.
+      if (ebaFilter !== 'all') {
+        if (ebaFilter === 'eba_active' && p.builder_status !== 'active_builder') return false;
+        if (ebaFilter === 'eba_inactive' && p.builder_status !== 'inactive_builder') return false;
+        if (ebaFilter === 'builder_unknown' && p.builder_status !== 'unknown_builder') return false;
+      }
+
+      return true
+    })
+  }, [view, mapData, q, tierFilter, universeFilter, stageFilter, ebaFilter])
+
+  const mapProjectsToShow = useMemo(() => {
+    if (patchIds.length > 0) {
+      return filteredMapProjects.filter(p => patchProjectIds.includes(p.id))
+    }
+    return filteredMapProjects
+  }, [filteredMapProjects, patchIds, patchProjectIds])
 
   return (
     <div className="p-6 space-y-4">
@@ -862,15 +982,38 @@ export function ProjectsDesktopView() {
       <div className="sticky top-0 z-30 -mx-6 px-6 py-3 bg-white shadow-sm border-b space-y-3">
         {/* Top Row: Search, Actions, and View Toggle */}
         <div className="flex items-center gap-3">
-          <div className="flex-1 max-w-md">
-            <Input 
-              id="project-search-desktop"
-              placeholder="Search projects…" 
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              className="h-9"
-              autoComplete="off"
-            />
+          <div className="flex-1 max-w-2xl flex items-center gap-2">
+            {/* Search Mode Toggle */}
+            <Tabs value={searchMode} onValueChange={(v) => handleSearchModeChange(v)} className="w-full">
+              <TabsList className="grid w-full grid-cols-2 max-w-sm">
+                <TabsTrigger value="name">
+                  <Search className="h-4 w-4 mr-2" />
+                  Search by Name
+                </TabsTrigger>
+                <TabsTrigger value="address">
+                  <Navigation className="h-4 w-4 mr-2" />
+                  Search by Address
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="name" className="mt-2">
+                <Input
+                  id="project-search-desktop"
+                  placeholder="Search projects by name…"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  className="h-9 flex-1"
+                  autoComplete="off"
+                />
+              </TabsContent>
+              <TabsContent value="address" className="mt-2">
+                <GoogleAddressInput
+                  value={addressQuery}
+                  onChange={handleAddressSelect}
+                  placeholder="Enter an address to find nearby projects…"
+                  showLabel={false}
+                />
+              </TabsContent>
+            </Tabs>
           </div>
           
           {/* Filter Toggle */}
@@ -914,6 +1057,15 @@ export function ProjectsDesktopView() {
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsBulkUploadOpen(true)}
+              className="gap-2"
+            >
+              <Upload className="h-4 w-4" />
+              Bulk Upload
+            </Button>
             <CreateProjectDialog />
           </div>
 
@@ -1055,9 +1207,53 @@ export function ProjectsDesktopView() {
       {!isInitialLoad && isFetching && (
         <div className="text-sm text-muted-foreground flex items-center gap-2"><LoadingSpinner size={16} alt="Refreshing" /> Updating projects…</div>
       )}
-      {(projects as any[]).length === 0 && !isLoading ? (
-        <p className="text-sm text-muted-foreground">No projects found.</p>
-      ) : view === 'list' ? (
+
+      {/* Address Search Results - Only show in card/list view, not map view */}
+      {searchMode === "address" && addressLat && addressLng && view !== 'map' && (
+        <>
+          {addressSearchQuery.isLoading && (
+            <div className="text-sm text-muted-foreground flex items-center gap-2">
+              <LoadingSpinner size={16} /> Searching for nearby projects…
+            </div>
+          )}
+          {addressSearchQuery.error && (
+            <Card className="border-red-300 bg-red-50">
+              <CardContent className="p-4">
+                <p className="text-red-800">Error searching for projects. Please try again.</p>
+              </CardContent>
+            </Card>
+          )}
+          {addressSearchQuery.data && addressSearchQuery.data.length > 0 && !addressSearchQuery.data.some(r => r.is_exact_match) && (
+            <AddressSearchResults
+              searchAddress={addressQuery}
+              searchLat={addressLat}
+              searchLng={addressLng}
+              results={addressSearchQuery.data}
+              onProjectClick={(projectId) => {
+                startNavigation(`/projects/${projectId}`)
+                setTimeout(() => router.push(`/projects/${projectId}`), 50)
+              }}
+              onShowOnMap={() => setParam("view", "map")}
+            />
+          )}
+          {addressSearchQuery.data && addressSearchQuery.data.length === 0 && !addressSearchQuery.isLoading && (
+            <Card>
+              <CardContent className="p-6 text-center">
+                <MapPin className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600 mb-2">No projects found within 100km of this address.</p>
+                <p className="text-sm text-gray-500">Try searching a different location or switch to name search.</p>
+              </CardContent>
+            </Card>
+          )}
+        </>
+      )}
+
+      {/* Regular Project Views - Show map view always, or other views when NOT in address search */}
+      {(view === 'map' || searchMode !== "address" || (!addressLat && !addressLng)) && (
+        <>
+          {(projects as any[]).length === 0 && !isLoading ? (
+            <p className="text-sm text-muted-foreground">No projects found.</p>
+          ) : view === 'list' ? (
         <div className="rounded-md border overflow-x-auto">
           <ProjectTable
             rows={projects as any[]}
@@ -1075,8 +1271,8 @@ export function ProjectsDesktopView() {
         </div>
       ) : view === 'map' ? (
         <ProjectsMapView
-          projects={filteredAndSortedProjects as any[]}
-          summaries={summaries}
+          projects={mapProjectsToShow as any[]}
+          summaries={{}} // Summaries are not needed for map view now
           onProjectClick={(id) => {
             startNavigation(`/projects/${id}`)
             setTimeout(() => router.push(`/projects/${id}`), 50)
@@ -1095,6 +1291,16 @@ export function ProjectsDesktopView() {
             special: specialFilter,
             eba: ebaFilter
           }}
+          addressSearchPin={
+            searchMode === "address" && addressLat && addressLng
+              ? { lat: addressLat, lng: addressLng, address: addressQuery }
+              : undefined
+          }
+          highlightedProjectIds={
+            searchMode === "address" && addressSearchQuery.data
+              ? addressSearchQuery.data.map(r => r.project_id)
+              : []
+          }
         />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1129,8 +1335,18 @@ export function ProjectsDesktopView() {
       
       {view === 'map' && (
         <div className="text-sm text-muted-foreground">
-          Showing all {filteredAndSortedProjects.length} project location{filteredAndSortedProjects.length !== 1 ? 's' : ''} matching current filters
+          {searchMode === "address" && addressSearchQuery.data && addressSearchQuery.data.length > 0 ? (
+            <>
+              Showing {addressSearchQuery.data.length} project{addressSearchQuery.data.length !== 1 ? 's' : ''} within 100km of search location
+            </>
+          ) : (
+            <>
+              Showing all {mapProjectsToShow.length} project location{mapProjectsToShow.length !== 1 ? 's' : ''} matching current filters
+            </>
+          )}
         </div>
+      )}
+        </>
       )}
 
       <EmployerDetailModal
@@ -1143,6 +1359,10 @@ export function ProjectsDesktopView() {
         workerId={selectedWorkerId}
         isOpen={isWorkerOpen}
         onClose={() => setIsWorkerOpen(false)}
+      />
+      <BulkUploadDialog
+        open={isBulkUploadOpen}
+        onOpenChange={setIsBulkUploadOpen}
       />
     </div>
   )
