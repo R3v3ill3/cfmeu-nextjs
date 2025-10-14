@@ -61,7 +61,10 @@ async function processMappingSheetScan(supabase, job) {
             .from('mapping-sheet-scans')
             .download(storagePath);
         if (downloadError || !fileData) {
-            throw new Error(`Failed to download PDF: ${downloadError?.message}`);
+            const errorDetails = downloadError
+                ? JSON.stringify(downloadError, null, 2)
+                : 'No file data returned from storage';
+            throw new Error(`Failed to download PDF from path "${storagePath}": ${errorDetails}`);
         }
         // Convert to buffer
         const pdfBuffer = Buffer.from(await fileData.arrayBuffer());

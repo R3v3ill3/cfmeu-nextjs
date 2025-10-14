@@ -22,17 +22,27 @@ async function handleJob(job: MappingSheetScanJob) {
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'
-    console.error(`[worker] Job ${job.id} failed:`, message)
+    console.error(`[worker] Job ${job.id} failed (attempt ${job.attempts}/${job.max_attempts}):`, message)
 
     const shouldRetry = job.attempts < job.max_attempts
     const nextStatus = shouldRetry ? 'queued' : 'failed'
+
+    // Exponential backoff: 5s, 10s, 20s, 40s...
+    // Formula: baseDelay * 2^(attempts - 1), capped at 60 seconds
+    const backoffDelayMs = shouldRetry
+      ? Math.min(config.pollIntervalMs * Math.pow(2, job.attempts - 1), 60000)
+      : 0
+
+    if (shouldRetry) {
+      console.log(`[worker] Scheduling retry for job ${job.id} in ${backoffDelayMs}ms`)
+    }
 
     await markJobStatus(client, job.id, nextStatus as any, {
       lock_token: null,
       locked_at: null,
       last_error: message,
-      run_at: shouldRetry 
-        ? new Date(Date.now() + config.pollIntervalMs).toISOString() 
+      run_at: shouldRetry
+        ? new Date(Date.now() + backoffDelayMs).toISOString()
         : job.run_at,
     })
   } finally {

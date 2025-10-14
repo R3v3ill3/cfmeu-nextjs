@@ -11,7 +11,6 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
     "dotenv": "^17.2.2",
-    "@cfmeu/normalize": "workspace:*",
     "express": "^4.19.2",
     "node-cron": "^3.0.3",
     "pg": "^8.12.0",
