@@ -536,14 +536,14 @@ export default function AdminPage() {
               </div>
             )}
             <div>
-              <h3 className="text-lg font-semibold mb-4">
-                Pending Approvals
+              <div className="flex items-center gap-2 mb-4">
+                <h3 className="text-lg font-semibold">Pending Approvals</h3>
                 {totalPendingCount > 0 && (
-                  <Badge variant="destructive" className="ml-2">
+                  <Badge variant="destructive">
                     {totalPendingCount}
                   </Badge>
                 )}
-              </h3>
+              </div>
               <div className="space-y-8">
                 <div>
                   <h4 className="text-base font-semibold mb-4">
