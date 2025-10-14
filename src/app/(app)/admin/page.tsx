@@ -21,8 +21,11 @@ import SpatialAssignmentTool from "@/components/admin/SpatialAssignmentTool"
 import AddressLookupDialog from "@/components/AddressLookupDialog"
 import DuplicateEmployerManager from "@/components/admin/DuplicateEmployerManager"
 import DataUploadTab from "@/components/admin/DataUploadTab"
+import { BatchesManagement } from "@/components/admin/BatchesManagement"
 import { NavigationVisibilityManager } from "@/components/admin/NavigationVisibilityManager"
 import { SystemHealthDashboard } from "@/components/admin/SystemHealthDashboard"
+import CanonicalPromotionConsole from "@/components/admin/CanonicalPromotionConsole"
+import AliasAnalyticsDashboard from "@/components/admin/AliasAnalyticsDashboard"
 import { useAuth } from "@/hooks/useAuth"
 import { useSearchParams } from "next/navigation"
 import { useIsMobile } from "@/hooks/use-mobile"
@@ -70,18 +73,37 @@ export default function AdminPage() {
   // Determine available tabs based on role
   const isAdmin = userRole === "admin"
   const isLeadOrganiser = userRole === "lead_organiser"
-  const defaultTab = isAdmin ? "users" : "invites" // Lead organisers start with invites tab
-  const [tabValue, setTabValue] = useState<string>(defaultTab)
+  const defaultParentTab = isAdmin ? "user-management" : "user-management"
+  const [parentTab, setParentTab] = useState<string>(defaultParentTab)
 
   const tabParam = searchParams?.get("tab")
 
   useEffect(() => {
     if (tabParam) {
-      setTabValue(tabParam)
+      // Map old tab values to new parent structure
+      const tabMapping: { [key: string]: string } = {
+        'users': 'user-management',
+        'invites': 'user-management',
+        'hierarchy': 'user-management',
+        'pending': 'data-integrity',
+        'alias-analytics': 'data-integrity',
+        'canonical-names': 'data-integrity',
+        'patches': 'patch-management',
+        'spatial': 'patch-management',
+        'scoping': 'patch-management',
+        'data-management': 'data-management',
+        'navigation': 'navigation',
+        'system-health': 'system-health',
+      }
+
+      const mapped = tabMapping[tabParam]
+      if (mapped) {
+        setParentTab(mapped)
+      }
     } else {
-      setTabValue(defaultTab)
+      setParentTab(defaultParentTab)
     }
-  }, [tabParam, defaultTab])
+  }, [tabParam, defaultParentTab])
 
   // Pending approvals state
   const [pendingProjects, setPendingProjects] = useState<any[]>([])
@@ -208,273 +230,370 @@ export default function AdminPage() {
         </div>
         
         {isMobile ? (
-          /* Mobile-optimized accordion layout */
+          /* Mobile-optimized accordion layout with grouped sections */
           <div className="space-y-3">
-            <Collapsible defaultOpen>
-              <CollapsibleTrigger asChild>
-                <Button variant="outline" className="w-full justify-between">
-                  Pending Approvals
-                  {totalPendingCount > 0 && (
-                    <Badge variant="destructive" className="ml-2">
-                      {totalPendingCount}
-                    </Badge>
-                  )}
-                  <ChevronDown className="h-4 w-4" />
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="mt-3 space-y-6">
-                  <div>
-                    <h3 className="text-base font-semibold mb-3">
-                      Pending Projects ({pendingProjects.length})
-                    </h3>
-                    <PendingProjectsTable
-                      projects={pendingProjects}
-                      onApprove={handleApproveProject}
-                      onReject={handleRejectProject}
-                      onRefresh={fetchPendingItems}
-                    />
-                  </div>
+            {/* User Management Group */}
+            <div className="pt-2">
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">
+                User Management
+              </h2>
+              <div className="space-y-2">
+                {isAdmin && (
+                  <Collapsible>
+                    <CollapsibleTrigger asChild>
+                      <Button variant="outline" className="w-full justify-between">
+                        Users
+                        <ChevronDown className="h-4 w-4" />
+                      </Button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="mt-3">
+                        <UsersTable />
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                )}
 
-                  <div>
-                    <h3 className="text-base font-semibold mb-3">
-                      Pending Employers ({pendingEmployers.length})
-                    </h3>
-                    <PendingEmployersTable
-                      employers={pendingEmployers}
-                      onApprove={handleApproveEmployer}
-                      onReject={handleRejectEmployer}
-                    />
-                  </div>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-
-            {isAdmin && (
-              <Collapsible>
-                <CollapsibleTrigger asChild>
-                  <Button variant="outline" className="w-full justify-between">
-                    Users
-                    <ChevronDown className="h-4 w-4" />
-                  </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <div className="mt-3">
-                    <UsersTable />
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
-            )}
-            
-            <Collapsible defaultOpen={!isAdmin}>
-              <CollapsibleTrigger asChild>
-                <Button variant="outline" className="w-full justify-between">
-                  Invites
-                  <ChevronDown className="h-4 w-4" />
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="mt-3 space-y-3">
-                  <div className="flex justify-end">
-                    <Button variant="outline" size="sm" onClick={() => setAddDraftOpen(true)}>
-                      Add draft organiser
+                <Collapsible defaultOpen={!isAdmin}>
+                  <CollapsibleTrigger asChild>
+                    <Button variant="outline" className="w-full justify-between">
+                      Invites
+                      <ChevronDown className="h-4 w-4" />
                     </Button>
-                  </div>
-                  <PendingUsersTable />
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-            
-            {isAdmin && (
-              <Collapsible>
-                <CollapsibleTrigger asChild>
-                  <Button variant="outline" className="w-full justify-between">
-                    Hierarchy
-                    <ChevronDown className="h-4 w-4" />
-                  </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <div className="mt-3">
-                    <RoleHierarchyManager users={users} />
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
-            )}
-            
-            <Collapsible>
-              <CollapsibleTrigger asChild>
-                <Button variant="outline" className="w-full justify-between">
-                  Patches
-                  <ChevronDown className="h-4 w-4" />
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="mt-3">
-                  <PatchManager />
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-            
-            {isAdmin && (
-              <Collapsible>
-                <CollapsibleTrigger asChild>
-                  <Button variant="outline" className="w-full justify-between">
-                    Spatial Assignment
-                    <ChevronDown className="h-4 w-4" />
-                  </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <div className="mt-3">
-                    <SpatialAssignmentTool />
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
-            )}
-            
-            <Collapsible>
-              <CollapsibleTrigger asChild>
-                <Button variant="outline" className="w-full justify-between">
-                  Scoping
-                  <ChevronDown className="h-4 w-4" />
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="mt-3">
-                  <OrganiserScopeManager />
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-            
-            <Collapsible>
-              <CollapsibleTrigger asChild>
-                <Button variant="outline" className="w-full justify-between">
-                  Data Management
-                  <ChevronDown className="h-4 w-4" />
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="mt-3">
-                  <DataUploadTab />
-                  <div className="mt-4">
-                    <DuplicateEmployerManager />
-                  </div>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-            
-            {isAdmin && (
-              <>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="mt-3 space-y-3">
+                      <div className="flex justify-end">
+                        <Button variant="outline" size="sm" onClick={() => setAddDraftOpen(true)}>
+                          Add draft organiser
+                        </Button>
+                      </div>
+                      <PendingUsersTable />
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+
+                {isAdmin && (
+                  <Collapsible>
+                    <CollapsibleTrigger asChild>
+                      <Button variant="outline" className="w-full justify-between">
+                        Hierarchy
+                        <ChevronDown className="h-4 w-4" />
+                      </Button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="mt-3">
+                        <RoleHierarchyManager users={users} />
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                )}
+              </div>
+            </div>
+
+            {/* Data Integrity Group */}
+            <div className="pt-4">
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">
+                Data Integrity
+              </h2>
+              <div className="space-y-2">
+                {isAdmin && (
+                  <Collapsible>
+                    <CollapsibleTrigger asChild>
+                      <Button variant="outline" className="w-full justify-between">
+                        Alias Analytics
+                        <ChevronDown className="h-4 w-4" />
+                      </Button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="mt-3">
+                        <AliasAnalyticsDashboard />
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                )}
+
+                {isAdmin && (
+                  <Collapsible>
+                    <CollapsibleTrigger asChild>
+                      <Button variant="outline" className="w-full justify-between">
+                        Canonical Names
+                        <ChevronDown className="h-4 w-4" />
+                      </Button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="mt-3">
+                        <CanonicalPromotionConsole />
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                )}
+
+                <Collapsible defaultOpen>
+                  <CollapsibleTrigger asChild>
+                    <Button variant="outline" className="w-full justify-between">
+                      Pending Approvals
+                      {totalPendingCount > 0 && (
+                        <Badge variant="destructive" className="ml-2">
+                          {totalPendingCount}
+                        </Badge>
+                      )}
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="mt-3 space-y-6">
+                      <div>
+                        <h3 className="text-base font-semibold mb-3">
+                          Pending Projects ({pendingProjects.length})
+                        </h3>
+                        <PendingProjectsTable
+                          projects={pendingProjects}
+                          onApprove={handleApproveProject}
+                          onReject={handleRejectProject}
+                          onRefresh={fetchPendingItems}
+                        />
+                      </div>
+
+                      <div>
+                        <h3 className="text-base font-semibold mb-3">
+                          Pending Employers ({pendingEmployers.length})
+                        </h3>
+                        <PendingEmployersTable
+                          employers={pendingEmployers}
+                          onApprove={handleApproveEmployer}
+                          onReject={handleRejectEmployer}
+                        />
+                      </div>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              </div>
+            </div>
+
+            {/* Patch Management Group */}
+            <div className="pt-4">
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">
+                Patch Management
+              </h2>
+              <div className="space-y-2">
                 <Collapsible>
                   <CollapsibleTrigger asChild>
                     <Button variant="outline" className="w-full justify-between">
-                      Navigation
+                      Patches
                       <ChevronDown className="h-4 w-4" />
                     </Button>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <div className="mt-3">
-                      <NavigationVisibilityManager />
+                      <PatchManager />
                     </div>
                   </CollapsibleContent>
                 </Collapsible>
-                
+
+                {isAdmin && (
+                  <Collapsible>
+                    <CollapsibleTrigger asChild>
+                      <Button variant="outline" className="w-full justify-between">
+                        Spatial Assignment
+                        <ChevronDown className="h-4 w-4" />
+                      </Button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="mt-3">
+                        <SpatialAssignmentTool />
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                )}
+
                 <Collapsible>
                   <CollapsibleTrigger asChild>
                     <Button variant="outline" className="w-full justify-between">
-                      System Health
+                      Scoping
                       <ChevronDown className="h-4 w-4" />
                     </Button>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <div className="mt-3">
-                      <SystemHealthDashboard />
+                      <OrganiserScopeManager />
                     </div>
                   </CollapsibleContent>
                 </Collapsible>
-              </>
-            )}
+              </div>
+            </div>
+
+            {/* Other Sections */}
+            <div className="pt-4">
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">
+                Other
+              </h2>
+              <div className="space-y-2">
+                <Collapsible>
+                  <CollapsibleTrigger asChild>
+                    <Button variant="outline" className="w-full justify-between">
+                      Data Management
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="mt-3 space-y-6">
+                      <DataUploadTab />
+                      <BatchesManagement />
+                      <DuplicateEmployerManager />
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+
+                {isAdmin && (
+                  <>
+                    <Collapsible>
+                      <CollapsibleTrigger asChild>
+                        <Button variant="outline" className="w-full justify-between">
+                          Navigation
+                          <ChevronDown className="h-4 w-4" />
+                        </Button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="mt-3">
+                          <NavigationVisibilityManager />
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+
+                    <Collapsible>
+                      <CollapsibleTrigger asChild>
+                        <Button variant="outline" className="w-full justify-between">
+                          System Health
+                          <ChevronDown className="h-4 w-4" />
+                        </Button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="mt-3">
+                          <SystemHealthDashboard />
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
         ) : (
-          /* Desktop layout - original tabs */
-          <Tabs value={tabValue} onValueChange={setTabValue}>
+          /* Desktop layout - grouped tabs */
+          <Tabs value={parentTab} onValueChange={setParentTab}>
           <TabsList>
-            <TabsTrigger value="pending">
-              Pending Approvals
+            <TabsTrigger value="user-management">User Management</TabsTrigger>
+            <TabsTrigger value="data-integrity">
+              Data Integrity
               {totalPendingCount > 0 && (
                 <Badge variant="destructive" className="ml-2">
                   {totalPendingCount}
                 </Badge>
               )}
             </TabsTrigger>
-            {isAdmin && <TabsTrigger value="users">Users</TabsTrigger>}
-            <TabsTrigger value="invites">Invites</TabsTrigger>
-            {isAdmin && <TabsTrigger value="hierarchy">Hierarchy</TabsTrigger>}
-            <TabsTrigger value="patches">Patches</TabsTrigger>
-            {isAdmin && <TabsTrigger value="spatial">Spatial Assignment</TabsTrigger>}
-            <TabsTrigger value="scoping">Scoping</TabsTrigger>
+            <TabsTrigger value="patch-management">Patch Management</TabsTrigger>
             <TabsTrigger value="data-management">Data Management</TabsTrigger>
             {isAdmin && <TabsTrigger value="navigation">Navigation</TabsTrigger>}
             {isAdmin && <TabsTrigger value="system-health">System Health</TabsTrigger>}
           </TabsList>
-          <TabsContent value="pending">
-            <div className="space-y-8">
-              <div>
-                <h3 className="text-lg font-semibold mb-4">
-                  Pending Projects ({pendingProjects.length})
-                </h3>
-                <PendingProjectsTable
-                  projects={pendingProjects}
-                  onApprove={handleApproveProject}
-                  onReject={handleRejectProject}
-                  onRefresh={fetchPendingItems}
-                />
-              </div>
 
+          {/* User Management Group */}
+          <TabsContent value="user-management" className="space-y-8">
+            {isAdmin && (
               <div>
-                <h3 className="text-lg font-semibold mb-4">
-                  Pending Employers ({pendingEmployers.length})
-                </h3>
-                <PendingEmployersTable
-                  employers={pendingEmployers}
-                  onApprove={handleApproveEmployer}
-                  onReject={handleRejectEmployer}
-                />
+                <h3 className="text-lg font-semibold mb-4">Users</h3>
+                <UsersTable />
+              </div>
+            )}
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold">Invites</h3>
+                <Button variant="outline" onClick={() => setAddDraftOpen(true)}>Add draft organiser</Button>
+              </div>
+              <PendingUsersTable />
+            </div>
+            {isAdmin && (
+              <div>
+                <h3 className="text-lg font-semibold mb-4">Hierarchy</h3>
+                <RoleHierarchyManager users={users} />
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Data Integrity Group */}
+          <TabsContent value="data-integrity" className="space-y-8">
+            {isAdmin && (
+              <div>
+                <h3 className="text-lg font-semibold mb-4">Alias Analytics</h3>
+                <AliasAnalyticsDashboard />
+              </div>
+            )}
+            {isAdmin && (
+              <div>
+                <h3 className="text-lg font-semibold mb-4">Canonical Names</h3>
+                <CanonicalPromotionConsole />
+              </div>
+            )}
+            <div>
+              <h3 className="text-lg font-semibold mb-4">
+                Pending Approvals
+                {totalPendingCount > 0 && (
+                  <Badge variant="destructive" className="ml-2">
+                    {totalPendingCount}
+                  </Badge>
+                )}
+              </h3>
+              <div className="space-y-8">
+                <div>
+                  <h4 className="text-base font-semibold mb-4">
+                    Pending Projects ({pendingProjects.length})
+                  </h4>
+                  <PendingProjectsTable
+                    projects={pendingProjects}
+                    onApprove={handleApproveProject}
+                    onReject={handleRejectProject}
+                    onRefresh={fetchPendingItems}
+                  />
+                </div>
+
+                <div>
+                  <h4 className="text-base font-semibold mb-4">
+                    Pending Employers ({pendingEmployers.length})
+                  </h4>
+                  <PendingEmployersTable
+                    employers={pendingEmployers}
+                    onApprove={handleApproveEmployer}
+                    onReject={handleRejectEmployer}
+                  />
+                </div>
               </div>
             </div>
           </TabsContent>
-          {isAdmin && (
-            <TabsContent value="users">
-              <UsersTable />
-            </TabsContent>
-          )}
-          <TabsContent value="invites">
-            <div className="flex items-center justify-between mb-2">
-              <div />
-              <Button variant="outline" onClick={() => setAddDraftOpen(true)}>Add draft organiser</Button>
+
+          {/* Patch Management Group */}
+          <TabsContent value="patch-management" className="space-y-8">
+            <div>
+              <h3 className="text-lg font-semibold mb-4">Patches</h3>
+              <PatchManager />
             </div>
-            <PendingUsersTable />
+            {isAdmin && (
+              <div>
+                <h3 className="text-lg font-semibold mb-4">Spatial Assignment</h3>
+                <SpatialAssignmentTool />
+              </div>
+            )}
+            <div>
+              <h3 className="text-lg font-semibold mb-4">Scoping</h3>
+              <OrganiserScopeManager />
+            </div>
           </TabsContent>
-          {isAdmin && (
-            <TabsContent value="hierarchy">
-              <RoleHierarchyManager users={users} />
-            </TabsContent>
-          )}
-          <TabsContent value="patches">
-            <PatchManager />
-          </TabsContent>
-          {isAdmin && (
-            <TabsContent value="spatial">
-              <SpatialAssignmentTool />
-            </TabsContent>
-          )}
-          <TabsContent value="scoping">
-            <OrganiserScopeManager />
-          </TabsContent>
-          <TabsContent value="data-management">
+
+          {/* Standalone Tabs */}
+          <TabsContent value="data-management" className="space-y-8">
             <DataUploadTab />
-            <div className="mt-4">
-              <DuplicateEmployerManager />
-            </div>
+            <BatchesManagement />
+            <DuplicateEmployerManager />
           </TabsContent>
           {isAdmin && (
             <>

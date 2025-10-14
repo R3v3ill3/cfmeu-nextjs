@@ -392,3 +392,39 @@ body {
     padding: 0;
   }
 }
+
+/* Google Places Autocomplete - ensure it appears above dialogs and modals */
+.pac-container {
+  z-index: 99999 !important;
+  /* Ensure clicks work properly */
+  pointer-events: auto !important;
+}
+
+/* Ensure autocomplete items are clickable */
+.pac-item {
+  cursor: pointer !important;
+  pointer-events: auto !important;
+}
+
+.pac-item:hover {
+  background-color: #fafafa !important;
+}
+
+/* Dark mode support for Google autocomplete */
+.dark .pac-container {
+  background-color: hsl(var(--popover)) !important;
+  border-color: hsl(var(--border)) !important;
+}
+
+.dark .pac-item {
+  color: hsl(var(--popover-foreground)) !important;
+  border-color: hsl(var(--border)) !important;
+}
+
+.dark .pac-item:hover {
+  background-color: hsl(var(--accent)) !important;
+}
+
+.dark .pac-item-query {
+  color: hsl(var(--foreground)) !important;
+}

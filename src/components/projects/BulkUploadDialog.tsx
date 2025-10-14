@@ -54,7 +54,9 @@ interface Project {
 interface ProjectDefinitionForm extends ProjectDefinition {
   id: string
   tentativeName?: string
+  tentativeAddress?: string | null
   confidence?: number
+  mode: 'new' | 'match' | 'skip'
 }
 
 interface AnalysisResult {
@@ -62,6 +64,7 @@ interface AnalysisResult {
     startPage: number
     endPage: number
     projectName: string
+    projectAddress?: string | null
     confidence: number
     reasoning?: string
   }>
@@ -82,6 +85,7 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
   const [totalPages, setTotalPages] = useState(0)
   const [projectDefinitions, setProjectDefinitions] = useState<ProjectDefinitionForm[]>([])
   const [batchId, setBatchId] = useState<string>('')
+  const [batchUploaderId, setBatchUploaderId] = useState<string>('')
   const [uploadProgress, setUploadProgress] = useState(0)
   const [processingStatus, setProcessingStatus] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
@@ -117,13 +121,23 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
       const pageCount = pdfDoc.getPageCount()
       setTotalPages(pageCount)
 
-      toast.success(`PDF loaded: ${pageCount} pages`)
+      toast.success(`PDF loaded: ${pageCount} pages - starting AI analysis...`)
+
+      // Automatically start AI analysis after successful file load
+      // Small delay to allow state to update
+      setTimeout(() => {
+        if (useAI) {
+          analyzeWithAI()
+        } else {
+          autoSegmentProjects()
+        }
+      }, 100)
     } catch (err) {
       console.error('Failed to read PDF:', err)
       toast.error('Failed to read PDF file')
       setError('Failed to read PDF file')
     }
-  }, [])
+  }, [useAI])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -163,6 +177,7 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
         endPage: p.endPage,
         mode: 'new' as const,
         tentativeName: p.projectName,
+        tentativeAddress: p.projectAddress,
         confidence: p.confidence,
       }))
 
@@ -280,7 +295,15 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
 
   // Validate definitions
   const validateDefinitions = (): boolean => {
-    for (const def of projectDefinitions) {
+    // Filter out skipped projects for validation
+    const activeDefinitions = projectDefinitions.filter((def) => def.mode !== 'skip')
+
+    if (activeDefinitions.length === 0) {
+      toast.error('At least one project must be selected for processing')
+      return false
+    }
+
+    for (const def of activeDefinitions) {
       if (def.startPage < 1 || def.endPage > totalPages) {
         toast.error(`Invalid page range: ${def.startPage}-${def.endPage}`)
         return false
@@ -295,8 +318,8 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
       }
     }
 
-    // Check for overlaps
-    const sorted = [...projectDefinitions].sort((a, b) => a.startPage - b.startPage)
+    // Check for overlaps (only among active definitions)
+    const sorted = [...activeDefinitions].sort((a, b) => a.startPage - b.startPage)
     for (let i = 0; i < sorted.length - 1; i++) {
       if (sorted[i].endPage >= sorted[i + 1].startPage) {
         toast.error('Page ranges cannot overlap')
@@ -342,12 +365,18 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
 
       const initData = await initResponse.json()
       const uploadedBatchId = initData.batchId
+      const uploaderIdFromInit: string | undefined = initData.uploaderId
       setBatchId(uploadedBatchId)
+      if (uploaderIdFromInit) {
+        setBatchUploaderId(uploaderIdFromInit)
+      }
       setUploadProgress(25)
 
       // Step 2: Split PDFs client-side
       setProcessingStatus('Splitting PDF by projects...')
-      const definitions = projectDefinitions.map((def, index) => ({
+      // Filter out skipped projects before processing
+      const activeProjectDefinitions = projectDefinitions.filter((def) => def.mode !== 'skip')
+      const definitions = activeProjectDefinitions.map((def, index) => ({
         startPage: def.startPage,
         endPage: def.endPage,
         tentativeName: def.tentativeName || `Project ${index + 1}`,
@@ -360,14 +389,18 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
 
       // Step 3: Upload split PDFs
       setProcessingStatus('Uploading split PDFs...')
-      const supabase = getSupabaseBrowserClient()
-      const { data: { user } } = await supabase.auth.getUser()
-
-      if (!user) {
-        throw new Error('User not authenticated')
+      let effectiveUploaderId = uploaderIdFromInit || batchUploaderId
+      if (!effectiveUploaderId) {
+        const supabase = getSupabaseBrowserClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+          throw new Error('User not authenticated')
+        }
+        effectiveUploaderId = user.id
+        setBatchUploaderId(user.id)
       }
 
-      const uploadedScans = await uploadSplitPdfs(uploadedBatchId, user.id, splitResults)
+      const uploadedScans = await uploadSplitPdfs(uploadedBatchId, effectiveUploaderId, splitResults)
       setUploadProgress(75)
 
       // Step 4: Create batch and scan records
@@ -392,11 +425,15 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
 
       const processData = await processResponse.json()
       setTotalScans(processData.scanIds.length)
+
+      // Update batchId with the actual database record ID from RPC
+      const actualBatchId = processData.batchId
+      setBatchId(actualBatchId)
       setUploadProgress(90)
 
       // Step 5: Poll for completion
       setProcessingStatus('Processing scans...')
-      await pollBatchStatus(uploadedBatchId)
+      await pollBatchStatus(actualBatchId)
 
       setUploadProgress(100)
       setStep('complete')
@@ -450,6 +487,7 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
     setTotalPages(0)
     setProjectDefinitions([])
     setBatchId('')
+    setBatchUploaderId('')
     setUploadProgress(0)
     setProcessingStatus('')
     setError(null)
@@ -613,11 +651,18 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
                   {projectDefinitions.map((def, index) => (
                     <div key={def.id} className="border rounded-lg p-4 space-y-3">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-medium">
-                            {def.tentativeName || `Project ${index + 1}`}
-                          </h4>
-                          {getConfidenceBadge(def.confidence)}
+                        <div className="space-y-1 flex-1">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-medium">
+                              {def.tentativeName || `Project ${index + 1}`}
+                            </h4>
+                            {getConfidenceBadge(def.confidence)}
+                          </div>
+                          {def.tentativeAddress && (
+                            <p className="text-sm text-muted-foreground">
+                              {def.tentativeAddress}
+                            </p>
+                          )}
                         </div>
                         {projectDefinitions.length > 1 && (
                           <Button
@@ -667,7 +712,7 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
                         <Label>Project Mode</Label>
                         <RadioGroup
                           value={def.mode}
-                          onValueChange={(value: 'new' | 'match') =>
+                          onValueChange={(value: 'new' | 'match' | 'skip') =>
                             updateProjectDefinition(def.id, { mode: value, projectId: undefined })
                           }
                         >
@@ -681,6 +726,12 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
                             <RadioGroupItem value="match" id={`match-${def.id}`} />
                             <Label htmlFor={`match-${def.id}`} className="font-normal">
                               Match to Existing Project
+                            </Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="skip" id={`skip-${def.id}`} />
+                            <Label htmlFor={`skip-${def.id}`} className="font-normal text-muted-foreground">
+                              Skip Project (Don't Process)
                             </Label>
                           </div>
                         </RadioGroup>
@@ -802,6 +853,11 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
         suggestedName={
           searchingForDefId
             ? projectDefinitions.find((d) => d.id === searchingForDefId)?.tentativeName
+            : undefined
+        }
+        suggestedAddress={
+          searchingForDefId
+            ? projectDefinitions.find((d) => d.id === searchingForDefId)?.tentativeAddress
             : undefined
         }
       />

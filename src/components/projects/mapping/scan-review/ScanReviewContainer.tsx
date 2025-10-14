@@ -23,8 +23,10 @@ import { ProjectFieldsReview } from './ProjectFieldsReview'
 import { SiteContactsReview } from './SiteContactsReview'
 import { SubcontractorsReview } from './SubcontractorsReview'
 import { ConfidenceIndicator } from './ConfidenceIndicator'
+import { DuplicateProjectWarning } from './DuplicateProjectWarning'
 import type { ExtractedMappingSheetData } from '@/types/mappingSheetScan'
 import { useNavigationLoading } from '@/hooks/useNavigationLoading'
+import { normalizeSiteContactRole } from '@/utils/siteContactRole'
 
 interface ScanReviewContainerProps {
   scanData: any
@@ -45,8 +47,25 @@ export function ScanReviewContainer({
   const { startNavigation } = useNavigationLoading()
   const [activeTab, setActiveTab] = useState('project')
   const [isImporting, setIsImporting] = useState(false)
-  
-  const extractedData: ExtractedMappingSheetData = scanData.extracted_data
+  const [duplicateCheck, setDuplicateCheck] = useState<any>(null)
+  const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false)
+  const [allowProceed, setAllowProceed] = useState(false)
+  const [linkedProjectId, setLinkedProjectId] = useState<string | null>(null)
+
+  const extractedData: ExtractedMappingSheetData =
+    (scanData.extracted_data as ExtractedMappingSheetData | null) ?? {
+      extraction_version: 'unknown',
+      pages_processed: 0,
+      project: {},
+      site_contacts: [],
+      subcontractors: [],
+      confidence: {
+        overall: 0,
+        project: {},
+        site_contacts: [],
+        subcontractors: [],
+      },
+    }
 
   // Track user decisions for each section
   const [projectDecisions, setProjectDecisions] = useState<Record<string, any>>({})
@@ -75,11 +94,57 @@ export function ScanReviewContainer({
     }
   }, [scanData.id, scanData.status])
 
+  // Check for duplicate project names when creating new project
+  useEffect(() => {
+    if (!allowProjectCreation) return
+
+    const projectName = projectDecisions.name || extractedData.project?.project_name || projectData?.name
+
+    if (!projectName) return
+
+    const checkDuplicates = async () => {
+      setIsCheckingDuplicates(true)
+      try {
+        const { data, error } = await supabase.rpc('check_duplicate_project_names', {
+          p_project_name: projectName,
+          p_exclude_project_id: null,
+        })
+
+        if (error) throw error
+
+        if (data && (data.has_exact_matches || data.has_fuzzy_matches)) {
+          setDuplicateCheck(data)
+          setAllowProceed(false) // User must acknowledge duplicates
+        } else {
+          setDuplicateCheck(null)
+          setAllowProceed(true)
+        }
+      } catch (error) {
+        console.error('Error checking for duplicates:', error)
+        // Allow proceed on error to not block the user
+        setAllowProceed(true)
+      } finally {
+        setIsCheckingDuplicates(false)
+      }
+    }
+
+    checkDuplicates()
+  }, [allowProjectCreation, projectDecisions.name, extractedData.project?.project_name, projectData?.name])
+
   const handleCancel = () => {
     if (allowProjectCreation && onCancel) {
       onCancel()
       return
     }
+
+    // If part of batch upload, go back to batch detail page
+    if (scanData.batch_id) {
+      startNavigation(`/projects/batches/${scanData.batch_id}`)
+      setTimeout(() => router.push(`/projects/batches/${scanData.batch_id}`), 50)
+      return
+    }
+
+    // Otherwise go to project
     startNavigation(`/projects/${projectData.id}`)
     setTimeout(() => router.push(`/projects/${projectData.id}`), 50)
   }
@@ -98,21 +163,69 @@ export function ScanReviewContainer({
       if (error) throw error
 
       toast.success('Scan rejected')
-      startNavigation(`/projects/${projectData.id}`)
-      setTimeout(() => router.push(`/projects/${projectData.id}`), 50)
+
+      // If part of batch upload, go back to batch detail page
+      if (scanData.batch_id) {
+        startNavigation(`/projects/batches/${scanData.batch_id}`)
+        setTimeout(() => router.push(`/projects/batches/${scanData.batch_id}`), 50)
+      } else {
+        startNavigation(`/projects/${projectData.id}`)
+        setTimeout(() => router.push(`/projects/${projectData.id}`), 50)
+      }
     } catch (error) {
       console.error('Failed to reject scan:', error)
       toast.error('Failed to reject scan')
     }
   }
 
+  const handleLinkToExistingProject = async (projectId: string) => {
+    try {
+      setLinkedProjectId(projectId)
+      // Update scan to link to existing project instead of creating new
+      const { error } = await supabase
+        .from('mapping_sheet_scans')
+        .update({
+          project_id: projectId,
+          upload_mode: 'existing_project',
+        })
+        .eq('id', scanData.id)
+
+      if (error) throw error
+
+      toast.success('Scan linked to existing project')
+
+      // Navigate to the scan review page for the existing project
+      startNavigation(`/projects/${projectId}/scan-review/${scanData.id}`)
+      setTimeout(() => router.push(`/projects/${projectId}/scan-review/${scanData.id}`), 50)
+    } catch (error) {
+      console.error('Failed to link to project:', error)
+      toast.error('Failed to link to project')
+    }
+  }
+
+  const handleProceedAnyway = () => {
+    setAllowProceed(true)
+    toast.info('Proceeding with new project creation')
+  }
+
   const handleConfirmImport = async () => {
     setIsImporting(true)
+
+    const normalizedContacts = contactsDecisions
+      .map((contact) => ({
+        action: contact.action,
+        existingId: contact.existingId,
+        role: normalizeSiteContactRole(contact.role),
+        name: contact.name?.trim() || null,
+        email: contact.email?.trim() || null,
+        phone: contact.phone?.trim() || null,
+      }))
+      .filter((contact) => contact.action === 'update' && (contact.existingId || contact.role))
 
     const payload = {
       scanId: scanData.id,
       projectDecisions,
-      contactsDecisions,
+      contactsDecisions: normalizedContacts,
       subcontractorDecisions,
     }
 
@@ -158,8 +271,15 @@ export function ScanReviewContainer({
         startNavigation(`/projects/${result.projectId}`)
         setTimeout(() => router.push(`/projects/${result.projectId}`), 50)
       } else {
-        startNavigation(`/projects/${projectData.id}`)
-        setTimeout(() => router.push(`/projects/${projectData.id}`), 50)
+        // If part of batch upload, go back to batch detail page
+        if (scanData.batch_id) {
+          startNavigation(`/projects/batches/${scanData.batch_id}`)
+          setTimeout(() => router.push(`/projects/batches/${scanData.batch_id}`), 50)
+        } else {
+          // Otherwise go to project
+          startNavigation(`/projects/${projectData.id}`)
+          setTimeout(() => router.push(`/projects/${projectData.id}`), 50)
+        }
       }
     } catch (error) {
       console.error('Import error:', error)
@@ -172,6 +292,7 @@ export function ScanReviewContainer({
   }
 
   const overallConfidence = extractedData?.confidence?.overall || 0
+  const extractedDataMissing = !scanData.extracted_data
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
@@ -182,7 +303,7 @@ export function ScanReviewContainer({
             <div className="flex items-center gap-4">
               <Button variant="ghost" size="sm" onClick={handleCancel}>
                 <ArrowLeft className="h-4 w-4 mr-2" />
-                {allowProjectCreation ? 'Back to Projects' : 'Back to Project'}
+                {allowProjectCreation ? 'Back to Projects' : scanData.batch_id ? 'Back to Batch' : 'Back to Project'}
               </Button>
               <div>
                 <h1 className="text-xl font-semibold flex items-center gap-2">
@@ -205,17 +326,39 @@ export function ScanReviewContainer({
       {/* Warnings */}
       {extractedData?.warnings && extractedData.warnings.length > 0 && (
         <div className="max-w-7xl mx-auto px-4 pt-4">
+      <Alert>
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          <strong>Extraction warnings:</strong>
+          <ul className="list-disc list-inside mt-2">
+            {extractedData.warnings.map((warning, i) => (
+              <li key={i} className="text-sm">{warning}</li>
+            ))}
+          </ul>
+        </AlertDescription>
+      </Alert>
+    </div>
+  )}
+
+      {extractedDataMissing && (
+        <div className="max-w-7xl mx-auto px-4 pt-4">
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              <strong>Extraction warnings:</strong>
-              <ul className="list-disc list-inside mt-2">
-                {extractedData.warnings.map((warning, i) => (
-                  <li key={i} className="text-sm">{warning}</li>
-                ))}
-              </ul>
+              AI extraction results were unavailable for this scan. Please review and enter the project details manually before importing.
             </AlertDescription>
           </Alert>
+        </div>
+      )}
+
+      {/* Duplicate Project Warning */}
+      {allowProjectCreation && duplicateCheck && (
+        <div className="max-w-7xl mx-auto px-4 pt-4">
+          <DuplicateProjectWarning
+            duplicateCheck={duplicateCheck}
+            onLinkToProject={handleLinkToExistingProject}
+            onProceedAnyway={handleProceedAnyway}
+          />
         </div>
       )}
 
@@ -302,21 +445,30 @@ export function ScanReviewContainer({
               <Button variant="outline" onClick={handleCancel} disabled={isImporting}>
                 {allowProjectCreation ? 'Cancel' : 'Save & Continue Later'}
               </Button>
-              <Button 
-                onClick={handleConfirmImport} 
-                disabled={isImporting || !allTabsVisited} 
+              <Button
+                onClick={handleConfirmImport}
+                disabled={isImporting || !allTabsVisited || (allowProjectCreation && duplicateCheck && !allowProceed)}
                 size="lg"
-                className={!allTabsVisited ? 'opacity-50' : ''}
+                className={(!allTabsVisited || (allowProjectCreation && duplicateCheck && !allowProceed)) ? 'opacity-50' : ''}
               >
                 {isImporting ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     Importing...
                   </>
+                ) : isCheckingDuplicates ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Checking duplicates...
+                  </>
                 ) : (
                   <>
                     <CheckCircle2 className="h-4 w-4 mr-2" />
-                    {allTabsVisited ? 'Confirm & Import' : `Visit All Tabs (${visitedTabs.size}/3)`}
+                    {!allTabsVisited
+                      ? `Visit All Tabs (${visitedTabs.size}/3)`
+                      : (allowProjectCreation && duplicateCheck && !allowProceed)
+                        ? 'Review Duplicate Matches'
+                        : 'Confirm & Import'}
                   </>
                 )}
               </Button>

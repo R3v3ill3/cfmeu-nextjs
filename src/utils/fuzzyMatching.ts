@@ -15,31 +15,21 @@ interface Employer {
   [key: string]: any;
 }
 
+import { normalizeEmployerName } from '@/lib/employers/normalize';
+
 // Normalize company names for better matching
-function normalizeCompanyName(name: string): string {
-  if (!name) return '';
-  
-  return name
-    .toLowerCase()
-    .trim()
-    // Remove common business suffixes
-    .replace(/\b(pty\s*ltd?|limited|ltd|inc|incorporated|corp|corporation|llc|llp)\b/gi, '')
-    // Remove common words that don't help with matching
-    .replace(/\b(the|and|&|of|for|in|at|to|with|by)\b/gi, '')
-    // Remove special characters except spaces and hyphens
-    .replace(/[^\w\s\-]/g, '')
-    // Normalize multiple spaces
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+const normalizeCompanyName = (name: string): string =>
+  normalizeEmployerName(name).normalized;
 
 // Calculate similarity between two strings using Levenshtein distance
 function calculateSimilarity(str1: string, str2: string): number {
   const longer = str1.length > str2.length ? str1 : str2;
   const shorter = str1.length > str2.length ? str2 : str1;
-  
-  if (longer.length === 0) return 1.0;
-  
+
+  // If either string is empty, similarity is 0 (not 1.0!)
+  // This prevents false matches when normalization produces empty strings
+  if (longer.length === 0 || shorter.length === 0) return 0.0;
+
   const editDistance = levenshteinDistance(longer, shorter);
   return (longer.length - editDistance) / longer.length;
 }
@@ -91,7 +81,13 @@ function tokenBasedSimilarity(query: string, target: string): number {
 function calculateMatchScore(query: string, target: string): number {
   const normalizedQuery = normalizeCompanyName(query);
   const normalizedTarget = normalizeCompanyName(target);
-  
+
+  // If either normalized name is empty, return 0 (no match)
+  // This prevents false matches from over-aggressive normalization
+  if (!normalizedQuery || !normalizedTarget || normalizedQuery.length === 0 || normalizedTarget.length === 0) {
+    return 0.0;
+  }
+
   // Exact match gets perfect score
   if (normalizedQuery === normalizedTarget) return 1.0;
   

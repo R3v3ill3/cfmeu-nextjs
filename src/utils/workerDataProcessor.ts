@@ -1,3 +1,5 @@
+import { normalizeEmployerName } from '@/lib/employers/normalize';
+
 export interface ProcessedWorkerData {
   // Worker fields
   first_name: string;
@@ -74,17 +76,7 @@ function levenshteinDistance(str1: string, str2: string): number {
   return matrix[str2.length][str1.length];
 }
 
-export function normalizeCompanyName(name: string): string {
-  return name
-    .trim()
-    .toUpperCase()
-    .replace(/\s+/g, ' ')
-    .replace(/PTY\.?\s*LTD\.?/gi, 'PTY LTD')
-    .replace(/LIMITED/gi, 'LTD')
-    .replace(/PROPRIETARY/gi, 'PTY')
-    .replace(/\bAND\b/gi, '&')
-    .replace(/[^\w\s&]/g, '');
-}
+export const normalizeCompanyName = (name: string): string => normalizeEmployerName(name).normalized;
 
 export function findBestEmployerMatch(
   companyName: string, 
@@ -92,14 +84,16 @@ export function findBestEmployerMatch(
 ): EmployerMatch | null {
   const normalizedSearchName = normalizeCompanyName(companyName);
   
-  let bestMatch: EmployerMatch | null = null;
-  let bestScore = 0;
+  // PERFORMANCE FIX: Pre-normalize all employer names once and cache
+  // This prevents recalculating normalization on every iteration
+  const normalizedEmployers = existingEmployers.map(emp => ({
+    ...emp,
+    normalized: normalizeCompanyName(emp.name)
+  }));
   
-  for (const employer of existingEmployers) {
-    const normalizedEmployerName = normalizeCompanyName(employer.name);
-    
-    // Check for exact match first
-    if (normalizedSearchName === normalizedEmployerName) {
+  // First pass: Look for exact match (very fast)
+  for (const employer of normalizedEmployers) {
+    if (normalizedSearchName === employer.normalized) {
       return {
         id: employer.id,
         name: employer.name,
@@ -107,9 +101,59 @@ export function findBestEmployerMatch(
         distance: 0
       };
     }
+  }
+  
+  // PERFORMANCE FIX: Limit fuzzy matching to reduce computational load
+  // Large datasets can cause browser hangs with Levenshtein distance on all records
+  const MAX_FUZZY_CHECKS = 500;
+  
+  // Smart filtering: Only check employers that could plausibly match
+  // This is much better than arbitrary first 500
+  const searchLength = normalizedSearchName.length;
+  const searchFirstChar = normalizedSearchName[0]?.toLowerCase() || '';
+  
+  const candidateEmployers = normalizedEmployers.filter(emp => {
+    // Include if same first character (most common scenario)
+    if (emp.normalized[0]?.toLowerCase() === searchFirstChar) return true;
     
-    // Calculate similarity
-    const similarity = calculateSimilarity(normalizedSearchName, normalizedEmployerName);
+    // Include if similar length (within 50% difference)
+    const lengthDiff = Math.abs(searchLength - emp.normalized.length);
+    const maxLength = Math.max(searchLength, emp.normalized.length);
+    if (maxLength > 0 && lengthDiff / maxLength <= 0.5) return true;
+    
+    return false;
+  });
+  
+  // If we still have too many candidates, take the ones with closest length match
+  let employersToCheck = candidateEmployers;
+  if (candidateEmployers.length > MAX_FUZZY_CHECKS) {
+    employersToCheck = candidateEmployers
+      .sort((a, b) => {
+        const diffA = Math.abs(searchLength - a.normalized.length);
+        const diffB = Math.abs(searchLength - b.normalized.length);
+        return diffA - diffB; // Sort by closest length match
+      })
+      .slice(0, MAX_FUZZY_CHECKS);
+  }
+  
+  let bestMatch: EmployerMatch | null = null;
+  let bestScore = 0;
+  
+  // PERFORMANCE FIX: Early exit if we find a very good match (>= 0.95)
+  for (const employer of employersToCheck) {
+    // Skip exact matches (already checked above)
+    if (normalizedSearchName === employer.normalized) continue;
+    
+    // PERFORMANCE FIX: Quick length check - if names differ too much in length, skip
+    const lengthDiff = Math.abs(normalizedSearchName.length - employer.normalized.length);
+    const maxLength = Math.max(normalizedSearchName.length, employer.normalized.length);
+    if (maxLength > 0 && lengthDiff / maxLength > 0.5) {
+      // Names differ by >50% in length, unlikely to be good match
+      continue;
+    }
+    
+    // Calculate similarity (expensive operation)
+    const similarity = calculateSimilarity(normalizedSearchName, employer.normalized);
     
     if (similarity > bestScore && similarity > 0.7) {
       bestScore = similarity;
@@ -122,6 +166,11 @@ export function findBestEmployerMatch(
         confidence,
         distance: 1 - similarity
       };
+      
+      // PERFORMANCE FIX: Early exit if we found a very good match
+      if (similarity >= 0.95) {
+        return bestMatch;
+      }
     }
   }
   

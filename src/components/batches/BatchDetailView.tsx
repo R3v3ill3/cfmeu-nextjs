@@ -24,6 +24,7 @@ import {
   Download,
   Eye,
   ExternalLink,
+  RefreshCw,
 } from 'lucide-react'
 import {
   Table,
@@ -76,6 +77,7 @@ interface BatchDetailViewProps {
 export function BatchDetailView({ batch: initialBatch }: BatchDetailViewProps) {
   const [batch, setBatch] = useState<Batch>(initialBatch)
   const [isPolling, setIsPolling] = useState(false)
+  const [isRetrying, setIsRetrying] = useState(false)
 
   // Poll for updates if batch is still processing
   useEffect(() => {
@@ -86,7 +88,13 @@ export function BatchDetailView({ batch: initialBatch }: BatchDetailViewProps) {
           const response = await fetch(`/api/projects/batch-upload/${batch.id}/status`)
           if (response.ok) {
             const updatedBatch = await response.json()
-            setBatch(updatedBatch)
+            // Note: The status endpoint only returns batch data, not scans
+            // Scan status updates will be visible after page refresh or when navigating back from review
+            setBatch((prevBatch) => ({
+              ...prevBatch,
+              ...updatedBatch,
+              scans: prevBatch.scans, // Keep existing scans since status endpoint doesn't include them
+            }))
 
             // Stop polling if completed
             if (
@@ -96,7 +104,7 @@ export function BatchDetailView({ batch: initialBatch }: BatchDetailViewProps) {
             ) {
               setIsPolling(false)
               clearInterval(interval)
-              toast.success('Batch processing completed')
+              toast.success('Batch processing completed - refresh page to see scan details')
             }
           }
         } catch (error) {
@@ -129,6 +137,32 @@ export function BatchDetailView({ batch: initialBatch }: BatchDetailViewProps) {
     return `${seconds}s`
   }
 
+  const handleRetryFailed = async () => {
+    setIsRetrying(true)
+    try {
+      const response = await fetch('/api/projects/batch-upload/retry-failed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batchId: batch.id }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to retry scans')
+      }
+
+      const result = await response.json()
+      toast.success(`Retrying ${result.retriedCount} failed scan${result.retriedCount !== 1 ? 's' : ''}`)
+
+      // Refresh page after a short delay to show updated statuses
+      setTimeout(() => window.location.reload(), 2000)
+    } catch (error) {
+      console.error('Retry failed:', error)
+      toast.error('Failed to retry scans. Please try again.')
+    } finally {
+      setIsRetrying(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -155,6 +189,65 @@ export function BatchDetailView({ batch: initialBatch }: BatchDetailViewProps) {
           <BatchStatusBadge status={batch.status} errorMessage={batch.error_message} />
         </div>
       </div>
+
+      {/* Review Alert */}
+      {batch.scans && batch.scans.length > 0 && (() => {
+        const scansNeedingReview = batch.scans.filter(s =>
+          s.status === 'completed' || s.status === 'review_new_project'
+        )
+        return scansNeedingReview.length > 0 && (
+          <div className="flex items-start gap-3 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-yellow-900">
+                {scansNeedingReview.length} Scan{scansNeedingReview.length > 1 ? 's' : ''} Need Review
+              </h3>
+              <p className="text-sm text-yellow-800 mt-1">
+                These scans have been processed and are ready for review. Please review each scan to match contractors to existing employers and confirm the extracted data before it's imported.
+              </p>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Failed Scans Alert */}
+      {batch.scans && batch.scans.length > 0 && (() => {
+        const failedScans = batch.scans.filter(s => s.status === 'failed')
+        return failedScans.length > 0 && (
+          <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <XCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-red-900">
+                {failedScans.length} Scan{failedScans.length > 1 ? 's' : ''} Failed
+              </h3>
+              <p className="text-sm text-red-800 mt-1">
+                These scans encountered errors during processing. Check error messages below or retry processing.
+              </p>
+              <div className="mt-3">
+                <Button
+                  onClick={handleRetryFailed}
+                  disabled={isRetrying}
+                  size="sm"
+                  variant="outline"
+                  className="border-red-300 text-red-700 hover:bg-red-100"
+                >
+                  {isRetrying ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Retrying...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Retry Failed Scans
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Batch Overview */}
       <Card>
@@ -256,10 +349,42 @@ export function BatchDetailView({ batch: initialBatch }: BatchDetailViewProps) {
       {/* Scans Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Individual Scans</CardTitle>
-          <CardDescription>
-            Status of each mapping sheet scan from this batch
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Individual Scans</CardTitle>
+              <CardDescription>
+                Status of each mapping sheet scan from this batch
+              </CardDescription>
+            </div>
+            {batch.scans && batch.scans.length > 0 && (() => {
+              const scansNeedingReview = batch.scans.filter(s =>
+                s.status === 'completed' || s.status === 'review_new_project'
+              ).length
+              const scansInReview = batch.scans.filter(s => s.status === 'under_review').length
+              const scansConfirmed = batch.scans.filter(s => s.status === 'confirmed').length
+
+              return scansNeedingReview > 0 && (
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">
+                    <AlertCircle className="h-3 w-3 mr-1" />
+                    {scansNeedingReview} Needs Review
+                  </Badge>
+                  {scansInReview > 0 && (
+                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
+                      <Clock className="h-3 w-3 mr-1" />
+                      {scansInReview} In Review
+                    </Badge>
+                  )}
+                  {scansConfirmed > 0 && (
+                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
+                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                      {scansConfirmed} Confirmed
+                    </Badge>
+                  )}
+                </div>
+              )
+            })()}
+          </div>
         </CardHeader>
         <CardContent>
           {batch.scans && batch.scans.length > 0 ? (
@@ -275,8 +400,16 @@ export function BatchDetailView({ batch: initialBatch }: BatchDetailViewProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {batch.scans.map((scan) => (
-                  <TableRow key={scan.id}>
+                {batch.scans.map((scan) => {
+                  const needsReview = scan.status === 'completed' || scan.status === 'review_new_project'
+                  const hasExistingProject = Boolean(scan.project_id || scan.created_project_id)
+                  const canReviewExisting = (scan.status === 'completed' || scan.status === 'under_review') && hasExistingProject
+                  const canReviewNewProject = scan.status === 'review_new_project' && !hasExistingProject
+                  return (
+                  <TableRow
+                    key={scan.id}
+                    className={needsReview ? 'bg-yellow-50 hover:bg-yellow-100' : ''}
+                  >
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <FileText className="h-4 w-4 text-muted-foreground" />
@@ -285,7 +418,7 @@ export function BatchDetailView({ batch: initialBatch }: BatchDetailViewProps) {
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="text-xs">
-                        {scan.upload_mode === 'new' ? 'New Project' : 'Match Existing'}
+                        {scan.upload_mode === 'new_project' ? 'New Project' : 'Match Existing'}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -315,6 +448,34 @@ export function BatchDetailView({ batch: initialBatch }: BatchDetailViewProps) {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
+                        {/* Review button for scans tied to an existing project */}
+                        {canReviewExisting && (
+                          <Button
+                            asChild
+                            variant={scan.status === 'completed' ? 'default' : 'outline'}
+                            size="sm"
+                          >
+                            <Link
+                              href={`/projects/${scan.project_id || scan.created_project_id}/scan-review/${scan.id}`}
+                              prefetch={false}
+                            >
+                              <FileText className="h-3 w-3 mr-1" />
+                              {scan.status === 'completed' || scan.status === 'review_new_project' ? 'Review' : 'Continue'}
+                            </Link>
+                          </Button>
+                        )}
+
+                        {/* Review button for new-project scans awaiting triage */}
+                        {canReviewNewProject && (
+                          <Button asChild variant="default" size="sm">
+                            <Link href={`/projects/new-scan-review/${scan.id}`} prefetch={false}>
+                              <FileText className="h-3 w-3 mr-1" />
+                              Review
+                            </Link>
+                          </Button>
+                        )}
+
+                        {/* View PDF button */}
                         <Button asChild variant="ghost" size="sm">
                           <a href={scan.file_url} target="_blank" rel="noopener noreferrer">
                             <Eye className="h-3 w-3" />
@@ -323,7 +484,7 @@ export function BatchDetailView({ batch: initialBatch }: BatchDetailViewProps) {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                )})}
               </TableBody>
             </Table>
           ) : (
@@ -378,11 +539,15 @@ function ScanStatusBadge({
 }) {
   const variants: Record<
     string,
-    { variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: any; label: string }
+    { variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: any; label: string; color?: string }
   > = {
     pending: { variant: 'secondary', icon: Clock, label: 'Pending' },
     processing: { variant: 'default', icon: Loader2, label: 'Processing' },
-    completed: { variant: 'outline', icon: CheckCircle2, label: 'Completed' },
+    completed: { variant: 'outline', icon: AlertCircle, label: 'Needs Review', color: 'text-yellow-600 border-yellow-300 bg-yellow-50' },
+    under_review: { variant: 'default', icon: Clock, label: 'In Review', color: 'bg-blue-100 text-blue-700 border-blue-300' },
+    confirmed: { variant: 'outline', icon: CheckCircle2, label: 'Confirmed', color: 'text-green-600 border-green-300 bg-green-50' },
+    rejected: { variant: 'outline', icon: XCircle, label: 'Rejected', color: 'text-gray-500 border-gray-300' },
+    review_new_project: { variant: 'outline', icon: AlertCircle, label: 'Needs Review', color: 'text-yellow-600 border-yellow-300 bg-yellow-50' },
     failed: { variant: 'destructive', icon: XCircle, label: 'Failed' },
   }
 
@@ -390,7 +555,7 @@ function ScanStatusBadge({
   const Icon = config.icon
 
   return (
-    <Badge variant={config.variant} className="gap-1 text-xs">
+    <Badge variant={config.variant} className={`gap-1 text-xs ${config.color || ''}`}>
       <Icon className={`h-3 w-3 ${status === 'processing' ? 'animate-spin' : ''}`} />
       {config.label}
     </Badge>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from 'react'
+import { useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/integrations/supabase/client'
 import { Loader2, AlertCircle } from 'lucide-react'
@@ -19,35 +19,56 @@ interface PageProps {
 export default function ScanReviewPage({ params }: PageProps) {
   const { projectId, scanId } = params
 
+  // Debug logging
+  useEffect(() => {
+    console.log('[scan-review] Page mounted with params:', { projectId, scanId })
+  }, [projectId, scanId])
+
   // Fetch scan data
-  const { data: scanData, isLoading: scanLoading, error: scanError } = useQuery({
+  const { data: scanData, error: scanError, isLoading: scanLoading } = useQuery({
     queryKey: ['mapping_sheet_scan', scanId],
     queryFn: async () => {
+      console.log('[scan-review] Fetching scan data for:', scanId)
       const { data, error } = await supabase
         .from('mapping_sheet_scans')
         .select('*')
         .eq('id', scanId)
         .single()
 
-      if (error) throw error
+      if (error) {
+        console.error('[scan-review] Scan fetch error:', error)
+        throw error
+      }
+      console.log('[scan-review] Scan data fetched:', data?.status)
       return data
     },
+    staleTime: 0,  // Always refetch
+    refetchOnMount: true,
+    retry: 3,
   })
 
-  // Fetch project data  
+  // Fetch project data
   const { data: projectData, isLoading: projectLoading } = useQuery({
     queryKey: ['project', projectId],
     enabled: !!projectId,
     queryFn: async () => {
+      console.log('[scan-review] Fetching project data for:', projectId)
       const { data, error } = await supabase
         .from('projects')
         .select('*')
         .eq('id', projectId)
         .single()
 
-      if (error) throw error
+      if (error) {
+        console.error('[scan-review] Project fetch error:', error)
+        throw error
+      }
+      console.log('[scan-review] Project data fetched')
       return data
     },
+    staleTime: 0,  // Always refetch
+    refetchOnMount: true,
+    retry: 3,
   })
 
   // Get job sites for patch lookup (same as main mapping sheet page)
@@ -179,18 +200,7 @@ export default function ScanReviewPage({ params }: PageProps) {
     },
   })
 
-  if (scanLoading || projectLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center space-y-4">
-          <img src="/spinner.gif" alt="Loading" className="h-12 w-12 mx-auto" />
-          <p className="text-sm text-gray-600">Loading scan data...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (scanError || !scanData) {
+  if (scanError) {
     return (
       <div className="max-w-4xl mx-auto py-8 px-4">
         <Alert variant="destructive">
@@ -201,6 +211,22 @@ export default function ScanReviewPage({ params }: PageProps) {
         </Alert>
       </div>
     )
+  }
+
+  // Show loading only while queries are actively loading
+  if (scanLoading || projectLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center space-y-4">
+          <Loader2 className="h-12 w-12 mx-auto animate-spin text-primary" />
+          <p className="text-sm text-gray-600">Loading scan data...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!scanData) {
+    return null
   }
 
   if (scanData.status !== 'completed' && scanData.status !== 'under_review') {

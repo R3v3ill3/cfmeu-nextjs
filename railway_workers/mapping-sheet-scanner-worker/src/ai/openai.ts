@@ -50,9 +50,19 @@ export async function extractWithOpenAI(
     const responseText = response.choices[0]?.message?.content || ''
 
     // Parse JSON
-    let jsonText = responseText.trim()
+    let jsonText = responseText?.trim() || ''
+
+    if (!jsonText) {
+      throw new Error('Empty or undefined response from OpenAI')
+    }
+
     if (jsonText.startsWith('```')) {
-      jsonText = jsonText.replace(/^```(?:json)?\n/, '').replace(/\n```$/, '')
+      // Safely handle markdown code block removal
+      jsonText = jsonText.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '')
+    }
+
+    if (!jsonText || jsonText.length === 0) {
+      throw new Error('Empty response from OpenAI after processing')
     }
 
     const extractedData: ExtractedMappingSheetData = JSON.parse(jsonText)

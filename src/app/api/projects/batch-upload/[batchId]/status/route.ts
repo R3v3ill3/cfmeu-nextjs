@@ -1,67 +1,61 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
 
+/**
+ * GET /api/projects/batch-upload/[batchId]/status
+ *
+ * Returns the current status of a batch upload
+ */
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ batchId: string }> }
+  { params }: { params: { batchId: string } }
 ) {
   try {
-    const { batchId } = await params
+    const { batchId } = params
+    console.log('[batch-status] Fetching status for batch:', batchId)
 
     const supabase = await createServerSupabase()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
     if (authError || !user) {
+      console.log('[batch-status] Auth error:', authError)
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Fetch batch with child scans
+    console.log('[batch-status] User authenticated:', user.id)
+
+    // Fetch batch record
     const { data: batch, error: batchError } = await supabase
       .from('batch_uploads')
-      .select(`
-        *,
-        scans:mapping_sheet_scans(
-          id,
-          file_name,
-          file_url,
-          status,
-          upload_mode,
-          project_id,
-          created_project_id,
-          page_count,
-          confidence_scores,
-          error_message,
-          created_at,
-          updated_at
-        )
-      `)
+      .select('*')
       .eq('id', batchId)
       .single()
 
     if (batchError || !batch) {
+      console.log('[batch-status] Batch not found:', batchId, batchError)
       return NextResponse.json({ error: 'Batch not found' }, { status: 404 })
     }
 
-    // Verify ownership (users can only see their own batches unless admin)
-    if (batch.uploaded_by !== user.id) {
-      // Check if user is admin
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single()
+    console.log('[batch-status] Batch found, status:', batch.status)
 
-      const isAdmin = profile?.role === 'admin' || profile?.role === 'lead_organiser'
-      if (!isAdmin) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-      }
+    // Verify user has access (owner or admin)
+    const { data: userProfile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    const isAdmin = userProfile && ['admin', 'lead_organiser'].includes(userProfile.role)
+
+    if (batch.uploaded_by !== user.id && !isAdmin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     return NextResponse.json(batch)
   } catch (error) {
-    console.error('Batch status error:', error)
+    console.error('Batch status fetch error:', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Fetch failed' },
+      { error: error instanceof Error ? error.message : 'Failed to fetch status' },
       { status: 500 }
     )
   }

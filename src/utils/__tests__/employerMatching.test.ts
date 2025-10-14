@@ -1,4 +1,5 @@
 import { matchEmployerAdvanced, getMatchingStatistics } from '../employerMatching';
+import { normalizeEmployerName } from '@/lib/employers/normalize';
 
 // Mock supabase
 jest.mock('@/integrations/supabase/client', () => ({
@@ -28,6 +29,11 @@ jest.mock('@/integrations/supabase/client', () => ({
 }));
 
 describe('employerMatching', () => {
+  describe('normalizeEmployerName', () => {
+    it('normalizes complex names consistently', () => {
+      expect(normalizeEmployerName('Acme T/A Builders Pty Ltd').normalized).toBe('ACME')
+    })
+  })
   describe('matchEmployerAdvanced', () => {
     it('should find exact matches with high confidence', async () => {
       const result = await matchEmployerAdvanced('ABC Construction Pty Ltd', {
@@ -84,19 +90,19 @@ describe('employerMatching', () => {
           match: { id: '1', name: 'Company A', confidence: 'exact' as const, distance: 0, score: 1.0 },
           candidates: [],
           searchQuery: 'Company A',
-          normalizedQuery: 'company a'
+          normalizedQuery: 'COMPANY A'
         },
         'Company B': {
           match: { id: '2', name: 'Company B Match', confidence: 'high' as const, distance: 0.1, score: 0.9 },
           candidates: [],
           searchQuery: 'Company B',
-          normalizedQuery: 'company b'
+          normalizedQuery: 'COMPANY B'
         },
         'Company C': {
           match: null,
           candidates: [],
           searchQuery: 'Company C',
-          normalizedQuery: 'company c'
+          normalizedQuery: 'COMPANY C'
         }
       };
 

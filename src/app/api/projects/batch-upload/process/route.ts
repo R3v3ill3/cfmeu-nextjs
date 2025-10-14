@@ -44,16 +44,27 @@ export async function POST(request: NextRequest) {
       project_definitions: projectDefinitions,
     }
 
-    // Prepare scan records
-    const scanRecords = uploadedScans.map((scan: any) => ({
-      project_id: scan.definition.projectId || null,
-      file_url: scan.url,
-      file_name: scan.fileName,
-      file_size_bytes: scan.size,
-      upload_mode: scan.definition.mode,
-      notes: `Part of batch upload. Pages ${scan.definition.startPage}-${scan.definition.endPage} of original PDF.`,
-      page_count: scan.pageCount,
-    }))
+    // Prepare scan records with selected_pages
+    const scanRecords = uploadedScans.map((scan: any) => {
+      // Calculate selected pages array from startPage and endPage
+      const startPage = scan.definition.startPage
+      const endPage = scan.definition.endPage
+      const selectedPages = Array.from(
+        { length: endPage - startPage + 1 },
+        (_, i) => startPage + i
+      )
+
+      return {
+        project_id: scan.definition.projectId || null,
+        file_url: scan.url,
+        file_name: scan.fileName,
+        file_size_bytes: scan.size,
+        upload_mode: scan.definition.mode,
+        notes: `Part of batch upload. Pages ${startPage}-${endPage} of original PDF.`,
+        page_count: scan.pageCount,
+        selected_pages: selectedPages,
+      }
+    })
 
     // Call RPC to create batch and scans
     const { data: result, error: rpcError } = await supabase.rpc(
@@ -80,17 +91,41 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Enqueue worker jobs for each scan
+    // Enqueue worker jobs for each scan with full context
     const scanIds = result.scanIds as string[]
-    for (const scanId of scanIds) {
+
+    // Fetch scan records to get selected_pages and other metadata
+    const { data: scans, error: fetchError } = await supabase
+      .from('mapping_sheet_scans')
+      .select('id, file_url, file_name, upload_mode, selected_pages')
+      .in('id', scanIds)
+
+    if (fetchError || !scans) {
+      console.error('Failed to fetch scans for job creation:', fetchError)
+      return NextResponse.json(
+        { error: 'Failed to create jobs' },
+        { status: 500 }
+      )
+    }
+
+    for (const scan of scans) {
       const { error: jobError } = await supabase.from('scraper_jobs').insert({
         job_type: 'mapping_sheet_scan',
-        payload: { scanId },
+        payload: {
+          scanId: scan.id,
+          fileUrl: scan.file_url,
+          fileName: scan.file_name,
+          uploadMode: scan.upload_mode,
+          selectedPages: scan.selected_pages, // Include selected pages
+        },
         status: 'queued',
+        priority: 5,
+        max_attempts: 3,
+        created_by: user.id, // Required for RLS policy
       })
 
       if (jobError) {
-        console.error(`Failed to enqueue job for scan ${scanId}:`, jobError)
+        console.error(`Failed to enqueue job for scan ${scan.id}:`, jobError)
         // Continue with other scans even if one job fails
       }
     }

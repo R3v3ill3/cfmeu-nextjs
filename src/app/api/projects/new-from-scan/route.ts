@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
+import { normalizeProjectType, ProjectTypeValue } from '@/utils/projectType'
+import { normalizeSiteContactRole } from '@/utils/siteContactRole'
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,13 +29,49 @@ export async function POST(request: NextRequest) {
     }
 
     // Prepare project data for RPC
+    let projectTypeValue: ProjectTypeValue | null | undefined = undefined
+
+    if (
+      projectDecisions &&
+      Object.prototype.hasOwnProperty.call(projectDecisions, 'project_type')
+    ) {
+      const rawProjectType = projectDecisions.project_type
+      if (rawProjectType === null || rawProjectType === undefined || rawProjectType === '') {
+        projectTypeValue = null
+      } else {
+        const normalizedType = normalizeProjectType(rawProjectType)
+        if (!normalizedType) {
+          throw new Error(`Unsupported project type value: ${rawProjectType}`)
+        }
+        projectTypeValue = normalizedType
+      }
+    }
+
+    const normalizedContacts = (contactsDecisions || [])
+      .map((contact: any) => ({
+        role: normalizeSiteContactRole(contact.role),
+        existingId: contact.existingId,
+        name: contact.name ?? null,
+        email: contact.email ?? null,
+        phone: contact.phone ?? null,
+        action: contact.action,
+      }))
+      .filter((contact) => contact.action === 'update' && (contact.existingId || contact.role))
+      .map((contact) => ({
+        role: contact.role,
+        existingId: contact.existingId,
+        name: contact.name,
+        email: contact.email,
+        phone: contact.phone,
+      }))
+
     const projectData = {
       name: projectDecisions?.name,
       value: projectDecisions?.value,
       proposed_start_date: projectDecisions?.proposed_start_date,
       proposed_finish_date: projectDecisions?.proposed_finish_date,
       roe_email: projectDecisions?.roe_email,
-      project_type: projectDecisions?.project_type,
+      project_type: projectTypeValue,
       state_funding: projectDecisions?.state_funding,
       federal_funding: projectDecisions?.federal_funding,
       address: projectDecisions?.address,
@@ -54,7 +92,7 @@ export async function POST(request: NextRequest) {
       p_user_id: user.id,
       p_scan_id: scanId,
       p_project_data: projectData as any,
-      p_contacts: (contactsDecisions || []) as any,
+      p_contacts: normalizedContacts as any,
       p_subcontractors: (subcontractorDecisions || []) as any,
       p_employer_creations: (employerCreations || []) as any,
       p_require_approval: true,  // NEW - always require approval for scan uploads

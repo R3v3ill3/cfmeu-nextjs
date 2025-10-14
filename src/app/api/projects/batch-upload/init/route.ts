@@ -60,6 +60,7 @@ export async function POST(request: NextRequest) {
       fileName: file.name,
       fileSize: file.size,
       totalPages,
+      uploaderId: user.id,
     })
   } catch (error) {
     console.error('Batch init error:', error)

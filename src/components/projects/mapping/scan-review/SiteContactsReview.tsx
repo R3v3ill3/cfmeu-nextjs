@@ -56,9 +56,9 @@ export function SiteContactsReview({
       return {
         role: extracted.role,
         action: shouldUpdate ? 'update' : 'skip',
-        name: shouldUpdate ? extracted.name : existing?.name || '',
-        email: shouldUpdate ? extracted.email : existing?.email || '',
-        phone: shouldUpdate ? extracted.phone : existing?.phone || '',
+        name: shouldUpdate ? extracted.name ?? '' : existing?.name ?? '',
+        email: shouldUpdate ? extracted.email ?? '' : existing?.email ?? '',
+        phone: shouldUpdate ? extracted.phone ?? '' : existing?.phone ?? '',
         existingId: existing?.id || null,
         confidence: confidence[index] || 0,
       }
@@ -124,7 +124,7 @@ export function SiteContactsReview({
                   <TableCell>
                     {decision.action === 'update' ? (
                       <Input
-                        value={decision.name}
+                        value={decision.name ?? ''}
                         onChange={(e) => handleFieldChange(index, 'name', e.target.value)}
                         placeholder="Name"
                         className="min-w-[200px]"
@@ -139,7 +139,7 @@ export function SiteContactsReview({
                     {decision.action === 'update' ? (
                       <Input
                         type="email"
-                        value={decision.email}
+                        value={decision.email ?? ''}
                         onChange={(e) => handleFieldChange(index, 'email', e.target.value)}
                         placeholder="Email"
                         className="min-w-[200px]"
@@ -153,7 +153,7 @@ export function SiteContactsReview({
                   <TableCell>
                     {decision.action === 'update' ? (
                       <Input
-                        value={decision.phone}
+                        value={decision.phone ?? ''}
                         onChange={(e) => handleFieldChange(index, 'phone', e.target.value)}
                         placeholder="Phone"
                         className="min-w-[160px]"

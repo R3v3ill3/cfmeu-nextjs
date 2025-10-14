@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { CheckCircle, AlertCircle, Info, Building2, Search, Merge, Eye, EyeOff, AlertTriangle, Users, Trash2 } from 'lucide-react';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+import { normalizeEmployerName } from '@/lib/employers/normalize';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
@@ -194,14 +195,7 @@ export default function DuplicateEmployerManager() {
   };
 
   // Normalize company names for better matching
-  const normalizeCompanyName = (name: string): string => {
-    return name
-      .toLowerCase()
-      .replace(/\b(pty|ltd|limited|proprietary|pl|co|group|construction|builders?|building|contractors?|contracting)\b/g, '')
-      .replace(/[^a-z0-9\s]/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-  };
+  const normalizeCompanyName = (name: string): string => normalizeEmployerName(name).normalized;
 
   // Scan for duplicates
   const scanForDuplicates = async () => {

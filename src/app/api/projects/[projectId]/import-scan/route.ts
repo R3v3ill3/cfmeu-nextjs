@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createServerSupabase } from '@/lib/supabase/server'
 import type { Database } from '@/types/database'
+import { normalizeProjectType } from '@/utils/projectType'
+import { normalizeSiteContactRole } from '@/utils/siteContactRole'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -32,7 +34,22 @@ export async function POST(
     let subcontractorsCreated = 0
 
     // 1. Update project fields (filter out non-database columns)
-    if (projectDecisions && Object.keys(projectDecisions).length > 0) {
+    const safeProjectDecisions = projectDecisions ? { ...projectDecisions } : {}
+
+    if (Object.prototype.hasOwnProperty.call(safeProjectDecisions, 'project_type')) {
+      const rawProjectType = safeProjectDecisions.project_type
+      if (rawProjectType === null || rawProjectType === undefined || rawProjectType === '') {
+        safeProjectDecisions.project_type = null
+      } else {
+        const normalizedType = normalizeProjectType(rawProjectType)
+        if (!normalizedType) {
+          throw new Error(`Unsupported project type value: ${rawProjectType}`)
+        }
+        safeProjectDecisions.project_type = normalizedType
+      }
+    }
+
+    if (Object.keys(safeProjectDecisions).length > 0) {
       // Valid columns in projects table
       const validProjectColumns = [
         'name', 'value', 'proposed_start_date', 'proposed_finish_date', 
@@ -41,15 +58,15 @@ export async function POST(
       
       // Filter to only include valid columns
       const validUpdates: any = {}
-      Object.entries(projectDecisions).forEach(([key, value]) => {
+      Object.entries(safeProjectDecisions).forEach(([key, value]) => {
         if (validProjectColumns.includes(key)) {
           validUpdates[key] = value
         }
       })
 
       // Handle builder_name separately (update builder_id)
-      if (projectDecisions.builder_name && projectDecisions.builder_employer_id) {
-        validUpdates.builder_id = projectDecisions.builder_employer_id
+      if (safeProjectDecisions.builder_name && safeProjectDecisions.builder_employer_id) {
+        validUpdates.builder_id = safeProjectDecisions.builder_employer_id
       }
 
       // Update project if we have valid fields
@@ -66,7 +83,7 @@ export async function POST(
       }
 
       // Handle address update (job_sites table)
-      if (projectDecisions.address) {
+      if (safeProjectDecisions.address) {
         const { data: project } = await serviceSupabase
           .from('projects')
           .select('main_job_site_id')
@@ -77,18 +94,26 @@ export async function POST(
           await serviceSupabase
             .from('job_sites')
             .update({ 
-              full_address: projectDecisions.address,
-              location: projectDecisions.address 
+              full_address: safeProjectDecisions.address,
+              location: safeProjectDecisions.address 
             })
             .eq('id', project.main_job_site_id)
         }
       }
 
-      updatedFields = Object.keys(projectDecisions).length
     }
+
+    updatedFields = Object.keys(safeProjectDecisions).length
 
     // 2. Update/create site contacts
     if (contactsDecisions && contactsDecisions.length > 0) {
+      const preparedContacts = contactsDecisions
+        .filter((contact: any) => !contact.action || contact.action === 'update')
+        .map((contact: any) => ({
+          ...contact,
+          role: normalizeSiteContactRole(contact.role),
+        }))
+
       // Get project's main site
       const { data: project } = await serviceSupabase
         .from('projects')
@@ -100,15 +125,18 @@ export async function POST(
         throw new Error('Project has no main job site')
       }
 
-      for (const contact of contactsDecisions) {
+      for (const contact of preparedContacts) {
         if (contact.existingId) {
+          const name = contact.name?.trim() || null
+          const email = contact.email?.trim() || null
+          const phone = contact.phone?.trim() || null
           // Update existing
           const { error } = await serviceSupabase
             .from('site_contacts')
             .update({
-              name: contact.name,
-              email: contact.email || null,
-              phone: contact.phone || null,
+              name,
+              email,
+              phone,
             })
             .eq('id', contact.existingId)
 
@@ -116,15 +144,22 @@ export async function POST(
             console.error('Failed to update contact:', error)
           }
         } else {
+          if (!contact.role) {
+            console.warn('Skipping site contact with invalid role:', contact)
+            continue
+          }
+          const name = contact.name?.trim() || null
+          const email = contact.email?.trim() || null
+          const phone = contact.phone?.trim() || null
           // Create new
           const { error } = await serviceSupabase
             .from('site_contacts')
             .insert({
               job_site_id: project.main_job_site_id,
               role: contact.role,
-              name: contact.name,
-              email: contact.email || null,
-              phone: contact.phone || null,
+              name,
+              email,
+              phone,
             })
 
           if (error) {
@@ -236,6 +271,9 @@ export async function POST(
 
 // Helper function to map trade names to codes
 function mapTradeNameToCode(tradeName: string): string {
+  if (!tradeName) {
+    return 'general_construction'
+  }
   const mapping: Record<string, string> = {
     'demo': 'demolition',
     'demolition': 'demolition',

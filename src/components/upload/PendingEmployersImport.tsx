@@ -13,6 +13,35 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/components/ui/use-toast';
+import { normalizeEmployerName } from '@/lib/employers/normalize';
+import { useAliasTelemetry } from '@/hooks/useAliasTelemetry';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Textarea } from '@/components/ui/textarea';
+
+// Type aliases inferred from Supabase client
+type Employer = {
+  id: string;
+  name: string;
+  [key: string]: any;
+};
+
+type PendingEmployer = {
+  id: string;
+  company_name: string;
+  csv_role: string;
+  import_status?: string | null;
+  imported_employer_id?: string | null;
+  import_notes?: string | null;
+  created_by?: string | null;
+  our_role?: 'builder' | 'head_contractor' | 'subcontractor' | null;
+  project_associations?: Array<{
+    project_id: string;
+    project_name: string;
+    csv_role: string;
+  }>;
+  raw: any;
+  [key: string]: any;
+};
 
 interface FWCSearchResult {
   title: string;
@@ -33,45 +62,59 @@ interface EbaSearchState {
   error?: string;
 }
 
-interface PendingEmployer {
-  id: string;
-  company_name: string;
-  csv_role: string;
-  source: string;
-  raw: any;
-  created_at: string;
-  inferred_trade_type?: string;
-  our_role?: 'builder' | 'head_contractor' | 'subcontractor';
-  project_associations?: Array<{
-    project_id: string;
-    project_name: string;
-    csv_role: string;
-  }>;
-  user_confirmed_trade_type?: string;
-  import_status?: string;
-  imported_employer_id?: string;
-  import_notes?: string;
-}
-
 interface ImportResults {
   success: number;
   errors: string[];
-  employersCreated: string[];
-  processedEmployers: Array<{id: string, name: string}>; // Track all processed employers for EBA search
-      duplicatesResolved: number;
-    relationshipsCreated: number;
-    ebaSearchesCompleted: number;
-    ebaRecordsCreated: number;
-  }
+  employersCreated: Array<{ id: string; name: string }>;
+  processedEmployers: Array<{ id: string; name: string }>;
+  duplicatesResolved: number;
+  relationshipsCreated: number;
+  ebaSearchesCompleted: number;
+  ebaRecordsCreated: number;
+  aliasDecisions: AliasPersistOutcome[];
+}
+
+type AliasDecision = 'keep_alias' | 'promote_canonical' | 'merge_alias'
+
+interface EmployerAlias {
+  id: string
+  employerId: string
+  employerName?: string | null
+  alias: string
+  alias_normalized: string
+  source_system: string | null
+  source_identifier: string | null
+  collected_at: string | null
+  collected_by: string | null
+  is_authoritative: boolean | null
+  notes: string | null
+}
+
+interface AliasPersistOutcome {
+  pendingEmployerId: string
+  employerId: string
+  employerName: string
+  alias: string
+  decision: AliasDecision
+  notes?: string | null
+  status: 'inserted' | 'skipped' | 'failed' | 'promoted' | 'merged'
+  error?: string
+}
 
 interface DuplicateDetection {
-  pendingEmployer: PendingEmployer;
-  exactMatches: Array<{id: string, name: string, address: string}>;
-  similarMatches: Array<{id: string, name: string, address: string, similarity: number}>;
-  hasExactMatch: boolean;
-  hasSimilarMatches: boolean;
-  userDecision?: 'use_existing' | 'create_new';
-  selectedEmployerId?: string;
+  pendingEmployer: PendingEmployer
+  exactMatches: Array<{ id: string; name: string; address: string }>
+  similarMatches: Array<{ id: string; name: string; address: string; similarity: number }>
+  pendingAliasNormalized: string
+  existingAliases: Record<string, EmployerAlias[]>
+  conflictingAliases: EmployerAlias[]
+  hasExactMatch: boolean
+  hasSimilarMatches: boolean
+  aliasDecision?: AliasDecision
+  aliasNotes?: string
+  mergeTargetAliasId?: string
+  userDecision?: 'use_existing' | 'create_new'
+  selectedEmployerId?: string
 }
 
 export default function PendingEmployersImport() {
@@ -107,7 +150,193 @@ export default function PendingEmployersImport() {
     const [expandedEbaResults, setExpandedEbaResults] = useState<Set<string>>(new Set());
     const [employersToDismiss, setEmployersToDismiss] = useState<Set<string>>(new Set());
     
-    const { toast } = useToast();
+  const { toast } = useToast();
+  const aliasTelemetry = useAliasTelemetry({ scope: 'pending_employers_import' });
+
+  const handleAliasMergeTargetChange = (employerId: string, aliasId: string) => {
+    const detection = duplicateDetections[employerId];
+    if (!detection?.conflictingAliases?.length) {
+      return;
+    }
+
+    if (detection.mergeTargetAliasId === aliasId) {
+      return;
+    }
+
+    const selected = detection.conflictingAliases.find((alias) => alias.id === aliasId);
+    if (selected) {
+      aliasTelemetry.logInsert({
+        employerId: selected.employerId,
+        alias: detection.pendingEmployer.company_name,
+        normalized: detection.pendingAliasNormalized,
+        sourceSystem: 'pending_employers_import',
+        sourceIdentifier: detection.pendingEmployer.id,
+        collectedBy: detection.pendingEmployer.created_by ?? null,
+        notes: detection.aliasNotes ?? null,
+      });
+    }
+
+    setDuplicateDetections((prev) => ({
+      ...prev,
+      [employerId]: {
+        ...prev[employerId],
+        mergeTargetAliasId: aliasId,
+      },
+    }));
+  };
+
+  const persistAliasDecision = async ({
+      employerId,
+      employerName,
+      pendingEmployer,
+      detection,
+      results,
+    }: {
+      employerId: string;
+      employerName: string;
+      pendingEmployer: PendingEmployer;
+      detection?: DuplicateDetection;
+      results: ImportResults;
+    },
+  ): Promise<void> => {
+    const supabase = getSupabaseBrowserClient();
+    const aliasDecision: AliasDecision = detection?.aliasDecision ?? 'keep_alias';
+    const aliasNotes = detection?.aliasNotes ?? null;
+    const normalizedAlias = detection?.pendingAliasNormalized ?? normalizeEmployerName(pendingEmployer.company_name).normalized;
+    const outcome: AliasPersistOutcome = {
+      pendingEmployerId: pendingEmployer.id,
+      employerId,
+      employerName,
+      alias: pendingEmployer.company_name,
+      decision: aliasDecision,
+      notes: aliasNotes,
+      status: 'failed',
+    };
+
+    const payload = {
+      employer_id: employerId,
+      alias: pendingEmployer.company_name,
+      alias_normalized: normalizedAlias,
+      source_system: 'pending_import',
+      source_identifier: pendingEmployer.id,
+      collected_at: new Date().toISOString(),
+      collected_by: pendingEmployer.created_by ?? null,
+      is_authoritative: aliasDecision === 'promote_canonical',
+      notes: aliasNotes,
+    };
+
+    try {
+      if (aliasDecision === 'promote_canonical') {
+        const { data: employerRow, error: fetchError } = await supabase
+          .from('employers')
+          .select('name')
+          .eq('id', employerId)
+          .maybeSingle();
+        if (fetchError) throw fetchError;
+        const previousName = employerRow?.name ?? null;
+        const { error: updateError } = await supabase
+          .from('employers')
+          .update({ name: pendingEmployer.company_name })
+          .eq('id', employerId);
+        if (updateError) throw updateError;
+        const { error: aliasError } = await supabase
+          .from('employer_aliases')
+          .upsert(payload, { onConflict: 'employer_id,alias_normalized' });
+        if (aliasError) throw aliasError;
+        if (previousName && previousName !== pendingEmployer.company_name) {
+          await supabase
+            .from('employer_aliases')
+            .upsert(
+              {
+                employer_id: employerId,
+                alias: previousName,
+                alias_normalized: normalizeEmployerName(previousName).normalized,
+                source_system: 'pending_import',
+                source_identifier: pendingEmployer.id,
+                collected_at: new Date().toISOString(),
+                collected_by: pendingEmployer.created_by ?? null,
+                is_authoritative: false,
+                notes: `Previous canonical name prior to promotion on ${new Date().toISOString()}`,
+              },
+              { onConflict: 'employer_id,alias_normalized' },
+            );
+        }
+        aliasTelemetry.logInsert({
+          employerId,
+          alias: pendingEmployer.company_name,
+          normalized: normalizedAlias,
+          sourceSystem: 'pending_employers_import',
+          sourceIdentifier: pendingEmployer.id,
+          collectedBy: pendingEmployer.created_by ?? null,
+          notes: aliasNotes ?? null,
+        });
+        outcome.status = 'promoted';
+      } else if (aliasDecision === 'merge_alias') {
+        const mergeTargetId = detection?.mergeTargetAliasId ?? detection?.conflictingAliases?.[0]?.id;
+        if (!mergeTargetId) {
+          outcome.status = 'skipped';
+          outcome.error = 'No existing alias selected to merge into.';
+        } else {
+          const target = detection?.conflictingAliases.find((alias) => alias.id === mergeTargetId);
+          const mergedNotes = [
+            target?.notes,
+            `Merged with pending import alias "${pendingEmployer.company_name}" on ${new Date().toLocaleDateString()}.`,
+            aliasNotes ?? undefined,
+          ]
+            .filter(Boolean)
+            .join('\n');
+          const { error: mergeError } = await supabase
+            .from('employer_aliases')
+            .update({
+              notes: mergedNotes,
+              collected_at: new Date().toISOString(),
+              collected_by: pendingEmployer.created_by ?? null,
+            })
+            .eq('id', mergeTargetId);
+          if (mergeError) throw mergeError;
+          aliasTelemetry.logInsert({
+            employerId,
+            alias: pendingEmployer.company_name,
+            normalized: normalizedAlias,
+            sourceSystem: 'pending_employers_import',
+            sourceIdentifier: pendingEmployer.id,
+            collectedBy: pendingEmployer.created_by ?? null,
+            notes: aliasNotes ?? null,
+          });
+          outcome.status = 'merged';
+        }
+      } else {
+        const { error: aliasError } = await supabase
+          .from('employer_aliases')
+          .upsert(payload, { onConflict: 'employer_id,alias_normalized' });
+        if (aliasError) throw aliasError;
+        aliasTelemetry.logInsert({
+          employerId,
+          alias: pendingEmployer.company_name,
+          normalized: normalizedAlias,
+          sourceSystem: 'pending_employers_import',
+          sourceIdentifier: pendingEmployer.id,
+          collectedBy: pendingEmployer.created_by ?? null,
+          notes: aliasNotes ?? null,
+        });
+        outcome.status = 'inserted';
+      }
+    } catch (error) {
+      outcome.error = error instanceof Error ? error.message : 'Alias persistence failed';
+      aliasTelemetry.logFailure({
+        employerId,
+        alias: pendingEmployer.company_name,
+        normalized: normalizedAlias,
+        sourceSystem: 'pending_employers_import',
+        sourceIdentifier: pendingEmployer.id,
+        collectedBy: pendingEmployer.created_by ?? null,
+        notes: aliasNotes ?? null,
+        error: error instanceof Error ? error : new Error('Alias persistence failed'),
+      });
+    }
+
+    results.aliasDecisions.push(outcome);
+  };
 
   const loadPendingEmployers = useCallback(async () => {
     try {
@@ -158,9 +387,9 @@ export default function PendingEmployersImport() {
   const createEmployer = async (pendingEmployer: PendingEmployer): Promise<string> => {
     const supabase = getSupabaseBrowserClient();
     const raw = pendingEmployer.raw;
-    
+
     console.log(`Processing employer: ${pendingEmployer.company_name}`);
-    
+
     // Check if user made a decision about duplicates
     const detection = duplicateDetections[pendingEmployer.id];
     if (detection?.userDecision === 'use_existing' && detection.selectedEmployerId) {
@@ -221,12 +450,12 @@ export default function PendingEmployersImport() {
     
     // Step 2: Fall back to exact name match if no BCI ID match
     if (!exactMatch) {
-      const { data: nameMatch } = await supabase
-        .from('employers')
-        .select('id, name, address_line_1, suburb, state')
-        .eq('name', pendingEmployer.company_name)
-        .maybeSingle();
-      exactMatch = nameMatch;
+    const { data: nameMatch } = await supabase
+      .from('employers')
+      .select('id, name, address_line_1, suburb, state')
+      .eq('name', pendingEmployer.company_name)
+      .maybeSingle();
+    exactMatch = nameMatch;
     }
     
     if (exactMatch) {
@@ -274,7 +503,7 @@ export default function PendingEmployersImport() {
     }
     
     // Step 2: Check for similar names and warn
-    const { data: similarEmployers } = await supabase
+      const { data: similarEmployers } = await supabase
       .from('employers')
       .select('id, name, address_line_1, suburb, state')
       .ilike('name', `%${pendingEmployer.company_name}%`)
@@ -365,6 +594,7 @@ export default function PendingEmployersImport() {
   const performDirectImport = async () => {
     setIsImporting(true);
     setWorkflowStep('import');
+    const supabase = getSupabaseBrowserClient();
     const results: ImportResults = {
       success: 0,
               errors: [],
@@ -373,7 +603,8 @@ export default function PendingEmployersImport() {
         duplicatesResolved: 0,
         relationshipsCreated: 0,
         ebaSearchesCompleted: 0,
-        ebaRecordsCreated: 0
+        ebaRecordsCreated: 0,
+    aliasDecisions: []
     };
 
     const employersToImport = pendingEmployers.filter(emp => selectedEmployers.has(emp.id));
@@ -385,7 +616,7 @@ export default function PendingEmployersImport() {
       try {
         const employerId = await createEmployer(pendingEmployer);
         results.success++;
-        results.employersCreated.push(pendingEmployer.company_name);
+        results.employersCreated.push({ id: employerId, name: pendingEmployer.company_name });
         
         // Track all processed employers for EBA search (both new and existing)
         results.processedEmployers.push({
@@ -564,6 +795,19 @@ export default function PendingEmployersImport() {
           }
         }
 
+        try {
+          await persistAliasDecision({
+            employerId,
+            employerName: pendingEmployer.company_name,
+            pendingEmployer,
+            detection,
+            results,
+          });
+        } catch (aliasErr) {
+          console.error('Failed to persist alias decision', aliasErr);
+          results.errors.push(`Alias persistence failed for ${pendingEmployer.company_name}: ${aliasErr instanceof Error ? aliasErr.message : 'Unknown error'}`);
+        }
+
       } catch (error) {
         console.error(`Error importing ${pendingEmployer.company_name}:`, error);
         results.errors.push(`Failed to import ${pendingEmployer.company_name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -704,21 +948,116 @@ export default function PendingEmployersImport() {
       const hasSimilarMatches = Boolean(similarMatches.length > 0);
       
       if (hasExactMatch || hasSimilarMatches) {
+        const normalizedAlias = normalizeEmployerName(pendingEmployer.company_name).normalized
+
+        const aliasEmployerIds = new Set<string>();
+        exactMatches.forEach((match) => aliasEmployerIds.add(match.id));
+        similarMatches.forEach((match) => aliasEmployerIds.add(match.id));
+
+        const existingAliases: Record<string, EmployerAlias[]> = {};
+        const conflictingAliases: EmployerAlias[] = [];
+
+        const { data: aliasRows } = await supabase
+          .from('employer_aliases')
+          .select('id, alias, alias_normalized, source_system, source_identifier, collected_at, collected_by, is_authoritative, notes, employer_id, employer:employers(id, name)')
+          .eq('alias_normalized', normalizedAlias);
+
+        (aliasRows || []).forEach((row: any) => {
+          aliasEmployerIds.add(row.employer_id);
+          const alias: EmployerAlias = {
+            id: row.id,
+            employerId: row.employer_id,
+            employerName: row.employer?.name ?? null,
+            alias: row.alias,
+            alias_normalized: row.alias_normalized,
+            source_system: row.source_system,
+            source_identifier: row.source_identifier,
+            collected_at: row.collected_at,
+            collected_by: row.collected_by,
+            is_authoritative: row.is_authoritative,
+            notes: row.notes,
+          };
+
+          conflictingAliases.push(alias);
+
+          if (!existingAliases[row.employer_id]) {
+            existingAliases[row.employer_id] = [];
+          }
+          existingAliases[row.employer_id].push(alias);
+        });
+
+        if (aliasEmployerIds.size > 0) {
+          const { data: allAliases } = await supabase
+            .from('employer_aliases')
+            .select('id, alias, alias_normalized, source_system, source_identifier, collected_at, collected_by, is_authoritative, notes, employer_id, employer:employers(id, name)')
+            .in('employer_id', Array.from(aliasEmployerIds));
+
+          (allAliases || []).forEach((row: any) => {
+            const alias: EmployerAlias = {
+              id: row.id,
+              employerId: row.employer_id,
+              employerName: row.employer?.name ?? null,
+              alias: row.alias,
+              alias_normalized: row.alias_normalized,
+              source_system: row.source_system,
+              source_identifier: row.source_identifier,
+              collected_at: row.collected_at,
+              collected_by: row.collected_by,
+              is_authoritative: row.is_authoritative,
+              notes: row.notes,
+            };
+
+            if (!existingAliases[row.employer_id]) {
+              existingAliases[row.employer_id] = [];
+            }
+
+            if (!existingAliases[row.employer_id].some((existing) => existing.id === row.id)) {
+              existingAliases[row.employer_id].push(alias);
+            }
+          });
+        }
+
+        const defaultMergeTargetAliasId = conflictingAliases[0]?.id;
+
+        if (conflictingAliases.length > 0) {
+          aliasTelemetry.logConflict({
+            employerId: `pending:${pendingEmployer.id}`,
+            alias: pendingEmployer.company_name,
+            normalized: normalizedAlias,
+            sourceSystem: 'pending_employers_import',
+            sourceIdentifier: pendingEmployer.id,
+            csvRole: pendingEmployer.csv_role ?? null,
+            conflictingEmployers: conflictingAliases.map((alias) => ({
+              employerId: alias.employerId,
+              employerName: alias.employerName ?? null,
+            })),
+            conflictReason: 'duplicate_alias_normalized',
+          });
+        }
+
         detections[pendingEmployer.id] = {
           pendingEmployer,
           exactMatches: (exactMatches || []).map((m: any) => ({
             id: m.id,
             name: m.name,
-            address: `${m.address_line_1 || ''} ${m.suburb || ''} ${m.state || ''}`.trim()
-          })),
-          similarMatches: similarMatches.map((m: any) => ({
-            id: m.id,
-            name: m.name,
             address: `${m.address_line_1 || ''} ${m.suburb || ''} ${m.state || ''}`.trim(),
-            similarity: calculateSimilarity(pendingEmployer.company_name, m.name)
-          })).sort((a, b) => b.similarity - a.similarity),
+          })),
+          similarMatches: similarMatches
+            .map((m: any) => ({
+              id: m.id,
+              name: m.name,
+              address: `${m.address_line_1 || ''} ${m.suburb || ''} ${m.state || ''}`.trim(),
+              similarity: calculateSimilarity(pendingEmployer.company_name, m.name),
+            }))
+            .sort((a, b) => b.similarity - a.similarity),
+          pendingAliasNormalized: normalizedAlias,
+          existingAliases,
+          conflictingAliases,
+          aliasDecision: conflictingAliases.length > 0 ? 'merge_alias' : 'keep_alias',
+          mergeTargetAliasId: conflictingAliases.length > 0 ? defaultMergeTargetAliasId : undefined,
+          aliasNotes: undefined,
           hasExactMatch,
-          hasSimilarMatches
+          hasSimilarMatches,
         };
       }
     }
@@ -865,8 +1204,8 @@ export default function PendingEmployersImport() {
     try {
       for (let i = 0; i < employerIds.length; i++) {
         const employerId = employerIds[i];
-        const detection = duplicateDetections[employerId];
-        if (!detection?.hasExactMatch || !detection.exactMatches?.length) {
+      const detection = duplicateDetections[employerId];
+      if (!detection?.hasExactMatch || !detection.exactMatches?.length) {
           setMergeProgress(prev => ({ ...prev, current: i + 1 }));
           continue;
         }
@@ -900,10 +1239,10 @@ export default function PendingEmployersImport() {
 
         if (duplicates.length > 0) {
           console.log(`Merging ${duplicates.length} duplicates for ${detection.pendingEmployer.company_name}`);
-          const { data, error } = await supabase.rpc('merge_employers', {
-            p_primary_employer_id: primaryId,
-            p_duplicate_employer_ids: duplicates,
-          });
+        const { data, error } = await supabase.rpc('merge_employers', {
+          p_primary_employer_id: primaryId,
+          p_duplicate_employer_ids: duplicates,
+        });
           
           if (error) {
             console.error(`Merge failed for ${detection.pendingEmployer.company_name}:`, error);
@@ -1673,12 +2012,13 @@ export default function PendingEmployersImport() {
                         setImportResults({
                           success: importedEmployers.length,
                           errors: [],
-                          employersCreated: importedEmployers.map(emp => emp.company_name),
+                          employersCreated: importedEmployers.map(emp => ({ id: emp.id, name: emp.company_name })),
                           processedEmployers: processedEmployers,
                           duplicatesResolved: 0,
                           relationshipsCreated: 0,
                           ebaSearchesCompleted: 0,
-                          ebaRecordsCreated: 0
+                          ebaRecordsCreated: 0,
+                          aliasDecisions: []
                         });
                         setShowEbaSearch(true);
                       }}
@@ -2098,95 +2438,213 @@ export default function PendingEmployersImport() {
                   <CardContent className="space-y-4">
                     
                     {detection.hasExactMatch && (
-                    <div className="bg-red-50 p-4 rounded border border-red-200">
-                      <h4 className="font-medium text-red-800 mb-2">Exact Match Found</h4>
-                      <p className="text-sm text-red-700 mb-3">
-                        An employer with this exact name already exists. Choose how to proceed:
-                      </p>
-                      {/* Merge all exact matches into a single employer (oldest record as primary) */}
-                      {detection.exactMatches.length > 1 && (
-                        <div className="flex items-center justify-between p-3 mb-2 rounded border bg-white">
-                          <div className="text-sm text-gray-700">
-                            Merge {detection.exactMatches.length} exact matches into one employer
+                    <div className="bg-blue-50 border border-blue-200 rounded p-4 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Info className="h-4 w-4 text-blue-500" />
+                        <h4 className="font-medium text-blue-900">Existing Employer Aliases</h4>
+                      </div>
+                      {detection.exactMatches.map((match) => {
+                        const aliasesForMatch = detection.existingAliases[match.id] ?? [];
+                        return (
+                          <div key={match.id} className="bg-white rounded border border-blue-100 p-3 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <div className="text-sm font-semibold text-blue-900">{match.name}</div>
+                                {match.address && (
+                                  <div className="text-xs text-blue-700">{match.address}</div>
+                                )}
+                              </div>
+                              <Badge variant="outline" className="text-xs">Canonical</Badge>
+                            </div>
+                            {aliasesForMatch.length > 0 ? (
+                              <ul className="space-y-1 text-sm text-blue-900">
+                                {aliasesForMatch.map((alias) => (
+                                  <li
+                                    key={alias.id}
+                                    className="flex items-center justify-between gap-3 border border-blue-100 rounded px-2 py-1 bg-blue-50/60"
+                                  >
+                                    <div className="flex-1">
+                                      <span className="font-medium">{alias.alias}</span>
+                                      {alias.is_authoritative && (
+                                        <span className="ml-2 text-xs uppercase tracking-wide text-blue-600">Authoritative</span>
+                                      )}
+                                    </div>
+                                    <span className="text-[11px] uppercase text-blue-700">
+                                      {alias.source_system ?? 'unknown'}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="text-sm text-blue-800">No stored aliases for this employer yet.</p>
+                            )}
                           </div>
-                          <Button
-                            size="sm"
-                            onClick={() => mergeExactMatchesFor(employerId)}
-                            disabled={Boolean(isMergingExact[employerId]) || detection.userDecision === 'use_existing'}
-                          >
-                            {isMergingExact[employerId] ? (
-                              <>
-                                <img src="/spinner.gif" alt="Loading" className="w-4 h-4 mr-2" />
-                                Merging...
-                              </>
-                            ) : detection.userDecision === 'use_existing' ? '✓ Merged' : 'Merge Exact Matches'}
-                          </Button>
+                        );
+                      })}
+
+                      {detection.conflictingAliases.length > 0 && (
+                        <div className="border border-amber-300 bg-amber-50 rounded p-3 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <AlertTriangle className="h-4 w-4 text-amber-600" />
+                            <h5 className="font-medium text-amber-800">Conflicting alias claims</h5>
+                          </div>
+                          <p className="text-xs text-amber-700">
+                            The intake name already exists as an alias for other employers. Review before promoting or merging.
+                          </p>
+                          <ul className="space-y-1 text-sm text-amber-900">
+                            {detection.conflictingAliases.map((alias) => (
+                              <li key={alias.id} className="border border-amber-200 rounded px-2 py-1 bg-white flex justify-between">
+                                <span>
+                                  <span className="font-medium">{alias.alias}</span>
+                                  <span className="ml-2 text-xs text-amber-700">
+                                    {alias.employerName ?? 'Unknown employer'}
+                                  </span>
+                                </span>
+                                <span className="text-[11px] uppercase text-amber-600">
+                                  {alias.source_system ?? 'unknown source'}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
                         </div>
                       )}
-                      {detection.exactMatches.map((match) => (
-                        <div key={match.id} className="flex items-center justify-between bg-white p-3 rounded border mb-2">
-                          <div>
-                            <p className="font-medium">{match.name}</p>
-                            <p className="text-sm text-gray-600">{match.address}</p>
-                          </div>
-                          <Button
-                            size="sm"
-                            variant={detection.userDecision === 'use_existing' && detection.selectedEmployerId === match.id ? 'default' : 'outline'}
-                            onClick={() => updateDuplicateDecision(employerId, 'use_existing', match.id)}
-                          >
-                            {detection.userDecision === 'use_existing' && detection.selectedEmployerId === match.id 
-                              ? '✓ Selected' : 'Use This Employer'}
-                          </Button>
-                        </div>
-                      ))}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => updateDuplicateDecision(employerId, 'create_new')}
-                        className={detection.userDecision === 'create_new' ? 'bg-amber-100' : ''}
-                        disabled={detection.userDecision === 'use_existing'}
-                      >
-                        {detection.userDecision === 'create_new' ? '✓ Create New Anyway' : 'Create New Anyway'}
-                      </Button>
                     </div>
-                  )}
-                  
-                  {detection.hasSimilarMatches && !detection.hasExactMatch && (
-                    <div className="bg-yellow-50 p-4 rounded border border-yellow-200">
-                      <h4 className="font-medium text-yellow-800 mb-2">Similar Employers Found</h4>
-                      <p className="text-sm text-yellow-700 mb-3">
-                        Consider using an existing employer to avoid duplicates:
-                      </p>
-                      {detection.similarMatches.slice(0, 5).map((match) => (
-                        <div key={match.id} className="flex items-center justify-between bg-white p-3 rounded border mb-2">
-                          <div>
-                            <p className="font-medium">{match.name}</p>
-                            <p className="text-sm text-gray-600">{match.address}</p>
-                            <Badge variant="outline" className="text-xs mt-1">
-                              {Math.round(match.similarity * 100)}% similar
-                            </Badge>
+                    )}
+
+                    {detection.hasExactMatch && (
+                    <div className="bg-red-50 p-4 rounded border border-red-200 space-y-3">
+                      <div>
+                        <h4 className="font-medium text-red-800 mb-2">Alias & Canonical Decision</h4>
+                        <p className="text-sm text-red-700 mb-3">
+                          Review how the intake name <span className="font-semibold">"{detection.pendingEmployer.company_name}"</span> should be treated for the selected employer.
+                        </p>
+                        <RadioGroup
+                          value={detection.aliasDecision ?? 'keep_alias'}
+                          onValueChange={(value) =>
+                            setDuplicateDetections((prev) => ({
+                              ...prev,
+                              [employerId]: {
+                                ...prev[employerId],
+                                aliasDecision: value as AliasDecision,
+                              },
+                            }))
+                          }
+                          className="space-y-2"
+                        >
+                          <label className="flex items-start gap-3 rounded border p-3 cursor-pointer hover:bg-white">
+                            <RadioGroupItem value="keep_alias" className="mt-1" />
+                            <div>
+                              <div className="font-medium">Keep Intake Name as Alias</div>
+                              <p className="text-sm text-muted-foreground">
+                                Store the intake name as an alias on the matched employer without changing the canonical name.
+                              </p>
+                            </div>
+                          </label>
+                          <label className="flex items-start gap-3 rounded border p-3 cursor-pointer hover:bg-white">
+                            <RadioGroupItem value="promote_canonical" className="mt-1" />
+                            <div>
+                              <div className="font-medium">Promote to Canonical Name</div>
+                              <p className="text-sm text-muted-foreground">
+                                Update the employer's canonical name to match the intake name once review is complete.
+                              </p>
+                            </div>
+                          </label>
+                          <label className="flex items-start gap-3 rounded border p-3 cursor-pointer hover:bg-white">
+                            <RadioGroupItem value="merge_alias" className="mt-1" />
+                            <div>
+                              <div className="font-medium">Merge with Existing Alias</div>
+                              <p className="text-sm text-muted-foreground">
+                                Link this intake name with an existing alias and review duplicates before finalising import.
+                              </p>
+                            </div>
+                          </label>
+                        </RadioGroup>
+                        {detection.aliasDecision === 'merge_alias' && detection.conflictingAliases.length > 0 && (
+                          <div className="mt-4 space-y-2">
+                            <Label className="text-xs font-medium text-red-800 uppercase">Choose existing alias to merge into</Label>
+                            <Select
+                              value={detection.mergeTargetAliasId}
+                              onValueChange={(value) => handleAliasMergeTargetChange(employerId, value)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select alias" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {detection.conflictingAliases.map((alias) => (
+                                  <SelectItem key={alias.id} value={alias.id}>
+                                    <div className="flex flex-col">
+                                      <span className="font-medium">{alias.alias}</span>
+                                      {alias.employerName && (
+                                        <span className="text-xs text-muted-foreground">{alias.employerName}</span>
+                                      )}
+                                      <span className="text-xs text-muted-foreground uppercase">
+                                        {alias.source_system ?? 'unknown source'}{alias.is_authoritative ? ' • authoritative' : ''}
+                                      </span>
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </div>
-                          <Button
-                            size="sm"
-                            variant={detection.userDecision === 'use_existing' && detection.selectedEmployerId === match.id ? 'default' : 'outline'}
-                            onClick={() => updateDuplicateDecision(employerId, 'use_existing', match.id)}
-                          >
-                            {detection.userDecision === 'use_existing' && detection.selectedEmployerId === match.id 
-                              ? '✓ Selected' : 'Use This'}
-                          </Button>
-                        </div>
-                      ))}
-                      <Button
-                        size="sm"
-                        onClick={() => updateDuplicateDecision(employerId, 'create_new')}
-                        className={detection.userDecision === 'create_new' ? 'bg-yellow-100' : ''}
-                      >
-                        {detection.userDecision === 'create_new' ? '✓ Create New' : 'Create New Employer'}
-                      </Button>
+                        )}
+                        <Textarea
+                          placeholder="Notes, context, or follow-up actions"
+                          value={detection.aliasNotes ?? ''}
+                          onChange={(event) =>
+                            setDuplicateDetections((prev) => ({
+                              ...prev,
+                              [employerId]: {
+                                ...prev[employerId],
+                                aliasNotes: event.target.value,
+                              },
+                            }))
+                          }
+                          className="min-h-[80px] mt-3"
+                        />
+                      </div>
+                      {/* Placeholder for future alias metrics or telemetry summaries */}
+                      <div className="rounded border border-dashed border-red-200 bg-red-50/60 p-3 text-xs text-red-600">
+                        Alias telemetry notes placeholder
+                      </div>
                     </div>
                     )}
                     
-                  </CardContent>
+                    {detection.hasSimilarMatches && !detection.hasExactMatch && (
+                      <div className="bg-yellow-50 p-4 rounded border border-yellow-200">
+                        <h4 className="font-medium text-yellow-800 mb-2">Similar Employers Found</h4>
+                        <p className="text-sm text-yellow-700 mb-3">
+                          Consider using an existing employer to avoid duplicates:
+                        </p>
+                        {detection.similarMatches.slice(0, 5).map((match) => (
+                          <div key={match.id} className="flex items-center justify-between bg-white p-3 rounded border mb-2">
+                            <div>
+                              <p className="font-medium">{match.name}</p>
+                              <p className="text-sm text-gray-600">{match.address}</p>
+                              <Badge variant="outline" className="text-xs mt-1">
+                                {Math.round(match.similarity * 100)}% similar
+                              </Badge>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant={detection.userDecision === 'use_existing' && detection.selectedEmployerId === match.id ? 'default' : 'outline'}
+                              onClick={() => updateDuplicateDecision(employerId, 'use_existing', match.id)}
+                            >
+                              {detection.userDecision === 'use_existing' && detection.selectedEmployerId === match.id 
+                                ? '✓ Selected' : 'Use This'}
+                            </Button>
+                          </div>
+                        ))}
+                        <Button
+                          size="sm"
+                          onClick={() => updateDuplicateDecision(employerId, 'create_new')}
+                          className={detection.userDecision === 'create_new' ? 'bg-yellow-100' : ''}
+                        >
+                          {detection.userDecision === 'create_new' ? '✓ Create New' : 'Create New Employer'}
+                        </Button>
+                      </div>
+                      )}
+                      
+                    </CardContent>
                 )}
               </Card>
             ))}

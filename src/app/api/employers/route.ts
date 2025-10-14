@@ -161,6 +161,26 @@ export interface EmployersRequest {
   engaged?: boolean;
   eba?: 'all' | 'active' | 'lodged' | 'pending' | 'no';
   type?: 'all' | 'builder' | 'principal_contractor' | 'large_contractor' | 'small_contractor' | 'individual';
+  // New alias search parameters
+  includeAliases?: boolean;
+  aliasMatchMode?: 'any' | 'authoritative' | 'canonical';
+}
+
+export interface EmployerAlias {
+  id: string;
+  alias: string;
+  alias_normalized: string;
+  is_authoritative: boolean;
+  source_system: string | null;
+  source_identifier: string | null;
+  collected_at: string | null;
+}
+
+export interface EmployerMatchDetails {
+  canonical_name: string;
+  matched_alias: string | null;
+  query: string;
+  external_id_match: 'bci' | 'incolink' | null;
 }
 
 export interface EmployerRecord {
@@ -188,6 +208,11 @@ export interface EmployerRecord {
     name: string;
     patch_name?: string;
   }>;
+  // Alias search data
+  aliases?: EmployerAlias[];
+  match_type?: 'canonical_name' | 'alias' | 'external_id' | 'abn';
+  match_details?: EmployerMatchDetails;
+  search_score?: number;
 }
 
 export interface EmployersResponse {
@@ -243,76 +268,152 @@ export async function GET(request: NextRequest) {
     const pageSize = Math.min(parseInt(searchParams.get('pageSize') || '100'), 200); // Cap at 200
     const sort = (searchParams.get('sort') || 'name') as EmployersRequest['sort'];
     const dir = (searchParams.get('dir') || 'asc') as EmployersRequest['dir'];
-    const q = searchParams.get('q')?.toLowerCase() || undefined;
+    const q = searchParams.get('q') || undefined;
     const engagedParam = searchParams.get('engaged');
     const engaged = engagedParam === null ? true : engagedParam === '1'; // Default to engaged=true like client
     const eba = (searchParams.get('eba') || 'all') as EmployersRequest['eba'];
     const type = (searchParams.get('type') || 'all') as EmployersRequest['type'];
-
-    // Build query - use employer_list_view if available, otherwise fall back to employers table
-    // TODO: Create employer_list_view for optimal performance
-    let query = supabase.from('employers').select(`
-      id,
-      name,
-      abn,
-      employer_type,
-      website,
-      email,
-      phone,
-      estimated_worker_count,
-      incolink_id,
-      enterprise_agreement_status,
-      company_eba_records!left(
-        id,
-        status,
-        nominal_expiry_date,
-        fwc_certified_date,
-        eba_lodged_fwc,
-        date_eba_signed,
-        date_vote_occurred,
-        eba_data_form_received,
-        date_draft_signing_sent,
-        date_barg_docs_sent
-      ),
-      worker_placements!left(id),
-      project_assignments!left(id)
-    `, { count: 'exact' });
     
+    // New alias search parameters
+    const includeAliases = searchParams.get('includeAliases') === 'true';
+    const aliasMatchMode = (searchParams.get('aliasMatchMode') || 'any') as 'any' | 'authoritative' | 'canonical';
+
     // Add parameter to control whether to include enhanced data (projects, organisers)
     const includeEnhanced = searchParams.get('enhanced') === 'true';
 
-    // Apply filters
+    // If there's a search query and aliases are requested, use the alias-aware search RPC
+    let data: any[] | null;
+    let error: any;
+    let count: number | null = null;
 
-    // Text search filter (name only for now; full-text search would require a view)
-    if (q) {
-      query = query.ilike('name', `%${q}%`);
-    }
+    if (q && includeAliases) {
+      // Use alias-aware search via RPC
+      const offset = (page - 1) * pageSize;
+      const { data: searchData, error: searchError } = await supabase.rpc(
+        'search_employers_with_aliases',
+        {
+          p_query: q,
+          p_limit: pageSize,
+          p_offset: offset,
+          p_include_aliases: true,
+          p_alias_match_mode: aliasMatchMode,
+        }
+      );
 
-    // Employer type filter
-    if (type !== 'all') {
-      query = query.eq('employer_type', type);
-    }
+      data = searchData;
+      error = searchError;
+      
+      // For alias search, we need to manually fetch relationships for filtering
+      // and get total count (RPC doesn't provide count)
+      if (data && data.length > 0) {
+        const employerIds = data.map((emp: any) => emp.id);
+        
+        // Fetch additional relationship data for filtering
+        const { data: relData } = await supabase
+          .from('employers')
+          .select(`
+            id,
+            company_eba_records!left(
+              id,
+              status,
+              nominal_expiry_date,
+              fwc_certified_date,
+              eba_lodged_fwc,
+              date_eba_signed,
+              date_vote_occurred,
+              eba_data_form_received,
+              date_draft_signing_sent,
+              date_barg_docs_sent
+            ),
+            worker_placements!left(id),
+            project_assignments!left(id)
+          `)
+          .in('id', employerIds);
 
-    // Note: Engagement and EBA filters will be applied post-query
-    // For better performance, create employer_list_view with precomputed columns
+        // Merge relationship data back into search results
+        if (relData) {
+          data = data.map((emp: any) => {
+            const rel = relData.find((r: any) => r.id === emp.id);
+            return {
+              ...emp,
+              company_eba_records: rel?.company_eba_records || [],
+              worker_placements: rel?.worker_placements || [],
+              project_assignments: rel?.project_assignments || [],
+            };
+          });
+        }
 
-    // Apply sorting
-    if (sort === 'name') {
-      query = query.order('name', { ascending: dir === 'asc' });
-    } else if (sort === 'estimated') {
-      query = query.order('estimated_worker_count', { ascending: dir === 'asc', nullsFirst: false });
+        // Get approximate count (this is expensive, so we do a simpler query)
+        const { count: totalCount } = await supabase
+          .from('employers')
+          .select('id', { count: 'exact', head: true })
+          .ilike('name', `%${q}%`);
+        
+        count = totalCount;
+      }
     } else {
-      // eba_recency requires complex logic, default to name sort
-      query = query.order('name', { ascending: true });
+      // Use standard query (with or without basic search)
+      let query = supabase.from('employers').select(`
+        id,
+        name,
+        abn,
+        employer_type,
+        website,
+        email,
+        phone,
+        estimated_worker_count,
+        incolink_id,
+        bci_company_id,
+        enterprise_agreement_status,
+        company_eba_records!left(
+          id,
+          status,
+          nominal_expiry_date,
+          fwc_certified_date,
+          eba_lodged_fwc,
+          date_eba_signed,
+          date_vote_occurred,
+          eba_data_form_received,
+          date_draft_signing_sent,
+          date_barg_docs_sent
+        ),
+        worker_placements!left(id),
+        project_assignments!left(id)
+      `, { count: 'exact' });
+
+      // Apply filters
+
+      // Text search filter (name only)
+      if (q) {
+        query = query.ilike('name', `%${q}%`);
+      }
+
+      // Employer type filter
+      if (type !== 'all') {
+        query = query.eq('employer_type', type);
+      }
+
+      // Apply sorting
+      if (sort === 'name') {
+        query = query.order('name', { ascending: dir === 'asc' });
+      } else if (sort === 'estimated') {
+        query = query.order('estimated_worker_count', { ascending: dir === 'asc', nullsFirst: false });
+      } else {
+        // eba_recency requires complex logic, default to name sort
+        query = query.order('name', { ascending: true });
+      }
+
+      // Apply pagination
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+      query = query.range(from, to);
+
+      // Execute query
+      const result = await query;
+      data = result.data;
+      error = result.error;
+      count = result.count;
     }
-
-    // Apply pagination
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
-    query = query.range(from, to);
-
-    // Execute query
-    const { data, error, count } = await query;
 
     if (error) {
       console.error('Employers API error:', error);
@@ -332,26 +433,37 @@ export async function GET(request: NextRequest) {
     }
 
     // Transform data to match client expectations and apply post-filters
-    let employers: EmployerRecord[] = (data || []).map((row: any) => ({
-      id: row.id,
-      name: row.name,
-      abn: row.abn,
-      employer_type: row.employer_type,
-      website: row.website,
-      email: row.email,
-      phone: row.phone,
-      estimated_worker_count: row.estimated_worker_count,
-      incolink_id: row.incolink_id,
-      enterprise_agreement_status: row.enterprise_agreement_status,
+    let employers: EmployerRecord[] = (data || []).map((row: any) => {
+      const baseEmployer: EmployerRecord = {
+        id: row.id,
+        name: row.name,
+        abn: row.abn,
+        employer_type: row.employer_type,
+        website: row.website,
+        email: row.email,
+        phone: row.phone,
+        estimated_worker_count: row.estimated_worker_count,
+        incolink_id: row.incolink_id,
 
-      // Transform to match existing client structure
-      company_eba_records: row.company_eba_records || [],
-      worker_placements: row.worker_placements || [],
-      project_assignments: row.project_assignments || [],
+        // Transform to match existing client structure
+        company_eba_records: row.company_eba_records || [],
+        worker_placements: row.worker_placements || [],
+        project_assignments: row.project_assignments || [],
 
-      // Add enhanced data if available
-      ...(includeEnhanced && enhancedData[row.id] ? enhancedData[row.id] : {}),
-    }));
+        // Add enhanced data if available
+        ...(includeEnhanced && enhancedData[row.id] ? enhancedData[row.id] : {}),
+      };
+
+      // Add alias search data if from RPC
+      if (row.aliases !== undefined) {
+        baseEmployer.aliases = Array.isArray(row.aliases) ? row.aliases : (row.aliases || []);
+        baseEmployer.match_type = row.match_type;
+        baseEmployer.match_details = row.match_details;
+        baseEmployer.search_score = row.search_score;
+      }
+
+      return baseEmployer;
+    });
 
     // Post-filter for engagement (until we have a view with precomputed column)
     if (engaged) {
@@ -432,13 +544,16 @@ export async function GET(request: NextRequest) {
       debug: {
         queryTime,
         cacheHit: false, // TODO: Implement caching in future
+        aliasSearchUsed: !!(q && includeAliases),
         appliedFilters: {
           q,
           engaged,
           eba,
           type,
           sort,
-          dir
+          dir,
+          includeAliases,
+          aliasMatchMode
         }
       }
     };

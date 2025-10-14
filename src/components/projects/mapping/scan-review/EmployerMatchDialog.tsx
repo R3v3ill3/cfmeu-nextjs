@@ -106,14 +106,17 @@ export function EmployerMatchDialog({
     setIsCreating(true)
 
     try {
+      // Note: contractor_type field doesn't exist in employers table yet
+      // For now, just create the employer with basic info
       const insertPayload: any = {
         name: newEmployerName.trim(),
         enterprise_agreement_status: 'unknown',
       }
 
-      if (allowContractorTypeSelection && contractorType) {
-        insertPayload.contractor_type = contractorType
-      }
+      // TODO: Add contractor_type field to employers table schema
+      // if (allowContractorTypeSelection && contractorType) {
+      //   insertPayload.contractor_type = contractorType
+      // }
 
       const { data, error } = await supabase
         .from('employers')

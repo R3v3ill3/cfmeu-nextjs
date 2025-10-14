@@ -13,10 +13,13 @@ import { CheckCircle, AlertCircle, Info, Users, Building2, Wrench, MapPin, Searc
 import { Checkbox } from '@/components/ui/checkbox';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { inferTradeTypeFromCompanyName, inferTradeTypeFromCsvRole, getTradeTypeLabel, TradeType, getTradeTypeCategories } from '@/utils/bciTradeTypeInference';
-import { findBestEmployerMatch, normalizeCompanyName } from '@/utils/workerDataProcessor';
+import { findBestEmployerMatch } from '@/utils/workerDataProcessor';
+import { normalizeEmployerName } from '@/lib/employers/normalize';
 import { mapBciStageToStageClass, defaultOrganisingUniverseFor } from '@/utils/stageClassification';
 // Removed unused and missing imports
 import { useToast } from '@/components/ui/use-toast';
+import { useAliasTelemetry } from '@/hooks/useAliasTelemetry';
+import { useAuth } from '@/hooks/useAuth';
 // Removed unused hooks
 
 // Enhanced types for BCI CSV data
@@ -84,7 +87,7 @@ interface EmployerMatchResult {
   csvRole: string;
   matchedEmployerId?: string;
   matchedEmployerName?: string;
-  confidence: 'exact' | 'fuzzy' | 'none';
+  confidence: EmployerConfidence;
   numericConfidence?: number;
   suggestedMatches: Array<{id: string, name: string, address: string}>;
   action: 'confirm_match' | 'search_manual' | 'create_new' | 'add_to_list' | 'skip';
@@ -93,12 +96,14 @@ interface EmployerMatchResult {
   finalTradeType?: TradeType;
 }
 
+type EmployerConfidence = 'exact' | 'fuzzy' | 'none';
+
 interface ConsolidatedEmployerMatch {
   companyName: string;
   normalizedName: string;
   matchedEmployerId?: string;
   matchedEmployerName?: string;
-  confidence: 'exact' | 'fuzzy' | 'none';
+  confidence: EmployerConfidence;
   action: 'confirm_match' | 'search_manual' | 'create_new' | 'add_to_list' | 'skip';
   userConfirmed: boolean;
   
@@ -155,6 +160,11 @@ interface BCIProjectImportProps {
 }
 
 const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onImportComplete, initialFile, onEmployersStaged, autoQuickFlow, showTopConfirmAllButton }) => {
+  const { user } = useAuth();
+  const aliasTelemetry = useAliasTelemetry({
+    scope: 'bci_import',
+    actorId: user?.id ?? null,
+  });
   const [isProcessing, setIsProcessing] = useState(false);
   const hasFiredCompleteRef = useRef(false);
   const [currentStep, setCurrentStep] = useState<'preview' | 'employer_matching' | 'trade_type_confirmation' | 'importing' | 'complete'>('preview');
@@ -603,7 +613,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
       const supabase = getSupabaseBrowserClient();
       // 0a. Alias lookup by normalized alias first
       try {
-        const normalized = normalizeCompanyName(companyName);
+        const normalized = normalizeEmployerName(companyName).normalized;
         const { data: aliasHit } = await supabase
           .from('employer_aliases')
           .select('employer_id, employer:employer_id ( id, name )')
@@ -627,8 +637,10 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
         // no-op; continue to normal matching
       }
       // 0. Try in-memory fuzzy match first if we have employers loaded
+      // PERFORMANCE FIX: Skip in-memory matching if there are too many employers (>1000)
+      // This prevents browser hangs during BCI imports with large employer databases
       const employersList = preloadedEmployers && preloadedEmployers.length > 0 ? preloadedEmployers : allEmployers;
-      if (employersList && employersList.length > 0) {
+      if (employersList && employersList.length > 0 && employersList.length <= 1000) {
         const best = findBestEmployerMatch(companyName, employersList as any);
         if (best) {
           const distance = (best as any).distance;
@@ -813,19 +825,19 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
       project.companies.forEach(company => {
         if (!company.shouldImport) return;
         
-        const normalizedName = normalizeCompanyName(company.companyName);
+        const normalizedName = normalizeEmployerName(company.companyName).normalized;
         const matchKey = `${project.projectId}-${company.companyName}-${company.csvRole}`;
         const match = matches[matchKey];
         
         if (!consolidated.has(normalizedName)) {
           const roles = processed.flatMap(p => 
             p.companies
-              .filter(c => c.shouldImport && normalizeCompanyName(c.companyName) === normalizedName)
+              .filter(c => c.shouldImport && normalizeEmployerName(c.companyName).normalized === normalizedName)
               .map(c => c.ourRole)
           );
           const tradeTypes = processed.flatMap(p => 
             p.companies
-              .filter(c => c.shouldImport && normalizeCompanyName(c.companyName) === normalizedName)
+              .filter(c => c.shouldImport && normalizeEmployerName(c.companyName).normalized === normalizedName)
               .map(c => c.tradeType)
           ).filter(Boolean);
           
@@ -898,7 +910,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
         
         // Find a CSV row for this company to get full data
         const csvRow = csvData.find(row => 
-          normalizeCompanyName(row.companyName) === consolidated.normalizedName
+          normalizeEmployerName(row.companyName).normalized === consolidated.normalizedName
         );
         
         if (csvRow) {
@@ -934,7 +946,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
           project.companies.forEach(company => {
             if (!company.shouldImport) return;
             const mk = `${project.projectId}-${company.companyName}-${company.csvRole}`;
-            const norm = normalizeCompanyName(company.companyName);
+            const norm = normalizeEmployerName(company.companyName).normalized;
             const employerId = createdEmployerIds.get(norm);
             if (employerId) {
               copy[mk] = {
@@ -1466,7 +1478,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
           if (!csvRow) return;
 
           // Use BCI Company ID as primary key, fallback to normalized name
-          const primaryKey = csvRow.companyId || normalizeCompanyName(company.companyName);
+          const primaryKey = csvRow.companyId || normalizeEmployerName(company.companyName).normalized;
           
           const existing = employerGroups.get(primaryKey);
           const projectAssociation = {
@@ -2177,7 +2189,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
         if (selectedCompanyName) break;
       }
       // Normalize helper
-      const norm = (s: string) => normalizeCompanyName(s);
+      const norm = (s: string) => normalizeEmployerName(s).normalized;
       const selectedNorm = selectedCompanyName ? norm(selectedCompanyName) : null;
 
       if (selectedNorm) {
@@ -2238,23 +2250,70 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
     // Persist alias mapping when a manual selection confirms a match
     if (action === 'confirm_match' && employerId) {
       const [projectId, companyName, csvRole] = matchKey.split('-');
-      const normalized = normalizeCompanyName(companyName);
+      const normalized = normalizeEmployerName(companyName);
       (async () => {
-        try {
-          const supabase = getSupabaseBrowserClient();
-          // Upsert alias by normalized value
-          await supabase
-            .from('employer_aliases')
-            .upsert({
-              alias: companyName,
-              alias_normalized: normalized,
-              employer_id: employerId
-            }, { onConflict: 'alias_normalized' });
-        } catch (e) {
-          // silent failure; alias persistence is best-effort
-          console.warn('Failed to save employer alias');
+        const supabase = getSupabaseBrowserClient();
+        const nowIso = new Date().toISOString();
+        const collectedBy = session?.user?.id ?? null;
+        const insertPayload = {
+          alias: companyName,
+          alias_normalized: normalized.normalized,
+          employer_id: employerId,
+          source_system: 'bci_import',
+          source_identifier: projectId,
+          collected_at: nowIso,
+          collected_by: collectedBy,
+          is_authoritative: false,
+          notes: `Matched via BCI import (${csvRole})`
+        };
+
+        const { error: aliasError } = await supabase
+          .from('employer_aliases')
+          .upsert(insertPayload, { onConflict: 'employer_id,alias_normalized' });
+
+        if (aliasError) {
+          console.warn('Failed to save employer alias', aliasError);
+          aliasTelemetry.logConflict({
+            employerId,
+            alias: companyName,
+            normalized: normalized.normalized,
+            sourceSystem: 'bci_import',
+            sourceIdentifier: projectId,
+            projectId,
+            csvRole,
+            collectedBy,
+            notes: insertPayload.notes,
+            conflictReason: aliasError.message,
+          });
+          return;
         }
-      })();
+
+        aliasTelemetry.logInsert({
+          employerId,
+          alias: companyName,
+          normalized: normalized.normalized,
+          sourceSystem: 'bci_import',
+          sourceIdentifier: projectId,
+          projectId,
+          csvRole,
+          collectedBy,
+          notes: insertPayload.notes,
+        });
+      })().catch((err) => {
+        console.warn('Failed to save employer alias', err);
+        aliasTelemetry.logFailure({
+          employerId,
+          alias: companyName,
+          normalized: normalized.normalized,
+          sourceSystem: 'bci_import',
+          sourceIdentifier: projectId,
+          projectId,
+          csvRole,
+          collectedBy: session?.user?.id ?? null,
+          notes: `Matched via BCI import (${csvRole})`,
+          error: err instanceof Error ? err : new Error('Unknown alias insert failure'),
+        });
+      });
     }
   };
 
@@ -2267,9 +2326,9 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
     
     if (csvRow) {
       // Check if this company (by normalized name) is already in the list
-      const normalizedName = normalizeCompanyName(company.companyName);
+      const normalizedName = normalizeEmployerName(company.companyName).normalized;
       const alreadyAdded = employersToAdd.some(emp => 
-        normalizeCompanyName(emp.companyName) === normalizedName
+        normalizeEmployerName(emp.companyName).normalized === normalizedName
       );
 
       if (!alreadyAdded) {
@@ -2311,7 +2370,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
       updateEmployerMatch(matchKey, 'add_to_list');
       
       // Also update all other instances of this company across projects
-      const norm = (s: string) => normalizeCompanyName(s);
+      const norm = (s: string) => normalizeEmployerName(s).normalized;
       const companyNorm = norm(company.companyName);
       
       setEmployerMatches(prev => {
@@ -2837,7 +2896,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
     setProcessedData(prev => prev.map(project => ({
       ...project,
       companies: project.companies.map(company => {
-        if (normalizeCompanyName(company.companyName) === normalizedName) {
+        if (normalizeEmployerName(company.companyName).normalized === normalizedName) {
           return { ...company, ourRole: role };
         }
         return company;
@@ -3134,7 +3193,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
                         {(() => {
                           const project = processedData.find(p => p.projectId === pa.projectId);
                           const company = project?.companies.find(c => 
-                            normalizeCompanyName(c.companyName) === consolidated.normalizedName && 
+                            normalizeEmployerName(c.companyName).normalized === consolidated.normalizedName && 
                             c.csvRole === pa.csvRole
                           );
                           return company?.tradeTypes && company.tradeTypes.length > 1 ? ` (+${company.tradeTypes.length - 1})` : '';
@@ -3489,7 +3548,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
                         <Button
                           size="sm"
                           onClick={() => {
-                            const normalizedName = normalizeCompanyName(searchingForCompany);
+                            const normalizedName = normalizeEmployerName(searchingForCompany).normalized;
                             updateConsolidatedMatch(normalizedName, {
                               matchedEmployerId: result.id,
                               matchedEmployerName: result.name,
@@ -3514,7 +3573,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
                     <div className="flex flex-wrap gap-2 justify-center">
                       <Button
                         onClick={() => {
-                          const normalizedName = normalizeCompanyName(searchingForCompany);
+                          const normalizedName = normalizeEmployerName(searchingForCompany).normalized;
                           updateConsolidatedMatch(normalizedName, {
                             action: 'create_new',
                             userConfirmed: true

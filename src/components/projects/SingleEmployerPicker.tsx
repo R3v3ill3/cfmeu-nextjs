@@ -1,5 +1,5 @@
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -7,6 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/components/ui/use-toast";
+import { normalizeEmployerName } from "@/lib/employers/normalize";
+import { useAliasTelemetry } from "@/hooks/useAliasTelemetry";
 // import type { Database } from "@/integrations/supabase/types";
 
 type Employer = { id: string; name: string };
@@ -30,6 +33,9 @@ export function SingleEmployerPicker({
   const [newEmployer, setNewEmployer] = useState<{ name: string; employer_type: EmployerType | "" }>({ name: "", employer_type: "" });
   const [search, setSearch] = useState("");
   const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [actorId, setActorId] = useState<string | null>(null);
+  const aliasTelemetry = useAliasTelemetry({ scope: "manual_single_employer_picker", actorId });
 
   useEffect(() => {
     const load = async () => {
@@ -49,6 +55,136 @@ export function SingleEmployerPicker({
     };
     load();
   }, []);
+
+  useEffect(() => {
+    supabase.auth
+      .getUser()
+      .then(({ data }) => {
+        setActorId(data.user?.id ?? null);
+      })
+      .catch(() => {
+        setActorId(null);
+      });
+  }, []);
+
+  const persistAlias = useCallback(
+    async (employerId: string, alias: string) => {
+      const supabaseClient = supabase;
+      const normalized = normalizeEmployerName(alias);
+      const collectedBy = actorId;
+      const collectedAt = new Date().toISOString();
+      const notes = "Created via SingleEmployerPicker";
+
+      const insertPayload = {
+        alias,
+        alias_normalized: normalized.normalized,
+        employer_id: employerId,
+        source_system: "manual_single_employer_picker",
+        source_identifier: employerId,
+        collected_at: collectedAt,
+        collected_by: collectedBy,
+        is_authoritative: false,
+        notes,
+      } as const;
+
+      const { error: aliasError } = await supabaseClient
+        .from("employer_aliases")
+        .upsert(insertPayload, { onConflict: "employer_id,alias_normalized" });
+
+      if (aliasError) {
+        aliasTelemetry.logFailure({
+          employerId,
+          alias,
+          normalized: normalized.normalized,
+          sourceSystem: "manual_single_employer_picker",
+          sourceIdentifier: employerId,
+          projectId: null,
+          csvRole: null,
+          collectedBy,
+          notes,
+          error: new Error(aliasError.message),
+        });
+        toast({
+          title: "Alias not saved",
+          description: aliasError.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      aliasTelemetry.logInsert({
+        employerId,
+        alias,
+        normalized: normalized.normalized,
+        sourceSystem: "manual_single_employer_picker",
+        sourceIdentifier: employerId,
+        projectId: null,
+        csvRole: null,
+        collectedBy,
+        notes,
+      });
+
+      const { data: conflicts, error: conflictError } = await supabaseClient
+        .from("employer_aliases")
+        .select("employer_id, employer:employer_id ( name )")
+        .eq("alias_normalized", normalized.normalized)
+        .neq("employer_id", employerId);
+
+      if (conflictError) {
+        aliasTelemetry.logFailure({
+          employerId,
+          alias,
+          normalized: normalized.normalized,
+          sourceSystem: "manual_single_employer_picker",
+          sourceIdentifier: employerId,
+          projectId: null,
+          csvRole: null,
+          collectedBy,
+          notes,
+          error: new Error(conflictError.message),
+        });
+        toast({
+          title: "Alias check failed",
+          description: conflictError.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (conflicts && conflicts.length > 0) {
+        aliasTelemetry.logConflict({
+          employerId,
+          alias,
+          normalized: normalized.normalized,
+          sourceSystem: "manual_single_employer_picker",
+          sourceIdentifier: employerId,
+          projectId: null,
+          csvRole: null,
+          collectedBy,
+          notes,
+          conflictReason: "Alias already exists for other employers",
+          conflictingEmployers: conflicts.map((conflict) => ({
+            employerId: conflict.employer_id,
+            employerName: (conflict as any).employer?.name ?? null,
+          })),
+        });
+
+        const names = conflicts
+          .map((conflict) => (conflict as any).employer?.name)
+          .filter(Boolean)
+          .join(", ");
+
+        toast({
+          title: "Alias already recorded",
+          description: names
+            ? `${alias} is already associated with ${names}. Consider reviewing duplicates.`
+            : `${alias} is already associated with another employer.`,
+          variant: "destructive",
+        });
+      }
+    },
+    [actorId, aliasTelemetry, toast]
+  );
 
   const sorted = useMemo(() => {
     const list = [...employers];
@@ -112,6 +248,8 @@ export function SingleEmployerPicker({
         }
         
         console.log("Employer created successfully:", emp);
+
+        await persistAlias(emp.id, newEmployer.name);
       }
     } catch (err: any) {
       console.error("Unexpected error creating employer:", err);

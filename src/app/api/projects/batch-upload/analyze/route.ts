@@ -9,7 +9,7 @@ const ANALYSIS_SYSTEM_PROMPT = `You are an expert at analyzing CFMEU NSW Mapping
 PAGE 1 (Project Details):
 - **TOP SECTION**: Contains "Organiser name" field and "Project Name" field (THIS IS WHERE THE PROJECT NAME IS!)
 - Government or Private checkboxes
-- Funding amounts, Project Value, Address, Builder
+- Funding amounts, Project Value, **Address** (THIS IS WHERE THE PROJECT ADDRESS IS!), Builder
 - Proposed start/finish dates
 - EBA checkbox
 - Site Contacts table
@@ -26,7 +26,8 @@ PAGE 2 (Subcontractors):
 Your task is to analyze PDFs containing multiple projects and detect:
 1. Project boundaries (which pages belong to which project)
 2. **Project names from the "Project Name" field at the TOP of page 1** for each project
-3. Confidence scores for your detections`
+3. **Project addresses from the "Address" field on page 1** for each project
+4. Confidence scores for your detections`
 
 const ANALYSIS_USER_PROMPT = `Analyze this PDF of CFMEU NSW MappingSheets forms containing multiple construction projects.
 
@@ -45,17 +46,25 @@ const ANALYSIS_USER_PROMPT = `Analyze this PDF of CFMEU NSW MappingSheets forms 
    - If the Project Name field is blank or illegible, use "Unnamed Project"
    - NEVER use generic names like "Project 1", "Project 2", "Unknown Project"
 
-3. **Confidence Scores**:
-   - 0.9-1.0: Project name clearly legible, boundaries obvious
-   - 0.7-0.9: Project name readable, standard 2-page structure
-   - 0.5-0.7: Project name partially legible or non-standard page count
-   - <0.5: Project name illegible or boundaries unclear
+3. **Project Addresses** (IMPORTANT):
+   - On page 1 of EACH project, there's an "Address" field
+   - This contains the physical address of the construction site
+   - Extract the EXACT text from this field
+   - Common examples: "123 Collins St, Melbourne VIC 3000", "West Gate Freeway, Spotswood VIC"
+   - If the Address field is blank or illegible, use null
+   - This helps users match to existing projects
+
+4. **Confidence Scores**:
+   - 0.9-1.0: Project name and address clearly legible, boundaries obvious
+   - 0.7-0.9: Project name and address readable, standard 2-page structure
+   - 0.5-0.7: Project name or address partially legible or non-standard page count
+   - <0.5: Project name or address illegible or boundaries unclear
 
 **IMPORTANT:**
 - Each CFMEU NSW MappingSheets form has a specific "Project Name" field at the top
-- This is NOT the same as the organiser name, builder name, or address
-- Extract ONLY what's written in that specific field
-- Handwriting may vary but the field location is always the same
+- The "Address" field is separate from the project name, builder name, or organiser name
+- Extract ONLY what's written in those specific fields
+- Handwriting may vary but the field locations are always the same
 
 Return ONLY valid JSON in this exact format:
 {
@@ -64,15 +73,17 @@ Return ONLY valid JSON in this exact format:
       "startPage": 1,
       "endPage": 2,
       "projectName": "Collins Street Tower Development",
+      "projectAddress": "123 Collins St, Melbourne VIC 3000",
       "confidence": 0.95,
-      "reasoning": "Project name clearly visible in header of page 1"
+      "reasoning": "Project name and address clearly visible on page 1"
     },
     {
       "startPage": 3,
       "endPage": 4,
       "projectName": "Unnamed Project",
+      "projectAddress": null,
       "confidence": 0.60,
-      "reasoning": "No clear project name field found on page 3, but form structure suggests project boundary"
+      "reasoning": "No clear project name or address found on page 3, but form structure suggests project boundary"
     }
   ],
   "totalPages": 4,
@@ -82,8 +93,9 @@ Return ONLY valid JSON in this exact format:
 
 Rules:
 - startPage and endPage are 1-indexed (first page is 1, not 0)
-- confidence should be 0.0 to 1.0 based on clarity of project name and boundaries
+- confidence should be 0.0 to 1.0 based on clarity of project name, address, and boundaries
 - projectName must be extracted text from the document, never use placeholders like "Project 1" or "Project 2"
+- projectAddress must be extracted text from the document, or null if not found
 - If no name found, use exactly "Unnamed Project" (this helps distinguish from placeholder names)`
 
 interface AnalysisResult {
@@ -91,6 +103,7 @@ interface AnalysisResult {
     startPage: number
     endPage: number
     projectName: string
+    projectAddress?: string | null
     confidence: number
     reasoning?: string
   }>
@@ -220,9 +233,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Log each project name for debugging
+    // Log each project name and address for debugging
     analysis.projects.forEach((p, idx) => {
-      console.log(`[analyze] Project ${idx + 1}: "${p.projectName}" (pages ${p.startPage}-${p.endPage}, confidence: ${p.confidence})`)
+      console.log(`[analyze] Project ${idx + 1}: "${p.projectName}" at "${p.projectAddress || 'No address'}" (pages ${p.startPage}-${p.endPage}, confidence: ${p.confidence})`)
     })
 
     // Calculate costs

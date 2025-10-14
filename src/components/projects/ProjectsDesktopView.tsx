@@ -1058,10 +1058,9 @@ export function ProjectsDesktopView() {
           {/* Action Buttons */}
           <div className="flex items-center gap-2">
             <Button
-              variant="outline"
-              size="sm"
+              size="xl"
               onClick={() => setIsBulkUploadOpen(true)}
-              className="gap-2"
+              className="gap-2 font-medium bg-orange-600 hover:bg-orange-700 text-white"
             >
               <Upload className="h-4 w-4" />
               Bulk Upload

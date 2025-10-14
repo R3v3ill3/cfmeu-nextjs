@@ -15,6 +15,13 @@ import { FwcEbaSearchModal } from '@/components/employers/FwcEbaSearchModal'
 import { supabase } from '@/integrations/supabase/client'
 import DateInput from '@/components/ui/date-input'
 import { GoogleAddressInput, GoogleAddress } from '@/components/projects/GoogleAddressInput'
+import {
+  PROJECT_TYPE_OPTIONS,
+  formatProjectTypeLabel,
+  getProjectTypeDescription,
+  normalizeProjectType,
+  ProjectTypeValue,
+} from '@/utils/projectType'
 
 interface ProjectFieldsReviewProps {
   extractedData: Record<string, any>
@@ -191,6 +198,17 @@ export function ProjectFieldsReview({
         value: action === 'replace' ? extracted : existing,
       }
     })
+
+    const existingProjectType = normalizeProjectType(existingData.project_type)
+    const extractedProjectType = normalizeProjectType(extractedData.project_type)
+
+    initial.project_type = {
+      action:
+        extractedProjectType && extractedProjectType !== existingProjectType
+          ? 'replace'
+          : 'keep',
+      value: extractedProjectType ?? existingProjectType ?? null,
+    }
     setDecisions(initial)
   }, [extractedData, existingData])
 
@@ -252,6 +270,18 @@ export function ProjectFieldsReview({
       address_longitude: {
         action: 'custom',
         value: addressData.lng,
+        error: undefined,
+      },
+    }))
+  }
+
+  const handleProjectTypeChange = (value: ProjectTypeValue | null) => {
+    const existingProjectType = normalizeProjectType(existingData.project_type)
+    setDecisions(prev => ({
+      ...prev,
+      project_type: {
+        action: value === existingProjectType ? 'keep' : 'custom',
+        value,
         error: undefined,
       },
     }))
@@ -332,6 +362,74 @@ export function ProjectFieldsReview({
     // Refresh data after EBA assignment
     setEbaSearchOpen(false)
     // TODO: Refresh employer data to reflect new EBA status
+  }
+
+  const renderProjectTypeSelector = () => {
+    const decision = decisions.project_type
+    const existingType = normalizeProjectType(existingData.project_type)
+    const extractedType = normalizeProjectType(extractedData.project_type)
+    const selectedValue = typeof decision?.value !== 'undefined' ? decision?.value : existingType ?? null
+
+    const existingLabel = formatProjectTypeLabel(existingType)
+    const extractedLabel = extractedType ? formatProjectTypeLabel(extractedType) : 'Not detected'
+    const extractedDescription = extractedType ? getProjectTypeDescription(extractedType) : null
+
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-medium">Project Type</CardTitle>
+            {extractedType && extractedType !== existingType && (
+              <Badge variant="secondary">New suggestion</Badge>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <div className="text-xs text-gray-500 mb-1">Existing Value</div>
+              <div className="font-medium text-gray-900">{existingLabel}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 mb-1">Scanned Suggestion</div>
+              <div className="font-medium text-blue-900">{extractedLabel}</div>
+              {extractedDescription && (
+                <div className="text-xs text-muted-foreground mt-1">{extractedDescription}</div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="text-xs text-gray-500 uppercase tracking-wide">Select project type</div>
+            <RadioGroup
+              value={selectedValue ?? 'none'}
+              onValueChange={(value) =>
+                handleProjectTypeChange(value === 'none' ? null : (value as ProjectTypeValue))
+              }
+            >
+              {PROJECT_TYPE_OPTIONS.map((option) => (
+                <div key={option.value} className="flex items-start gap-3 rounded border p-3">
+                  <RadioGroupItem value={option.value} id={`project-type-${option.value}`} />
+                  <Label htmlFor={`project-type-${option.value}`} className="font-normal cursor-pointer">
+                    <div className="font-medium text-gray-900">{option.label}</div>
+                    <div className="text-xs text-muted-foreground mt-1">{option.description}</div>
+                  </Label>
+                </div>
+              ))}
+              <div className="flex items-start gap-3 rounded border p-3">
+                <RadioGroupItem value="none" id="project-type-none" />
+                <Label htmlFor="project-type-none" className="font-normal cursor-pointer">
+                  <div className="font-medium text-gray-900">No project type</div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Clear the project type if this scan should not update it.
+                  </div>
+                </Label>
+              </div>
+            </RadioGroup>
+          </div>
+        </CardContent>
+      </Card>
+    )
   }
 
   const renderFieldComparison = (config: FieldConfig) => {
@@ -624,6 +722,7 @@ export function ProjectFieldsReview({
       </Alert>
 
       <div className="grid gap-4">
+        {renderProjectTypeSelector()}
         {FIELD_CONFIGS.map(renderFieldComparison)}
       </div>
 

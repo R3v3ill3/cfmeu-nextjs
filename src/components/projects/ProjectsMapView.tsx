@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useMemo, useCallback } from "react"
-import { GoogleMap, Polygon, Marker, InfoWindow, Circle } from "@react-google-maps/api"
+import { GoogleMap, Polygon, Marker, InfoWindow, Circle, useLoadScript } from "@react-google-maps/api"
 import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { Badge } from "@/components/ui/badge"
@@ -12,6 +12,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Palette } from "lucide-react"
 import { getProjectColor, getColorSchemeLegend } from "@/utils/projectColors"
+
+const libraries: ("geometry")[] = ["geometry"]
 
 interface ProjectsMapViewProps {
   projects: any[]
@@ -71,61 +73,6 @@ const defaultCenter = {
   lng: 151.2093 // Sydney, Australia
 }
 
-const GOOGLE_SCRIPT_ID = "google-maps-script"
-
-function loadGoogleMaps(apiKey: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const isMapsReady = () => !!(window.google && window.google.maps && window.google.maps.geometry)
-
-    if (isMapsReady()) {
-      resolve()
-      return
-    }
-    if (document.getElementById(GOOGLE_SCRIPT_ID)) {
-      const check = setInterval(() => {
-        if (isMapsReady()) {
-          clearInterval(check)
-          resolve()
-        }
-      }, 100)
-      setTimeout(() => {
-        clearInterval(check)
-        if (!isMapsReady()) {
-          reject(new Error("Google Maps failed to load (timeout after 30s)"))
-        }
-      }, 30000) // Increased from 10s to 30s
-      return
-    }
-
-    const script = document.createElement("script")
-    script.id = GOOGLE_SCRIPT_ID
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geometry&loading=async&v=weekly`
-    script.async = true
-    script.onload = async () => {
-      try {
-        if (window.google?.maps?.importLibrary) {
-          await window.google.maps.importLibrary("geometry")
-        }
-      } catch {}
-
-      const check = setInterval(() => {
-        if (window.google && window.google.maps && window.google.maps.geometry) {
-          clearInterval(check)
-          resolve()
-        }
-      }, 100)
-      setTimeout(() => {
-        clearInterval(check)
-        if (!(window.google && window.google.maps && window.google.maps.geometry)) {
-          reject(new Error("Google Maps geometry library failed to load (timeout after 30s)"))
-        }
-      }, 30000) // Increased from 10s to 30s
-    }
-    script.onerror = () => reject(new Error("Failed to load Google Maps"))
-    document.head.appendChild(script)
-  })
-}
-
 // Color scheme for different patch types
 const patchColors = {
   geo: "#ef4444", // red
@@ -149,9 +96,13 @@ export default function ProjectsMapView({
   const [selectedJobSite, setSelectedJobSite] = useState<JobSiteData | null>(null)
   const [selectedPatch, setSelectedPatch] = useState<PatchData | null>(null)
   const [infoWindowPosition, setInfoWindowPosition] = useState<{ lat: number, lng: number } | null>(null)
-  const [mapsLoaded, setMapsLoaded] = useState(false)
-  const [mapsError, setMapsError] = useState<string | null>(null)
   const [projectColorBy, setProjectColorBy] = useState<'tier' | 'organising_universe' | 'stage' | 'builder_eba' | 'default'>('builder_eba')
+
+  // Load Google Maps using the official hook
+  const { isLoaded, loadError } = useLoadScript({
+    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY as string,
+    libraries
+  })
   
   // Construct URL for Full Map page with preserved filters
   const fullMapUrl = useMemo(() => {
@@ -183,32 +134,6 @@ export default function ProjectsMapView({
     const queryString = params.toString()
     return queryString ? `/map?${queryString}` : '/map'
   }, [currentFilters])
-
-  // Load Google Maps
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY as string | undefined
-        if (!key) {
-          console.error("Google Maps API key not found in environment variables")
-          setMapsError("Google Maps API key not configured")
-          return
-        }
-        console.log("Loading Google Maps API...")
-        await loadGoogleMaps(key)
-        if (!cancelled) {
-          console.log("Google Maps loaded successfully")
-          setMapsLoaded(true)
-        }
-      } catch (e) {
-        console.error("Google Maps loading error:", e)
-        const errorMessage = e instanceof Error ? e.message : "Failed to load Google Maps"
-        setMapsError(errorMessage)
-      }
-    })()
-    return () => { cancelled = true }
-  }, [])
 
   // Get project IDs from filtered projects
   const projectIds = useMemo(() => projects.map(p => p.id), [projects])
@@ -432,14 +357,14 @@ export default function ProjectsMapView({
   }), [])
 
   // Handle loading states
-  if (mapsError) {
+  if (loadError) {
     return (
       <Card>
         <CardContent className="p-6 text-center">
           <div className="flex items-center justify-center">
             <div className="text-center">
               <MapPin className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600">{mapsError}</p>
+              <p className="text-gray-600">Error loading Google Maps: {loadError.message}</p>
             </div>
           </div>
         </CardContent>
@@ -447,7 +372,7 @@ export default function ProjectsMapView({
     )
   }
 
-  if (!mapsLoaded) {
+  if (!isLoaded) {
     return (
       <Card>
         <CardContent className="p-6 text-center">

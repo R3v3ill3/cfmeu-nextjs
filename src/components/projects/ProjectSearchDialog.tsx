@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -14,7 +14,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Search, Building2, MapPin, Hash, Navigation } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { supabase } from '@/integrations/supabase/client'
 import { useDebounce } from '@/hooks/useDebounce'
 import { GoogleAddressInput, GoogleAddress } from '@/components/projects/GoogleAddressInput'
 import { useAddressSearch, NearbyProject, formatDistance } from '@/hooks/useAddressSearch'
@@ -39,6 +38,7 @@ interface ProjectSearchDialogProps {
   onOpenChange: (open: boolean) => void
   onSelectProject: (project: Project) => void
   suggestedName?: string
+  suggestedAddress?: string | null
 }
 
 export function ProjectSearchDialog({
@@ -46,6 +46,7 @@ export function ProjectSearchDialog({
   onOpenChange,
   onSelectProject,
   suggestedName = '',
+  suggestedAddress = null,
 }: ProjectSearchDialogProps) {
   // Search mode state
   const [searchMode, setSearchMode] = useState<'name' | 'address'>('name')
@@ -56,6 +57,7 @@ export function ProjectSearchDialog({
   const [isLoading, setIsLoading] = useState(false)
   const [hasSearched, setHasSearched] = useState(false)
   const debouncedSearch = useDebounce(searchTerm, 300)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   // Address search state (new)
   const [selectedAddress, setSelectedAddress] = useState<GoogleAddress | null>(null)
@@ -91,19 +93,59 @@ export function ProjectSearchDialog({
     setIsLoading(true)
     setHasSearched(true)
 
-    const { data, error } = await supabase
-      .rpc('search_projects_basic', {
-        p_query: query.trim(),
-      })
-
-    if (error) {
-      console.error('Project search error:', error)
-      setResults([])
-    } else {
-      setResults((data as ProjectFromRPC[]) || [])
+    // Abort any in-flight request before starting a new one
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
     }
 
-    setIsLoading(false)
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+
+    try {
+      const response = await fetch(`/api/projects/search?q=${encodeURIComponent(query.trim())}`, {
+        signal: controller.signal,
+        headers: {
+          'X-Requested-With': 'ProjectSearchDialog',
+        },
+      })
+
+      if (!response.ok) {
+        const message = await response.text().catch(() => 'Search failed')
+        throw new Error(message || 'Search failed')
+      }
+
+      const payload = await response.json()
+      const projects = (payload?.projects || []).map((project: any) => ({
+        id: project.id,
+        name: project.project_name,
+        full_address: project.project_address,
+        builder_name: project.builder,
+      })) as ProjectFromRPC[]
+
+      setResults(projects)
+    } catch (err) {
+      if ((err as Error)?.name === 'AbortError') {
+        return
+      }
+
+      console.error('Project search failed:', err)
+      setResults([])
+    } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null
+      }
+      setIsLoading(false)
+    }
+  }, [])
+
+  // Abort any pending request when the dialog closes/unmounts
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+        abortControllerRef.current = null
+      }
+    }
   }, [])
 
   // Run search when debounced search term changes
@@ -151,11 +193,25 @@ export function ProjectSearchDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent
+        className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col"
+        onInteractOutside={(e) => {
+          // Prevent dialog from closing when clicking on Google autocomplete dropdown
+          const target = e.target as HTMLElement
+          if (target.closest('.pac-container')) {
+            e.preventDefault()
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Search for Existing Project</DialogTitle>
           <DialogDescription>
             Search by project name or find nearby projects by address
+            {suggestedAddress && (
+              <span className="block mt-2 text-xs">
+                Extracted address: <span className="font-medium">{suggestedAddress}</span>
+              </span>
+            )}
           </DialogDescription>
         </DialogHeader>
 

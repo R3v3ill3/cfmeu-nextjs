@@ -35,6 +35,8 @@ import { useIsMobile } from "@/hooks/use-mobile"
 import { ComplianceDesktopView } from "@/components/projects/compliance/ComplianceDesktopView"
 import { ComplianceMobileView } from "@/components/projects/compliance/ComplianceMobileView"
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner"
+import { MappingSheetPage1 } from "@/components/projects/mapping/MappingSheetPage1"
+import { MappingSubcontractorsTable } from "@/components/projects/mapping/MappingSubcontractorsTable"
 
 function SiteContactsSummary({ projectId, siteIds }: { projectId: string; siteIds: string[] }) {
   const [delegates, setDelegates] = useState<string[]>([])
@@ -677,9 +679,8 @@ export default function ProjectDetailPage() {
                   </Button>
                 </div>
                 <div className="grid gap-6">
-                  {(() => {
-                    const Comp = require("@/components/projects/mapping/MappingSheetPage1").MappingSheetPage1;
-                    const projectData = {
+                  <MappingSheetPage1 
+                    projectData={{
                       ...(project as any),
                       address: mappingSheetData?.address,
                       builderName: mappingSheetData?.builderName,
@@ -690,19 +691,15 @@ export default function ProjectDetailPage() {
                       subsetStats,
                       lastVisit,
                       patches: projectPatches,
-                    }
-                    const handleProjectUpdate = (patch: any) => {
+                    }}
+                    onProjectUpdate={(patch: any) => {
                       // No need to update local state as react-query will refetch
-                    }
-                    const handleAddressUpdate = (address: string) => {
+                    }}
+                    onAddressUpdate={(address: string) => {
                       // No need to update local state as react-query will refetch
-                    }
-                    return <Comp projectData={projectData} onProjectUpdate={handleProjectUpdate} onAddressUpdate={handleAddressUpdate} />
-                  })()}
-                  {(() => {
-                    const Subs = require("@/components/projects/mapping/MappingSubcontractorsTable").MappingSubcontractorsTable;
-                    return <Subs projectId={project.id} />
-                  })()}
+                    }}
+                  />
+                  <MappingSubcontractorsTable projectId={project.id} />
                 </div>
               </div>
             )}

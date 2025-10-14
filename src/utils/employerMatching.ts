@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { normalizeEmployerName } from '@/lib/employers/normalize';
 
 export interface EmployerMatchingOptions {
   confidenceThreshold: number;
@@ -21,23 +22,9 @@ export interface EmployerMatchResult {
   normalizedQuery: string;
 }
 
-// Normalize company names for better matching
-function normalizeCompanyName(name: string): string {
-  if (!name) return '';
-  
-  return name
-    .toLowerCase()
-    .trim()
-    // Remove common business suffixes
-    .replace(/\b(pty\s*ltd?|limited|ltd|inc|incorporated|corp|corporation|llc|llp)\b/gi, '')
-    // Remove common words that don't help with matching
-    .replace(/\b(the|and|&|of|for|in|at|to|with|by)\b/gi, '')
-    // Remove special characters except spaces and hyphens
-    .replace(/[^\w\s\-]/g, '')
-    // Normalize multiple spaces
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+// Legacy export retained for backwards compatibility
+export const normalizeCompanyName = (name: string): string =>
+  normalizeEmployerName(name).normalized;
 
 // Calculate similarity between two strings using Levenshtein distance
 function calculateSimilarity(str1: string, str2: string): number {

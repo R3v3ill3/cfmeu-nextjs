@@ -18,7 +18,7 @@ export default function NewProjectScanReviewPage({ params }: PageProps) {
   const { scanId } = params
   const { startNavigation } = useNavigationLoading()
 
-  const { data: scanData, isLoading: scanLoading, error: scanError } = useQuery({
+  const { data: scanData, error: scanError } = useQuery({
     queryKey: ["mapping_sheet_scan", scanId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -45,18 +45,7 @@ export default function NewProjectScanReviewPage({ params }: PageProps) {
     address: scanData?.extracted_data?.project?.address || null,
   }), [scanData])
 
-  if (scanLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center space-y-4">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto" />
-          <p className="text-sm text-muted-foreground">Loading scan data…</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (scanError || !scanData) {
+  if (scanError) {
     return (
       <div className="max-w-4xl mx-auto py-8 px-4">
         <Alert variant="destructive">
@@ -65,6 +54,17 @@ export default function NewProjectScanReviewPage({ params }: PageProps) {
             Failed to load scan data. {scanError?.message || "Scan not found"}
           </AlertDescription>
         </Alert>
+      </div>
+    )
+  }
+
+  if (!scanData) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center space-y-4">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+          <p className="text-sm text-muted-foreground">Loading scan data…</p>
+        </div>
       </div>
     )
   }

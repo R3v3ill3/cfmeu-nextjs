@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -40,6 +40,7 @@ export default function CreateProjectDialog() {
   const [jvLabel, setJvLabel] = useState<string>("");
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [scanToReview, setScanToReview] = useState<{ scanId: string; projectId?: string } | null>(null);
+  const closingFromUploadResultRef = useRef(false)
 
   const canSubmit = useMemo(() => name.trim() && addressData?.formatted, [name, addressData]);
 
@@ -291,11 +292,18 @@ export default function CreateProjectDialog() {
         onOpenChange={(open) => {
           setIsUploadDialogOpen(open)
           if (!open) {
+            if (closingFromUploadResultRef.current) {
+              closingFromUploadResultRef.current = false
+              return
+            }
             setScanToReview(null)
             setOpen(true) // Re-open main dialog when upload is cancelled
+          } else {
+            setOpen(false)
           }
         }}
         onScanReady={(scanId, projectId) => {
+          closingFromUploadResultRef.current = true
           if (projectId) {
             startNavigation(`/projects/${projectId}/scan-review/${scanId}`)
             setTimeout(() => router.push(`/projects/${projectId}/scan-review/${scanId}`), 50)

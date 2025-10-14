@@ -6,6 +6,8 @@
  * naming variations.
  */
 
+import { normalizeEmployerName as sharedNormalizeEmployerName } from '@/lib/employers/normalize';
+
 export interface EmployerSimilarity {
   id: string;
   name: string;
@@ -26,46 +28,7 @@ export interface DuplicateSearchResult {
  * Normalize company name by removing common variations and standardizing format
  */
 export function normalizeEmployerName(name: string): string {
-  if (!name) return '';
-  
-  let normalized = name.trim().toLowerCase();
-  
-  // Remove common business suffixes (case insensitive)
-  const suffixes = [
-    'pty ltd', 'pty. ltd.', 'pty ltd.', 'pty. ltd',
-    'proprietary limited', 'proprietary ltd',
-    'limited', 'ltd', 'ltd.',
-    'incorporated', 'inc', 'inc.',
-    'corporation', 'corp', 'corp.',
-    'company', 'co', 'co.',
-    'group', 'grp',
-    'enterprises', 'ent',
-    'australia', 'aust', 'aus',
-    'international', 'intl', 'int\'l'
-  ];
-  
-  // Remove suffixes at the end of the name
-  for (const suffix of suffixes) {
-    const pattern = new RegExp(`\\s+${suffix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
-    normalized = normalized.replace(pattern, '');
-  }
-  
-  // Remove common prefixes
-  const prefixes = ['the ', 'a ', 'an '];
-  for (const prefix of prefixes) {
-    if (normalized.startsWith(prefix)) {
-      normalized = normalized.substring(prefix.length);
-    }
-  }
-  
-  // Normalize whitespace and punctuation
-  normalized = normalized
-    .replace(/[&]/g, 'and')  // Replace & with 'and'
-    .replace(/[^\w\s]/g, ' ')  // Replace punctuation with spaces
-    .replace(/\s+/g, ' ')  // Collapse multiple spaces
-    .trim();
-  
-  return normalized;
+  return sharedNormalizeEmployerName(name).normalized.toLowerCase();
 }
 
 /**

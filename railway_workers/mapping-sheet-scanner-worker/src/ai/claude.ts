@@ -48,24 +48,30 @@ export async function extractWithClaude(
     // Extract JSON from response
     const responseText = message.content
       .filter((block) => block.type === 'text')
-      .map((block: any) => block.text)
+      .map((block: any) => block.text || '')  // Handle undefined text blocks
       .join('\n')
 
     // Debug: Log Claude's actual response
-    console.log('[claude] Raw response length:', responseText.length)
-    console.log('[claude] Raw response preview:', responseText.substring(0, 200))
-    
+    console.log('[claude] Raw response length:', responseText?.length || 0)
+    console.log('[claude] Raw response preview:', responseText?.substring(0, 200) || 'empty')
+
     // Parse JSON (may be wrapped in markdown code blocks)
-    let jsonText = responseText.trim()
-    if (jsonText.startsWith('```')) {
-      jsonText = jsonText.replace(/^```(?:json)?\n/, '').replace(/\n```$/, '')
+    let jsonText = responseText?.trim() || ''
+
+    if (!jsonText) {
+      throw new Error('Empty or undefined response from Claude')
     }
 
-    console.log('[claude] Parsing JSON length:', jsonText.length)
-    console.log('[claude] JSON preview:', jsonText.substring(0, 200))
+    if (jsonText.startsWith('```')) {
+      // Safely handle markdown code block removal
+      jsonText = jsonText.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '')
+    }
+
+    console.log('[claude] Parsing JSON length:', jsonText?.length || 0)
+    console.log('[claude] JSON preview:', jsonText?.substring(0, 200) || 'empty')
 
     if (!jsonText || jsonText.length === 0) {
-      throw new Error('Empty response from Claude')
+      throw new Error('Empty response from Claude after processing')
     }
 
     const extractedData: ExtractedMappingSheetData = JSON.parse(jsonText)

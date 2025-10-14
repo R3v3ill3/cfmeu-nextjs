@@ -45,7 +45,7 @@ export async function reserveNextJob(
       .from(JOB_TABLE)
       .update({
         lock_token: lockToken,
-        status: 'running',
+        status: 'processing',
         attempts: (candidate.attempts ?? 0) + 1,
         locked_at: nowIso,
         last_error: null,
