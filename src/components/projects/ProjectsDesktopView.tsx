@@ -981,18 +981,20 @@ export function ProjectsDesktopView() {
       {/* Improved Header with Search and Quick Actions */}
       <div className="sticky top-0 z-30 -mx-6 px-6 py-3 bg-white shadow-sm border-b space-y-3">
         {/* Top Row: Search, Actions, and View Toggle */}
-        <div className="flex items-center gap-3">
-          <div className="flex-1 max-w-2xl flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex-1 min-w-[320px] max-w-2xl flex items-center gap-2">
             {/* Search Mode Toggle */}
             <Tabs value={searchMode} onValueChange={(v) => handleSearchModeChange(v)} className="w-full">
               <TabsList className="grid w-full grid-cols-2 max-w-sm">
-                <TabsTrigger value="name">
-                  <Search className="h-4 w-4 mr-2" />
-                  Search by Name
+                <TabsTrigger value="name" className="gap-2">
+                  <Search className="h-4 w-4" />
+                  <span className="hidden xl:inline">Search by Name</span>
+                  <span className="xl:hidden">Name</span>
                 </TabsTrigger>
-                <TabsTrigger value="address">
-                  <Navigation className="h-4 w-4 mr-2" />
-                  Search by Address
+                <TabsTrigger value="address" className="gap-2">
+                  <Navigation className="h-4 w-4" />
+                  <span className="hidden xl:inline">Search by Address</span>
+                  <span className="xl:hidden">Address</span>
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="name" className="mt-2">
@@ -1015,65 +1017,78 @@ export function ProjectsDesktopView() {
               </TabsContent>
             </Tabs>
           </div>
-          
-          {/* Filter Toggle */}
-          <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
-            <CollapsibleTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-2">
-                <Filter className="h-4 w-4" />
-                Filters
-                {activeFilters.length > 0 && (
-                  <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
-                    {activeFilters.length}
-                  </Badge>
-                )}
-                {filtersOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+
+          {/* Secondary Controls - wrapped group */}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Filter Toggle */}
+            <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
+              <CollapsibleTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <Filter className="h-4 w-4" />
+                  Filters
+                  {activeFilters.length > 0 && (
+                    <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
+                      {activeFilters.length}
+                    </Badge>
+                  )}
+                  {filtersOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </Button>
+              </CollapsibleTrigger>
+            </Collapsible>
+
+            {/* Sort Controls */}
+            <div className="flex items-center gap-2">
+              <Select value={sort} onValueChange={(v) => setParam("sort", v)}>
+                <SelectTrigger className="w-32 xl:w-40 h-9">
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="name">Name</SelectItem>
+                  <SelectItem value="value">Project Value</SelectItem>
+                  <SelectItem value="tier">Tier</SelectItem>
+                  <SelectItem value="employers">Employer Count</SelectItem>
+                  <SelectItem value="workers">Worker Count</SelectItem>
+                  <SelectItem value="members">Member Count</SelectItem>
+                  <SelectItem value="delegates">Has Delegate</SelectItem>
+                  <SelectItem value="eba_coverage">EBA Coverage</SelectItem>
+                </SelectContent>
+              </Select>
+              <ToggleGroup type="single" variant="outline" size="sm" value={dir} onValueChange={(v) => v && setParam("dir", v)}>
+                <ToggleGroupItem value="asc" aria-label="Ascending"><ArrowUp className="h-4 w-4" /></ToggleGroupItem>
+                <ToggleGroupItem value="desc" aria-label="Descending"><ArrowDown className="h-4 w-4" /></ToggleGroupItem>
+              </ToggleGroup>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-2">
+              <Button
+                size="xl"
+                onClick={() => setIsBulkUploadOpen(true)}
+                className="gap-2 font-medium bg-orange-600 hover:bg-orange-700 text-white"
+              >
+                <Upload className="h-4 w-4" />
+                <span className="hidden xl:inline">Bulk Upload</span>
+                <span className="xl:hidden">Upload</span>
               </Button>
-            </CollapsibleTrigger>
-          </Collapsible>
-          
-          {/* Sort Controls */}
-          <div className="flex items-center gap-2">
-            <Select value={sort} onValueChange={(v) => setParam("sort", v)}>
-              <SelectTrigger className="w-40 h-9">
-                <SelectValue placeholder="Sort by" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="name">Name</SelectItem>
-                <SelectItem value="value">Project Value</SelectItem>
-                <SelectItem value="tier">Tier</SelectItem>
-                <SelectItem value="employers">Employer Count</SelectItem>
-                <SelectItem value="workers">Worker Count</SelectItem>
-                <SelectItem value="members">Member Count</SelectItem>
-                <SelectItem value="delegates">Has Delegate</SelectItem>
-                <SelectItem value="eba_coverage">EBA Coverage</SelectItem>
-              </SelectContent>
-            </Select>
-            <ToggleGroup type="single" variant="outline" size="sm" value={dir} onValueChange={(v) => v && setParam("dir", v)}>
-              <ToggleGroupItem value="asc" aria-label="Ascending"><ArrowUp className="h-4 w-4" /></ToggleGroupItem>
-              <ToggleGroupItem value="desc" aria-label="Descending"><ArrowDown className="h-4 w-4" /></ToggleGroupItem>
+              <CreateProjectDialog />
+            </div>
+
+            {/* View Toggle */}
+            <ToggleGroup type="single" variant="outline" size="sm" value={view} onValueChange={(v) => v && setParam("view", v)}>
+              <ToggleGroupItem value="card" aria-label="Card view" className="gap-1">
+                <LayoutGrid className="h-4 w-4" />
+                <span className="hidden lg:inline">Card</span>
+              </ToggleGroupItem>
+              <ToggleGroupItem value="list" aria-label="List view" className="gap-1">
+                <ListIcon className="h-4 w-4" />
+                <span className="hidden lg:inline">List</span>
+              </ToggleGroupItem>
+              <ToggleGroupItem value="map" aria-label="Map view" className="gap-1">
+                <MapPin className="h-4 w-4" />
+                <span className="hidden lg:inline">Map</span>
+              </ToggleGroupItem>
             </ToggleGroup>
           </div>
-
-          {/* Action Buttons */}
-          <div className="flex items-center gap-2">
-            <Button
-              size="xl"
-              onClick={() => setIsBulkUploadOpen(true)}
-              className="gap-2 font-medium bg-orange-600 hover:bg-orange-700 text-white"
-            >
-              <Upload className="h-4 w-4" />
-              Bulk Upload
-            </Button>
-            <CreateProjectDialog />
-          </div>
-
-          {/* View Toggle */}
-          <ToggleGroup type="single" variant="outline" size="sm" value={view} onValueChange={(v) => v && setParam("view", v)}>
-            <ToggleGroupItem value="card" aria-label="Card view" className="gap-1"><LayoutGrid className="h-4 w-4" /> Card</ToggleGroupItem>
-            <ToggleGroupItem value="list" aria-label="List view" className="gap-1"><ListIcon className="h-4 w-4" /> List</ToggleGroupItem>
-            <ToggleGroupItem value="map" aria-label="Map view" className="gap-1"><MapPin className="h-4 w-4" /> Map</ToggleGroupItem>
-          </ToggleGroup>
         </div>
         
         {/* Active Filters Pills */}
