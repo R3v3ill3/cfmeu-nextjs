@@ -4,12 +4,15 @@ import { useQuery } from '@tanstack/react-query';
 export interface EmployersParams {
   page: number;
   pageSize: number;
-  sort: 'name' | 'estimated' | 'eba_recency';
+  sort: 'name' | 'estimated' | 'eba_recency' | 'project_count';
   dir: 'asc' | 'desc';
   q?: string;
   engaged?: boolean;
   eba?: 'all' | 'active' | 'lodged' | 'pending' | 'no';
   type?: 'all' | 'builder' | 'principal_contractor' | 'large_contractor' | 'small_contractor' | 'individual';
+  categoryType?: 'contractor_role' | 'trade' | 'all';
+  categoryCode?: string;
+  projectTier?: 'all' | 'tier_1' | 'tier_2' | 'tier_3';
   enhanced?: boolean;
 }
 
@@ -85,6 +88,18 @@ export function useEmployersServerSide(params: EmployersParams) {
       
       if (params.type && params.type !== 'all') {
         searchParams.set('type', params.type);
+      }
+
+      if (params.categoryType && params.categoryType !== 'all') {
+        searchParams.set('categoryType', params.categoryType);
+      }
+
+      if (params.categoryCode) {
+        searchParams.set('categoryCode', params.categoryCode);
+      }
+
+      if (params.projectTier && params.projectTier !== 'all') {
+        searchParams.set('projectTier', params.projectTier);
       }
       
       if (params.enhanced) {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
+import type { Database } from '@/types/database';
 
 const ALLOWED_ROLES = ['organiser', 'lead_organiser', 'admin'] as const;
 type AllowedRole = typeof ALLOWED_ROLES[number];
@@ -8,8 +9,25 @@ const ROLE_SET = new Set<AllowedRole>(ALLOWED_ROLES);
 export const dynamic = 'force-dynamic'
 
 // Helper function to fetch enhanced employer data (projects, organisers, incolink IDs)
-async function fetchEnhancedEmployerData(supabase: any, employerIds: string[]) {
-  const enhancedData: Record<string, any> = {};
+type EmployerAnalyticsRow = Database['public']['Views']['employer_analytics']['Row'];
+type ProjectAssignmentRow = Database['public']['Tables']['project_assignments']['Row'];
+
+async function fetchEnhancedEmployerData(supabase: Awaited<ReturnType<typeof createServerSupabase>>, employerIds: string[]) {
+  const enhancedData: Record<string, {
+    incolink_id: string | null;
+    projects: Array<{
+      id: string;
+      name: string;
+      tier: string | null;
+      roles: string[];
+      trades: string[];
+    }>;
+    organisers: Array<{
+      id: string;
+      name: string;
+      patch_name?: string;
+    }>;
+  }> = {};
 
   // Initialize all employers with empty data
   employerIds.forEach(id => {
@@ -40,7 +58,7 @@ async function fetchEnhancedEmployerData(supabase: any, employerIds: string[]) {
       .select(`
         employer_id,
         assignment_type,
-        projects!inner(id, name),
+        projects!inner(id, name, tier),
         contractor_role_types(code),
         trade_types(code)
       `)
@@ -58,6 +76,7 @@ async function fetchEnhancedEmployerData(supabase: any, employerIds: string[]) {
         projectsByEmployer[row.employer_id][projectId] = {
           id: projectId,
           name: row.projects.name,
+          tier: row.projects.tier,
           roles: [],
           trades: []
         };
@@ -155,12 +174,15 @@ async function fetchEnhancedEmployerData(supabase: any, employerIds: string[]) {
 export interface EmployersRequest {
   page: number;
   pageSize: number;
-  sort: 'name' | 'estimated' | 'eba_recency';
+  sort: 'name' | 'estimated' | 'eba_recency' | 'project_count';
   dir: 'asc' | 'desc';
   q?: string;
   engaged?: boolean;
   eba?: 'all' | 'active' | 'lodged' | 'pending' | 'no';
   type?: 'all' | 'builder' | 'principal_contractor' | 'large_contractor' | 'small_contractor' | 'individual';
+  categoryType?: 'contractor_role' | 'trade' | 'all';
+  categoryCode?: string;
+  projectTier?: 'all' | 'tier_1' | 'tier_2' | 'tier_3';
   // New alias search parameters
   includeAliases?: boolean;
   aliasMatchMode?: 'any' | 'authoritative' | 'canonical';
@@ -200,6 +222,7 @@ export interface EmployerRecord {
   projects?: Array<{
     id: string;
     name: string;
+    tier?: string | null;
     roles?: string[];
     trades?: string[];
   }>;
@@ -273,6 +296,9 @@ export async function GET(request: NextRequest) {
     const engaged = engagedParam === null ? true : engagedParam === '1'; // Default to engaged=true like client
     const eba = (searchParams.get('eba') || 'all') as EmployersRequest['eba'];
     const type = (searchParams.get('type') || 'all') as EmployersRequest['type'];
+    const categoryType = (searchParams.get('categoryType') || 'all') as 'contractor_role' | 'trade' | 'all';
+    const categoryCode = searchParams.get('categoryCode') || undefined;
+    const projectTier = (searchParams.get('projectTier') || 'all') as 'all' | 'tier_1' | 'tier_2' | 'tier_3';
     
     // New alias search parameters
     const includeAliases = searchParams.get('includeAliases') === 'true';
@@ -286,7 +312,9 @@ export async function GET(request: NextRequest) {
     let error: any;
     let count: number | null = null;
 
-    if (q && includeAliases) {
+    const useAliasSearch = q && includeAliases;
+
+    if (useAliasSearch) {
       // Use alias-aware search via RPC
       const offset = (page - 1) * pageSize;
       const { data: searchData, error: searchError } = await supabase.rpc(
@@ -352,67 +380,133 @@ export async function GET(request: NextRequest) {
         count = totalCount;
       }
     } else {
-      // Use standard query (with or without basic search)
-      let query = supabase.from('employers').select(`
-        id,
-        name,
-        abn,
-        employer_type,
-        website,
-        email,
-        phone,
-        estimated_worker_count,
-        incolink_id,
-        bci_company_id,
-        enterprise_agreement_status,
-        company_eba_records!left(
-          id,
-          status,
-          nominal_expiry_date,
-          fwc_certified_date,
-          eba_lodged_fwc,
-          date_eba_signed,
-          date_vote_occurred,
-          eba_data_form_received,
-          date_draft_signing_sent,
-          date_barg_docs_sent
-        ),
-        worker_placements!left(id),
-        project_assignments!left(id)
-      `, { count: 'exact' });
+      // Use employer analytics view for filtering and sorting
+      let analyticsQuery = supabase
+        .from('employer_analytics')
+        .select(`
+          employer_id,
+          employer_name,
+          employer_abn,
+          employer_type,
+          employer_website,
+          employer_email,
+          employer_phone,
+          estimated_worker_count,
+          worker_placement_count,
+          project_assignment_count,
+          eba_recency_score,
+          eba_category,
+          category_roles,
+          category_trades,
+          has_project_tier_1,
+          has_project_tier_2,
+          has_project_tier_3
+        `, { count: 'exact' });
 
-      // Apply filters
-
-      // Text search filter (name only)
       if (q) {
-        query = query.ilike('name', `%${q}%`);
+        analyticsQuery = analyticsQuery.ilike('employer_name', `%${q}%`);
       }
 
-      // Employer type filter
       if (type !== 'all') {
-        query = query.eq('employer_type', type);
+        analyticsQuery = analyticsQuery.eq('employer_type', type);
       }
 
-      // Apply sorting
+      if (categoryType !== 'all' && categoryCode) {
+        if (categoryType === 'contractor_role') {
+          analyticsQuery = analyticsQuery.contains('category_roles', [categoryCode]);
+        } else if (categoryType === 'trade') {
+          analyticsQuery = analyticsQuery.contains('category_trades', [categoryCode]);
+        }
+      }
+
+      if (projectTier !== 'all') {
+        if (projectTier === 'tier_1') analyticsQuery = analyticsQuery.eq('has_project_tier_1', true);
+        if (projectTier === 'tier_2') analyticsQuery = analyticsQuery.eq('has_project_tier_2', true);
+        if (projectTier === 'tier_3') analyticsQuery = analyticsQuery.eq('has_project_tier_3', true);
+      }
+
       if (sort === 'name') {
-        query = query.order('name', { ascending: dir === 'asc' });
+        analyticsQuery = analyticsQuery.order('employer_name', { ascending: dir === 'asc' });
       } else if (sort === 'estimated') {
-        query = query.order('estimated_worker_count', { ascending: dir === 'asc', nullsFirst: false });
-      } else {
-        // eba_recency requires complex logic, default to name sort
-        query = query.order('name', { ascending: true });
+        analyticsQuery = analyticsQuery.order('estimated_worker_count', { ascending: dir === 'asc', nullsFirst: false });
+      } else if (sort === 'project_count') {
+        analyticsQuery = analyticsQuery.order('project_assignment_count', { ascending: dir === 'asc', nullsFirst: true });
+      } else if (sort === 'eba_recency') {
+        analyticsQuery = analyticsQuery.order('eba_recency_score', { ascending: dir === 'asc', nullsFirst: true });
       }
 
-      // Apply pagination
       const from = (page - 1) * pageSize;
       const to = from + pageSize - 1;
-      query = query.range(from, to);
+      analyticsQuery = analyticsQuery.range(from, to);
 
-      // Execute query
-      const result = await query;
-      data = result.data;
-      error = result.error;
-      count = result.count;
+      const analyticsResult = await analyticsQuery;
+      const analyticsRows = analyticsResult.data || [];
+      error = analyticsResult.error;
+      count = analyticsResult.count;
+
+      if (analyticsRows.length > 0) {
+        const employerIds = analyticsRows.map((row: any) => row.employer_id);
+        const { data: employerRows, error: employerError } = await supabase
+          .from('employers')
+          .select(`
+            id,
+            name,
+            abn,
+            employer_type,
+            website,
+            email,
+            phone,
+            estimated_worker_count,
+            incolink_id,
+            enterprise_agreement_status,
+            company_eba_records!left(
+              id,
+              status,
+              nominal_expiry_date,
+              fwc_certified_date,
+              eba_lodged_fwc,
+              date_eba_signed,
+              date_vote_occurred,
+              eba_data_form_received,
+              date_draft_signing_sent,
+              date_barg_docs_sent
+            ),
+            worker_placements!left(id),
+            project_assignments!left(id)
+          `)
+          .in('id', employerIds);
+
+        if (employerError) {
+          error = employerError;
+        } else {
+          const employerMap = new Map((employerRows || []).map((row: any) => [row.id, row]));
+          data = analyticsRows
+            .map((row: any) => {
+              const base = employerMap.get(row.employer_id);
+              if (!base) return null;
+
+              return {
+                ...base,
+                worker_placements: base.worker_placements || [],
+                project_assignments: base.project_assignments || [],
+                _analytics: {
+                  project_assignment_count: row.project_assignment_count,
+                  worker_placement_count: row.worker_placement_count,
+                  eba_recency_score: row.eba_recency_score,
+                  eba_category: row.eba_category,
+                  category_roles: row.category_roles,
+                  category_trades: row.category_trades,
+                  has_project_tier_1: row.has_project_tier_1,
+                  has_project_tier_2: row.has_project_tier_2,
+                  has_project_tier_3: row.has_project_tier_3
+                }
+              };
+            })
+            .filter(Boolean) as any[];
+        }
+      } else {
+        data = [];
+      }
     }
 
     if (error) {
@@ -550,6 +644,9 @@ export async function GET(request: NextRequest) {
           engaged,
           eba,
           type,
+          categoryType,
+          categoryCode,
+          projectTier,
           sort,
           dir,
           includeAliases,

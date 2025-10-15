@@ -29,6 +29,7 @@ type EmployerRow = {
   projects?: Array<{
     id: string
     name: string
+    tier?: string | null
     roles?: string[]
     trades?: string[]
   }>
