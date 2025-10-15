@@ -117,7 +117,6 @@ export default function ResetPasswordPage() {
     
     return () => {
       mounted = false
-      if (sessionCheckTimeout) clearTimeout(sessionCheckTimeout)
       subscription.unsubscribe()
     }
   }, [router])
