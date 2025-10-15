@@ -126,23 +126,37 @@ function employerHasActiveEba(employer) {
     return false;
 }
 async function ensureAuthorizedUser(token) {
-    const client = (0, supabase_1.getUserClientFromToken)(token);
-    const { data: auth, error: authError } = await client.auth.getUser();
-    if (authError || !auth?.user) {
+    // Verify the JWT token and get user data
+    let user;
+    try {
+        user = await (0, supabase_1.verifyJWT)(token);
+    }
+    catch (err) {
+        logger.warn({ err }, 'JWT verification failed');
         throw new Error('Unauthorized');
     }
+    // Get a client for database queries (uses service role for queries)
+    const client = (0, supabase_1.getUserClientFromToken)(token);
+    // Fetch user profile to check role
     const { data: profile, error: profileError } = await client
         .from('profiles')
         .select('role, last_seen_projects_at')
-        .eq('id', auth.user.id)
+        .eq('id', user.id)
         .maybeSingle();
     if (profileError) {
+        logger.error({ err: profileError, userId: user.id }, 'Profile query failed');
         throw Object.assign(new Error('profile_load_failed'), { cause: profileError });
     }
-    const allowedRoles = new Set(['organiser', 'lead_organiser', 'admin']);
-    if (!profile || !allowedRoles.has(profile.role)) {
+    if (!profile) {
+        logger.warn({ userId: user.id }, 'No profile found for user');
         throw new Error('Forbidden');
     }
+    const allowedRoles = new Set(['organiser', 'lead_organiser', 'admin']);
+    if (!allowedRoles.has(profile.role)) {
+        logger.warn({ userId: user.id, role: profile.role }, 'User role not allowed');
+        throw new Error('Forbidden');
+    }
+    logger.debug({ userId: user.id, role: profile.role }, 'User authorized');
     return { client, profile };
 }
 // GET /v1/projects — mirrors Next.js /api/projects semantics, with caching

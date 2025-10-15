@@ -1,7 +1,7 @@
 import express from 'express'
 import pino from 'pino'
 import { config } from './config'
-import { getServiceRoleClient, getUserClientFromToken } from './supabase'
+import { getServiceRoleClient, getUserClientFromToken, verifyJWT } from './supabase'
 import { scheduleMaterializedViewRefreshes, refreshPatchProjectMappingViewInBackground } from './refresh'
 import { cache, makeCacheKey } from './cache'
 import crypto from 'crypto'
@@ -130,27 +130,42 @@ function employerHasActiveEba(employer: any): boolean {
 }
 
 async function ensureAuthorizedUser(token: string) {
-  const client = getUserClientFromToken(token)
-  const { data: auth, error: authError } = await client.auth.getUser()
-  if (authError || !auth?.user) {
+  // Verify the JWT token and get user data
+  let user
+  try {
+    user = await verifyJWT(token)
+  } catch (err) {
+    logger.warn({ err }, 'JWT verification failed')
     throw new Error('Unauthorized')
   }
 
+  // Get a client for database queries (uses service role for queries)
+  const client = getUserClientFromToken(token)
+
+  // Fetch user profile to check role
   const { data: profile, error: profileError } = await client
     .from('profiles')
     .select('role, last_seen_projects_at')
-    .eq('id', auth.user.id)
+    .eq('id', user.id)
     .maybeSingle()
 
   if (profileError) {
+    logger.error({ err: profileError, userId: user.id }, 'Profile query failed')
     throw Object.assign(new Error('profile_load_failed'), { cause: profileError })
   }
 
-  const allowedRoles = new Set(['organiser', 'lead_organiser', 'admin'])
-  if (!profile || !allowedRoles.has(profile.role)) {
+  if (!profile) {
+    logger.warn({ userId: user.id }, 'No profile found for user')
     throw new Error('Forbidden')
   }
 
+  const allowedRoles = new Set(['organiser', 'lead_organiser', 'admin'])
+  if (!allowedRoles.has(profile.role)) {
+    logger.warn({ userId: user.id, role: profile.role }, 'User role not allowed')
+    throw new Error('Forbidden')
+  }
+
+  logger.debug({ userId: user.id, role: profile.role }, 'User authorized')
   return { client, profile }
 }
 

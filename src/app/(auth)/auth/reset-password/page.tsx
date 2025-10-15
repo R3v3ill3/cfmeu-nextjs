@@ -12,11 +12,12 @@ export default function ResetPasswordPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const [isRecoverySession, setIsRecoverySession] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
-    // Check if we have the session from the password reset link
     const supabase = getSupabaseBrowserClient()
+    let mounted = true
     
     // Check for error in URL params
     const params = new URLSearchParams(window.location.search)
@@ -27,21 +28,70 @@ export default function ResetPasswordPage() {
       setError(errorDescription || 'Invalid or expired reset link. Please request a new one.')
       return
     }
-    
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('Auth event:', event, 'Session:', session)
-      if (event === 'PASSWORD_RECOVERY') {
-        // User clicked the reset link and is now authenticated
-        console.log('Password recovery event detected')
-      } else if (event === 'SIGNED_IN' && session) {
-        // Don't redirect during password recovery
-        if (event !== 'PASSWORD_RECOVERY') {
-          router.replace('/')
+
+    // Initialize: Check if we have a recovery session and clear any conflicting sessions
+    const initializeRecoverySession = async () => {
+      try {
+        // First, check what kind of session we have
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        
+        if (sessionError) {
+          console.error('Session error:', sessionError)
+          return
         }
+
+        console.log('Current session on reset page:', session)
+
+        // Check if the URL hash contains reset token parameters
+        const hashParams = new URLSearchParams(window.location.hash.substring(1))
+        const hasResetToken = hashParams.has('access_token') && hashParams.get('type') === 'recovery'
+        
+        if (hasResetToken) {
+          console.log('Password reset link detected, clearing any existing sessions...')
+          
+          // Sign out any existing session first to avoid conflicts
+          // This is critical - we need a clean slate for password recovery
+          await supabase.auth.signOut({ scope: 'local' })
+          
+          // Wait a moment for the signout to complete
+          await new Promise(resolve => setTimeout(resolve, 500))
+          
+          // The reset token in the URL will automatically create a new recovery session
+          console.log('Existing session cleared, ready for password recovery')
+        }
+        
+        if (session && mounted) {
+          // We have a session - mark as recovery session
+          setIsRecoverySession(true)
+        }
+      } catch (err) {
+        console.error('Error initializing recovery session:', err)
       }
+    }
+
+    initializeRecoverySession()
+    
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('Auth event on reset page:', event, 'Has session:', !!session)
+      
+      if (!mounted) return
+
+      if (event === 'PASSWORD_RECOVERY') {
+        // User clicked the reset link and now has a recovery session
+        console.log('Password recovery event detected')
+        setIsRecoverySession(true)
+        setError(null) // Clear any previous errors
+      } else if (event === 'SIGNED_OUT') {
+        // Session was signed out
+        console.log('Signed out on reset page')
+        setIsRecoverySession(false)
+      }
+      // Do NOT redirect away from this page during password recovery
     })
     
     return () => {
+      mounted = false
       subscription.unsubscribe()
     }
   }, [router])
@@ -66,36 +116,51 @@ export default function ResetPasswordPage() {
     try {
       console.log('Attempting to update password...')
       
-      // Check if we have a session first
+      // Check if we have a recovery session
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-      console.log('Current session:', session, 'Error:', sessionError)
+      console.log('Current session during password update:', session, 'Error:', sessionError)
       
       if (!session) {
         setError('No active session found. The reset link may have expired. Please request a new one.')
         setLoading(false)
         return
       }
+
+      if (!isRecoverySession) {
+        setError('This page can only be used with a valid password reset link.')
+        setLoading(false)
+        return
+      }
       
+      // Update the password
       const { error } = await supabase.auth.updateUser({ 
         password: password 
       })
       
-      console.log('Update result:', error)
+      console.log('Password update result:', error)
       
       if (error) {
         setError(error.message)
-      } else {
-        setSuccess(true)
-        // Redirect to login after 2 seconds
-        setTimeout(() => {
-          router.replace('/auth')
-        }, 2000)
+        setLoading(false)
+        return
       }
+
+      // Password updated successfully
+      setSuccess(true)
+      
+      // Sign out the recovery session to force a clean login with the new password
+      console.log('Password updated, signing out recovery session...')
+      await supabase.auth.signOut({ scope: 'local' })
+      
+      // Redirect to login after a brief delay
+      setTimeout(() => {
+        router.replace('/auth')
+      }, 2000)
+      
     } catch (err) {
       console.error('Error updating password:', err)
       const message = err instanceof Error ? err.message : 'Unexpected error updating password'
       setError(message)
-    } finally {
       setLoading(false)
     }
   }
