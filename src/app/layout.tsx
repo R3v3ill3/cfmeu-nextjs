@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, Roboto_Mono } from "next/font/google";
 import { headers } from "next/headers";
 import "./globals.css";
@@ -15,16 +15,17 @@ const geistMono = Roboto_Mono({
   subsets: ["latin"],
 });
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover", // iPhone X+ safe area support
+};
+
 export const metadata: Metadata = {
   title: "CFMEU App",
   description: "Next.js App Router migrated from Vite",
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-    viewportFit: "cover", // iPhone X+ safe area support
-  },
   icons: {
     icon: [
       { url: "/favicon.ico", type: "image/x-icon" },
