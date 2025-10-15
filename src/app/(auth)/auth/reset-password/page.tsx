@@ -47,7 +47,6 @@ export default function ResetPasswordPage() {
   useEffect(() => {
     const supabase = getSupabaseBrowserClient()
     let mounted = true
-    let sessionCheckTimeout: NodeJS.Timeout
     
     // Check for error in URL params
     const params = new URLSearchParams(window.location.search)
@@ -64,42 +63,76 @@ export default function ResetPasswordPage() {
     console.log('URL Hash:', window.location.hash)
     console.log('URL Search:', window.location.search)
     
-    // PKCE Flow: After redirect from /verify, Supabase may need time to exchange token
-    // We need to wait a bit and check for session
-    const checkForPKCESession = async () => {
-      console.log('Checking for PKCE session...')
-      
-      // Wait a moment for Supabase to process any PKCE exchange
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-      
-      console.log('PKCE session check result:', {
-        hasSession: !!session,
-        error: sessionError,
-        userId: session?.user?.id
-      })
-      
-      if (session && mounted) {
-        console.log('✅ Session found after PKCE check')
-        setIsRecoverySession(true)
-        setError(null)
-      } else if (mounted) {
-        console.log('⚠️ No session found after PKCE check')
-        // Set a timeout to check again in case it's still processing
-        sessionCheckTimeout = setTimeout(async () => {
-          const { data: { retrySession } } = await supabase.auth.getSession()
-          if (retrySession && mounted) {
-            console.log('✅ Session found on retry')
-            setIsRecoverySession(true)
-            setError(null)
-          }
-        }, 2000)
-      }
-    }
+    // CRITICAL: Check if URL has PKCE code parameter that needs to be exchanged
+    const urlParams = new URLSearchParams(window.location.search)
+    const code = urlParams.get('code')
     
-    // Start the PKCE session check
-    checkForPKCESession()
+    if (code) {
+      console.log('🔑 PKCE code detected in URL:', code.substring(0, 20) + '...')
+      console.log('⚡ Manually exchanging PKCE code for session...')
+      
+      // Manually exchange the PKCE code for a session
+      const exchangeCode = async () => {
+        try {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+          
+          if (error) {
+            console.error('❌ Code exchange failed:', error)
+            setError('Failed to verify reset link: ' + error.message)
+            return
+          }
+          
+          if (data?.session) {
+            console.log('✅ Code exchange successful! Session created.')
+            console.log('User ID:', data.session.user.id)
+            if (mounted) {
+              setIsRecoverySession(true)
+              setError(null)
+            }
+            
+            // Clean up URL to remove the code parameter
+            const newUrl = window.location.origin + window.location.pathname
+            window.history.replaceState({}, '', newUrl)
+            console.log('🧹 Cleaned URL, removed code parameter')
+          } else {
+            console.error('❌ Code exchange returned no session')
+            setError('Password reset link verification failed. Please request a new link.')
+          }
+        } catch (err) {
+          console.error('❌ Code exchange error:', err)
+          setError('Error verifying reset link: ' + (err as Error).message)
+        }
+      }
+      
+      // Exchange the code immediately
+      exchangeCode()
+    } else {
+      console.log('ℹ️ No PKCE code in URL, checking for existing session...')
+      
+      // No code parameter - check if we already have a session
+      const checkForExistingSession = async () => {
+        await new Promise(resolve => setTimeout(resolve, 500))
+        
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        
+        console.log('Session check result:', {
+          hasSession: !!session,
+          error: sessionError,
+          userId: session?.user?.id
+        })
+        
+        if (session && mounted) {
+          console.log('✅ Existing session found')
+          setIsRecoverySession(true)
+          setError(null)
+        } else if (mounted) {
+          console.log('⚠️ No session found')
+          setError('No active password reset session. Please click the reset link from your email.')
+        }
+      }
+      
+      checkForExistingSession()
+    }
     
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
