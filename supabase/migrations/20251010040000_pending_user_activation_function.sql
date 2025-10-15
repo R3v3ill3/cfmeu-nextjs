@@ -192,6 +192,7 @@ BEGIN
     UPDATE profiles
     SET role = v_pending_role,
         full_name = COALESCE(full_name, v_pending_full_name),
+        is_active = true,
         updated_at = NOW()
     WHERE id = v_activated_user_id;
     

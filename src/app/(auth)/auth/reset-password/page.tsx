@@ -17,15 +17,33 @@ export default function ResetPasswordPage() {
   useEffect(() => {
     // Check if we have the session from the password reset link
     const supabase = getSupabaseBrowserClient()
-    supabase.auth.onAuthStateChange((event, session) => {
+    
+    // Check for error in URL params
+    const params = new URLSearchParams(window.location.search)
+    const errorParam = params.get('error')
+    const errorDescription = params.get('error_description')
+    
+    if (errorParam) {
+      setError(errorDescription || 'Invalid or expired reset link. Please request a new one.')
+      return
+    }
+    
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('Auth event:', event, 'Session:', session)
       if (event === 'PASSWORD_RECOVERY') {
         // User clicked the reset link and is now authenticated
-        // They can now update their password
+        console.log('Password recovery event detected')
       } else if (event === 'SIGNED_IN' && session) {
-        // Redirect to dashboard if already signed in
-        router.replace('/')
+        // Don't redirect during password recovery
+        if (event !== 'PASSWORD_RECOVERY') {
+          router.replace('/')
+        }
       }
     })
+    
+    return () => {
+      subscription.unsubscribe()
+    }
   }, [router])
 
   async function handlePasswordUpdate(e: React.FormEvent) {
@@ -46,9 +64,23 @@ export default function ResetPasswordPage() {
     const supabase = getSupabaseBrowserClient()
     
     try {
+      console.log('Attempting to update password...')
+      
+      // Check if we have a session first
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      console.log('Current session:', session, 'Error:', sessionError)
+      
+      if (!session) {
+        setError('No active session found. The reset link may have expired. Please request a new one.')
+        setLoading(false)
+        return
+      }
+      
       const { error } = await supabase.auth.updateUser({ 
         password: password 
       })
+      
+      console.log('Update result:', error)
       
       if (error) {
         setError(error.message)
@@ -60,6 +92,7 @@ export default function ResetPasswordPage() {
         }, 2000)
       }
     } catch (err) {
+      console.error('Error updating password:', err)
       const message = err instanceof Error ? err.message : 'Unexpected error updating password'
       setError(message)
     } finally {
