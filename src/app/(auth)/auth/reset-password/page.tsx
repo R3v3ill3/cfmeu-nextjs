@@ -47,6 +47,7 @@ export default function ResetPasswordPage() {
   useEffect(() => {
     const supabase = getSupabaseBrowserClient()
     let mounted = true
+    let sessionCheckTimeout: NodeJS.Timeout
     
     // Check for error in URL params
     const params = new URLSearchParams(window.location.search)
@@ -59,45 +60,81 @@ export default function ResetPasswordPage() {
     }
 
     console.log('Password reset page loaded')
+    console.log('Current URL:', window.location.href)
+    console.log('URL Hash:', window.location.hash)
+    console.log('URL Search:', window.location.search)
     
-    // Listen for auth state changes - this is how we detect the recovery session
+    // PKCE Flow: After redirect from /verify, Supabase may need time to exchange token
+    // We need to wait a bit and check for session
+    const checkForPKCESession = async () => {
+      console.log('Checking for PKCE session...')
+      
+      // Wait a moment for Supabase to process any PKCE exchange
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      
+      console.log('PKCE session check result:', {
+        hasSession: !!session,
+        error: sessionError,
+        userId: session?.user?.id
+      })
+      
+      if (session && mounted) {
+        console.log('✅ Session found after PKCE check')
+        setIsRecoverySession(true)
+        setError(null)
+      } else if (mounted) {
+        console.log('⚠️ No session found after PKCE check')
+        // Set a timeout to check again in case it's still processing
+        sessionCheckTimeout = setTimeout(async () => {
+          const { data: { retrySession } } = await supabase.auth.getSession()
+          if (retrySession && mounted) {
+            console.log('✅ Session found on retry')
+            setIsRecoverySession(true)
+            setError(null)
+          }
+        }, 2000)
+      }
+    }
+    
+    // Start the PKCE session check
+    checkForPKCESession()
+    
+    // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state change:', event, 'Has session:', !!session)
+      console.log('🔔 Auth state change:', event, 'Has session:', !!session)
       
       if (!mounted) return
 
       if (event === 'PASSWORD_RECOVERY') {
-        // Supabase detected the reset token and created a recovery session
-        console.log('✅ Password recovery session established')
+        console.log('✅ PASSWORD_RECOVERY event - recovery session established')
         setIsRecoverySession(true)
         setError(null)
       } else if (event === 'SIGNED_IN') {
-        // Initial sign-in from recovery token
-        console.log('Recovery token processed, session created')
-        // Check if this is actually a recovery session by checking if we have a token in URL
-        const hashParams = new URLSearchParams(window.location.hash.substring(1))
-        if (hashParams.get('type') === 'recovery') {
-          setIsRecoverySession(true)
-          setError(null)
-        }
+        console.log('✅ SIGNED_IN event - session created')
+        setIsRecoverySession(true)
+        setError(null)
       } else if (event === 'SIGNED_OUT') {
         console.log('Signed out on reset page')
         setIsRecoverySession(false)
       } else if (event === 'INITIAL_SESSION') {
-        // Page loaded with existing session
-        console.log('Initial session detected:', session ? 'exists' : 'none')
-        if (session) {
-          // Check if URL has recovery token
-          const hashParams = new URLSearchParams(window.location.hash.substring(1))
-          if (hashParams.get('type') === 'recovery') {
-            setIsRecoverySession(true)
-          }
+        console.log('INITIAL_SESSION event, has session:', !!session)
+        if (session && mounted) {
+          setIsRecoverySession(true)
+          setError(null)
+        }
+      } else if (event === 'TOKEN_REFRESHED') {
+        console.log('TOKEN_REFRESHED event')
+        if (session && mounted) {
+          setIsRecoverySession(true)
         }
       }
     })
     
     return () => {
       mounted = false
+      if (sessionCheckTimeout) clearTimeout(sessionCheckTimeout)
       subscription.unsubscribe()
     }
   }, [router])
