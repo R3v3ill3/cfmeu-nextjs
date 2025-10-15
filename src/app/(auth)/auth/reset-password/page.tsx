@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import { getSupabaseBrowserClient, resetSupabaseBrowserClient } from '@/lib/supabase/client'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,8 +45,13 @@ export default function ResetPasswordPage() {
   }
 
   useEffect(() => {
+    // CRITICAL: Reset the client cache to force fresh client creation
+    // This ensures the client can properly handle PKCE flow
+    resetSupabaseBrowserClient()
     const supabase = getSupabaseBrowserClient()
     let mounted = true
+    
+    console.log('🔄 Fresh Supabase client created for password reset')
     
     // Check for error in URL params
     const params = new URLSearchParams(window.location.search)
@@ -63,53 +68,55 @@ export default function ResetPasswordPage() {
     console.log('URL Hash:', window.location.hash)
     console.log('URL Search:', window.location.search)
     
-    // CRITICAL: Check if URL has PKCE code parameter that needs to be exchanged
+    // Check if URL has PKCE code - Supabase client should auto-exchange it
     const urlParams = new URLSearchParams(window.location.search)
     const code = urlParams.get('code')
     
     if (code) {
       console.log('🔑 PKCE code detected in URL:', code.substring(0, 20) + '...')
-      console.log('⚡ Manually exchanging PKCE code for session...')
+      console.log('⏳ Waiting for Supabase to auto-exchange code...')
       
-      // Manually exchange the PKCE code for a session
-      const exchangeCode = async () => {
-        try {
-          const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+      // Let Supabase client auto-exchange the code, then check for session
+      const waitForAutoExchange = async () => {
+        // Give Supabase time to automatically exchange the code
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        
+        console.log('Post-exchange session check:', {
+          hasSession: !!session,
+          error: sessionError,
+          userId: session?.user?.id
+        })
+        
+        if (session && mounted) {
+          console.log('✅ Session established after auto-exchange')
+          setIsRecoverySession(true)
+          setError(null)
           
-          if (error) {
-            console.error('❌ Code exchange failed:', error)
-            setError('Failed to verify reset link: ' + error.message)
-            return
-          }
+          // Clean up URL
+          const newUrl = window.location.origin + window.location.pathname
+          window.history.replaceState({}, '', newUrl)
+        } else if (mounted) {
+          console.log('❌ No session after auto-exchange')
+          // Try one more time
+          await new Promise(resolve => setTimeout(resolve, 2000))
+          const { data: { retrySession } } = await supabase.auth.getSession()
           
-          if (data?.session) {
-            console.log('✅ Code exchange successful! Session created.')
-            console.log('User ID:', data.session.user.id)
-            if (mounted) {
-              setIsRecoverySession(true)
-              setError(null)
-            }
-            
-            // Clean up URL to remove the code parameter
-            const newUrl = window.location.origin + window.location.pathname
-            window.history.replaceState({}, '', newUrl)
-            console.log('🧹 Cleaned URL, removed code parameter')
+          if (retrySession && mounted) {
+            console.log('✅ Session found on retry')
+            setIsRecoverySession(true)
+            setError(null)
           } else {
-            console.error('❌ Code exchange returned no session')
-            setError('Password reset link verification failed. Please request a new link.')
+            setError('Unable to verify reset link. The link may have expired. Please request a new one.')
           }
-        } catch (err) {
-          console.error('❌ Code exchange error:', err)
-          setError('Error verifying reset link: ' + (err as Error).message)
         }
       }
       
-      // Exchange the code immediately
-      exchangeCode()
+      waitForAutoExchange()
     } else {
       console.log('ℹ️ No PKCE code in URL, checking for existing session...')
       
-      // No code parameter - check if we already have a session
       const checkForExistingSession = async () => {
         await new Promise(resolve => setTimeout(resolve, 500))
         
