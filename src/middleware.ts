@@ -27,9 +27,12 @@ export async function middleware(req: NextRequest) {
     }
   )
 
-  // IMPORTANT: This refreshes the session and handles code exchanges automatically
-  const { data } = await supabase.auth.getClaims()
-  console.log('[Middleware] Auth claims:', data?.claims ? 'User authenticated' : 'No session')
+  // IMPORTANT: Refresh auth session - this handles PKCE code exchange when present
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  console.log('[Middleware] Auth user:', user ? `User ${user.id}` : 'No session', 'Path:', req.nextUrl.pathname)
   
   // Generate a cryptographically secure nonce for CSP
   const nonce = Buffer.from(crypto.randomUUID()).toString('base64')
