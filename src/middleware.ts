@@ -1,6 +1,56 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
 
 export async function middleware(req: NextRequest) {
+  // CRITICAL: Handle Supabase PKCE auth code exchange for password reset
+  if (req.nextUrl.pathname === '/auth/reset-password' && req.nextUrl.searchParams.has('code')) {
+    const code = req.nextUrl.searchParams.get('code')!
+    console.log('[Middleware] PKCE code detected, exchanging for session...')
+    
+    // Create Supabase client with cookie handling
+    const res = NextResponse.next()
+    
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return req.cookies.get(name)?.value
+          },
+          set(name: string, value: string, options: CookieOptions) {
+            res.cookies.set({ name, value, ...options })
+          },
+          remove(name: string, options: CookieOptions) {
+            res.cookies.set({ name, value: '', ...options })
+          },
+        },
+      }
+    )
+    
+    // Exchange the code for a session
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+    
+    if (error) {
+      console.error('[Middleware] Code exchange failed:', error)
+      // Redirect with error
+      const url = req.nextUrl.clone()
+      url.searchParams.delete('code')
+      url.searchParams.set('error', 'auth_failed')
+      url.searchParams.set('error_description', error.message)
+      return NextResponse.redirect(url)
+    }
+    
+    if (data?.session) {
+      console.log('[Middleware] ✅ Code exchange successful, session created for user:', data.session.user.id)
+      // Redirect to clean URL without code (cookies are already set in res)
+      const url = req.nextUrl.clone()
+      url.searchParams.delete('code')
+      // Use the response object that has the cookies set
+      return NextResponse.redirect(url, { headers: res.headers })
+    }
+  }
+  
   // Generate a cryptographically secure nonce for CSP
   const nonce = Buffer.from(crypto.randomUUID()).toString('base64')
 
