@@ -13,7 +13,36 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [isRecoverySession, setIsRecoverySession] = useState(false)
+  const [checking, setChecking] = useState(false)
   const router = useRouter()
+
+  // Manual session check for debugging
+  const checkSession = async () => {
+    setChecking(true)
+    const supabase = getSupabaseBrowserClient()
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession()
+      console.log('=== MANUAL SESSION CHECK ===')
+      console.log('Error:', error)
+      console.log('Session:', session)
+      console.log('User ID:', session?.user?.id)
+      console.log('URL hash:', window.location.hash)
+      console.log('===========================')
+      
+      if (session) {
+        setIsRecoverySession(true)
+        setError(null)
+        alert('Session found! You can now set your password.')
+      } else {
+        alert('No session found. Check console for details.')
+      }
+    } catch (err) {
+      console.error('Check session error:', err)
+      alert('Error checking session: ' + (err as Error).message)
+    } finally {
+      setChecking(false)
+    }
+  }
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient()
@@ -29,65 +58,42 @@ export default function ResetPasswordPage() {
       return
     }
 
-    // Initialize: Check if we have a recovery session and clear any conflicting sessions
-    const initializeRecoverySession = async () => {
-      try {
-        // First, check what kind of session we have
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-        
-        if (sessionError) {
-          console.error('Session error:', sessionError)
-          return
-        }
-
-        console.log('Current session on reset page:', session)
-
-        // Check if the URL hash contains reset token parameters
-        const hashParams = new URLSearchParams(window.location.hash.substring(1))
-        const hasResetToken = hashParams.has('access_token') && hashParams.get('type') === 'recovery'
-        
-        if (hasResetToken) {
-          console.log('Password reset link detected, clearing any existing sessions...')
-          
-          // Sign out any existing session first to avoid conflicts
-          // This is critical - we need a clean slate for password recovery
-          await supabase.auth.signOut({ scope: 'local' })
-          
-          // Wait a moment for the signout to complete
-          await new Promise(resolve => setTimeout(resolve, 500))
-          
-          // The reset token in the URL will automatically create a new recovery session
-          console.log('Existing session cleared, ready for password recovery')
-        }
-        
-        if (session && mounted) {
-          // We have a session - mark as recovery session
-          setIsRecoverySession(true)
-        }
-      } catch (err) {
-        console.error('Error initializing recovery session:', err)
-      }
-    }
-
-    initializeRecoverySession()
+    console.log('Password reset page loaded')
     
-    // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('Auth event on reset page:', event, 'Has session:', !!session)
+    // Listen for auth state changes - this is how we detect the recovery session
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state change:', event, 'Has session:', !!session)
       
       if (!mounted) return
 
       if (event === 'PASSWORD_RECOVERY') {
-        // User clicked the reset link and now has a recovery session
-        console.log('Password recovery event detected')
+        // Supabase detected the reset token and created a recovery session
+        console.log('✅ Password recovery session established')
         setIsRecoverySession(true)
-        setError(null) // Clear any previous errors
+        setError(null)
+      } else if (event === 'SIGNED_IN') {
+        // Initial sign-in from recovery token
+        console.log('Recovery token processed, session created')
+        // Check if this is actually a recovery session by checking if we have a token in URL
+        const hashParams = new URLSearchParams(window.location.hash.substring(1))
+        if (hashParams.get('type') === 'recovery') {
+          setIsRecoverySession(true)
+          setError(null)
+        }
       } else if (event === 'SIGNED_OUT') {
-        // Session was signed out
         console.log('Signed out on reset page')
         setIsRecoverySession(false)
+      } else if (event === 'INITIAL_SESSION') {
+        // Page loaded with existing session
+        console.log('Initial session detected:', session ? 'exists' : 'none')
+        if (session) {
+          // Check if URL has recovery token
+          const hashParams = new URLSearchParams(window.location.hash.substring(1))
+          if (hashParams.get('type') === 'recovery') {
+            setIsRecoverySession(true)
+          }
+        }
       }
-      // Do NOT redirect away from this page during password recovery
     })
     
     return () => {
@@ -116,40 +122,44 @@ export default function ResetPasswordPage() {
     try {
       console.log('Attempting to update password...')
       
-      // Check if we have a recovery session
+      // Check if we have any session
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-      console.log('Current session during password update:', session, 'Error:', sessionError)
+      console.log('Session check:', sessionError ? `Error: ${sessionError.message}` : session ? 'Session exists' : 'No session')
+      
+      if (sessionError) {
+        console.error('Session error:', sessionError)
+        setError('Session error: ' + sessionError.message)
+        setLoading(false)
+        return
+      }
       
       if (!session) {
+        console.error('No session found when trying to update password')
         setError('No active session found. The reset link may have expired. Please request a new one.')
         setLoading(false)
         return
       }
-
-      if (!isRecoverySession) {
-        setError('This page can only be used with a valid password reset link.')
-        setLoading(false)
-        return
-      }
+      
+      console.log('Session found, updating password for user:', session.user.id)
       
       // Update the password
-      const { error } = await supabase.auth.updateUser({ 
+      const { error: updateError } = await supabase.auth.updateUser({ 
         password: password 
       })
       
-      console.log('Password update result:', error)
-      
-      if (error) {
-        setError(error.message)
+      if (updateError) {
+        console.error('Password update error:', updateError)
+        setError(updateError.message)
         setLoading(false)
         return
       }
 
       // Password updated successfully
+      console.log('✅ Password updated successfully')
       setSuccess(true)
       
       // Sign out the recovery session to force a clean login with the new password
-      console.log('Password updated, signing out recovery session...')
+      console.log('Signing out recovery session...')
       await supabase.auth.signOut({ scope: 'local' })
       
       // Redirect to login after a brief delay
@@ -158,7 +168,7 @@ export default function ResetPasswordPage() {
       }, 2000)
       
     } catch (err) {
-      console.error('Error updating password:', err)
+      console.error('Unexpected error updating password:', err)
       const message = err instanceof Error ? err.message : 'Unexpected error updating password'
       setError(message)
       setLoading(false)
@@ -182,6 +192,26 @@ export default function ResetPasswordPage() {
         <h1 className="text-2xl font-semibold text-center">Reset Password</h1>
         <p className="text-gray-600 text-center text-sm">Enter your new password below</p>
         
+        {/* Debug: Show recovery session status */}
+        {isRecoverySession && (
+          <div className="bg-green-50 border border-green-200 rounded px-3 py-2 text-sm text-green-700">
+            ✓ Recovery session active
+          </div>
+        )}
+        {!isRecoverySession && !error && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded px-3 py-2 text-sm text-yellow-700">
+            <div>⏳ Waiting for recovery session...</div>
+            <button
+              type="button"
+              onClick={checkSession}
+              disabled={checking}
+              className="mt-2 text-xs underline hover:no-underline"
+            >
+              {checking ? 'Checking...' : '🔍 Check Session Status'}
+            </button>
+          </div>
+        )}
+        
         <input
           type="password"
           placeholder="New Password"
@@ -190,6 +220,7 @@ export default function ResetPasswordPage() {
           className="w-full border rounded px-3 py-2"
           required
           minLength={6}
+          disabled={!isRecoverySession && !error}
         />
         <input
           type="password"
@@ -199,13 +230,15 @@ export default function ResetPasswordPage() {
           className="w-full border rounded px-3 py-2"
           required
           minLength={6}
+          disabled={!isRecoverySession && !error}
         />
         
         {error && <p className="text-red-600 text-sm">{error}</p>}
         
         <button 
-          disabled={loading} 
-          className="w-full bg-black text-white py-2 rounded disabled:opacity-50"
+          disabled={loading || (!isRecoverySession && !error)} 
+          className="w-full bg-black text-white py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+          title={!isRecoverySession ? 'Waiting for recovery session to establish' : ''}
         >
           {loading ? 'Updating Password...' : 'Update Password'}
         </button>
@@ -218,6 +251,11 @@ export default function ResetPasswordPage() {
           >
             Back to Login
           </button>
+        </div>
+        
+        {/* Debug info */}
+        <div className="text-xs text-gray-400 text-center">
+          Check browser console for detailed logs
         </div>
       </form>
     </div>
