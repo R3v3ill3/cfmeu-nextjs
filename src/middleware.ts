@@ -2,75 +2,50 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 
 export async function middleware(req: NextRequest) {
-  // CRITICAL: Handle Supabase PKCE auth code exchange for password reset
-  if (req.nextUrl.pathname === '/auth/reset-password' && req.nextUrl.searchParams.has('code')) {
-    const code = req.nextUrl.searchParams.get('code')!
-    console.log('[Middleware] PKCE code detected, exchanging for session...')
-    
-    // Create Supabase client with cookie handling
-    const res = NextResponse.next()
-    
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return req.cookies.get(name)?.value
-          },
-          set(name: string, value: string, options: CookieOptions) {
-            res.cookies.set({ name, value, ...options })
-          },
-          remove(name: string, options: CookieOptions) {
-            res.cookies.set({ name, value: '', ...options })
-          },
+  let supabaseResponse = NextResponse.next({
+    request: req,
+  })
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return req.cookies.getAll()
         },
-      }
-    )
-    
-    // Exchange the code for a session
-    const { data, error } = await supabase.auth.exchangeCodeForSession(code)
-    
-    if (error) {
-      console.error('[Middleware] Code exchange failed:', error)
-      // Redirect with error
-      const url = req.nextUrl.clone()
-      url.searchParams.delete('code')
-      url.searchParams.set('error', 'auth_failed')
-      url.searchParams.set('error_description', error.message)
-      return NextResponse.redirect(url)
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => req.cookies.set(name, value))
+          supabaseResponse = NextResponse.next({
+            request: req,
+          })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options)
+          )
+        },
+      },
     }
-    
-    if (data?.session) {
-      console.log('[Middleware] ✅ Code exchange successful, session created for user:', data.session.user.id)
-      // Redirect to clean URL without code (cookies are already set in res)
-      const url = req.nextUrl.clone()
-      url.searchParams.delete('code')
-      // Use the response object that has the cookies set
-      return NextResponse.redirect(url, { headers: res.headers })
-    }
-  }
+  )
+
+  // IMPORTANT: This refreshes the session and handles code exchanges automatically
+  const { data } = await supabase.auth.getClaims()
+  console.log('[Middleware] Auth claims:', data?.claims ? 'User authenticated' : 'No session')
   
   // Generate a cryptographically secure nonce for CSP
   const nonce = Buffer.from(crypto.randomUUID()).toString('base64')
 
+  // Set nonce in request headers
   const requestHeaders = new Headers(req.headers)
   requestHeaders.set('x-nonce', nonce)
 
-  const res = NextResponse.next({
-    request: {
-      headers: requestHeaders,
-    },
-  })
+  // Update the supabaseResponse to include our headers
+  supabaseResponse.headers.set('x-nonce', nonce)
 
-  // Pass nonce to the request so it can be used in layouts/components
-  res.headers.set('x-nonce', nonce)
-
-  // Build CSP with nonce
+  // Build and set CSP with nonce
   const csp = buildCSP(nonce)
-  res.headers.set('Content-Security-Policy', csp)
+  supabaseResponse.headers.set('Content-Security-Policy', csp)
 
-  return res
+  return supabaseResponse
 }
 
 function buildCSP(nonce: string): string {
