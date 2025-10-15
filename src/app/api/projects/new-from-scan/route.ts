@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
+
+export const dynamic = 'force-dynamic'
 import { normalizeProjectType, ProjectTypeValue } from '@/utils/projectType'
 import { normalizeSiteContactRole } from '@/utils/siteContactRole'
 

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
 
+export const dynamic = 'force-dynamic'
+
 /**
  * Admin endpoint for manually triggering materialized view refresh
  * This can be called by cron jobs, webhooks, or manual administration

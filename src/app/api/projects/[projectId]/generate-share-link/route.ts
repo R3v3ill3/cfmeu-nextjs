@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
+
+export const dynamic = 'force-dynamic'
 import { createClient } from '@supabase/supabase-js';
 import { getBaseUrl } from '@/lib/share-links';
 

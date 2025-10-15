@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
+
+export const dynamic = 'force-dynamic'
 import { decryptWithEnvKey } from '@/lib/crypto/secrets'
 
 const ALLOWED_ROLES = ['organiser', 'lead_organiser', 'admin'] as const

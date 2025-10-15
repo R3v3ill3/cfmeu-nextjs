@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
+
+export const dynamic = 'force-dynamic'
 import Anthropic from '@anthropic-ai/sdk'
 
 const ANALYSIS_SYSTEM_PROMPT = `You are an expert at analyzing CFMEU NSW MappingSheets forms. These are standardized construction project forms.
