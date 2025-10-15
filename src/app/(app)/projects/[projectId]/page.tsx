@@ -89,6 +89,18 @@ export default function ProjectDetailPage() {
   const projectId = params?.projectId as string
   const isMobile = useIsMobile()
   const [tab, setTab] = useState(sp.get("tab") || "mappingsheets")
+
+  // Early return if no projectId
+  if (!projectId) {
+    return (
+      <div className="p-6">
+        <p className="text-muted-foreground">Invalid project ID</p>
+        <Button variant="outline" onClick={() => router.push('/projects')} className="mt-4">
+          Back to Projects
+        </Button>
+      </div>
+    )
+  }
   const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null)
   const [showEbaForEmployerId, setShowEbaForEmployerId] = useState<string | null>(null)
   const [chartEmployer, setChartEmployer] = useState<{ id: string; name: string } | null>(null)
@@ -669,8 +681,13 @@ export default function ProjectDetailPage() {
         </TabsList>
 
         <TabsContent value="mappingsheets">
-          <div className="space-y-4">
-            {project && (
+          {projectLoading || mappingDataLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <LoadingSpinner />
+              <span className="ml-3 text-muted-foreground">Loading project mapping...</span>
+            </div>
+          ) : project ? (
+            <div className="space-y-4">
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <h2 className="text-xl font-semibold">Project Mapping</h2>
@@ -702,8 +719,12 @@ export default function ProjectDetailPage() {
                   <MappingSubcontractorsTable projectId={project.id} />
                 </div>
               </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="text-center py-12 text-muted-foreground">
+              Project not found
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="sites">

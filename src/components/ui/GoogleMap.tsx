@@ -4,7 +4,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { MapPin, ZoomIn, ZoomOut, AlertCircle } from 'lucide-react';
-import { GoogleMap as RGMMap, Polygon as RGMPolygon, MarkerF as RGMMarker, useJsApiLoader } from '@react-google-maps/api';
+import { GoogleMap as RGMMap, Polygon as RGMPolygon, MarkerF as RGMMarker } from '@react-google-maps/api';
+import { useGoogleMaps } from '@/providers/GoogleMapsProvider';
 
 interface GoogleMapProps {
   center?: { lat: number; lng: number };
@@ -43,17 +44,12 @@ export function GoogleMap({
   const [mapError, setMapError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<string>('');
 
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-  const { isLoaded, loadError } = useJsApiLoader({
-    id: 'google-maps-script',
-    googleMapsApiKey: apiKey || '',
-  });
+  const { isLoaded, loadError } = useGoogleMaps();
 
   useEffect(() => {
-    setDebugInfo(`API Key: ${apiKey ? 'Found' : 'Missing'} | Loaded: ${isLoaded ? 'Yes' : 'No'}`);
-    if (!apiKey) setMapError('Google Maps API key not found. Please check NEXT_PUBLIC_GOOGLE_MAPS_API_KEY in .env');
+    setDebugInfo(`Loaded: ${isLoaded ? 'Yes' : 'No'}`);
     if (loadError) setMapError('Failed to load Google Maps script. Please check your API key and internet connection.');
-  }, [apiKey, isLoaded, loadError]);
+  }, [isLoaded, loadError]);
 
   // WKT parsing helpers -> returns array of polygons, each with optional holes
   const parseWktPolygons = (wktRaw: string): Array<{ paths: google.maps.LatLngLiteral[][] }> => {

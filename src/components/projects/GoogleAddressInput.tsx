@@ -1,72 +1,14 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
-
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { useGoogleMaps } from "@/providers/GoogleMapsProvider";
 
 declare global {
   interface Window {
     google?: any;
   }
-}
-
-const GOOGLE_SCRIPT_ID = "google-maps-script";
-
-function loadGoogleMaps(apiKey: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const isPlacesReady = () => !!(window.google && window.google.maps && window.google.maps.places);
-
-    if (isPlacesReady()) {
-      resolve();
-      return;
-    }
-    if (document.getElementById(GOOGLE_SCRIPT_ID)) {
-      const check = setInterval(() => {
-        if (isPlacesReady()) {
-          clearInterval(check);
-          resolve();
-        }
-      }, 100);
-      setTimeout(() => {
-        clearInterval(check);
-        if (!isPlacesReady()) {
-          reject(new Error("Google Maps failed to load"));
-        }
-      }, 10000);
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.id = GOOGLE_SCRIPT_ID;
-    // Use loading=async per Google best practices and pin to weekly channel
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&loading=async&v=weekly`;
-    script.async = true;
-    script.onload = async () => {
-      try {
-        // Ensure places library is actually available when using loading=async
-        if (window.google?.maps?.importLibrary) {
-          await window.google.maps.importLibrary("places");
-        }
-      } catch {}
-
-      // Wait until places is actually ready before resolving
-      const check = setInterval(() => {
-        if (window.google && window.google.maps && window.google.maps.places) {
-          clearInterval(check);
-          resolve();
-        }
-      }, 100);
-      setTimeout(() => {
-        clearInterval(check);
-        if (!(window.google && window.google.maps && window.google.maps.places)) {
-          reject(new Error("Google Maps failed to load"));
-        }
-      }, 10000);
-    };
-    script.onerror = () => reject(new Error("Failed to load Google Maps"));
-    document.head.appendChild(script);
-  });
 }
 
 export type GoogleAddress = {
@@ -89,8 +31,7 @@ export function GoogleAddressInput({
   showLabel?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const [loaded, setLoaded] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { isLoaded, loadError } = useGoogleMaps();
   const [text, setText] = useState<string>(value || "");
   const lastFromAutocomplete = useRef(false);
   const selectingFromList = useRef(false);
@@ -109,27 +50,14 @@ export function GoogleAddressInput({
   }, [onChange]);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY as string | undefined;
-        if (!key) {
-          setError("Autocomplete unavailable");
-          return;
-        }
-        await loadGoogleMaps(key);
-        if (!cancelled) setLoaded(true);
-      } catch (e) {
-        console.error(e);
-        setError("Autocomplete unavailable");
-        toast.error("Google Maps failed to load. Autocomplete disabled.");
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+    if (loadError) {
+      console.error("Google Maps load error:", loadError);
+      toast.error("Google Maps failed to load. Autocomplete disabled.");
+    }
+  }, [loadError]);
 
   useEffect(() => {
-    if (!loaded || !inputRef.current) return;
+    if (!isLoaded || !inputRef.current) return;
     if (!(window.google && window.google.maps && window.google.maps.places && window.google.maps.places.Autocomplete)) {
       // Places library not available; keep manual entry working
       return;
@@ -170,10 +98,10 @@ export function GoogleAddressInput({
       }
       autocompleteRef.current = null;
     };
-  }, [loaded]);
+  }, [isLoaded]);
 
   useEffect(() => {
-    if (!loaded) return;
+    if (!isLoaded) return;
     const markSelecting = (e: Event) => {
       const target = e.target as HTMLElement | null;
       if (target && target.closest('.pac-container')) {
@@ -191,7 +119,7 @@ export function GoogleAddressInput({
       document.removeEventListener('mousedown', markSelecting as EventListener, true);
       document.removeEventListener('touchstart', markSelecting as EventListener, true);
     };
-  }, [loaded]);
+  }, [isLoaded]);
 
   return (
     <div className="space-y-2">
@@ -251,7 +179,7 @@ export function GoogleAddressInput({
           }}
         />
         <div className="text-xs text-muted-foreground">
-          {loaded ? <span>Autocomplete enabled.</span> : <span>{error || "Autocomplete unavailable; manual entry works."}</span>}
+          {isLoaded ? <span>Autocomplete enabled.</span> : <span>{loadError?.message || "Autocomplete unavailable; manual entry works."}</span>}
         </div>
       </div>
     </div>

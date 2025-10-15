@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useMemo, useCallback } from "react"
-import { GoogleMap, Polygon, Marker, InfoWindow, Circle, useLoadScript } from "@react-google-maps/api"
+import { GoogleMap, Polygon, Marker, InfoWindow, Circle } from "@react-google-maps/api"
 import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { Badge } from "@/components/ui/badge"
@@ -12,8 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Palette } from "lucide-react"
 import { getProjectColor, getColorSchemeLegend } from "@/utils/projectColors"
-
-const libraries: ("geometry")[] = ["geometry"]
+import { useGoogleMaps } from "@/providers/GoogleMapsProvider"
 
 interface ProjectsMapViewProps {
   projects: any[]
@@ -98,11 +97,8 @@ export default function ProjectsMapView({
   const [infoWindowPosition, setInfoWindowPosition] = useState<{ lat: number, lng: number } | null>(null)
   const [projectColorBy, setProjectColorBy] = useState<'tier' | 'organising_universe' | 'stage' | 'builder_eba' | 'default'>('builder_eba')
 
-  // Load Google Maps using the official hook
-  const { isLoaded, loadError } = useLoadScript({
-    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY as string,
-    libraries
-  })
+  // Use centralized Google Maps context
+  const { isLoaded, loadError } = useGoogleMaps()
   
   // Construct URL for Full Map page with preserved filters
   const fullMapUrl = useMemo(() => {

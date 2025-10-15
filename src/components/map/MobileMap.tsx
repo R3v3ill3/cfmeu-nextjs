@@ -1,5 +1,6 @@
 'use client';
-import { GoogleMap, useJsApiLoader, Polygon, Marker } from '@react-google-maps/api';
+import { GoogleMap, Polygon, Marker } from '@react-google-maps/api';
+import { useGoogleMaps } from '@/providers/GoogleMapsProvider';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -58,10 +59,7 @@ function MobileMap({
   labelMode = 'always',
   autoFocusPatches = false
 }: MobileMapProps) {
-  const { isLoaded } = useJsApiLoader({
-    id: 'google-map-script',
-    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
-  });
+  const { isLoaded } = useGoogleMaps();
 
   const [hoveredPatchId, setHoveredPatchId] = useState<string | null>(null);
   const [map, setMap] = useState<google.maps.Map | null>(null);

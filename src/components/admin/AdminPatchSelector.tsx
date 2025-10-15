@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Check, ChevronDown, Search, Users } from "lucide-react"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { toast } from "sonner"
 
 interface PatchOption { id: string; name: string }
 interface LeadOption { id: string; label: string; kind: "live" | "draft" }
@@ -98,7 +99,10 @@ export default function AdminPatchSelector() {
 		setLoadingLead(true)
 		try {
 			const lead = leadOptions.find(l => l.id === selectedLead)
-			if (!lead) return
+			if (!lead) {
+				console.error("Lead not found:", selectedLead)
+				return
+			}
 
 			let liveOrganiserIds: string[] = []
 			let draftOrganiserIds: string[] = []
@@ -109,44 +113,84 @@ export default function AdminPatchSelector() {
 					(supabase as any).from("role_hierarchy").select("child_user_id").eq("parent_user_id", lead.id).is("end_date", null),
 					(supabase as any).from("lead_draft_organiser_links").select("pending_user_id").eq("lead_user_id", lead.id).eq("is_active", true)
 				])
+				
+				if (liveKids.error) {
+					console.error("Error fetching live organisers:", liveKids.error)
+				}
+				if (draftKids.error) {
+					console.error("Error fetching draft organisers:", draftKids.error)
+				}
+				
 				liveOrganiserIds = ((((liveKids as any)?.data as any[]) || []).map((r: any) => String(r.child_user_id)))
 				draftOrganiserIds = ((((draftKids as any)?.data as any[]) || []).map((r: any) => String(r.pending_user_id)))
 			} else {
 				// Draft lead → organisers via draft_lead_organiser_links
-				const { data: dl } = await (supabase as any)
+				const { data: dl, error } = await (supabase as any)
 					.from("draft_lead_organiser_links")
 					.select("organiser_user_id, organiser_pending_user_id")
 					.eq("draft_lead_pending_user_id", lead.id)
 					.eq("is_active", true)
+				
+				if (error) {
+					console.error("Error fetching draft lead organisers:", error)
+				}
+				
 				liveOrganiserIds = ((dl as any[]) || []).map((r: any) => r.organiser_user_id).filter(Boolean).map((x: any) => String(x))
 				draftOrganiserIds = ((dl as any[]) || []).map((r: any) => r.organiser_pending_user_id).filter(Boolean).map((x: any) => String(x))
 			}
 
+			console.log("Found organisers:", { liveOrganiserIds, draftOrganiserIds })
+
 			// For live organisers, read organiser_patch_assignments
 			let patchIds: string[] = []
 			if (liveOrganiserIds.length > 0) {
-				const { data: opa } = await (supabase as any)
+				const { data: opa, error } = await (supabase as any)
 					.from("organiser_patch_assignments")
 					.select("patch_id")
 					.is("effective_to", null)
 					.in("organiser_id", liveOrganiserIds)
+				
+				if (error) {
+					console.error("Error fetching organiser patch assignments:", error)
+				}
+				
 				patchIds = patchIds.concat(((opa as any[]) || []).map((r: any) => String(r.patch_id)))
 			}
 			// For draft organisers, use pending_users.assigned_patch_ids
 			if (draftOrganiserIds.length > 0) {
-				const { data: pu } = await (supabase as any)
+				const { data: pu, error } = await (supabase as any)
 					.from("pending_users")
 					.select("id, assigned_patch_ids")
 					.in("id", draftOrganiserIds)
+				
+				if (error) {
+					console.error("Error fetching pending user patches:", error)
+				}
+				
 				const more = (((pu as any[]) || []).flatMap((r: any) => Array.isArray(r.assigned_patch_ids) ? r.assigned_patch_ids : [])).map((x: any) => String(x))
 				patchIds = patchIds.concat(more)
 			}
+			
+			console.log("Found patch IDs:", patchIds)
+			
 			// De-duplicate and retain only those that exist in patches list (defensive)
 			const allowed = new Set(allPatches.map(p => p.id))
 			const unique = Array.from(new Set(patchIds.filter(id => allowed.has(id))))
+			
+			console.log("Filtered to valid patches:", unique)
+			
 			// Apply both: preselect and filter visible list to these patches
 			setSelectedPatchIds(unique)
 			setLeadFilterPatchIds(unique)
+			
+			if (unique.length === 0) {
+				toast.info("No patches found for the selected co-ordinator's organisers")
+			} else {
+				toast.success(`Selected ${unique.length} patch${unique.length === 1 ? '' : 'es'}`)
+			}
+		} catch (err) {
+			console.error("Error in selectByLeadOrganiser:", err)
+			toast.error("Failed to load patches for co-ordinator. Please try again.")
 		} finally {
 			setLoadingLead(false)
 		}

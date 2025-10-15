@@ -12,6 +12,7 @@ import dynamic from "next/dynamic"
 import { usePatchOrganiserLabels } from "@/hooks/usePatchOrganiserLabels"
 import { getProjectColor } from "@/utils/projectColors"
 import { useNavigationLoading } from "@/hooks/useNavigationLoading"
+import { useGoogleMaps } from "@/providers/GoogleMapsProvider"
 
 interface InteractiveMapProps {
   showJobSites: boolean
@@ -73,61 +74,6 @@ declare global {
   }
 }
 
-const GOOGLE_SCRIPT_ID = "google-maps-script";
-
-function loadGoogleMaps(apiKey: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const isMapsReady = () => !!(window.google && window.google.maps && window.google.maps.geometry);
-
-    if (isMapsReady()) {
-      resolve();
-      return;
-    }
-    if (document.getElementById(GOOGLE_SCRIPT_ID)) {
-      const check = setInterval(() => {
-        if (isMapsReady()) {
-          clearInterval(check);
-          resolve();
-        }
-      }, 100);
-      setTimeout(() => {
-        clearInterval(check);
-        if (!isMapsReady()) {
-          reject(new Error("Google Maps failed to load"));
-        }
-      }, 10000);
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.id = GOOGLE_SCRIPT_ID;
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geometry&loading=async&v=weekly`;
-    script.async = true;
-    script.onload = async () => {
-      try {
-        if (window.google?.maps?.importLibrary) {
-          await window.google.maps.importLibrary("geometry");
-        }
-      } catch {}
-
-      const check = setInterval(() => {
-        if (window.google && window.google.maps && window.google.maps.geometry) {
-          clearInterval(check);
-          resolve();
-        }
-      }, 100);
-      setTimeout(() => {
-        clearInterval(check);
-        if (!(window.google && window.google.maps && window.google.maps.geometry)) {
-          reject(new Error("Google Maps failed to load"));
-        }
-      }, 10000);
-    };
-    script.onerror = () => reject(new Error("Failed to load Google Maps"));
-    document.head.appendChild(script);
-  });
-}
-
 // Color scheme for different patch types
 const patchColors = {
   geo: "#ef4444", // red
@@ -149,33 +95,13 @@ export default function InteractiveMap({
   autoFocusPatches = false
 }: InteractiveMapProps) {
   const { startNavigation } = useNavigationLoading()
+  const { isLoaded: mapsLoaded, loadError } = useGoogleMaps()
+  const mapsError = loadError?.message || null
   const [map, setMap] = useState<google.maps.Map | null>(null)
   const [selectedPatch, setSelectedPatch] = useState<PatchData | null>(null)
   const [selectedJobSite, setSelectedJobSite] = useState<JobSiteData | null>(null)
   const [infoWindowPosition, setInfoWindowPosition] = useState<{ lat: number, lng: number } | null>(null)
-  const [mapsLoaded, setMapsLoaded] = useState(false)
-  const [mapsError, setMapsError] = useState<string | null>(null)
   const [hoveredPatchId, setHoveredPatchId] = useState<string | null>(null)
-
-  // Load Google Maps
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY as string | undefined;
-        if (!key) {
-          setMapsError("Google Maps API key not configured");
-          return;
-        }
-        await loadGoogleMaps(key);
-        if (!cancelled) setMapsLoaded(true);
-      } catch (e) {
-        console.error(e);
-        setMapsError("Failed to load Google Maps");
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
 
   // Debug authentication and environment
   useEffect(() => {

@@ -84,9 +84,10 @@ function buildCSP(nonce: string): string {
     // Style: unsafe-inline required for React inline styles (style={{...}})
     // NOTE: Cannot use nonce with unsafe-inline - nonce causes unsafe-inline to be ignored per CSP spec
     // TODO: migrate to CSS modules/Tailwind only for full nonce-based styles
-    `style-src 'self' 'unsafe-inline'`,
+    // Include fonts.googleapis.com for Google Maps fonts
+    `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`,
     "img-src 'self' data: https:",
-    "font-src 'self' data:",
+    "font-src 'self' data: https://fonts.gstatic.com",
     `connect-src ${connectSrc.join(' ')}`,
     "frame-src 'self'",
     "object-src 'none'",

@@ -340,6 +340,11 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
       tradesForStage = tradesForStage.filter(trade => KEY_CONTRACTOR_TRADES.has(trade.value));
     }
     
+    // Don't render section if no trades after filtering
+    if (tradesForStage.length === 0) {
+      return null;
+    }
+    
     if (isLoading) {
       return (
         <>
@@ -351,11 +356,6 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
           </TableRow>
         </>
       );
-    }
-
-    // Don't render section if no trades after filtering
-    if (tradesForStage.length === 0) {
-      return null;
     }
     
     return (
@@ -403,21 +403,27 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
           </Label>
         </div>
       </div>
-      <div className="overflow-x-auto">
-        <Table className="print-table print-border">
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-56">Trade</TableHead>
-              <TableHead>Company</TableHead>
-              <TableHead className="w-40">EBA (Y/N)</TableHead>
-              <TableHead className="w-20 text-center">Compliance</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {getAllStages().map(stage => renderSection(getStageLabel(stage), stage))}
-          </TableBody>
-        </Table>
-      </div>
+      {isLoading ? (
+        <div className="text-center py-8 text-muted-foreground">
+          Loading subcontractors...
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <Table className="print-table print-border">
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-56">Trade</TableHead>
+                <TableHead>Company</TableHead>
+                <TableHead className="w-40">EBA (Y/N)</TableHead>
+                <TableHead className="w-20 text-center">Compliance</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {getAllStages().map(stage => renderSection(getStageLabel(stage), stage))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
       <div className="flex justify-end mt-2">
         <Button size="sm" variant="outline" onClick={() => handleAddOrChange({
           key: `other|other_${Date.now()}|skeleton`,
