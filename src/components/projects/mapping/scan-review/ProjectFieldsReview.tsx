@@ -154,23 +154,45 @@ export function ProjectFieldsReview({
   const [ebaEmployerInfo, setEbaEmployerInfo] = useState<{employerId: string, employerName: string} | null>(null)
 
   // Load all employers for matching and check for fuzzy match
+  // NOTE: Paginate to get ALL employers, not just the first 1000
   useEffect(() => {
     const loadEmployers = async () => {
-      const { data, error } = await supabase
-        .from('employers')
-        .select('id, name, enterprise_agreement_status')
-        .order('name')
+      let allData: any[] = []
+      let from = 0
+      const pageSize = 1000
       
-      if (!error && data) {
-        setAllEmployers(data)
+      // Paginate through all employers to bypass Supabase's default limit
+      while (true) {
+        const { data, error } = await supabase
+          .from('employers')
+          .select('id, name, enterprise_agreement_status')
+          .order('name')
+          .range(from, from + pageSize - 1)
         
-        // Check for fuzzy match for builder
-        const extractedBuilder = extractedData.builder
-        if (extractedBuilder && data.length > 0) {
-          const { findBestEmployerMatch } = await import('@/utils/fuzzyMatching')
-          const match = findBestEmployerMatch(extractedBuilder, data)
-          setBuilderSuggestedMatch(match)
+        if (error) {
+          console.error('[ProjectFieldsReview] Error loading employers:', error)
+          break
         }
+        
+        if (!data || data.length === 0) break
+        
+        allData = allData.concat(data)
+        
+        // If we got less than a full page, we've reached the end
+        if (data.length < pageSize) break
+        
+        from += pageSize
+      }
+      
+      console.log(`[ProjectFieldsReview] Loaded ${allData.length} total employers`)
+      setAllEmployers(allData)
+      
+      // Check for fuzzy match for builder
+      const extractedBuilder = extractedData.builder
+      if (extractedBuilder && allData.length > 0) {
+        const { findBestEmployerMatch } = await import('@/utils/fuzzyMatching')
+        const match = findBestEmployerMatch(extractedBuilder, allData)
+        setBuilderSuggestedMatch(match)
       }
     }
     loadEmployers()

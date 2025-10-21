@@ -28,6 +28,7 @@ import { useNavigationLoading } from "@/hooks/useNavigationLoading"
 import { CfmeuEbaBadge, getProjectEbaStatus } from "@/components/ui/CfmeuEbaBadge"
 import { OrganizingUniverseBadge } from "@/components/ui/OrganizingUniverseBadge"
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner"
+import { useKeyContractorTradesSet } from "@/hooks/useKeyContractorTrades"
 import Link from "next/link"
 import { WorkerDetailModal } from "@/components/workers/WorkerDetailModal"
 import { GoogleAddressInput, GoogleAddress } from "@/components/projects/GoogleAddressInput"
@@ -146,6 +147,9 @@ function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: Proje
   const { startNavigation } = useNavigationLoading()
   const router = useRouter()
   
+  // Fetch key trades dynamically from database (needed for metrics calculation)
+  const { tradeSet: KEY_CONTRACTOR_TRADES_SET } = useKeyContractorTradesSet()
+  
   const builderNames = useMemo(() => {
     // Get all contractor role assignments as potential builders
     const contractors = (p.project_assignments || []).filter((a) => 
@@ -173,13 +177,11 @@ function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: Proje
   // Calculate key contractor mapping metrics
   // Key contractors are critical roles and trades that significantly impact project success
   const keyContractorMetrics = useMemo(() => {
-    const KEY_CONTRACTOR_TRADES = new Set([
-      'demolition', 'piling', 'concrete', 'scaffolding', 'form_work',
-      'tower_crane', 'mobile_crane', 'labour_hire', 'earthworks', 'traffic_control'
-    ]);
+    // Use dynamic key trades from database
+    const KEY_CONTRACTOR_TRADES = KEY_CONTRACTOR_TRADES_SET;
     const KEY_CONTRACTOR_ROLES = new Set(['builder', 'project_manager']);
     
-    // Total key categories (10 critical trades + 2 key roles = 12)
+    // Total key categories (dynamic key trades + 2 key roles)
     const totalKeyCategories = KEY_CONTRACTOR_TRADES.size + KEY_CONTRACTOR_ROLES.size;
     
     // Count mapped key contractor categories
@@ -224,7 +226,7 @@ function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: Proje
       totalKeyContractors,
       ebaPercentage
     };
-  }, [p.project_assignments]);
+  }, [p.project_assignments, KEY_CONTRACTOR_TRADES_SET]);
 
   const primary = builderNames[0] || head
   const secondary = head && primary && head.id !== primary.id ? head : null
@@ -402,7 +404,7 @@ function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: Proje
             <Badge variant="secondary" className="text-[10px]">{totalWorkers} workers</Badge>
           )}
         </div>
-        <div className="pt-2 mt-auto">
+        <div className="pt-2 mt-auto space-y-2">
           <Button 
             className="w-full" 
             size="sm" 
@@ -412,6 +414,18 @@ function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: Proje
             }}
           >
             Open project
+          </Button>
+          <Button 
+            className="w-full" 
+            size="sm"
+            variant="outline"
+            onClick={(e) => {
+              e.stopPropagation()
+              startNavigation(`/projects/${p.id}?tab=site-visits`)
+              setTimeout(() => router.push(`/projects/${p.id}?tab=site-visits`), 50)
+            }}
+          >
+            Record Site Visit
           </Button>
         </div>
       </CardContent>
@@ -464,6 +478,9 @@ export function ProjectsDesktopView() {
   const [searchInput, setSearchInput] = useState(() => sp.get("q") || "")
   const qParam = sp.get("q") || ""
   const q = qParam.toLowerCase()
+  
+  // Fetch key trades dynamically from database
+  const { tradeSet: KEY_CONTRACTOR_TRADES_SET } = useKeyContractorTradesSet()
   const patchParam = sp.get("patch") || ""
   const patchIds = patchParam.split(",").map(s => s.trim()).filter(Boolean)
   const tierFilter = (sp.get("tier") || "all") as ProjectTier | 'all'

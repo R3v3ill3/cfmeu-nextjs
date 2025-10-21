@@ -5,13 +5,14 @@ import { useState, useEffect, useCallback } from "react"
 import { useSearchParams, usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Search } from "lucide-react"
+import { Search, Plus } from "lucide-react"
 import { useEmployersServerSideCompatible } from "@/hooks/useEmployersServerSide"
 import { EmployerCard, EmployerCardData } from "./EmployerCard"
 import { EmployerDetailModal } from "./EmployerDetailModal"
 import { getEbaCategory } from "./ebaHelpers"
 import { useQueryClient } from "@tanstack/react-query"
 import { refreshSupabaseClient } from "@/integrations/supabase/client"
+import { AddEmployerDialog } from "./AddEmployerDialog"
 
 const EMPLOYERS_STATE_KEY = 'employers-page-state-mobile'
 
@@ -44,6 +45,7 @@ export function EmployersMobileView() {
   const PAGE_SIZE = 10
   const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
+  const [isAddEmployerOpen, setIsAddEmployerOpen] = useState(false)
 
   useEffect(() => {
     saveEmployersState(sp)
@@ -137,6 +139,10 @@ export function EmployersMobileView() {
     email: emp.email,
     incolink_id: emp.incolink_id,
     incolink_last_matched: emp.incolink_last_matched,
+    enterprise_agreement_status: emp.enterprise_agreement_status,
+    eba_status_source: emp.eba_status_source,
+    eba_status_updated_at: emp.eba_status_updated_at,
+    eba_status_notes: emp.eba_status_notes,
     worker_placements: emp.worker_placements || [],
     ebaCategory: emp.company_eba_records?.[0] ? getEbaCategory(emp.company_eba_records[0]) : { category: 'no', label: 'No EBA', variant: 'destructive' },
     projects: emp.projects,
@@ -147,6 +153,10 @@ export function EmployersMobileView() {
     <div className="px-safe py-4 pb-safe-bottom space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Employers</h1>
+        <Button size="sm" onClick={() => setIsAddEmployerOpen(true)}>
+          <Plus className="h-4 w-4 mr-1" />
+          Add
+        </Button>
       </div>
 
       <div className="relative">
@@ -192,6 +202,18 @@ export function EmployersMobileView() {
         onClose={() => setIsDetailOpen(false)}
         initialTab="overview"
         onEmployerUpdated={refreshEmployers}
+      />
+
+      <AddEmployerDialog
+        isOpen={isAddEmployerOpen}
+        onClose={() => setIsAddEmployerOpen(false)}
+        onEmployerCreated={(employerId) => {
+          // Refresh employers list
+          refreshEmployers()
+          // Optionally open the detail modal for the newly created employer
+          setSelectedEmployerId(employerId)
+          setIsDetailOpen(true)
+        }}
       />
     </div>
   )

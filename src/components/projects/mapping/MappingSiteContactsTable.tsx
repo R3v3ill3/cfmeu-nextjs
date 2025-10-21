@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toast } from "sonner";
 import { Plus, Edit, UserCheck, Users } from "lucide-react";
 import { DelegateRegistrationDialog } from "./DelegateRegistrationDialog";
+import { PhoneLink, EmailLink, ContactActions } from "@/components/ui/ContactActions";
 
 type RoleKey = "project_manager" | "site_manager" | "site_delegate" | "site_hsr";
 

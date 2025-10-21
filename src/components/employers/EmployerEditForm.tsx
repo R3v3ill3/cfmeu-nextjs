@@ -126,28 +126,36 @@ const form = useForm<z.input<typeof FormSchema>>({
   mode: "onChange", // Prevent re-validation on every change
 });
 
-  // Load existing durable classification tags and trade capabilities
+  // Load existing durable classification tags and trade capabilities from employer_capabilities
   const { data: roleTags = [] } = useQuery({
-    queryKey: ["employer_role_tags", stableEmployer.id],
+    queryKey: ["employer_capabilities_roles", stableEmployer.id],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from("employer_role_tags")
-        .select("tag")
-        .eq("employer_id", stableEmployer.id);
+      const { data, error} = await (supabase as any)
+        .from("employer_capabilities")
+        .select("contractor_role_types!inner(code)")
+        .eq("employer_id", stableEmployer.id)
+        .eq("capability_type", "contractor_role");
       if (error) throw error;
-      return (data ?? []) as { tag: "builder" | "head_contractor" }[];
+      // Map to the old format for compatibility with existing code
+      return (data ?? []).map((row: any) => ({
+        tag: row.contractor_role_types.code as "builder" | "head_contractor"
+      }));
     },
   });
 
   const { data: tradeCaps = [] } = useQuery({
-    queryKey: ["contractor_trade_capabilities", stableEmployer.id],
+    queryKey: ["employer_capabilities_trades", stableEmployer.id],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
-        .from("contractor_trade_capabilities")
-        .select("trade_type")
-        .eq("employer_id", stableEmployer.id);
+        .from("employer_capabilities")
+        .select("trade_types!inner(code)")
+        .eq("employer_id", stableEmployer.id)
+        .eq("capability_type", "trade");
       if (error) throw error;
-      return (data ?? []) as { trade_type: string }[];
+      // Map to the old format for compatibility with existing code
+      return (data ?? []).map((row: any) => ({
+        trade_type: row.trade_types.code
+      }));
     },
   });
 
@@ -295,10 +303,11 @@ const onSubmit = useCallback(async (values: z.input<typeof FormSchema>) => {
   await queryClient.refetchQueries({ queryKey: ["employer-detail", stableEmployer.id] });
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: ["employers"] }),
-    queryClient.invalidateQueries({ queryKey: ["employer_role_tags"] }),
-    queryClient.invalidateQueries({ queryKey: ["employer_role_tags", stableEmployer.id] }),
-    queryClient.invalidateQueries({ queryKey: ["contractor_trade_capabilities"] }),
-    queryClient.invalidateQueries({ queryKey: ["contractor_trade_capabilities", stableEmployer.id] }),
+    queryClient.invalidateQueries({ queryKey: ["employer_capabilities_roles"] }),
+    queryClient.invalidateQueries({ queryKey: ["employer_capabilities_roles", stableEmployer.id] }),
+    queryClient.invalidateQueries({ queryKey: ["employer_capabilities_trades"] }),
+    queryClient.invalidateQueries({ queryKey: ["employer_capabilities_trades", stableEmployer.id] }),
+    queryClient.invalidateQueries({ queryKey: ["employer-categories", stableEmployer.id] }), // Also invalidate categories tab
   ]);
 
   toast({ title: 'Employer updated', description: 'Changes saved successfully.' });

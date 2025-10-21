@@ -39,13 +39,18 @@ export function MultiEmployerPicker({
       const { data: emps, error } = await supabase.from("employers").select("id, name").order("name", { ascending: true });
       if (!error && emps) setEmployers(emps as Employer[]);
 
-      const { data: tagRows } = await (supabase as any)
-        .from("employer_role_tags")
-        .select("employer_id, tag");
+      // Query employer_capabilities for contractor roles
+      const { data: capRows } = await (supabase as any)
+        .from("employer_capabilities")
+        .select("employer_id, contractor_role_types!inner(code)")
+        .eq("capability_type", "contractor_role")
+        .in("contractor_role_types.code", ["builder", "head_contractor"]);
+      
       const map: Record<string, RoleTag[]> = {};
-      (tagRows ?? []).forEach((r: any) => {
+      (capRows ?? []).forEach((r: any) => {
+        const tag = r.contractor_role_types.code as RoleTag;
         const arr = map[r.employer_id] ?? [];
-        if (!arr.includes(r.tag)) arr.push(r.tag);
+        if (!arr.includes(tag)) arr.push(tag);
         map[r.employer_id] = arr;
       });
       setTags(map);

@@ -21,6 +21,10 @@ export type EmployerCardData = {
   email: string | null;
   incolink_id: string | null;
   incolink_last_matched: string | null;
+  enterprise_agreement_status?: boolean | null;
+  eba_status_source?: string | null;
+  eba_status_updated_at?: string | null;
+  eba_status_notes?: string | null;
   worker_placements: { id: string }[];
   ebaCategory: {
     label: string;
@@ -49,20 +53,24 @@ export function EmployerCard({ employer, onClick, onUpdated }: { employer: Emplo
   const [selectedProject, setSelectedProject] = useState<EmployerProject | null>(null)
   const router = useRouter()
 
+  // Badge 1: Canonical EBA status from boolean
+  const hasActiveEba = employer.enterprise_agreement_status === true
+
+  // Badge 2: FWC workflow status from scrape records
+  const fwcStatus = employer.ebaCategory
+
   const handleActionClick = (e: React.MouseEvent) => {
     e.stopPropagation();
   };
 
   const handleEbaBadgeClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    
-    const hasEba = employer.ebaCategory.variant === 'default'
-    
-    if (hasEba) {
-      // Open EBA tracker
+
+    // If has canonical EBA status, go to tracker
+    // Otherwise open FWC search to find/link certification
+    if (hasActiveEba) {
       router.push('/eba-tracking')
     } else {
-      // Open FWC search
       setFwcSearchOpen(true)
     }
   };
@@ -102,24 +110,39 @@ export function EmployerCard({ employer, onClick, onUpdated }: { employer: Emplo
         <CardContent className="space-y-4">
           {/* Badges Section */}
           <div className="flex flex-wrap items-center gap-2">
-            <div 
-              className="cursor-pointer" 
+            {/* Badge 1: Canonical EBA Status - Blue Eureka Flag */}
+            <div
+              className="cursor-pointer flex items-center gap-1"
               onClick={handleEbaBadgeClick}
             >
-              <CfmeuEbaBadge 
-                hasActiveEba={employer.ebaCategory.variant === 'default'} 
+              <CfmeuEbaBadge
+                hasActiveEba={hasActiveEba}
                 builderName={employer.name}
                 size="sm"
                 showText={true}
               />
-              {employer.ebaCategory.variant !== 'default' && (
-                <Badge variant={employer.ebaCategory.variant} className="hover:shadow-sm transition-shadow ml-1">
-                  {employer.ebaCategory.label}
+
+              {/* Badge 2: FWC Workflow Status - Always show to indicate scrape status */}
+              <Badge
+                variant={fwcStatus?.variant ?? 'outline'}
+                className="hover:shadow-sm transition-shadow text-xs"
+              >
+                {fwcStatus?.label ?? 'No FWC Match'}
+              </Badge>
+
+              {/* Source badge - only show when canonical status is true */}
+              {hasActiveEba && employer.eba_status_source && (
+                <Badge variant="outline" className="text-xs">
+                  {employer.eba_status_source === 'manual'
+                    ? 'Manual'
+                    : employer.eba_status_source === 'import'
+                    ? 'Import'
+                    : 'FWC'}
                 </Badge>
               )}
             </div>
-            
-            <IncolinkBadge 
+
+            <IncolinkBadge
               incolinkId={employer.incolink_id}
               size="sm"
               clickable
@@ -132,7 +155,6 @@ export function EmployerCard({ employer, onClick, onUpdated }: { employer: Emplo
                 {employer.worker_placements.length}
               </Badge>
             )}
-            
           </div>
 
           {employer.incolink_last_matched && (

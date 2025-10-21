@@ -297,7 +297,8 @@ export async function GET(
         tradeContractors: (() => {
           const allTradeContractors: any[] = [];
           
-          // Define key contractor trade types (matching MappingSubcontractorsTable.tsx)
+          // DEPRECATED: This file uses hard-coded key trades
+          // TODO: Delete this file if no longer in use, or update to use dynamic key_contractor_trades table
           const KEY_CONTRACTOR_TRADES = new Set([
             'demolition',
             'piling', 

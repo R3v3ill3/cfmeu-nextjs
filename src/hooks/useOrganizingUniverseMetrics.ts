@@ -191,7 +191,25 @@ export async function fetchOrganizingUniverseMetrics(filters: OrganizingUniverse
 
     console.log(`📊 Loaded ${activeProjects?.length || 0} active projects for organizing universe metrics`)
     
-    const metrics = calculateMetrics(activeProjects || [])
+    // Fetch key contractor trades from database (replaces hard-coded list)
+    const { data: keyTradesData, error: keyTradesError } = await (supabase as any)
+      .from('key_contractor_trades')
+      .select('trade_type')
+      .eq('is_active', true)
+    
+    if (keyTradesError) {
+      console.error('Failed to fetch key trades, using fallback:', keyTradesError)
+    }
+    
+    // Use database trades if available, otherwise fallback to ensure metrics don't fail
+    // Fallback includes all 10 trades (fixes previous 7-trade bug)
+    const keyTrades = new Set<string>(
+      keyTradesData && keyTradesData.length > 0
+        ? keyTradesData.map((t: any) => t.trade_type as string)
+        : ['demolition', 'piling', 'concrete', 'scaffolding', 'form_work', 'tower_crane', 'mobile_crane', 'labour_hire', 'earthworks', 'traffic_control']
+    )
+    
+    const metrics = calculateMetrics(activeProjects || [], keyTrades)
     console.log('Organizing universe metrics client result:', { filters, metrics })
     console.log('📊 Calculated organizing universe metrics:', metrics)
     
@@ -206,15 +224,13 @@ export async function fetchOrganizingUniverseMetrics(filters: OrganizingUniverse
  * Calculate organizing universe metrics from project data
  * Pure function for safe metric calculations
  */
-function calculateMetrics(projects: any[]): OrganizingUniverseMetrics {
+function calculateMetrics(projects: any[], keyContractorTrades: Set<string>): OrganizingUniverseMetrics {
   const totalActiveProjects = projects.length
   
   console.log(`🔢 Calculating metrics for ${totalActiveProjects} projects`)
+  console.log(`🔧 Using ${keyContractorTrades.size} key trades for metrics:`, Array.from(keyContractorTrades))
   
-  // Define key contractor trades that we track (matching database enum values)
-  const KEY_CONTRACTOR_TRADES = new Set([
-    'demolition', 'piling', 'concreting', 'form_work', 'scaffolding', 'tower_crane', 'mobile_crane'
-  ])
+  const KEY_CONTRACTOR_TRADES = keyContractorTrades
 
   // Key contractor roles we track  
   const KEY_CONTRACTOR_ROLES = new Set([

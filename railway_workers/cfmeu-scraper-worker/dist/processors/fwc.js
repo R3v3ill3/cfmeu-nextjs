@@ -597,12 +597,14 @@ async function upsertEbaRecord(client, employerId, result) {
             throw new Error(`Failed to insert new EBA record: ${error.message}`);
         }
     }
-    const { error: employerUpdateError } = await client
-        .from('employers')
-        .update({ enterprise_agreement_status: true })
-        .eq('id', employerId);
-    if (employerUpdateError) {
-        throw new Error(`Failed to update employer status: ${employerUpdateError.message}`);
+    const { error: statusError } = await client.rpc('set_employer_eba_status', {
+        p_employer_id: employerId,
+        p_status: true,
+        p_source: 'fwc_scraper',
+        p_notes: 'FWC scraper matched EBA record'
+    });
+    if (statusError) {
+        throw new Error(`Failed to update employer status: ${statusError.message}`);
     }
 }
 function normalizeDateInput(value) {

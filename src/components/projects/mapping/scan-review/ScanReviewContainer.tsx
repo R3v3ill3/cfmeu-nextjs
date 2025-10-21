@@ -220,7 +220,19 @@ export function ScanReviewContainer({
         email: contact.email?.trim() || null,
         phone: contact.phone?.trim() || null,
       }))
-      .filter((contact) => contact.action === 'update' && (contact.existingId || contact.role))
+      .filter((contact) => {
+        // Only include contacts that have:
+        // 1. action === 'update'
+        // 2. Either an existingId OR a role
+        // 3. A valid name (not null, not empty, not "Nil")
+        if (contact.action !== 'update') return false
+        if (!contact.existingId && !contact.role) return false
+        
+        // Skip contacts without a valid name (handles "Nil" or empty values from scans)
+        if (!contact.name || contact.name.toLowerCase() === 'nil') return false
+        
+        return true
+      })
 
     const payload = {
       scanId: scanData.id,

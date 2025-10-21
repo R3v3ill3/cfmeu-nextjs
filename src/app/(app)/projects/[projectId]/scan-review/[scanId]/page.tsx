@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/integrations/supabase/client'
 import { Loader2, AlertCircle } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -18,14 +18,19 @@ interface PageProps {
 
 export default function ScanReviewPage({ params }: PageProps) {
   const { projectId, scanId } = params
+  const queryClient = useQueryClient()
 
-  // Debug logging
+  // Force REMOVE cache entirely when component mounts to prevent stuck loading states
+  // removeQueries is more aggressive than invalidateQueries - ensures completely fresh fetch
   useEffect(() => {
     console.log('[scan-review] Page mounted with params:', { projectId, scanId })
-  }, [projectId, scanId])
+    console.log('[scan-review] Removing all scan and project cache entries')
+    queryClient.removeQueries({ queryKey: ['mapping_sheet_scan'] })
+    queryClient.removeQueries({ queryKey: ['project', projectId] })
+  }, [queryClient, projectId])
 
   // Fetch scan data
-  const { data: scanData, error: scanError, isLoading: scanLoading } = useQuery({
+  const { data: scanData, error: scanError, isLoading: scanLoading, isFetching: scanFetching } = useQuery({
     queryKey: ['mapping_sheet_scan', scanId],
     queryFn: async () => {
       console.log('[scan-review] Fetching scan data for:', scanId)
@@ -43,8 +48,9 @@ export default function ScanReviewPage({ params }: PageProps) {
       return data
     },
     staleTime: 0,  // Always refetch
-    refetchOnMount: true,
+    refetchOnMount: 'always',
     retry: 3,
+    retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
   })
 
   // Fetch project data
@@ -214,16 +220,25 @@ export default function ScanReviewPage({ params }: PageProps) {
   }
 
   // Show loading only while queries are actively loading
-  if (scanLoading || projectLoading) {
+  if (scanLoading || scanFetching || projectLoading) {
+    console.log('[scan-review] Render: showing loading state', { 
+      scanLoading, 
+      scanFetching, 
+      projectLoading, 
+      hasScanData: !!scanData 
+    })
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center space-y-4">
           <Loader2 className="h-12 w-12 mx-auto animate-spin text-primary" />
           <p className="text-sm text-gray-600">Loading scan data...</p>
+          {(scanLoading || scanFetching) && <p className="text-xs text-gray-400">This may take a moment for large scans</p>}
         </div>
       </div>
     )
   }
+  
+  console.log('[scan-review] Render: proceeding with data checks')
 
   if (!scanData) {
     return null

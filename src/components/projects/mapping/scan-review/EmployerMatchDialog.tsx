@@ -21,6 +21,7 @@ interface EmployerMatchDialogProps {
   allEmployers: any[]
   onConfirm: (employerId: string, employerName: string, isNewEmployer: boolean, extras?: { contractorType?: string }) => void
   allowContractorTypeSelection?: boolean
+  tradeTypeCode?: string // The trade type for this subcontractor (e.g., 'cleaning', 'scaffolding')
 }
 
 export function EmployerMatchDialog({
@@ -31,6 +32,7 @@ export function EmployerMatchDialog({
   allEmployers,
   onConfirm,
   allowContractorTypeSelection = false,
+  tradeTypeCode,
 }: EmployerMatchDialogProps) {
   const [selectedOption, setSelectedOption] = useState<'suggested' | 'search' | 'new'>(
     suggestedMatch ? 'suggested' : 'search'
@@ -40,6 +42,7 @@ export function EmployerMatchDialog({
   const [newEmployerName, setNewEmployerName] = useState(companyName)
   const [isCreating, setIsCreating] = useState(false)
   const [contractorType, setContractorType] = useState<string>('builder')
+  const [employerType, setEmployerType] = useState<string>('small_contractor')
 
   // Search results
   const searchResults = useMemo(() => {
@@ -106,17 +109,13 @@ export function EmployerMatchDialog({
     setIsCreating(true)
 
     try {
-      // Note: contractor_type field doesn't exist in employers table yet
-      // For now, just create the employer with basic info
+      // Create the employer with pending approval status
       const insertPayload: any = {
         name: newEmployerName.trim(),
-        enterprise_agreement_status: 'unknown',
+        employer_type: employerType, // Required NOT NULL field
+        enterprise_agreement_status: null, // null = unknown (boolean column can be true/false/null)
+        approval_status: 'pending', // New employers need approval
       }
-
-      // TODO: Add contractor_type field to employers table schema
-      // if (allowContractorTypeSelection && contractorType) {
-      //   insertPayload.contractor_type = contractorType
-      // }
 
       const { data, error } = await supabase
         .from('employers')
@@ -126,7 +125,26 @@ export function EmployerMatchDialog({
 
       if (error) throw error
 
-      toast.success('New employer created')
+      // If we have a trade type, add it as a trade capability
+      if (tradeTypeCode) {
+        const { error: tradeError } = await supabase
+          .from('contractor_trade_capabilities')
+          .insert({
+            employer_id: data.id,
+            trade_type: tradeTypeCode,
+            is_primary: true,
+            notes: `Added from scanned mapping sheet`,
+          })
+
+        if (tradeError) {
+          console.warn('Failed to add trade capability:', tradeError)
+          // Don't fail the whole operation if trade capability insert fails
+        } else {
+          console.log(`Added trade capability: ${tradeTypeCode} for employer ${data.name}`)
+        }
+      }
+
+      toast.success('New employer created (pending approval)')
       onConfirm(data.id, data.name, true, {
         contractorType: allowContractorTypeSelection ? contractorType : undefined,
       })
@@ -270,15 +288,53 @@ export function EmployerMatchDialog({
                 </Label>
               </div>
               {selectedOption === 'new' && (
-                <div className="ml-6 space-y-2">
-                  <Input
-                    placeholder="Company name"
-                    value={newEmployerName}
-                    onChange={(e) => setNewEmployerName(e.target.value)}
-                  />
-                  <p className="text-xs text-gray-500">
-                    A new employer record will be created in the database.
-                  </p>
+                <div className="ml-6 space-y-3">
+                  <div>
+                    <Label className="text-sm mb-1.5 block">Company Name</Label>
+                    <Input
+                      placeholder="Company name"
+                      value={newEmployerName}
+                      onChange={(e) => setNewEmployerName(e.target.value)}
+                    />
+                  </div>
+                  
+                  <div>
+                    <Label className="text-sm mb-1.5 block">Employer Type</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { value: 'small_contractor', label: 'Small Contractor', description: '< 50 employees' },
+                        { value: 'large_contractor', label: 'Large Contractor', description: '50+ employees' },
+                        { value: 'principal_contractor', label: 'Principal Contractor', description: 'Head contractor' },
+                        { value: 'builder', label: 'Builder', description: 'Building company' },
+                        { value: 'individual', label: 'Individual', description: 'Sole trader' },
+                      ].map(option => (
+                        <Button
+                          key={option.value}
+                          type="button"
+                          variant={employerType === option.value ? 'default' : 'outline'}
+                          size="sm"
+                          className="justify-start h-auto py-2 px-3"
+                          onClick={() => setEmployerType(option.value)}
+                        >
+                          <div className="text-left">
+                            <div className="font-medium text-xs">{option.label}</div>
+                            <div className="text-[10px] text-muted-foreground mt-0.5">{option.description}</div>
+                          </div>
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-1">
+                    <p className="text-xs text-gray-500">
+                      A new employer record will be created with pending approval status.
+                    </p>
+                    {tradeTypeCode && (
+                      <p className="text-xs text-blue-600">
+                        ✓ Will be tagged with trade: <strong>{tradeTypeCode.replace(/_/g, ' ')}</strong>
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

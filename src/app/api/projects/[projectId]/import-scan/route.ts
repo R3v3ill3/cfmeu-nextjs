@@ -153,6 +153,13 @@ export async function POST(
           const name = contact.name?.trim() || null
           const email = contact.email?.trim() || null
           const phone = contact.phone?.trim() || null
+          
+          // Skip contacts without valid names (handles "Nil" or empty values from scans)
+          if (!name || name.toLowerCase() === 'nil') {
+            console.log(`Skipping contact with role ${contact.role} - no valid name (${contact.name})`)
+            continue
+          }
+          
           // Create new
           const { error } = await serviceSupabase
             .from('site_contacts')
@@ -202,6 +209,9 @@ export async function POST(
               employer_id: sub.matchedEmployer.id,
               assignment_type: 'trade_work',
               trade_type_id: tradeType.id,
+              status: sub.status || 'active',  // Include status from scan review
+              status_updated_at: new Date().toISOString(),
+              status_updated_by: user.id,
               source: 'scanned_mapping_sheet',
               match_status: 'confirmed',
               match_confidence: sub.matchConfidence || 1.0,

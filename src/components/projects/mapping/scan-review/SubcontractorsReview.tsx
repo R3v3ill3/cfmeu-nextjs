@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
@@ -18,6 +19,9 @@ import { FwcEbaSearchModal } from '@/components/employers/FwcEbaSearchModal'
 import { BatchEbaSearchModal } from './BatchEbaSearchModal'
 import { findBestEmployerMatch } from '@/utils/fuzzyMatching'
 import { useMappingSheetData } from '@/hooks/useMappingSheetData'
+import { toast } from 'sonner'
+import { StatusSelectSimple } from '@/components/ui/StatusSelect'
+import { TradeStatus } from '@/components/ui/StatusBadge'
 
 interface SubcontractorsReviewProps {
   extractedSubcontractors: Array<{
@@ -95,19 +99,46 @@ export function SubcontractorsReview({
   const [ebaSearchOpen, setEbaSearchOpen] = useState(false)
   const [batchEbaSearchOpen, setBatchEbaSearchOpen] = useState(false)
   const [selectedEbaEmployer, setSelectedEbaEmployer] = useState<{employerId: string, employerName: string} | null>(null)
+  
+  // Inline editing state for "other" trades with missing company names
+  const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  const [editingCompanyName, setEditingCompanyName] = useState('')
+  const [editingTradeName, setEditingTradeName] = useState('')
 
   // Fetch all employers for matching
+  // NOTE: Removed the Supabase default row limit to ensure we get ALL employers
+  // This is necessary for search functionality to work across the entire employer database
   const { data: allEmployers = [] } = useQuery({
-    queryKey: ['employers'],
+    queryKey: ['employers-all'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('employers')
-        .select('id, name, enterprise_agreement_status')
-        .order('name')
+      let allData: any[] = []
+      let from = 0
+      const pageSize = 1000
+      
+      // Paginate through all employers to bypass Supabase's default limit
+      while (true) {
+        const { data, error } = await supabase
+          .from('employers')
+          .select('id, name, enterprise_agreement_status')
+          .order('name')
+          .range(from, from + pageSize - 1)
 
-      if (error) throw error
-      return data || []
+        if (error) throw error
+        
+        if (!data || data.length === 0) break
+        
+        allData = allData.concat(data)
+        
+        // If we got less than a full page, we've reached the end
+        if (data.length < pageSize) break
+        
+        from += pageSize
+      }
+      
+      console.log(`[SubcontractorsReview] Loaded ${allData.length} total employers`)
+      return allData
     },
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes to avoid repeated pagination
   })
 
   // Get existing trade assignments for the project
@@ -133,6 +164,7 @@ export function SubcontractorsReview({
           matchedEmployer: null,
           matchConfidence: 0,
           confidence: confidence[index] || 0,
+          status: 'unknown' as TradeStatus, // Default for empty companies
           existingEmployers: existingAssignments.map(ea => ({
             id: ea.employerId,
             name: ea.employerName,
@@ -151,6 +183,7 @@ export function SubcontractorsReview({
         matchConfidence: match ? (match.confidence === 'exact' ? 1.0 : match.confidence === 'high' ? 0.8 : 0.6) : 0,
         confidence: confidence[index] || 0,
         needsReview: !match || match.confidence !== 'exact',
+        status: 'active' as TradeStatus, // Default for companies with names
         existingEmployers: existingAssignments.map(ea => ({
           id: ea.employerId,
           name: ea.employerName,
@@ -184,6 +217,15 @@ export function SubcontractorsReview({
     setDecisions(prev => {
       const updated = [...prev]
       updated[index].action = action
+      return updated
+    })
+  }
+
+  // Handle status change for subcontractor
+  const handleStatusChange = (index: number, status: TradeStatus) => {
+    setDecisions(prev => {
+      const updated = [...prev]
+      updated[index].status = status
       return updated
     })
   }
@@ -246,6 +288,56 @@ export function SubcontractorsReview({
     setBatchEbaSearchOpen(true)
   }
 
+  // Handle inline editing for "other" trades with data entry errors
+  const handleStartEdit = (index: number) => {
+    const decision = decisions[index]
+    setEditingIndex(index)
+    // Pre-populate with current values - if company is missing, suggest using trade name
+    setEditingCompanyName(decision.company || decision.trade)
+    setEditingTradeName(decision.company ? decision.trade : '') // Clear trade if it's the company name
+  }
+
+  const handleSaveEdit = async (index: number) => {
+    if (!editingCompanyName.trim()) {
+      toast({ title: 'Please enter a company name', variant: 'destructive' })
+      return
+    }
+
+    // Try to find match for the edited company name
+    const match = findBestEmployerMatch(editingCompanyName.trim(), allEmployers)
+
+    setDecisions(prev => {
+      const updated = [...prev]
+      updated[index] = {
+        ...updated[index],
+        company: editingCompanyName.trim(),
+        trade: editingTradeName.trim() || updated[index].trade, // Keep original if not changed
+        matchedEmployer: match || null,
+        matchConfidence: match ? (match.confidence === 'exact' ? 1.0 : match.confidence === 'high' ? 0.8 : 0.6) : 0,
+        action: match && match.confidence === 'exact' ? 'import' : 'skip',
+        needsReview: !match || match.confidence !== 'exact',
+        trade_type_code: mapTradeNameToCode(editingTradeName.trim() || updated[index].trade),
+      }
+      return updated
+    })
+
+    setEditingIndex(null)
+    setEditingCompanyName('')
+    setEditingTradeName('')
+    
+    if (match) {
+      toast({ title: 'Match found', description: `Matched to: ${match.name}` })
+    } else {
+      toast({ title: 'No match found', description: 'You can manually search for the employer' })
+    }
+  }
+
+  const handleCancelEdit = () => {
+    setEditingIndex(null)
+    setEditingCompanyName('')
+    setEditingTradeName('')
+  }
+
   // Get list of employers that need EBA status updated to Active
   const employersNeedingEbaUpdate = decisions
     .filter(d => d.action === 'import' && d.shouldUpdateEbaStatus && d.matchedEmployer)
@@ -257,9 +349,21 @@ export function SubcontractorsReview({
 
   const needsReviewCount = decisions.filter(d => d.needsReview).length
   const needsEbaUpdateCount = employersNeedingEbaUpdate.length
+  const needsEditingCount = decisions.filter(d => !d.company && d.stage === 'other').length
 
   return (
     <div className="space-y-4">
+      {needsEditingCount > 0 && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            {needsEditingCount} "Other" trade{needsEditingCount > 1 ? 's have' : ' has'} missing company names.
+            This usually means the company name was entered in the wrong column.
+            Click "Fix Entry" to correct the data.
+          </AlertDescription>
+        </Alert>
+      )}
+      
       {needsReviewCount > 0 && (
         <Alert>
           <AlertCircle className="h-4 w-4" />
@@ -302,18 +406,19 @@ export function SubcontractorsReview({
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
-            <Table>
+            <Table className="table-auto w-full">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Stage</TableHead>
-                  <TableHead>Trade</TableHead>
-                  <TableHead>Current Employer</TableHead>
-                  <TableHead>Scanned Company</TableHead>
-                  <TableHead>Matched Employer</TableHead>
-                  <TableHead>Action</TableHead>
-                  <TableHead>EBA</TableHead>
+                  <TableHead className="w-24">Stage</TableHead>
+                  <TableHead className="w-32">Trade</TableHead>
+                  <TableHead className="w-48">Current Employer</TableHead>
+                  <TableHead className="w-40">Scanned Company</TableHead>
+                  <TableHead className="w-48">Matched Employer</TableHead>
+                  <TableHead className="w-40">Action</TableHead>
+                  <TableHead className="w-32">Status</TableHead>
+                  <TableHead className="w-16">EBA</TableHead>
                   <TableHead className="w-24">Confidence</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead className="min-w-[200px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -324,7 +429,18 @@ export function SubcontractorsReview({
                         {STAGE_LABELS[decision.stage] || decision.stage}
                       </Badge>
                     </TableCell>
-                    <TableCell className="font-medium">{decision.trade}</TableCell>
+                    <TableCell className="font-medium">
+                      {editingIndex === index ? (
+                        <Input
+                          value={editingTradeName}
+                          onChange={(e) => setEditingTradeName(e.target.value)}
+                          placeholder="Enter correct trade type"
+                          className="h-8 text-sm"
+                        />
+                      ) : (
+                        decision.trade
+                      )}
+                    </TableCell>
                     
                     {/* Current Employers */}
                     <TableCell>
@@ -365,7 +481,16 @@ export function SubcontractorsReview({
                     
                     {/* Scanned Company */}
                     <TableCell>
-                      {decision.company || <span className="text-gray-400">—</span>}
+                      {editingIndex === index ? (
+                        <Input
+                          value={editingCompanyName}
+                          onChange={(e) => setEditingCompanyName(e.target.value)}
+                          placeholder="Enter company name"
+                          className="h-8 text-sm"
+                        />
+                      ) : (
+                        decision.company || <span className="text-gray-400">—</span>
+                      )}
                     </TableCell>
                     
                     {/* Matched Employer */}
@@ -446,6 +571,15 @@ export function SubcontractorsReview({
                       </div>
                     </TableCell>
                     
+                    {/* Status */}
+                    <TableCell>
+                      <StatusSelectSimple
+                        value={decision.status || 'active'}
+                        onChange={(status) => handleStatusChange(index, status)}
+                        size="sm"
+                      />
+                    </TableCell>
+                    
                     {/* EBA Status */}
                     <TableCell>
                       {decision.eba !== null && decision.eba !== undefined ? (
@@ -463,39 +597,75 @@ export function SubcontractorsReview({
                     </TableCell>
                     
                     {/* Actions */}
-                    <TableCell>
+                    <TableCell className="min-w-[200px]">
                       <div className="space-y-1">
-                        {decision.company && (
-                          <Button
-                            variant={decision.needsReview ? 'default' : 'outline'}
-                            size="sm"
-                            onClick={() => handleOpenMatchDialog(index)}
-                          >
-                            {decision.needsReview ? (
-                              <>
+                        {editingIndex === index ? (
+                          <>
+                            <Button
+                              variant="default"
+                              size="sm"
+                              onClick={() => handleSaveEdit(index)}
+                              className="w-full"
+                            >
+                              Save
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={handleCancelEdit}
+                              className="w-full"
+                            >
+                              Cancel
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            {!decision.company && decision.stage === 'other' && (
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => handleStartEdit(index)}
+                                className="w-full"
+                              >
                                 <AlertCircle className="h-3 w-3 mr-1" />
-                                Review
-                              </>
-                            ) : (
-                              <>
-                                <Search className="h-3 w-3 mr-1" />
-                                Change
-                              </>
+                                Fix Entry
+                              </Button>
                             )}
-                          </Button>
-                        )}
-                        
-                        {/* Individual EBA Search - Show when employer matched and EBA status needs update */}
-                        {decision.shouldUpdateEbaStatus && decision.matchedEmployer && decision.action === 'import' && (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => handleIndividualEbaSearch(decision.matchedEmployer.id, decision.matchedEmployer.name)}
-                            className="gap-1 w-full"
-                          >
-                            <FileSearch className="h-3 w-3" />
-                            Search EBA for {decision.matchedEmployer.name}
-                          </Button>
+                            {decision.company && (
+                              <Button
+                                variant={decision.needsReview ? 'default' : 'outline'}
+                                size="sm"
+                                onClick={() => handleOpenMatchDialog(index)}
+                                className="w-full"
+                              >
+                                {decision.needsReview ? (
+                                  <>
+                                    <AlertCircle className="h-3 w-3 mr-1" />
+                                    Review
+                                  </>
+                                ) : (
+                                  <>
+                                    <Search className="h-3 w-3 mr-1" />
+                                    Change
+                                  </>
+                                )}
+                              </Button>
+                            )}
+                            
+                            {/* Individual EBA Search - Show when employer matched and EBA status needs update */}
+                            {decision.shouldUpdateEbaStatus && decision.matchedEmployer && decision.action === 'import' && (
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => handleIndividualEbaSearch(decision.matchedEmployer.id, decision.matchedEmployer.name)}
+                                className="gap-1 w-full text-xs"
+                                title={`Search Fair Work Commission EBA database for ${decision.matchedEmployer.name}`}
+                              >
+                                <FileSearch className="h-3 w-3" />
+                                <span className="truncate">Search EBA</span>
+                              </Button>
+                            )}
+                          </>
                         )}
                       </div>
                     </TableCell>
@@ -516,6 +686,7 @@ export function SubcontractorsReview({
           suggestedMatch={selectedSubcontractor.matchedEmployer}
           allEmployers={allEmployers}
           onConfirm={handleMatchConfirm}
+          tradeTypeCode={selectedSubcontractor.trade_type_code}
         />
       )}
 

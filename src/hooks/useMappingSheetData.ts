@@ -36,6 +36,10 @@ export interface TradeContractor {
   matchedAt?: string;
   confirmedAt?: string;
   matchNotes?: string;
+  // Status tracking fields
+  status?: string;
+  statusUpdatedAt?: string;
+  statusUpdatedBy?: string;
 }
 
 export interface MappingSheetData {
@@ -137,6 +141,9 @@ export function useMappingSheetData(projectId: string) {
         .select(`
           id,
           employer_id,
+          status,
+          status_updated_at,
+          status_updated_by,
           source,
           match_status,
           match_confidence,
@@ -173,6 +180,9 @@ export function useMappingSheetData(projectId: string) {
           matchedAt: t.matched_at,
           confirmedAt: t.confirmed_at,
           matchNotes: t.match_notes,
+          status: t.status,
+          statusUpdatedAt: t.status_updated_at,
+          statusUpdatedBy: t.status_updated_by,
         });
       });
 
@@ -180,7 +190,7 @@ export function useMappingSheetData(projectId: string) {
       // 4. Get trade contractors from project_contractor_trades (legacy)
       const { data: projectTrades } = await supabase
         .from("project_contractor_trades")
-        .select("id, employer_id, trade_type, stage, estimated_project_workforce, source, match_status, match_confidence, matched_at, confirmed_at, match_notes, employers(name, enterprise_agreement_status)")
+        .select("id, employer_id, trade_type, stage, estimated_project_workforce, status, status_updated_at, status_updated_by, source, match_status, match_confidence, matched_at, confirmed_at, match_notes, employers(name, enterprise_agreement_status)")
         .eq("project_id", projectId);
 
       (projectTrades || []).forEach((t: any) => {
@@ -208,7 +218,10 @@ export function useMappingSheetData(projectId: string) {
           matchConfidence: t.match_confidence,
           matchedAt: t.matched_at,
           confirmedAt: t.confirmed_at,
-          matchNotes: t.match_notes
+          matchNotes: t.match_notes,
+          status: t.status,
+          statusUpdatedAt: t.status_updated_at,
+          statusUpdatedBy: t.status_updated_by,
         });
       });
 

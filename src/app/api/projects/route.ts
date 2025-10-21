@@ -41,6 +41,7 @@ export interface ProjectRecord {
     employers?: { 
       name: string | null;
       enterprise_agreement_status?: boolean | null;
+      eba_status_source?: string | null;
     } | null;
   }[];
 }
@@ -309,7 +310,16 @@ export async function GET(request: NextRequest) {
       full_address: row.full_address,
       
       // Transform project_assignments_data back to expected format
-      project_assignments: row.project_assignments_data || [],
+      project_assignments: (row.project_assignments_data || []).map((assignment: any) => ({
+        ...assignment,
+        employers: assignment.employers
+          ? {
+              ...assignment.employers,
+              enterprise_agreement_status: assignment.employers.enterprise_agreement_status ?? null,
+              eba_status_source: assignment.employers.eba_status_source ?? null,
+            }
+          : null,
+      })),
     }));
 
     // Transform summaries to match client expectations

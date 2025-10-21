@@ -6,6 +6,7 @@ import { InviteUserDialog } from "@/components/admin/InviteUserDialog"
 import { AddDraftUserDialog } from "@/components/admin/AddDraftUserDialog"
 import { PendingProjectsTable } from "@/components/admin/PendingProjectsTable"
 import { PendingEmployersTable } from "@/components/admin/PendingEmployersTable"
+import { PendingEmployerDuplicateDetector } from "@/components/admin/PendingEmployerDuplicateDetector"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
@@ -355,14 +356,21 @@ export default function AdminPage() {
                         />
                       </div>
 
-                      <div>
-                        <h3 className="text-base font-semibold mb-3">
+                      <div className="space-y-4">
+                        <h3 className="text-base font-semibold">
                           Pending Employers ({pendingEmployers.length})
                         </h3>
+                        
+                        {/* Duplicate Detection */}
+                        <PendingEmployerDuplicateDetector
+                          pendingCount={pendingEmployers.length}
+                          onMergeComplete={fetchPendingItems}
+                        />
+                        
+                        {/* Enhanced Pending Employers Table */}
                         <PendingEmployersTable
                           employers={pendingEmployers}
-                          onApprove={handleApproveEmployer}
-                          onReject={handleRejectEmployer}
+                          onRefresh={fetchPendingItems}
                         />
                       </div>
                     </div>
@@ -557,14 +565,21 @@ export default function AdminPage() {
                   />
                 </div>
 
-                <div>
-                  <h4 className="text-base font-semibold mb-4">
+                <div className="space-y-4">
+                  <h4 className="text-base font-semibold">
                     Pending Employers ({pendingEmployers.length})
                   </h4>
+                  
+                  {/* Duplicate Detection */}
+                  <PendingEmployerDuplicateDetector
+                    pendingCount={pendingEmployers.length}
+                    onMergeComplete={fetchPendingItems}
+                  />
+                  
+                  {/* Enhanced Pending Employers Table */}
                   <PendingEmployersTable
                     employers={pendingEmployers}
-                    onApprove={handleApproveEmployer}
-                    onReject={handleRejectEmployer}
+                    onRefresh={fetchPendingItems}
                   />
                 </div>
               </div>
@@ -594,6 +609,21 @@ export default function AdminPage() {
             <DataUploadTab />
             <BatchesManagement />
             <DuplicateEmployerManager />
+            {isAdmin && (
+              <div>
+                <h3 className="text-lg font-semibold mb-4">Key Contractor Trades</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Manage which trades are prioritized across the system.{' '}
+                  <Button
+                    variant="link"
+                    className="p-0 h-auto"
+                    onClick={() => window.location.href = '/admin/key-trades'}
+                  >
+                    Open Key Trades Manager →
+                  </Button>
+                </p>
+              </div>
+            )}
           </TabsContent>
           {isAdmin && (
             <>

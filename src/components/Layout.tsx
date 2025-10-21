@@ -5,7 +5,7 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
-  Menu, LogOut, Users, Building, MapPin, BarChart3, FolderOpen, FileCheck, Shield, AlertTriangle, QrCode, HelpCircle, Crown
+  Menu, LogOut, Users, Building, MapPin, BarChart3, FolderOpen, FileCheck, Shield, AlertTriangle, QrCode, HelpCircle, Crown, Settings
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -101,6 +101,9 @@ const Layout = ({ children }: LayoutProps) => {
 
     // Bug Report - external link
     items.push({ path: "https://fider.uconstruct.app", label: "Bug Report", icon: AlertTriangle, external: true });
+
+    // Settings - always show for authenticated users
+    items.push({ path: "/settings", label: "Settings", icon: Settings });
     
     return items;
   };

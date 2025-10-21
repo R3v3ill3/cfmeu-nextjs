@@ -122,30 +122,52 @@ export default function DuplicateEmployerManager() {
       });
 
       // Use database function for efficient relationship counting
-      const employerIds = (employerData || []).map((emp: any) => emp.id);
+      const employerIds = (employerData || []).map((emp: any) => emp.id).filter((id: any) => id);
       
       if (employerIds.length > 0) {
-        const { data: impactData } = await supabase
-          .rpc('get_employer_merge_impact', { p_employer_ids: employerIds });
-        
-        const impactMap = new Map();
-        (impactData || []).forEach((impact: any) => {
-          impactMap.set(impact.employer_id, {
-            worker_count: impact.worker_placements_count || 0,
-            project_count: (impact.project_roles_count || 0) + (impact.project_trades_count || 0) + (impact.builder_projects_count || 0),
-            eba_records_count: impact.eba_records_count || 0
-          });
-        });
-        
-        const enrichedEmployers: EmployerRecord[] = (employerData || []).map((emp: any) => {
-          const impact = impactMap.get(emp.id) || { worker_count: 0, project_count: 0, eba_records_count: 0 };
-          return {
+        try {
+          const { data: impactData, error: impactError } = await supabase
+            .rpc('get_employer_merge_impact', { p_employer_ids: employerIds });
+          
+          if (impactError) {
+            console.warn('get_employer_merge_impact error (non-fatal):', impactError);
+            // Fall back to employers without impact data
+            setEmployers(employerData.map((emp: any) => ({
+              ...emp,
+              worker_count: 0,
+              project_count: 0,
+              eba_records_count: 0
+            })));
+          } else {
+            const impactMap = new Map();
+            (impactData || []).forEach((impact: any) => {
+              impactMap.set(impact.employer_id, {
+                worker_count: impact.worker_placements_count || 0,
+                project_count: (impact.project_roles_count || 0) + (impact.project_trades_count || 0) + (impact.builder_projects_count || 0),
+                eba_records_count: impact.eba_records_count || 0
+              });
+            });
+            
+            const enrichedEmployers: EmployerRecord[] = (employerData || []).map((emp: any) => {
+              const impact = impactMap.get(emp.id) || { worker_count: 0, project_count: 0, eba_records_count: 0 };
+              return {
+                ...emp,
+                ...impact
+              };
+            });
+            
+            setEmployers(enrichedEmployers);
+          }
+        } catch (rpcError) {
+          console.warn('RPC call failed (non-fatal):', rpcError);
+          // Fall back to employers without impact data
+          setEmployers(employerData.map((emp: any) => ({
             ...emp,
-            ...impact
-          };
-        });
-        
-        setEmployers(enrichedEmployers);
+            worker_count: 0,
+            project_count: 0,
+            eba_records_count: 0
+          })));
+        }
       } else {
         setEmployers([]);
       }

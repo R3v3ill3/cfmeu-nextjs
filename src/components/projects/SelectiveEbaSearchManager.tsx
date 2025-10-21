@@ -12,6 +12,7 @@ import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { useKeyContractorTradesSet } from '@/hooks/useKeyContractorTrades';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   Search,
@@ -84,20 +85,6 @@ const EBA_STATUS_OPTIONS = [
   { value: 'has_eba', label: 'Has EBA Only' },
 ] as const;
 
-// Key contractor trade types (from SubsetEbaStats.tsx comments)
-const KEY_CONTRACTOR_TRADES = new Set([
-  'demolition',
-  'piling', 
-  'concrete',
-  'scaffolding',
-  'form_work',
-  'tower_crane',
-  'mobile_crane',
-  'labour_hire',
-  'earthworks',
-  'traffic_control'
-]);
-
 // Key contractor roles
 const KEY_CONTRACTOR_ROLES = new Set(['builder', 'project_manager']);
 
@@ -137,6 +124,9 @@ type ScraperJobEvent = {
 }
 
 export default function SelectiveEbaSearchManager({ projectId, onClose }: SelectiveEbaSearchManagerProps) {
+  // Fetch key trades dynamically from database (replaces hard-coded list)
+  const { tradeSet: KEY_CONTRACTOR_TRADES } = useKeyContractorTradesSet();
+  
   // State management
   const [employers, setEmployers] = useState<SelectableEmployer[]>([]);
   const [filteredEmployers, setFilteredEmployers] = useState<SelectableEmployer[]>([]);

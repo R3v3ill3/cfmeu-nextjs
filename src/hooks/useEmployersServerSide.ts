@@ -26,6 +26,10 @@ export interface EmployerRecord {
   phone: string | null;
   estimated_worker_count: number | null;
   incolink_id: string | null;
+  enterprise_agreement_status: boolean | null;
+  eba_status_source: string | null;
+  eba_status_updated_at: string | null;
+  eba_status_notes: string | null;
   company_eba_records: any[];
   worker_placements: { id: string }[];
   project_assignments: { id: string }[];

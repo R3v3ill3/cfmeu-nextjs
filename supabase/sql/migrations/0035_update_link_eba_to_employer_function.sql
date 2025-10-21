@@ -57,6 +57,7 @@ BEGIN
     END IF;
 
     -- Refresh materialized views and derived employer status so the UI sees new data immediately
+    PERFORM set_employer_eba_status(p_employer_id, TRUE, 'fwc_scraper', 'FWC scraper matched EBA record');
     PERFORM refresh_employer_eba_status(p_employer_id);
     PERFORM refresh_employer_related_views();
 END;

@@ -17,6 +17,10 @@ import { useMappingSheetData } from "@/hooks/useMappingSheetData";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal";
+import { useKeyContractorTradesSet } from "@/hooks/useKeyContractorTrades";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { StatusSelectSimple } from "@/components/ui/StatusSelect";
+import { TradeStatus } from "@/components/ui/StatusBadge";
 
 type Row = {
   key: string; // stage|trade value
@@ -35,27 +39,19 @@ type Row = {
   matchedAt?: string;
   confirmedAt?: string;
   matchNotes?: string;
+  // Status tracking fields
+  status?: string;
+  statusUpdatedAt?: string;
+  statusUpdatedBy?: string;
 };
 
 function startCase(s: string): string {
   return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-// Define key contractor trade types
-const KEY_CONTRACTOR_TRADES = new Set([
-  'demolition',
-  'piling', 
-  'concrete',
-  'scaffolding',
-  'form_work',
-  'tower_crane',
-  'mobile_crane',
-  'labour_hire',
-  'earthworks',
-  'traffic_control'
-]);
-
 export function MappingSubcontractorsTable({ projectId }: { projectId: string }) {
+  // Fetch key trades dynamically from database (replaces hard-coded list)
+  const { tradeSet: KEY_CONTRACTOR_TRADES } = useKeyContractorTradesSet();
   const [rowsByTrade, setRowsByTrade] = useState<Record<string, Row[]>>({});
   const [manageOpen, setManageOpen] = useState(false);
   const [activeRow, setActiveRow] = useState<Row | null>(null);
@@ -70,6 +66,9 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
   // Employer detail modal state
   const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null);
   const [isEmployerDetailOpen, setIsEmployerDetailOpen] = useState(false);
+  
+  // Status filtering state
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed'>('all');
   
   // Get unified mapping data which includes trade contractors
   const { data: mappingData, isLoading } = useMappingSheetData(projectId);
@@ -91,7 +90,7 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
       trade_label: tc.tradeLabel,
       employer_id: tc.employerId,
       employer_name: tc.employerName,
-      id: tc.id.startsWith('project_trade:') ? tc.id.replace('project_trade:', '') : tc.id,
+      id: tc.id, // Keep full ID with prefix for table identification
       eba: tc.ebaStatus ?? null,
       isSkeleton: false,
       // Auto-match tracking fields
@@ -101,6 +100,10 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
       matchedAt: tc.matchedAt,
       confirmedAt: tc.confirmedAt,
       matchNotes: tc.matchNotes,
+      // Status tracking fields
+      status: tc.status,
+      statusUpdatedAt: tc.statusUpdatedAt,
+      statusUpdatedBy: tc.statusUpdatedBy,
     }));
 
     // 3. Build the rows, ensuring at least one (skeleton) row per trade
@@ -146,11 +149,17 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
         return;
       }
 
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
       const payload: any = {
         project_id: projectId,
         employer_id: employerId,
         assignment_type: 'trade_work',
         trade_type_id: (tradeType as any).id,
+        status: r.status || 'active',  // Include current status or default to active
+        status_updated_at: new Date().toISOString(),
+        status_updated_by: user.id,
         source: 'manual',
         match_status: 'confirmed',
         match_confidence: 1.0,
@@ -186,6 +195,9 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
         employer_name: employerName, 
         isSkeleton: false, 
         eba: (emp as any)?.enterprise_agreement_status ?? null,
+        status: r.status || 'active',
+        statusUpdatedAt: new Date().toISOString(),
+        statusUpdatedBy: user.id,
         dataSource: 'manual',
         matchStatus: 'confirmed',
         matchConfidence: 1.0,
@@ -209,6 +221,69 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
       });
     } catch (e: any) {
       toast.error(e?.message || "Failed to save contractor row");
+    }
+  };
+
+  const updateStatus = async (row: Row, newStatus: TradeStatus) => {
+    if (!row.id) return;
+    
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      
+      // Determine which table to update based on ID prefix
+      if (row.id.startsWith('assignment_trade:')) {
+        const assignmentId = row.id.replace('assignment_trade:', '');
+        await (supabase as any)
+          .from('project_assignments')
+          .update({
+            status: newStatus,
+            status_updated_at: new Date().toISOString(),
+            status_updated_by: user.id,
+          })
+          .eq('id', assignmentId);
+      } else if (row.id.startsWith('project_trade:')) {
+        const tradeId = row.id.replace('project_trade:', '');
+        await (supabase as any)
+          .from('project_contractor_trades')
+          .update({
+            status: newStatus,
+            status_updated_at: new Date().toISOString(),
+            status_updated_by: user.id,
+          })
+          .eq('id', tradeId);
+      } else {
+        // Fallback - try project_assignments first
+        await (supabase as any)
+          .from('project_assignments')
+          .update({
+            status: newStatus,
+            status_updated_at: new Date().toISOString(),
+            status_updated_by: user.id,
+          })
+          .eq('id', row.id);
+      }
+      
+      // Update local state
+      setRowsByTrade(prev => {
+        const newRows = { ...prev };
+        const tradeRows = newRows[row.trade_value] || [];
+        const index = tradeRows.findIndex(r => r.id === row.id);
+        if (index >= 0) {
+          tradeRows[index] = {
+            ...tradeRows[index],
+            status: newStatus,
+            statusUpdatedAt: new Date().toISOString(),
+            statusUpdatedBy: user.id,
+          };
+        }
+        newRows[row.trade_value] = tradeRows;
+        return newRows;
+      });
+      
+      toast.success('Status updated');
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to update status');
     }
   };
 
@@ -360,9 +435,10 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
     
     return (
       <>
-        <tr><td colSpan={4} className="font-semibold pt-3">{title}</td></tr>
+        <tr><td colSpan={5} className="font-semibold pt-3">{title}</td></tr>
         {tradesForStage.map(trade => {
-          const assignments = rowsByTrade[trade.value] || [];
+          const assignments = filteredRowsByTrade[trade.value] || [];
+          if (assignments.length === 0) return null;
           return assignments.map((row, index) => (
             <TableRow key={row.key}>
               <TableCell className={"w-56 " + (row.employer_id ? "bg-muted/20" : "")}>
@@ -370,6 +446,17 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
               </TableCell>
               <TableCell>
                 {companyCell(row)}
+              </TableCell>
+              <TableCell className="w-36">
+                {row.isSkeleton || !row.employer_id ? (
+                  <StatusBadge status="unknown" showLabel={false} size="sm" />
+                ) : (
+                  <StatusSelectSimple
+                    value={(row.status as TradeStatus) || 'active'}
+                    onChange={(status) => updateStatus(row, status)}
+                    size="sm"
+                  />
+                )}
               </TableCell>
               <TableCell className="w-40">{ebaCell(row)}</TableCell>
               <TableCell className="w-20 text-center">
@@ -388,19 +475,84 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
     )
   };
 
+  // Calculate status counts for filtering
+  const statusCounts = Object.values(rowsByTrade).flat().reduce((acc, row) => {
+    if (row.isSkeleton || !row.employer_id) return acc;
+    const status = row.status || 'active';
+    acc.total++;
+    if (status === 'active' || status === 'planned' || status === 'tendering' || status === 'not_yet_tendered' || status === 'unknown') {
+      acc.active++;
+    }
+    if (status === 'completed') {
+      acc.completed++;
+    }
+    return acc;
+  }, { total: 0, active: 0, completed: 0 });
+
+  // Apply status filter
+  const filteredRowsByTrade = Object.entries(rowsByTrade).reduce((acc, [trade, rows]) => {
+    if (statusFilter === 'all') {
+      acc[trade] = rows;
+    } else if (statusFilter === 'active') {
+      acc[trade] = rows.filter(r => {
+        if (r.isSkeleton || !r.employer_id) return true; // Keep skeleton rows
+        const status = r.status || 'active';
+        return ['active', 'planned', 'tendering', 'not_yet_tendered', 'unknown', 'on_hold'].includes(status);
+      });
+    } else if (statusFilter === 'completed') {
+      acc[trade] = rows.filter(r => {
+        if (r.isSkeleton || !r.employer_id) return false; // Hide skeleton rows
+        return r.status === 'completed';
+      });
+    }
+    // Only include trade if it has rows
+    if (acc[trade].length > 0) {
+      return acc;
+    }
+    return acc;
+  }, {} as Record<string, Row[]>);
+
   return (
     <div className="mt-6">
       <div className="flex items-center justify-between mb-4">
         <div className="font-semibold uppercase tracking-wide text-sm">Subcontractors</div>
-        <div className="flex items-center space-x-2 no-print">
-          <Checkbox
-            id="key-contractors-filter"
-            checked={showKeyContractorsOnly}
-            onCheckedChange={(checked) => setShowKeyContractorsOnly(checked === true)}
-          />
-          <Label htmlFor="key-contractors-filter" className="text-sm font-medium cursor-pointer">
-            Show key contractors only
-          </Label>
+        <div className="flex items-center gap-4 no-print">
+          {/* Status Filter */}
+          <div className="flex items-center gap-1">
+            <Button
+              variant={statusFilter === 'all' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setStatusFilter('all')}
+            >
+              All ({statusCounts.total})
+            </Button>
+            <Button
+              variant={statusFilter === 'active' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setStatusFilter('active')}
+            >
+              Active ({statusCounts.active})
+            </Button>
+            <Button
+              variant={statusFilter === 'completed' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setStatusFilter('completed')}
+            >
+              Completed ({statusCounts.completed})
+            </Button>
+          </div>
+          
+          {/* Key Contractors Filter */}
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="key-contractors-filter"
+              checked={showKeyContractorsOnly}
+              onCheckedChange={(checked) => setShowKeyContractorsOnly(checked === true)}
+            />
+            <Label htmlFor="key-contractors-filter" className="text-sm font-medium cursor-pointer">
+              Key contractors only
+            </Label>
+          </div>
         </div>
       </div>
       {isLoading ? (
@@ -414,6 +566,7 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
               <TableRow>
                 <TableHead className="w-56">Trade</TableHead>
                 <TableHead>Company</TableHead>
+                <TableHead className="w-36">Status</TableHead>
                 <TableHead className="w-40">EBA (Y/N)</TableHead>
                 <TableHead className="w-20 text-center">Compliance</TableHead>
               </TableRow>

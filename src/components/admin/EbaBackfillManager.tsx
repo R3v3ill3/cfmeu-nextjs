@@ -31,20 +31,7 @@ import {
 } from 'lucide-react';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-
-// Define key contractor roles and trades based on existing EbaProjectSearch definitions
-const KEY_CONTRACTOR_TRADES = new Set([
-  'demolition',
-  'piling', 
-  'concrete',
-  'scaffolding',
-  'form_work',
-  'tower_crane',
-  'mobile_crane',
-  'labour_hire',
-  'earthworks',
-  'traffic_control'
-]);
+import { useKeyContractorTradesSet } from '@/hooks/useKeyContractorTrades';
 
 const KEY_CONTRACTOR_ROLES = new Set(['builder', 'project_manager']);
 
@@ -119,6 +106,10 @@ interface ManualSearchState {
 
 export function EbaBackfillManager() {
   const { toast } = useToast();
+  
+  // Fetch key trades dynamically from database (replaces hard-coded list)
+  const { tradeSet: KEY_CONTRACTOR_TRADES } = useKeyContractorTradesSet();
+  
   const [employers, setEmployers] = useState<EmployerWithoutEba[]>([]);
   const [filteredEmployers, setFilteredEmployers] = useState<EmployerWithoutEba[]>([]);
   const [isLoading, setIsLoading] = useState(true);

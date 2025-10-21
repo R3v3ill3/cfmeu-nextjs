@@ -13,6 +13,7 @@ import { CfmeuEbaBadge, getProjectEbaStatus } from "@/components/ui/CfmeuEbaBadg
 import JobSitesManager from "@/components/projects/JobSitesManager"
 import EditProjectDialog from "@/components/projects/EditProjectDialog"
 import DeleteProjectDialog from "@/components/projects/DeleteProjectDialog"
+import { MarkProjectCompleteButton } from "@/components/projects/MarkProjectCompleteButton"
 import ContractorsSummary from "@/components/projects/ContractorsSummary"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
@@ -37,6 +38,7 @@ import { ComplianceMobileView } from "@/components/projects/compliance/Complianc
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner"
 import { MappingSheetPage1 } from "@/components/projects/mapping/MappingSheetPage1"
 import { MappingSubcontractorsTable } from "@/components/projects/mapping/MappingSubcontractorsTable"
+import { ProjectSiteVisits } from "@/components/siteVisits/ProjectSiteVisits"
 
 function SiteContactsSummary({ projectId, siteIds }: { projectId: string; siteIds: string[] }) {
   const [delegates, setDelegates] = useState<string[]>([])
@@ -649,6 +651,12 @@ export default function ProjectDetailPage() {
         {project && (
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => { try { router.push('/projects') } catch {} }}>Close</Button>
+            <MarkProjectCompleteButton 
+              projectId={project.id} 
+              projectName={project.name}
+              variant="outline"
+              size="default"
+            />
             <EditProjectDialog project={project} />
             <DeleteProjectDialog projectId={project.id} projectName={project.name} />
           </div>
@@ -675,6 +683,7 @@ export default function ProjectDetailPage() {
         <TabsList>
           {/* Sites tab trigger hidden; accessible via Overview 'Sites' link */}
           <TabsTrigger value="mappingsheets">Mapping Sheets</TabsTrigger>
+          <TabsTrigger value="site-visits">Site Visits</TabsTrigger>
           <TabsTrigger value="wallcharts">Wallcharts</TabsTrigger>
           <TabsTrigger value="eba-search">EBA Search</TabsTrigger>
           <TabsTrigger value="audit-compliance">Audit & Compliance</TabsTrigger>
@@ -758,6 +767,14 @@ export default function ProjectDetailPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="site-visits">
+          <ProjectSiteVisits 
+            projectId={projectId} 
+            projectName={project?.name}
+            autoCreate={false}
+          />
         </TabsContent>
 
         <TabsContent value="eba-search">

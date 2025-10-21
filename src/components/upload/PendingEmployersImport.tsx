@@ -17,6 +17,7 @@ import { normalizeEmployerName } from '@/lib/employers/normalize';
 import { useAliasTelemetry } from '@/hooks/useAliasTelemetry';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
+import { EbaEmployerMatchDialog } from './EbaEmployerMatchDialog';
 
 // Type aliases inferred from Supabase client
 type Employer = {
@@ -143,13 +144,38 @@ export default function PendingEmployersImport() {
     const [importProgress, setImportProgress] = useState({ current: 0, total: 0, currentEmployer: '' });
     const [showProcessedEmployers, setShowProcessedEmployers] = useState(false);
     
-    // EBA search states
-    const [showEbaSearch, setShowEbaSearch] = useState(false);
-    const [ebaSearchStates, setEbaSearchStates] = useState<Record<string, EbaSearchState>>({});
-    const [isEbaSearching, setIsEbaSearching] = useState(false);
-    const [expandedEbaResults, setExpandedEbaResults] = useState<Set<string>>(new Set());
-    const [employersToDismiss, setEmployersToDismiss] = useState<Set<string>>(new Set());
-    
+  // EBA search states
+  const [showEbaSearch, setShowEbaSearch] = useState(false);
+  const [ebaSearchStates, setEbaSearchStates] = useState<Record<string, EbaSearchState>>({});
+  const [isEbaSearching, setIsEbaSearching] = useState(false);
+  const [expandedEbaResults, setExpandedEbaResults] = useState<Set<string>>(new Set());
+  const [employersToDismiss, setEmployersToDismiss] = useState<Set<string>>(new Set());
+  
+  // Manual match dialog state
+  const [manualMatchDialog, setManualMatchDialog] = useState<{
+    open: boolean;
+    pendingEmployerId: string | null;
+    pendingEmployerName: string;
+  }>({
+    open: false,
+    pendingEmployerId: null,
+    pendingEmployerName: '',
+  });
+
+  // Delete confirmation dialog
+  const [deleteConfirmDialog, setDeleteConfirmDialog] = useState<{
+    open: boolean;
+    employerId: string | null;
+    employerName: string;
+  }>({
+    open: false,
+    employerId: null,
+    employerName: '',
+  });
+
+  // Filter for skipped employers
+  const [showSkipped, setShowSkipped] = useState(false);
+  
   const { toast } = useToast();
   const aliasTelemetry = useAliasTelemetry({ scope: 'pending_employers_import' });
 
@@ -346,8 +372,21 @@ export default function PendingEmployersImport() {
         .select('*');
       
       if (!showProcessedEmployers) {
-        // Only load employers that haven't been processed (pending or null status)
-        query = query.or('import_status.is.null,import_status.eq.pending');
+        // Build filter: only show unprocessed employers
+        const statuses = ['import_status.is.null', 'import_status.eq.pending'];
+        
+        if (showSkipped) {
+          statuses.push('import_status.eq.skipped');
+        }
+        
+        // Include matched and create_new ONLY during active workflow
+        // After import, these should have been updated to 'imported'
+        if (workflowStep === 'merge' || workflowStep === 'import') {
+          statuses.push('import_status.eq.matched');
+          statuses.push('import_status.eq.create_new');
+        }
+        
+        query = query.or(statuses.join(','));
       }
       
       const { data, error } = await query.order('created_at', { ascending: false });
@@ -377,12 +416,218 @@ export default function PendingEmployersImport() {
     } finally {
       setIsLoading(false);
     }
-  }, [projectLinkingMode, showProcessedEmployers]);
+  }, [projectLinkingMode, showProcessedEmployers, showSkipped]);
 
   // Load pending employers on mount and when filter changes
   useEffect(() => {
     loadPendingEmployers();
-  }, [showProcessedEmployers, loadPendingEmployers]);
+  }, [loadPendingEmployers]);
+
+  // ============================================================================
+  // MANUAL MATCH, SKIP, DELETE HANDLERS
+  // ============================================================================
+
+  // Manual Match Handlers
+  const openManualMatch = (employerId: string, employerName: string) => {
+    setManualMatchDialog({
+      open: true,
+      pendingEmployerId: employerId,
+      pendingEmployerName: employerName,
+    });
+  };
+
+  const handleManualMatchSelect = async (matchedEmployerId: string) => {
+    if (!manualMatchDialog.pendingEmployerId) return;
+    
+    const supabase = getSupabaseBrowserClient();
+    
+    console.log(`[Manual Match] Saving match for ${manualMatchDialog.pendingEmployerName}`);
+    console.log(`  Pending ID: ${manualMatchDialog.pendingEmployerId}`);
+    console.log(`  Matched Employer ID: ${matchedEmployerId}`);
+    
+    // Bypass duplicate detection - persist directly to database
+    const { error } = await supabase
+      .from('pending_employers')
+      .update({
+        import_status: 'matched',
+        matched_employer_id: matchedEmployerId,
+      })
+      .eq('id', manualMatchDialog.pendingEmployerId);
+    
+    if (!error) {
+      console.log(`  → ✅ Match saved to database`);
+      toast({
+        title: 'Match Saved',
+        description: 'Employer matched successfully. Will update existing employer on import.',
+      });
+      
+      // Refresh list to show updated status and reload the matched_employer_id
+      await loadPendingEmployers();
+    } else {
+      console.error(`  → ❌ Match save failed:`, error);
+      toast({
+        title: 'Match Failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+    
+    setManualMatchDialog({ open: false, pendingEmployerId: null, pendingEmployerName: '' });
+  };
+
+  const handleManualMatchCreateNew = async () => {
+    if (!manualMatchDialog.pendingEmployerId) return;
+    
+    const supabase = getSupabaseBrowserClient();
+    
+    // Mark as create new in database
+    const { error } = await supabase
+      .from('pending_employers')
+      .update({
+        import_status: 'create_new',
+        matched_employer_id: null, // Clear any previous match
+      })
+      .eq('id', manualMatchDialog.pendingEmployerId);
+    
+    if (!error) {
+      toast({
+        title: 'Marked as New',
+        description: 'Will create new employer on import',
+      });
+      
+      loadPendingEmployers();
+    } else {
+      toast({
+        title: 'Update Failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+    
+    setManualMatchDialog({ open: false, pendingEmployerId: null, pendingEmployerName: '' });
+  };
+
+  const handleManualMatchSkip = async () => {
+    if (!manualMatchDialog.pendingEmployerId) return;
+    
+    const supabase = getSupabaseBrowserClient();
+    
+    // Update status to skipped (will be hidden from list)
+    const { error } = await supabase
+      .from('pending_employers')
+      .update({ import_status: 'skipped' })
+      .eq('id', manualMatchDialog.pendingEmployerId);
+    
+    if (!error) {
+      toast({
+        title: 'Skipped',
+        description: 'Employer hidden from import list',
+      });
+      
+      // Refresh list (employer will disappear if showSkipped is false)
+      loadPendingEmployers();
+    } else {
+      toast({
+        title: 'Skip Failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+    
+    setManualMatchDialog({ open: false, pendingEmployerId: null, pendingEmployerName: '' });
+  };
+
+  // Quick Skip (without opening dialog)
+  const skipPendingEmployer = async (employerId: string, employerName: string) => {
+    const supabase = getSupabaseBrowserClient();
+    
+    const { error } = await supabase
+      .from('pending_employers')
+      .update({ import_status: 'skipped' })
+      .eq('id', employerId);
+    
+    if (!error) {
+      toast({
+        title: 'Skipped',
+        description: `"${employerName}" hidden from import list`,
+      });
+      loadPendingEmployers();
+    } else {
+      toast({
+        title: 'Skip Failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Delete Handler (opens confirmation dialog)
+  const openDeleteConfirm = (employerId: string, employerName: string) => {
+    setDeleteConfirmDialog({
+      open: true,
+      employerId: employerId,
+      employerName: employerName,
+    });
+  };
+
+  const confirmDeletePendingEmployer = async () => {
+    if (!deleteConfirmDialog.employerId) return;
+    
+    const supabase = getSupabaseBrowserClient();
+    const employerName = deleteConfirmDialog.employerName;
+    
+    const { error } = await supabase
+      .from('pending_employers')
+      .delete()
+      .eq('id', deleteConfirmDialog.employerId);
+    
+    if (!error) {
+      toast({
+        title: 'Deleted',
+        description: `Removed "${employerName}" from pending list`,
+      });
+      
+      // Remove from selected employers if it was selected
+      setSelectedEmployers(prev => {
+        const updated = new Set(prev);
+        updated.delete(deleteConfirmDialog.employerId!);
+        return updated;
+      });
+      
+      // Refresh list
+      loadPendingEmployers();
+    } else {
+      toast({
+        title: 'Delete Failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+    
+    setDeleteConfirmDialog({ open: false, employerId: null, employerName: '' });
+  };
+
+  // Switch from automatic match to manual search
+  const switchToManualMatch = (employerId: string, employerName: string) => {
+    // Remove from duplicate detections to allow manual override
+    setDuplicateDetections(prev => {
+      const updated = { ...prev };
+      delete updated[employerId];
+      return updated;
+    });
+    
+    // Open manual match dialog
+    openManualMatch(employerId, employerName);
+    
+    toast({
+      title: 'Switched to Manual',
+      description: 'Search for the correct employer match',
+    });
+  };
+
+  // ============================================================================
+  // END MANUAL MATCH, SKIP, DELETE HANDLERS
+  // ============================================================================
 
   const createEmployer = async (pendingEmployer: PendingEmployer): Promise<string> => {
     const supabase = getSupabaseBrowserClient();
@@ -390,10 +635,106 @@ export default function PendingEmployersImport() {
 
     console.log(`Processing employer: ${pendingEmployer.company_name}`);
 
-    // Check if user made a decision about duplicates
+    // Check if user manually matched this employer (takes priority over automatic detection)
+    if (pendingEmployer.import_status === 'matched' && pendingEmployer.matched_employer_id) {
+      console.log(`✓ Using manually matched employer for ${pendingEmployer.company_name}: ${pendingEmployer.matched_employer_id}`);
+      
+      // SIMPLE: Set EBA status if source contains eba_trade_pdf
+      const isEbaImport = pendingEmployer.source?.includes('eba_trade_pdf');
+      
+    if (isEbaImport) {
+      const { error: ebaErr } = await (supabase as any).rpc('set_employer_eba_status', {
+        p_employer_id: pendingEmployer.matched_employer_id,
+        p_status: true,
+        p_source: 'import',
+        p_notes: `Matched via pending employers import (${pendingEmployer.source || 'unknown source'})`
+      });
+      if (ebaErr) {
+        console.error('Failed to set EBA status via RPC:', ebaErr);
+      }
+      console.log(`  → ✅ EBA status set for matched employer`);
+    }
+      
+      const updateData: any = {};
+      
+      // Add trade capabilities if needed
+      if (pendingEmployer.our_role === 'subcontractor') {
+        const finalTradeType = tradeTypeOverrides[pendingEmployer.id] || 
+                              pendingEmployer.user_confirmed_trade_type || 
+                              pendingEmployer.inferred_trade_type || 
+                              'general_construction';
+        
+        // Check if trade capability already exists
+        const { data: existingCapability } = await supabase
+          .from('contractor_trade_capabilities')
+          .select('id')
+          .eq('employer_id', pendingEmployer.matched_employer_id)
+          .eq('trade_type', finalTradeType)
+          .maybeSingle();
+        
+        if (!existingCapability) {
+          await supabase
+            .from('contractor_trade_capabilities')
+            .insert({
+              employer_id: pendingEmployer.matched_employer_id,
+              trade_type: finalTradeType,
+              is_primary: true,
+              notes: `Added via manual match. Original CSV role: ${pendingEmployer.csv_role}`
+            });
+          console.log(`  → Added trade capability: ${finalTradeType}`);
+        }
+      }
+      
+      // Update employer record if we have new data
+      if (Object.keys(updateData).length > 0) {
+        const { error: updateError } = await supabase
+          .from('employers')
+          .update(updateData)
+          .eq('id', pendingEmployer.matched_employer_id);
+        
+        if (updateError) {
+          console.error('Error updating matched employer:', updateError);
+        }
+      }
+      
+      // Mark as imported
+      await supabase
+        .from('pending_employers')
+        .update({ 
+          import_status: 'imported',
+          imported_employer_id: pendingEmployer.matched_employer_id 
+        })
+        .eq('id', pendingEmployer.id);
+      
+      return pendingEmployer.matched_employer_id;
+    }
+
+    // Check if user confirmed create new (bypass duplicate detection)
+    if (pendingEmployer.import_status === 'create_new') {
+      console.log(`✓ Creating new employer as confirmed by user: ${pendingEmployer.company_name}`);
+      // Continue with normal employer creation logic below
+    }
+
+    // Check if user made a decision about duplicates (automatic detection)
     const detection = duplicateDetections[pendingEmployer.id];
     if (detection?.userDecision === 'use_existing' && detection.selectedEmployerId) {
       console.log(`✓ Using selected existing employer for ${pendingEmployer.company_name}: ${detection.selectedEmployerId}`);
+      
+      // SIMPLE: Set EBA status if source contains eba_trade_pdf
+      const isEbaImport = pendingEmployer.source?.includes('eba_trade_pdf');
+      
+      if (isEbaImport) {
+        const { error: ebaErr } = await (supabase as any).rpc('set_employer_eba_status', {
+          p_employer_id: detection.selectedEmployerId,
+          p_status: true,
+          p_source: 'import',
+          p_notes: `Matched via pending employers duplicate resolution (${pendingEmployer.source || 'unknown'})`
+        });
+        if (ebaErr) {
+          console.error('Failed to set EBA status via RPC:', ebaErr);
+        }
+        console.log(`  → ✅ EBA status set for automatic match`);
+      }
       
       // Still create trade capabilities if needed
       if (pendingEmployer.our_role === 'subcontractor') {
@@ -515,16 +856,17 @@ export default function PendingEmployersImport() {
     }
     
     // Step 3: Create new employer
-    const { data: employerData, error: employerError } = await supabase
+    // Create employer first, then update EBA status separately
+    const { data: employerData, error: employerError} = await supabase
       .from('employers')
       .insert({
         name: pendingEmployer.company_name,
-        bci_company_id: raw.companyId || null, // Store BCI Company ID
-        address_line_1: raw.companyStreet,
-        suburb: raw.companyTown,
-        state: raw.companyState,
-        postcode: raw.companyPostcode,
-        phone: raw.companyPhone,
+        bci_company_id: raw.companyId || null,
+        address_line_1: raw.companyStreet || raw.address_line_1,
+        suburb: raw.companyTown || raw.suburb,
+        state: raw.companyState || raw.state,
+        postcode: raw.companyPostcode || raw.postcode,
+        phone: raw.companyPhone || raw.phone,
         email: raw.companyEmail,
         primary_contact_name: `${raw.contactFirstName || ''} ${raw.contactSurname || ''}`.trim(),
         employer_type: 'large_contractor'
@@ -536,6 +878,55 @@ export default function PendingEmployersImport() {
     
     const employerId = employerData.id;
     console.log(`✓ Created new employer: ${pendingEmployer.company_name} (${employerId})`);
+    
+    // SIMPLE FIX: Set EBA status with direct UPDATE (not during INSERT)
+    const isEbaImport = pendingEmployer.source?.includes('eba_trade_pdf');
+    
+    if (isEbaImport) {
+      const { error: ebaError } = await (supabase as any).rpc('set_employer_eba_status', {
+        p_employer_id: employerId,
+        p_status: true,
+        p_source: 'import',
+        p_notes: `Created via pending employers import (${pendingEmployer.source || 'unknown source'})`
+      });
+
+      if (ebaError) {
+        console.error(`Failed to set EBA status via RPC:`, ebaError);
+      } else {
+        console.log(`  → ✅ EBA status set to TRUE`);
+        await (supabase as any).rpc('refresh_employer_eba_status', { p_employer_id: employerId });
+      }
+    }
+    
+    // Store extracted trading names/aliases from EBA import
+    if (raw.aliases && Array.isArray(raw.aliases) && raw.aliases.length > 0) {
+      console.log(`📝 Storing ${raw.aliases.length} alias(es) for ${pendingEmployer.company_name}`);
+      
+      for (const aliasName of raw.aliases) {
+        if (!aliasName || aliasName.trim().length === 0) continue;
+        
+        try {
+          const normalized = normalizeEmployerName(aliasName);
+          await supabase
+            .from('employer_aliases')
+            .upsert({
+              employer_id: employerId,
+              alias: aliasName,
+              alias_normalized: normalized.normalized,
+              source_system: 'eba_trade_pdf',
+              source_identifier: `${pendingEmployer.id}:${aliasName}`,
+              collected_at: new Date().toISOString(),
+              collected_by: pendingEmployer.created_by ?? null,
+              is_authoritative: false,
+              notes: `Trading name extracted from EBA trade PDF: ${raw.sourceFile || 'unknown'}`,
+            }, { onConflict: 'employer_id,alias_normalized' });
+          
+          console.log(`  ✓ Stored alias: "${aliasName}" → normalized: "${normalized.normalized}"`);
+        } catch (aliasError) {
+          console.warn(`  ⚠ Failed to store alias "${aliasName}":`, aliasError);
+        }
+      }
+    }
     
     // Create trade capabilities record if it's a subcontractor with a trade type
     if (pendingEmployer.our_role === 'subcontractor') {
@@ -826,13 +1217,40 @@ export default function PendingEmployersImport() {
 
     setImportResults(results);
     setIsImporting(false);
+    
+    // Refresh materialized view so new employers appear in search immediately
+    if (results.success > 0) {
+      try {
+        console.log('✓ Triggering materialized view refresh for employer search...');
+        await fetch('/api/admin/refresh-views', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scope: 'employers' })
+        });
+        console.log(`✓ Materialized view refreshed - ${results.success} new employers now searchable`);
+      } catch (err) {
+        console.warn('View refresh failed (non-fatal):', err);
+        // Non-fatal - employers are still created, just won't appear in search immediately
+      }
+    }
+    
     setWorkflowStep('complete');
     setShowDuplicateResolution(false);
     
-    // Reload the list
+    // Refresh pending employers list to remove imported employers
     await loadPendingEmployers();
     setSelectedEmployers(new Set());
     setImportProgress({ current: 0, total: 0, currentEmployer: '' });
+    
+    // SIMPLE FIX: Check if ANY employer source contains 'eba_trade_pdf'
+    const hasEbaImports = employersToImport.some(emp => emp.source?.includes('eba_trade_pdf'));
+    
+    if (hasEbaImports && results.success > 0) {
+      console.log(`📋 EBA import detected - opening FWC search dialog`);
+      setTimeout(() => {
+        setShowEbaSearch(true);
+      }, 500);
+    }
   };
 
   const deletePendingEmployer = async (id: string) => {
@@ -923,25 +1341,117 @@ export default function PendingEmployersImport() {
         }
       }
       
-      // Fall back to name matches if no BCI ID matches
+      // Fall back to intelligent search using search_employers_with_aliases RPC
+      // This handles normalization, aliases, and fuzzy matching much better than .eq()
       if (exactMatches.length === 0) {
-        const { data: nameMatches } = await supabase
-          .from('employers')
-          .select('id, name, address_line_1, suburb, state')
-          .eq('name', pendingEmployer.company_name);
-        exactMatches = nameMatches || [];
+        const { data: searchResults, error: searchError } = await supabase
+          .rpc('search_employers_with_aliases', {
+            p_query: pendingEmployer.company_name,
+            p_limit: 20,
+            p_offset: 0,
+            p_include_aliases: true,
+            p_alias_match_mode: 'any'
+          });
+
+        if (!searchError && searchResults && searchResults.length > 0) {
+          // Split into exact and similar matches based on search score
+          const highScoreMatches = searchResults.filter((r: any) => r.search_score >= 80);
+          const mediumScoreMatches = searchResults.filter((r: any) => r.search_score >= 60 && r.search_score < 80);
+
+          // Map to expected format
+          exactMatches = highScoreMatches.map((r: any) => ({
+            id: r.id,
+            name: r.name,
+            address_line_1: r.address_line_1,
+            suburb: r.suburb,
+            state: r.state,
+            search_score: r.search_score,
+            match_type: r.match_type
+          }));
+
+          console.log(`🔍 Found ${exactMatches.length} high-confidence matches for "${pendingEmployer.company_name}"`);
+          exactMatches.forEach((m: any) => {
+            console.log(`  ✓ ${m.name} (score: ${m.search_score}, type: ${m.match_type})`);
+          });
+
+          // Store medium score matches for similar matches section
+          if (exactMatches.length === 0 && mediumScoreMatches.length > 0) {
+            exactMatches = mediumScoreMatches.map((r: any) => ({
+              id: r.id,
+              name: r.name,
+              address_line_1: r.address_line_1,
+              suburb: r.suburb,
+              state: r.state,
+              search_score: r.search_score,
+              match_type: r.match_type
+            }));
+            console.log(`🔍 Found ${exactMatches.length} medium-confidence matches for "${pendingEmployer.company_name}"`);
+          }
+        }
       }
-      
+
+      // Also check extracted aliases (T/A names from EBA imports) if still no matches
+      if (exactMatches.length === 0 && pendingEmployer.raw?.aliases && Array.isArray(pendingEmployer.raw.aliases)) {
+        console.log(`🔍 Checking ${pendingEmployer.raw.aliases.length} extracted alias(es) for matches...`);
+
+        for (const aliasName of pendingEmployer.raw.aliases) {
+          if (!aliasName || aliasName.trim().length === 0) continue;
+
+          // Use the RPC search for aliases too
+          const { data: aliasSearchResults, error: aliasSearchError } = await supabase
+            .rpc('search_employers_with_aliases', {
+              p_query: aliasName,
+              p_limit: 10,
+              p_offset: 0,
+              p_include_aliases: true,
+              p_alias_match_mode: 'any'
+            });
+
+          if (!aliasSearchError && aliasSearchResults && aliasSearchResults.length > 0) {
+            const highScoreAliasMatches = aliasSearchResults.filter((r: any) => r.search_score >= 70);
+            highScoreAliasMatches.forEach((r: any) => {
+              if (!exactMatches.some((m: any) => m.id === r.id)) {
+                exactMatches.push({
+                  id: r.id,
+                  name: r.name,
+                  address_line_1: r.address_line_1,
+                  suburb: r.suburb,
+                  state: r.state,
+                  search_score: r.search_score,
+                  match_type: r.match_type
+                });
+                console.log(`  ✓ Found match via alias "${aliasName}": ${r.name} (score: ${r.search_score})`);
+              }
+            });
+          }
+        }
+      }
+
       // Check for similar matches (only if no exact match)
       let similarMatches: any[] = [];
       if (!exactMatches || exactMatches.length === 0) {
-        const { data } = await supabase
-          .from('employers')
-          .select('id, name, address_line_1, suburb, state')
-          .ilike('name', `%${pendingEmployer.company_name}%`)
-          .neq('name', pendingEmployer.company_name)
-          .limit(10);
-        similarMatches = data || [];
+        // Use the RPC search again with lower threshold for similar matches
+        const { data: similarSearchResults, error: similarSearchError } = await supabase
+          .rpc('search_employers_with_aliases', {
+            p_query: pendingEmployer.company_name,
+            p_limit: 10,
+            p_offset: 0,
+            p_include_aliases: true,
+            p_alias_match_mode: 'any'
+          });
+
+        if (!similarSearchError && similarSearchResults && similarSearchResults.length > 0) {
+          similarMatches = similarSearchResults
+            .filter((r: any) => r.search_score >= 50 && r.search_score < 80)
+            .map((r: any) => ({
+              id: r.id,
+              name: r.name,
+              address_line_1: r.address_line_1,
+              suburb: r.suburb,
+              state: r.state,
+              similarity: r.search_score
+            }));
+        }
       }
       
       const hasExactMatch = Boolean(exactMatches && exactMatches.length > 0);
@@ -1268,7 +1778,36 @@ export default function PendingEmployersImport() {
       // Re-run duplicate detection to update the UI state
       setTimeout(async () => {
         const refreshedDetections = await detectDuplicatesForImport();
-        setDuplicateDetections(refreshedDetections);
+        
+        // IMPORTANT: Preserve existing user decisions when refreshing
+        setDuplicateDetections(prev => {
+          const merged = { ...refreshedDetections };
+          
+          // Restore user decisions from previous state
+          Object.keys(prev).forEach(employerId => {
+            if (merged[employerId]) {
+              // Preserve user decision and selected employer
+              if (prev[employerId].userDecision) {
+                merged[employerId].userDecision = prev[employerId].userDecision;
+              }
+              if (prev[employerId].selectedEmployerId) {
+                merged[employerId].selectedEmployerId = prev[employerId].selectedEmployerId;
+              }
+              // Preserve alias decisions too
+              if (prev[employerId].aliasDecision) {
+                merged[employerId].aliasDecision = prev[employerId].aliasDecision;
+              }
+              if (prev[employerId].aliasNotes) {
+                merged[employerId].aliasNotes = prev[employerId].aliasNotes;
+              }
+              if (prev[employerId].mergeTargetAliasId) {
+                merged[employerId].mergeTargetAliasId = prev[employerId].mergeTargetAliasId;
+              }
+            }
+          });
+          
+          return merged;
+        });
       }, 1000);
       
     } catch (error) {
@@ -1489,6 +2028,18 @@ export default function PendingEmployersImport() {
         .insert(recordsToInsert);
 
       if (error) throw error;
+
+      for (const employerId of employersToUpdate) {
+        const { error: rpcError } = await (supabase as any).rpc('set_employer_eba_status', {
+          p_employer_id: employerId,
+          p_status: false,
+          p_source: 'manual',
+          p_notes: 'Marked as no EBA found during pending employers import'
+        });
+        if (rpcError) {
+          console.error('Failed to clear EBA status via RPC:', rpcError);
+        }
+      }
 
       toast({
         title: `${employersToUpdate.length} Employers Updated`,
@@ -1777,15 +2328,26 @@ export default function PendingEmployersImport() {
                   }
                 </CardDescription>
               </div>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={showProcessedEmployers}
-                  onChange={(e) => setShowProcessedEmployers(e.target.checked)}
-                  className="w-4 h-4"
-                />
-                Show processed
-              </label>
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={showSkipped}
+                    onChange={(e) => setShowSkipped(e.target.checked)}
+                    className="w-4 h-4"
+                  />
+                  Show skipped
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={showProcessedEmployers}
+                    onChange={(e) => setShowProcessedEmployers(e.target.checked)}
+                    className="w-4 h-4"
+                  />
+                  Show processed
+                </label>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -1900,7 +2462,7 @@ export default function PendingEmployersImport() {
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <Button
                           variant="ghost"
                           size="sm"
@@ -1940,14 +2502,82 @@ export default function PendingEmployersImport() {
                             <SelectItem value="subcontractor">Subcontractor</SelectItem>
                           </SelectContent>
                         </Select>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => deletePendingEmployer(employer.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
                       </div>
+                    </div>
+
+                    {/* Action Buttons - Different per scenario */}
+                    <div className="flex gap-2 flex-wrap border-t pt-3">
+                      {/* SCENARIO 1: Has automatic duplicate detection */}
+                      {duplicateDetections[employer.id] ? (
+                        <>
+                          {/* Confirm automatic match */}
+                          {duplicateDetections[employer.id].hasExactMatch && (
+                            <Button
+                              size="sm"
+                              variant={duplicateDetections[employer.id].userDecision === 'use_existing' ? 'default' : 'outline'}
+                              onClick={() => {
+                                const match = duplicateDetections[employer.id].exactMatches?.[0];
+                                if (match) {
+                                  updateDuplicateDecision(employer.id, 'use_existing', match.id);
+                                }
+                              }}
+                            >
+                              <CheckCircle className="h-4 w-4 mr-1" />
+                              {duplicateDetections[employer.id].userDecision === 'use_existing' ? 'Match Confirmed' : 'Confirm Match'}
+                            </Button>
+                          )}
+                          
+                          {/* Switch to manual search */}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => switchToManualMatch(employer.id, employer.company_name)}
+                          >
+                            <Search className="h-4 w-4 mr-1" />
+                            Different Match
+                          </Button>
+                          
+                          {/* Create New option */}
+                          <Button
+                            size="sm"
+                            variant={duplicateDetections[employer.id].userDecision === 'create_new' ? 'default' : 'outline'}
+                            onClick={() => updateDuplicateDecision(employer.id, 'create_new')}
+                          >
+                            Create New
+                          </Button>
+                        </>
+                      ) : (
+                        /* SCENARIO 2: No automatic match - show manual match button */
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openManualMatch(employer.id, employer.company_name)}
+                          >
+                            <Search className="h-4 w-4 mr-1" />
+                            Manual Match
+                          </Button>
+                          
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => skipPendingEmployer(employer.id, employer.company_name)}
+                            disabled={employer.import_status === 'skipped'}
+                          >
+                            {employer.import_status === 'skipped' ? 'Skipped' : 'Skip'}
+                          </Button>
+                        </>
+                      )}
+                      
+                      {/* Delete always available */}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => openDeleteConfirm(employer.id, employer.company_name)}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
 
                     {/* Trade Type Selection for Subcontractors */}
@@ -2678,6 +3308,44 @@ export default function PendingEmployersImport() {
                 Proceed with Import ({Object.values(duplicateDetections).filter(d => d.userDecision).length}/{Object.keys(duplicateDetections).length} resolved)
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manual Match Dialog */}
+      <EbaEmployerMatchDialog
+        open={manualMatchDialog.open}
+        onOpenChange={(open) => setManualMatchDialog({ ...manualMatchDialog, open })}
+        pendingEmployerName={manualMatchDialog.pendingEmployerName}
+        pendingEmployerId={manualMatchDialog.pendingEmployerId || ''}
+        onSelectMatch={handleManualMatchSelect}
+        onCreateNew={handleManualMatchCreateNew}
+        onSkip={handleManualMatchSkip}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirmDialog.open} onOpenChange={(open) => setDeleteConfirmDialog({ ...deleteConfirmDialog, open })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Pending Employer</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to permanently delete <strong>"{deleteConfirmDialog.employerName}"</strong> from the pending import list?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteConfirmDialog({ open: false, employerId: null, employerName: '' })}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDeletePendingEmployer}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete Permanently
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

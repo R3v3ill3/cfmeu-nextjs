@@ -762,3 +762,4 @@ The slow performance on the Employers page is primarily caused by:
 All improvements maintain full searchability of the dataset - no compromises on search functionality.
 
 
+

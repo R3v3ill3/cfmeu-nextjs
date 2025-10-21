@@ -74,7 +74,8 @@ SELECT
                     CASE WHEN e.name IS NOT NULL
                     THEN JSON_BUILD_OBJECT(
                         'name', e.name,
-                        'enterprise_agreement_status', e.enterprise_agreement_status
+                        'enterprise_agreement_status', e.enterprise_agreement_status,
+                        'eba_status_source', e.eba_status_source
                     )
                     ELSE NULL END
             )

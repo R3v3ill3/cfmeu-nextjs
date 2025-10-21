@@ -1,8 +1,11 @@
 "use client"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
 import { CfmeuEbaBadge, getProjectEbaStatus } from "@/components/ui/CfmeuEbaBadge"
+import { LastVisitBadge } from "@/components/projects/LastVisitBadge"
+import { Calendar } from "lucide-react"
 import Link from "next/link"
 import { useMemo } from "react"
 import { OrganizingUniverseBadge } from "@/components/ui/OrganizingUniverseBadge"
@@ -10,6 +13,7 @@ import { useNavigationLoading } from "@/hooks/useNavigationLoading"
 import { usePatchOrganiserLabels } from "@/hooks/usePatchOrganiserLabels"
 import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
+import { useRouter } from "next/navigation"
 
 // Helper component to get organiser names for a project
 function ProjectOrganiserNames({ projectId }: { projectId: string }) {
@@ -90,6 +94,7 @@ export function ProjectTable({
   onOpenEmployer: (id: string) => void
 }) {
   const { startNavigation } = useNavigationLoading()
+  const router = useRouter()
   
   return (
     <Table>
@@ -107,6 +112,8 @@ export function ProjectTable({
           <TableHead>Delegate</TableHead>
           <TableHead className="text-right">EBA Coverage</TableHead>
           <TableHead className="text-right">Key EBA</TableHead>
+          <TableHead>Last Visit</TableHead>
+          <TableHead className="text-right">Actions</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -273,6 +280,24 @@ export function ProjectTable({
                     </div>
                   )
                 })()}
+              </TableCell>
+              <TableCell>
+                <LastVisitBadge projectId={project.id} variant="compact" />
+              </TableCell>
+              <TableCell className="text-right">
+                <Button 
+                  size="sm" 
+                  variant="ghost"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    startNavigation(`/projects/${project.id}?tab=site-visits`)
+                    setTimeout(() => router.push(`/projects/${project.id}?tab=site-visits`), 50)
+                  }}
+                  className="gap-1"
+                >
+                  <Calendar className="h-3 w-3" />
+                  Visit
+                </Button>
               </TableCell>
             </TableRow>
           )

@@ -69,7 +69,9 @@ export async function POST(request: NextRequest) {
     switch (scope) {
       case 'employers':
         await supabase.rpc('refresh_employer_related_views');
-        refreshedViews.push('employer_list_view', 'project_list_comprehensive_view');
+        // Also refresh the search-optimized view
+        await supabase.rpc('refresh_employers_search_view_logged', { p_triggered_by: 'api_ui' });
+        refreshedViews.push('employer_list_view', 'employers_search_optimized', 'project_list_comprehensive_view');
         break;
         
       case 'workers':
@@ -90,8 +92,11 @@ export async function POST(request: NextRequest) {
       case 'all':
       default:
         await supabase.rpc('refresh_all_materialized_views');
+        // Also refresh the search-optimized view
+        await supabase.rpc('refresh_employers_search_view_logged', { p_triggered_by: 'api_ui_all' });
         refreshedViews.push(
           'employer_list_view',
+          'employers_search_optimized',
           'worker_list_view', 
           'project_list_comprehensive_view',
           'patch_project_mapping_view',

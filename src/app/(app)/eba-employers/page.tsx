@@ -166,16 +166,21 @@ export default function EbaEmployersPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Employer</TableHead>
-                  <TableHead>Projects</TableHead>
-                  <TableHead className="w-28">Actions</TableHead>
+                  <TableHead className="w-[30%] max-w-[400px]">Employer</TableHead>
+                  <TableHead className="w-[55%]">Projects</TableHead>
+                  <TableHead className="w-[15%] min-w-[120px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.map((row) => (
                   <TableRow key={row.employer_id}>
-                    <TableCell className="font-medium">
-                      <Button variant="link" onClick={() => setSelectedEmployerId(row.employer_id)} className="px-0">
+                    <TableCell className="font-medium max-w-[400px]">
+                      <Button 
+                        variant="link" 
+                        onClick={() => setSelectedEmployerId(row.employer_id)} 
+                        className="px-0 text-left truncate max-w-full block"
+                        title={row.employer_name}
+                      >
                         {row.employer_name}
                       </Button>
                     </TableCell>
@@ -186,7 +191,7 @@ export default function EbaEmployersPage() {
                             <Badge
                               key={p.id}
                               variant="secondary"
-                              className="cursor-pointer"
+                              className="cursor-pointer whitespace-nowrap"
                               onClick={() => {
                                 startNavigation(`/projects/${p.id}`)
                                 setTimeout(() => { window.location.href = `/projects/${p.id}` }, 50)

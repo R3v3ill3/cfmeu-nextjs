@@ -23,6 +23,10 @@ type EmployerRow = {
   phone?: string | null
   incolink_id?: string | null;
   incolink_last_matched?: string | null;
+  enterprise_agreement_status?: boolean | null
+  eba_status_source?: string | null
+  eba_status_updated_at?: string | null
+  eba_status_notes?: string | null
   worker_placements: { id: string }[];
   company_eba_records?: any[];
   // Enhanced data
@@ -239,6 +243,15 @@ export function EmployerTable({ rows, onRowClick, onEmployerUpdated }: { rows: E
                         {ebaStatus?.label || 'No EBA'}
                       </Badge>
                     )}
+                {emp.enterprise_agreement_status === true && emp.eba_status_source && (
+                  <Badge variant="outline" className="text-xs ml-1">
+                    {emp.eba_status_source === 'manual'
+                      ? 'Manual override'
+                      : emp.eba_status_source === 'import'
+                      ? 'Import override'
+                      : 'FWC auto'}
+                  </Badge>
+                )}
                   </div>
                 </TableCell>
                 

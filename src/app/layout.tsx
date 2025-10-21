@@ -24,21 +24,27 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "CFMEU App",
-  description: "Next.js App Router migrated from Vite",
+  title: "CFMEU Organizer App",
+  description: "Construction, Forestry, Maritime, Mining and Energy Union organizing platform",
+  manifest: "/manifest.json",
   icons: {
     icon: [
       { url: "/favicon.ico", type: "image/x-icon" },
       { url: "/favicon.svg", type: "image/svg+xml" },
     ],
-    apple: {
-      url: "/apple-touch-icon.png",
-      sizes: "180x180",
-    },
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+      { url: "/favicon.svg", sizes: "any", type: "image/svg+xml" },
+    ],
     shortcut: "/favicon.ico",
     other: [
       { rel: "mask-icon", url: "/mask-icon.svg", color: "#0b2a5b" },
     ],
+  },
+  appleWebApp: {
+    capable: true,
+    title: "CFMEU",
+    statusBarStyle: "black-translucent",
   },
 };
 

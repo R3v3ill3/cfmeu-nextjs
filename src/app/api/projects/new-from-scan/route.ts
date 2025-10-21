@@ -58,7 +58,20 @@ export async function POST(request: NextRequest) {
         phone: contact.phone ?? null,
         action: contact.action,
       }))
-      .filter((contact) => contact.action === 'update' && (contact.existingId || contact.role))
+      .filter((contact) => {
+        // Only include contacts that have:
+        // 1. action === 'update'
+        // 2. Either an existingId OR a role
+        // 3. A valid name (not null, not empty, not "Nil")
+        if (contact.action !== 'update') return false
+        if (!contact.existingId && !contact.role) return false
+        
+        // Skip contacts without a valid name (handles "Nil" or empty values from scans)
+        const name = contact.name?.trim()
+        if (!name || name.toLowerCase() === 'nil') return false
+        
+        return true
+      })
       .map((contact) => ({
         role: contact.role,
         existingId: contact.existingId,

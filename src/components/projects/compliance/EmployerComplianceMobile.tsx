@@ -11,6 +11,7 @@ import { useMappingSheetData } from "@/hooks/useMappingSheetData";
 import { EmployerComplianceDetailMobile } from "./EmployerComplianceDetailMobile";
 import { format } from "date-fns";
 import { EmployerComplianceCheck } from "@/types/compliance";
+import { useKeyContractorTradesSet } from "@/hooks/useKeyContractorTrades";
 
 interface EmployerComplianceMobileProps {
   projectId: string;
@@ -24,24 +25,6 @@ interface UnifiedEmployer {
   isKeyContractor: boolean;
 }
 
-// Define key contractor trades for filtering
-const KEY_CONTRACTOR_TRADES = new Set([
-  'demolition',
-  'piling',
-  'concrete',
-  'concreting',
-  'scaffolding',
-  'scaffold',
-  'form_work',
-  'formwork',
-  'tower_crane',
-  'mobile_crane',
-  'crane',
-  'labour_hire',
-  'earthworks',
-  'traffic_control'
-]);
-
 export function EmployerComplianceMobile({ projectId }: EmployerComplianceMobileProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null);
@@ -49,6 +32,9 @@ export function EmployerComplianceMobile({ projectId }: EmployerComplianceMobile
 
   const { data: compliance = [] } = useEmployerCompliance(projectId);
   const { data: mappingData, isLoading } = useMappingSheetData(projectId);
+  
+  // Fetch key trades dynamically from database (replaces hard-coded list)
+  const { tradeSet: KEY_CONTRACTOR_TRADES } = useKeyContractorTradesSet();
 
   // Combine all contractors from mapping data into a unified list
   const contractors = useMemo(() => {
@@ -84,7 +70,7 @@ export function EmployerComplianceMobile({ projectId }: EmployerComplianceMobile
     });
     
     return Array.from(employerMap.values());
-  }, [mappingData]);
+  }, [mappingData, KEY_CONTRACTOR_TRADES]);
 
   // Create compliance map
   const complianceMap = new Map<string, EmployerComplianceCheck>();

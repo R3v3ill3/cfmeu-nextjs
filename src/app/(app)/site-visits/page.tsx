@@ -1,13 +1,13 @@
 "use client"
 export const dynamic = 'force-dynamic'
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
-import SiteVisitForm from "@/components/siteVisits/SiteVisitForm"
+import { EnhancedSiteVisitForm } from "@/components/siteVisits/EnhancedSiteVisitForm"
 import { useSearchParams } from "next/navigation"
 import { format } from "date-fns"
 
@@ -18,6 +18,24 @@ export default function SiteVisitsPage() {
   const q = (sp.get("q") || "").toLowerCase()
   const status = (sp.get("status") || "")
   const projectId = sp.get("projectId")
+  const openForm = sp.get("openForm")
+
+  // Handle geofencing notification
+  useEffect(() => {
+    if (openForm === "true") {
+      try {
+        const pendingVisit = sessionStorage.getItem("pendingSiteVisit")
+        if (pendingVisit) {
+          const data = JSON.parse(pendingVisit)
+          setEditing(data)
+          setOpen(true)
+          sessionStorage.removeItem("pendingSiteVisit")
+        }
+      } catch (error) {
+        console.error("Error parsing pending site visit:", error)
+      }
+    }
+  }, [openForm])
 
   const { data: rows = [], isFetching, refetch } = useQuery({
     queryKey: ["site-visits"],
@@ -109,7 +127,7 @@ export default function SiteVisitsPage() {
         </CardContent>
       </Card>
 
-      <SiteVisitForm open={open} onOpenChange={(v) => { setOpen(v); if (!v) refetch() }} initial={editing ?? (projectId ? { project_id: projectId } : {})} />
+      <EnhancedSiteVisitForm open={open} onOpenChange={(v) => { setOpen(v); if (!v) refetch() }} initial={editing ?? (projectId ? { project_id: projectId } : {})} />
     </div>
   )
 }

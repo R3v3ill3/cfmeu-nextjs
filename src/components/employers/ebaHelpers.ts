@@ -169,13 +169,24 @@ export function getEbaProgress(ebaRecord: any): { stage: string; percentage: num
   };
 }
 
-// New simplified categorisation used for employer listing and engagement checks
+// FWC workflow status badge - shows what we know from FWC scraping
 export type EbaCategoryInfo = {
-  category: 'active' | 'lodged' | 'pending' | 'no';
+  category: 'certified' | 'lodged' | 'pending' | 'no_fwc_match';
   label: string;
   variant: "default" | "secondary" | "destructive" | "outline";
 };
 
+/**
+ * Computes FWC workflow status from company_eba_records.
+ * This is for the SECONDARY badge that shows FWC scrape/certification status.
+ * NOTE: This is NOT the canonical EBA status - that comes from enterprise_agreement_status boolean.
+ *
+ * Returns:
+ * - 'certified': FWC certified within 4 years (found via scrape)
+ * - 'lodged': Lodged with FWC within 1 year
+ * - 'pending': Recent signing/voting activity
+ * - 'no_fwc_match': No FWC records found (doesn't mean no EBA, just no FWC match)
+ */
 export function getEbaCategory(ebaRecord: any): EbaCategoryInfo {
   const today = new Date();
 
@@ -196,21 +207,22 @@ export function getEbaCategory(ebaRecord: any): EbaCategoryInfo {
 
   const certifiedDate = getDate(ebaRecord.fwc_certified_date);
   const lodgedDate = getDate(ebaRecord.eba_lodged_fwc);
-  // Support both potential spellings for safety
   const voteOccurredDate = getDate(ebaRecord.date_vote_occurred ?? ebaRecord.date_vote_occured);
   const signedDate = getDate(ebaRecord.date_eba_signed);
 
+  // FWC certification found (this is evidence, not the canonical status)
   if (withinYears(certifiedDate, 4)) {
-    return { category: 'active', label: 'Active', variant: 'default' };
+    return { category: 'certified', label: 'FWC Certified', variant: 'default' };
   }
 
   if (withinYears(lodgedDate, 1)) {
-    return { category: 'lodged', label: 'Lodged', variant: 'outline' };
+    return { category: 'lodged', label: 'FWC Lodged', variant: 'outline' };
   }
 
-  if (withinMonths(voteOccurredDate, 6) || withinMonths(signedDate, 6)) {
-    return { category: 'pending', label: 'Pending', variant: 'secondary' };
+  if (withinMonths(voteOccurredDate, 6) || withinMonths(signedDate, 6) ||
+      ebaRecord.eba_data_form_received || ebaRecord.date_draft_signing_sent || ebaRecord.date_barg_docs_sent) {
+    return { category: 'pending', label: 'EBA Pending', variant: 'secondary' };
   }
 
-  return { category: 'no', label: 'No EBA', variant: 'destructive' };
+  return { category: 'no_fwc_match', label: 'No FWC Match', variant: 'outline' };
 }

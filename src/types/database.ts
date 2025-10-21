@@ -1989,6 +1989,15 @@ export type Database = {
           email: string | null
           employer_type: Database["public"]["Enums"]["employer_type"]
           enterprise_agreement_status: boolean | null
+          eba_status_source: Database["public"]["Enums"]["eba_status_source"] | null
+          eba_status_updated_at: string | null
+          eba_status_notes: string | null
+          eba_status_source: Database["public"]["Enums"]["eba_status_source"] | null
+          eba_status_updated_at: string | null
+          eba_status_notes: string | null
+          eba_status_source: Database["public"]["Enums"]["eba_status_source"] | null
+          eba_status_updated_at: string | null
+          eba_status_notes: string | null
           estimated_worker_count: number | null
           id: string
           incolink_id: string | null
@@ -2018,6 +2027,9 @@ export type Database = {
           email?: string | null
           employer_type: Database["public"]["Enums"]["employer_type"]
           enterprise_agreement_status?: boolean | null
+          eba_status_source?: Database["public"]["Enums"]["eba_status_source"] | null
+          eba_status_updated_at?: string | null
+          eba_status_notes?: string | null
           estimated_worker_count?: number | null
           id?: string
           incolink_id?: string | null
@@ -2047,6 +2059,9 @@ export type Database = {
           email?: string | null
           employer_type?: Database["public"]["Enums"]["employer_type"]
           enterprise_agreement_status?: boolean | null
+          eba_status_source?: Database["public"]["Enums"]["eba_status_source"] | null
+          eba_status_updated_at?: string | null
+          eba_status_notes?: string | null
           estimated_worker_count?: number | null
           id?: string
           incolink_id?: string | null
@@ -7408,6 +7423,9 @@ export type Database = {
           email: string | null
           employer_type: Database["public"]["Enums"]["employer_type"] | null
           enterprise_agreement_status: boolean | null
+          eba_status_source: Database["public"]["Enums"]["eba_status_source"] | null
+          eba_status_updated_at: string | null
+          eba_status_notes: string | null
           estimated_worker_count: number | null
           id: string | null
           name: string | null
@@ -10251,6 +10269,9 @@ export type Database = {
           incolink_id: string | null
           bci_company_id: string | null
           enterprise_agreement_status: boolean | null
+          eba_status_source: Database["public"]["Enums"]["eba_status_source"] | null
+          eba_status_updated_at: string | null
+          eba_status_notes: string | null
           aliases: Json
           match_type: string
           match_details: Json
@@ -10458,6 +10479,15 @@ export type Database = {
       refresh_employer_eba_status: {
         Args: { p_employer_id: string }
         Returns: undefined
+      }
+      set_employer_eba_status: {
+        Args: {
+          p_employer_id: string
+          p_status: boolean
+          p_source: Database["public"]["Enums"]["eba_status_source"]
+          p_notes?: string | null
+        }
+        Returns: Database["public"]["Tables"]["employers"]["Row"]
       }
       refresh_employer_list_view: {
         Args: Record<PropertyKey, never>
@@ -11878,6 +11908,7 @@ export type Database = {
         | "financial_standing_list_audit"
       dd_status_type: "not_started" | "in_progress" | "active" | "failed"
       eba_status: "yes" | "no" | "pending"
+      eba_status_source: "unknown" | "fwc_scraper" | "import" | "manual"
       eba_status_type: "yes" | "no" | "not_specified"
       employer_role_tag: "builder" | "head_contractor"
       employer_type:
@@ -12148,6 +12179,7 @@ export const Constants = {
       ],
       dd_status_type: ["not_started", "in_progress", "active", "failed"],
       eba_status: ["yes", "no", "pending"],
+      eba_status_source: ["unknown", "fwc_scraper", "import", "manual"],
       eba_status_type: ["yes", "no", "not_specified"],
       employer_role_tag: ["builder", "head_contractor"],
       employer_type: [

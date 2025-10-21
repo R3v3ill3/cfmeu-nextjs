@@ -18,6 +18,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { getEbaCategory } from "@/components/employers/ebaHelpers"
 import { EmployerTable } from "@/components/employers/EmployerTable"
 import { useEmployersServerSideCompatible } from "@/hooks/useEmployersServerSide"
+import { AddEmployerDialog } from "@/components/employers/AddEmployerDialog"
+import { Plus } from "lucide-react"
 
 export function EmployersDesktopView() {
   const queryClient = useQueryClient()
@@ -25,7 +27,7 @@ export function EmployersDesktopView() {
   const pathname = usePathname()
   const sp = useSearchParams()
   const q = (sp.get("q") || "").toLowerCase()
-  const engaged = (sp.get("engaged") ?? "1") !== "0"
+  const engaged = sp.get("engaged") === "1" // Changed: Show all by default, filter when explicitly set to "1"
   const eba = sp.get("eba") || "all"
   const type = sp.get("type") || "all"
   const sort = sp.get("sort") || "name"
@@ -109,6 +111,7 @@ export function EmployersDesktopView() {
 
   const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
+  const [isAddEmployerOpen, setIsAddEmployerOpen] = useState(false)
 
   const refreshEmployers = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["employers-server-side"] })
@@ -151,8 +154,14 @@ export function EmployersDesktopView() {
       }
       if (eba !== "all") {
         list = list.filter((emp: any) => {
+          if (eba === 'active') return emp.enterprise_agreement_status === true
+          if (eba === 'no') return emp.enterprise_agreement_status !== true
+
           const rec = emp.company_eba_records?.[0]
-          const cat = rec ? getEbaCategory(rec).category : 'no'
+          if (!rec) return false
+          const cat = getEbaCategory(rec).category
+          if (eba === 'lodged') return cat === 'lodged'
+          if (eba === 'pending') return cat === 'pending'
           return cat === eba
         })
       }
@@ -197,16 +206,22 @@ export function EmployersDesktopView() {
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Employers</h1>
-        {/* Optional debug badge */}
-        {process.env.NEXT_PUBLIC_SHOW_DEBUG_BADGES === 'true' && (
-          <div className="text-xs px-2 py-1 rounded border">
-            {USE_SERVER_SIDE ? (
-              <span className="text-green-600">🚀 Server-side {serverSideResult.debug?.queryTime ? `(${serverSideResult.debug.queryTime}ms)` : ''}</span>
-            ) : (
-              <span className="text-blue-600">💻 Client-side</span>
-            )}
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Optional debug badge */}
+          {process.env.NEXT_PUBLIC_SHOW_DEBUG_BADGES === 'true' && (
+            <div className="text-xs px-2 py-1 rounded border">
+              {USE_SERVER_SIDE ? (
+                <span className="text-green-600">🚀 Server-side {serverSideResult.debug?.queryTime ? `(${serverSideResult.debug.queryTime}ms)` : ''}</span>
+              ) : (
+                <span className="text-blue-600">💻 Client-side</span>
+              )}
+            </div>
+          )}
+          <Button onClick={() => setIsAddEmployerOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Employer
+          </Button>
+        </div>
       </div>
       <div className="sticky top-0 z-30 -mx-6 px-6 py-3 bg-white shadow-sm border-b">
         <div className="flex flex-wrap items-center gap-3">
@@ -322,6 +337,10 @@ export function EmployersDesktopView() {
               key={emp.id}
               employer={{
                 ...emp,
+                enterprise_agreement_status: emp.enterprise_agreement_status,
+                eba_status_source: emp.eba_status_source,
+                eba_status_updated_at: emp.eba_status_updated_at,
+                eba_status_notes: emp.eba_status_notes,
                 ebaCategory: emp.company_eba_records?.[0] ? getEbaCategory(emp.company_eba_records[0]) : { category: 'no', label: 'No EBA', variant: 'destructive' }
               }}
               onClick={() => {
@@ -371,6 +390,18 @@ export function EmployersDesktopView() {
         onClose={() => setIsDetailOpen(false)}
         initialTab="overview"
         onEmployerUpdated={refreshEmployers}
+      />
+
+      <AddEmployerDialog
+        isOpen={isAddEmployerOpen}
+        onClose={() => setIsAddEmployerOpen(false)}
+        onEmployerCreated={(employerId) => {
+          // Refresh employers list
+          refreshEmployers()
+          // Optionally open the detail modal for the newly created employer
+          setSelectedEmployerId(employerId)
+          setIsDetailOpen(true)
+        }}
       />
     </div>
   )

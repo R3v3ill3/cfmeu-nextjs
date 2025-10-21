@@ -1,0 +1,52 @@
+{
+  "name": "CFMEU Organizer App",
+  "short_name": "CFMEU",
+  "description": "Construction, Forestry, Maritime, Mining and Energy Union organizing platform",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Record Site Visit",
+      "short_name": "New Visit",
+      "description": "Quickly record a site visit",
+      "url": "/site-visits?openForm=true",
+      "icons": [{ "src": "/favicon.svg", "sizes": "96x96" }]
+    },
+    {
+      "name": "View Projects",
+      "short_name": "Projects",
+      "description": "Browse all projects",
+      "url": "/projects",
+      "icons": [{ "src": "/favicon.svg", "sizes": "96x96" }]
+    },
+    {
+      "name": "My Patch",
+      "short_name": "Patch",
+      "description": "View patch dashboard",
+      "url": "/patch",
+      "icons": [{ "src": "/favicon.svg", "sizes": "96x96" }]
+    }
+  ],
+  "categories": ["productivity", "business"],
+  "lang": "en-AU",
+  "dir": "ltr"
+}
+
+

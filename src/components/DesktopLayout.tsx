@@ -102,6 +102,9 @@ function useVisibleNavItems(userRole: string | null, isLoadingRole: boolean): Na
   // Bug Report - external link
   items.push({ path: "https://fider.uconstruct.app", label: "Bug Report", icon: AlertTriangle, description: "Report bugs and platform issues", external: true })
 
+  // Settings - always show for authenticated users
+  items.push({ path: "/settings", label: "Settings", icon: Settings, description: "Account settings and preferences" })
+
   // Wait for role to load before showing role-dependent items
   if (!isLoadingRole && userRole) {
     // Lead Console - show for lead organisers and admins when enabled

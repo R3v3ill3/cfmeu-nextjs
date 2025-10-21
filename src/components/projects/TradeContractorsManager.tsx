@@ -38,14 +38,17 @@ export function TradeContractorsManager({
       const { data } = await supabase.from("employers").select("id, name").order("name");
       setEmployers((data ?? []) as Employer[]);
 
+      // Query employer_capabilities for trade capabilities
       const { data: caps } = await (supabase as any)
-        .from("contractor_trade_capabilities")
-        .select("employer_id, trade_type");
+        .from("employer_capabilities")
+        .select("employer_id, trade_types!inner(code)")
+        .eq("capability_type", "trade");
+      
       const map: Record<string, Set<string>> = {};
       (caps ?? []).forEach((row: any) => {
-        const t = row.trade_type as string;
-        if (!map[t]) map[t] = new Set();
-        if (row.employer_id) map[t].add(row.employer_id as string);
+        const tradeCode = row.trade_types.code as string;
+        if (!map[tradeCode]) map[tradeCode] = new Set();
+        if (row.employer_id) map[tradeCode].add(row.employer_id as string);
       });
       setTradeEmployers(map);
     };

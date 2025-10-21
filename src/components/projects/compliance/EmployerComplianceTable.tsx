@@ -13,24 +13,7 @@ import { useMappingSheetData } from "@/hooks/useMappingSheetData";
 import { EmployerComplianceDetail } from "./EmployerComplianceDetail";
 import { format } from "date-fns";
 import { EmployerComplianceCheck } from "@/types/compliance";
-
-// Define key contractor trades for filtering
-const KEY_CONTRACTOR_TRADES = new Set([
-  'demolition',
-  'piling',
-  'concrete',
-  'concreting',
-  'scaffolding',
-  'scaffold',
-  'form_work',
-  'formwork',
-  'tower_crane',
-  'mobile_crane',
-  'crane',
-  'labour_hire',
-  'earthworks',
-  'traffic_control'
-]);
+import { useKeyContractorTradesSet } from "@/hooks/useKeyContractorTrades";
 
 interface EmployerComplianceTableProps {
   projectId: string;
@@ -53,6 +36,9 @@ export function EmployerComplianceTable({ projectId }: EmployerComplianceTablePr
 
   const { data: compliance = [] } = useEmployerCompliance(projectId);
   const { data: mappingData, isLoading } = useMappingSheetData(projectId);
+  
+  // Fetch key trades dynamically from database (replaces hard-coded list)
+  const { tradeSet: KEY_CONTRACTOR_TRADES } = useKeyContractorTradesSet();
 
   // Combine all contractors from mapping data into a unified list
   const contractors = useMemo(() => {
@@ -88,7 +74,7 @@ export function EmployerComplianceTable({ projectId }: EmployerComplianceTablePr
     });
     
     return Array.from(employerMap.values());
-  }, [mappingData]);
+  }, [mappingData, KEY_CONTRACTOR_TRADES]);
 
   // Create a map of compliance by employer ID for quick lookup
   const complianceMap = new Map<string, EmployerComplianceCheck>();

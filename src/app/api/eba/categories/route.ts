@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { KEY_CONTRACTOR_TRADES_SET } from '@/constants/keyContractorTrades'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,7 +33,14 @@ export async function GET(request: NextRequest) {
       if (typeParam && typeParam !== 'trade') {
         categories = []
       } else {
-        categories = categories.filter((c) => c.category_type === 'trade' && KEY_CONTRACTOR_TRADES_SET.has(c.category_code))
+        // Fetch key trades from database (dynamic system)
+        const { data: keyTradesData } = await (supabase as any)
+          .from('key_contractor_trades')
+          .select('trade_type')
+          .eq('is_active', true)
+        
+        const keyTradesSet = new Set((keyTradesData || []).map((t: any) => t.trade_type))
+        categories = categories.filter((c) => c.category_type === 'trade' && keyTradesSet.has(c.category_code))
       }
     }
 

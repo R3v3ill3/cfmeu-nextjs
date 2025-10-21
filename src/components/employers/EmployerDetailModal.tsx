@@ -59,6 +59,10 @@ type EmployerWithEba = {
   incolink_id: string | null;
   incolink_last_matched: string | null;
   estimated_worker_count: number | null;
+  enterprise_agreement_status: boolean | null;
+  eba_status_source: string | null;
+  eba_status_updated_at: string | null;
+  eba_status_notes: string | null;
   company_eba_records: {
     id: string;
     contact_name: string | null;
@@ -80,11 +84,21 @@ interface EmployerDetailModalProps {
   employerId: string | null;
   isOpen: boolean;
   onClose: () => void;
-  initialTab?: "overview" | "eba" | "sites" | "workers";
+  initialTab?: "overview" | "eba" | "sites" | "workers" | "categories";
   onEmployerUpdated?: () => void;
+  mode?: 'active' | 'pending_review'; // NEW: Support pending review mode
+  onPendingReviewClose?: () => void; // NEW: Called when closing from pending review
 }
 
-export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = "overview", onEmployerUpdated }: EmployerDetailModalProps) => {
+export const EmployerDetailModal = ({ 
+  employerId, 
+  isOpen, 
+  onClose, 
+  initialTab = "overview", 
+  onEmployerUpdated,
+  mode = 'active',
+  onPendingReviewClose
+}: EmployerDetailModalProps) => {
   const [activeTab, setActiveTab] = useState(initialTab);
   const [isEditing, setIsEditing] = useState(false);
   const [isManualWorkerOpen, setIsManualWorkerOpen] = useState(false);
@@ -94,6 +108,8 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { toast } = useToast();
+  
+  const isPendingReview = mode === 'pending_review';
 
   useEffect(() => {
     if (isOpen) {
@@ -141,7 +157,8 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
             .from("employers")
             .select(
               `
-              id, name, abn, employer_type, address_line_1, address_line_2, suburb, state, postcode, phone, email, website, primary_contact_name, incolink_id, incolink_last_matched, estimated_worker_count,
+                id, name, abn, employer_type, address_line_1, address_line_2, suburb, state, postcode, phone, email, website, primary_contact_name, incolink_id, incolink_last_matched, estimated_worker_count,
+                enterprise_agreement_status, eba_status_source, eba_status_updated_at, eba_status_notes,
               company_eba_records (*)
             `
             )
@@ -160,7 +177,8 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
               .from("employers")
               .select(
                 `
-                id, name, abn, employer_type, address_line_1, address_line_2, suburb, state, postcode, phone, email, website, primary_contact_name, incolink_id, incolink_last_matched, estimated_worker_count
+                id, name, abn, employer_type, address_line_1, address_line_2, suburb, state, postcode, phone, email, website, primary_contact_name, incolink_id, incolink_last_matched, estimated_worker_count,
+                enterprise_agreement_status, eba_status_source, eba_status_updated_at, eba_status_notes
               `
               )
               .eq("id", employerId)
@@ -301,9 +319,19 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
   if (!isOpen) return null;
 
   const ebaStatus = employer?.company_eba_records?.[0] ? getEbaStatusInfo(employer.company_eba_records[0]) : null;
+  const hasManualOverride = employer?.enterprise_agreement_status === true && employer?.eba_status_source === 'manual';
+
+  const handleClose = () => {
+    if (isPendingReview && onPendingReviewClose) {
+      // Trigger final decision step instead of directly closing
+      onPendingReviewClose();
+    } else {
+      onClose();
+    }
+  };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" aria-describedby="employer-dialog-description">
         <DialogDescription id="employer-dialog-description" className="sr-only">
           View and edit employer details, including company info, EBA, worksites, and workers.
@@ -319,13 +347,28 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
                 )}
               </div>
             </div>
-            {employer && canEdit && (
+            {employer && canEdit && !isPendingReview && (
               <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
                 Edit
               </Button>
             )}
           </div>
         </DialogHeader>
+
+        {/* Pending Review Banner */}
+        {isPendingReview && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center gap-3">
+            <div className="flex-shrink-0">
+              <AlertCircle className="h-5 w-5 text-blue-600" />
+            </div>
+            <div className="flex-1">
+              <h4 className="font-semibold text-blue-900">Pending Employer Review</h4>
+              <p className="text-sm text-blue-700">
+                This employer is under review. You can edit all fields, run FWC/Incolink searches, and verify details before making a final decision.
+              </p>
+            </div>
+          </div>
+        )}
 
         {isLoading ? (
           <div className="p-8 text-center flex items-center justify-center gap-2"><img src="/spinner.gif" alt="Loading" className="h-4 w-4" /> Loading employer details...</div>
@@ -478,6 +521,60 @@ export const EmployerDetailModal = ({ employerId, isOpen, onClose, initialTab = 
                     </CardContent>
                   </Card>
                 </div>
+
+                {hasManualOverride && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <Badge variant="outline">Manual Override</Badge>
+                        EBA Status
+                      </CardTitle>
+                      <CardDescription>
+                        This employer was manually marked as having an active EBA. Downgrading will require confirmation and a note.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {employer.eba_status_notes && (
+                        <div>
+                          <label className="text-sm font-medium text-muted-foreground">Override Notes</label>
+                          <p className="text-sm bg-muted p-3 rounded-md">{employer.eba_status_notes}</p>
+                        </div>
+                      )}
+                      {employer.eba_status_updated_at && (
+                        <div className="text-xs text-muted-foreground">
+                          Last updated {new Date(employer.eba_status_updated_at).toLocaleString()}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {hasManualOverride && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <Badge variant="outline">Manual Override</Badge>
+                        EBA Status
+                      </CardTitle>
+                      <CardDescription>
+                        This employer was manually marked as having an active EBA. Downgrading will require confirmation and notes.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {employer.eba_status_notes && (
+                        <div>
+                          <label className="text-sm font-medium text-muted-foreground">Override Notes</label>
+                          <p className="text-sm bg-muted p-3 rounded-md">{employer.eba_status_notes}</p>
+                        </div>
+                      )}
+                      {employer.eba_status_updated_at && (
+                        <div className="text-xs text-muted-foreground">
+                          Last updated {new Date(employer.eba_status_updated_at).toLocaleString()}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
 
                 <Card>
                   <CardHeader>

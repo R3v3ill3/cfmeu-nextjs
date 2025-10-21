@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { useNavigationLoading } from "@/hooks/useNavigationLoading";
 import { useRouter } from "next/navigation";
 import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal";
+import { LastVisitBadge } from "@/components/projects/LastVisitBadge";
 
 type ProjectData = {
   id: string;
@@ -157,13 +158,14 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
       {/* Project Header with Tier */}
       <div className="border-b border-gray-200 pb-4 mb-4">
         <h2 className="text-2xl font-bold mb-2">{projectData.name}</h2>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <ProjectTierBadge tier={projectData.tier || null} size="md" />
           {formatCurrency(projectData.value) && (
             <span className="text-lg text-muted-foreground">
               {formatCurrency(projectData.value)}
             </span>
           )}
+          <LastVisitBadge projectId={projectData.id} variant="compact" />
         </div>
       </div>
 

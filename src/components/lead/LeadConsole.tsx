@@ -9,6 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { PENDING_USER_DASHBOARD_STATUSES, formatPendingOrganiserName } from "@/utils/organiserDisplay"
+import Link from "next/link"
+import { FileText } from "lucide-react"
 
 export default function LeadConsole() {
   const qc = useQueryClient()
@@ -130,6 +132,17 @@ export default function LeadConsole() {
 
   return (
     <div className="space-y-6">
+      {/* Header with Manage Button */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold">Co-ordinator Console</h2>
+        <Link href="/lead-console/site-visit-reasons">
+          <Button variant="outline" className="gap-2">
+            <FileText className="h-4 w-4" />
+            Manage Site Visit Reasons
+          </Button>
+        </Link>
+      </div>
+
       {/* Summary Statistics */}
       {summary && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Building, UserPlus, RefreshCw, UserX, Link, Database } from 'lucide-react'
+import { Building, UserPlus, RefreshCw, UserX, Link, Database, FileText } from 'lucide-react'
 import PendingEmployersImport from '@/components/upload/PendingEmployersImport'
 import ContractorImport from '@/components/upload/ContractorImport'
 import { BackfillProjectCoordinates } from '@/components/admin/BackfillProjectCoordinates'
@@ -12,8 +12,9 @@ import DuplicateEmployerManager from '@/components/admin/DuplicateEmployerManage
 import { IncolinkImport } from '@/components/upload/IncolinkImport'
 import IncolinkScrape from '@/components/upload/IncolinkScrape'
 import FileUpload from '@/components/upload/FileUpload'
+import EbaTradeImport from '@/components/upload/EbaTradeImport'
 
-type EmployerImportMode = 'pending-employers' | 'csv-upload' | 'project-backfill' | 'duplicates' | 'incolink'
+type EmployerImportMode = 'pending-employers' | 'csv-upload' | 'project-backfill' | 'duplicates' | 'incolink' | 'eba-trade-import'
 
 interface EmployerOption {
   mode: EmployerImportMode
@@ -58,6 +59,13 @@ const employerOptions: EmployerOption[] = [
     description: 'Upload Incolink data or scrape from existing employers with Incolink IDs',
     icon: Link,
     requiresUpload: false // Can be either upload or web scraping
+  },
+  {
+    mode: 'eba-trade-import',
+    title: 'EBA Trade Import',
+    description: 'Import employers from EBA trade-categorized PDF lists using AI parsing',
+    icon: FileText,
+    requiresUpload: true
   }
 ]
 
@@ -195,6 +203,14 @@ export default function EmployersManagement() {
                   </TabsContent>
                 )}
               </Tabs>
+            </div>
+          )}
+
+          {selectedMode === 'eba-trade-import' && (
+            <div className="space-y-4">
+              <EbaTradeImport 
+                onNavigateToPendingImport={() => setSelectedMode('pending-employers')}
+              />
             </div>
           )}
         </CardContent>

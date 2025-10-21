@@ -54,19 +54,6 @@ interface EbaSearchState {
   error?: string;
 }
 
-const KEY_CONTRACTOR_TRADES = new Set([
-  'demolition',
-  'piling', 
-  'concrete',
-  'scaffolding',
-  'form_work',
-  'tower_crane',
-  'mobile_crane',
-  'labour_hire',
-  'earthworks',
-  'traffic_control'
-]);
-
 const KEY_CONTRACTOR_ROLES = new Set(['builder', 'project_manager']);
 
 const ROLE_FILTER_OPTIONS = [
@@ -94,6 +81,9 @@ interface EbaCoverageSummary {
 }
 
 export default function EbaProjectSearch() {
+  // Fetch key trades dynamically from database (replaces hard-coded list)
+  const { tradeSet: KEY_CONTRACTOR_TRADES } = useKeyContractorTradesSet();
+  
   const [projectEmployers, setProjectEmployers] = useState<ProjectEmployer[]>([]);
   const [filteredEmployers, setFilteredEmployers] = useState<ProjectEmployer[]>([]);
   const [ebaCoverageSummary, setEbaCoverageSummary] = useState<EbaCoverageSummary | null>(null);

@@ -8,6 +8,10 @@ const ROLE_SET = new Set<AllowedRole>(ALLOWED_ROLES);
 
 export const dynamic = 'force-dynamic'
 
+// Feature flag: Use materialized view for optimized search
+// Set to 'false' to rollback to old behavior instantly
+const USE_MATERIALIZED_VIEW = process.env.NEXT_PUBLIC_USE_EMPLOYER_MAT_VIEW !== 'false';
+
 // Helper function to fetch enhanced employer data (projects, organisers, incolink IDs)
 type EmployerAnalyticsRow = Database['public']['Views']['employer_analytics']['Row'];
 type ProjectAssignmentRow = Database['public']['Tables']['project_assignments']['Row'];
@@ -293,7 +297,7 @@ export async function GET(request: NextRequest) {
     const dir = (searchParams.get('dir') || 'asc') as EmployersRequest['dir'];
     const q = searchParams.get('q') || undefined;
     const engagedParam = searchParams.get('engaged');
-    const engaged = engagedParam === null ? true : engagedParam === '1'; // Default to engaged=true like client
+    const engaged = engagedParam === '1'; // Changed: Show all by default (null/undefined = false)
     const eba = (searchParams.get('eba') || 'all') as EmployersRequest['eba'];
     const type = (searchParams.get('type') || 'all') as EmployersRequest['type'];
     const categoryType = (searchParams.get('categoryType') || 'all') as 'contractor_role' | 'trade' | 'all';
@@ -313,6 +317,7 @@ export async function GET(request: NextRequest) {
     let count: number | null = null;
 
     const useAliasSearch = q && includeAliases;
+    const useMaterializedView = USE_MATERIALIZED_VIEW && !useAliasSearch;
 
     if (useAliasSearch) {
       // Use alias-aware search via RPC
@@ -379,7 +384,128 @@ export async function GET(request: NextRequest) {
         
         count = totalCount;
       }
+    } else if (useMaterializedView) {
+      // ============================================================================
+      // MATERIALIZED VIEW PATH - Optimized search with precomputed filters
+      // ============================================================================
+      console.log('🚀 Using materialized view for employer search');
+      
+      let matViewQuery = supabase
+        .from('employers_search_optimized')
+        .select(`
+          id,
+          name,
+          abn,
+          employer_type,
+          website,
+          email,
+          phone,
+          estimated_worker_count,
+          incolink_id,
+          bci_company_id,
+          enterprise_agreement_status,
+          eba_status_source,
+          eba_status_updated_at,
+          eba_status_notes,
+          is_engaged,
+          eba_category,
+          eba_recency_score,
+          actual_worker_count,
+          project_count,
+          company_eba_records_json,
+          worker_placements_json,
+          project_assignments_json,
+          incolink_last_matched,
+          most_recent_eba_date,
+          view_refreshed_at
+        `, { count: 'exact' });
+
+      // Apply text search filter
+      if (q) {
+        matViewQuery = matViewQuery.ilike('name', `%${q}%`);
+      }
+
+      // Apply engagement filter (precomputed!)
+      if (engaged === true) {
+        matViewQuery = matViewQuery.eq('is_engaged', true);
+      } else if (engaged === false) {
+        matViewQuery = matViewQuery.eq('is_engaged', false);
+      }
+
+      // Apply EBA filter (precomputed!)
+      if (eba !== 'all') {
+        matViewQuery = matViewQuery.eq('eba_category', eba);
+      }
+
+      // Apply employer type filter
+      if (type !== 'all') {
+        matViewQuery = matViewQuery.eq('employer_type', type);
+      }
+
+      // Apply sorting
+      if (sort === 'name') {
+        matViewQuery = matViewQuery.order('name', { ascending: dir === 'asc' });
+      } else if (sort === 'estimated') {
+        matViewQuery = matViewQuery.order('estimated_worker_count', { ascending: dir === 'asc', nullsFirst: false });
+      } else if (sort === 'eba_recency') {
+        matViewQuery = matViewQuery.order('eba_recency_score', { ascending: dir === 'asc', nullsFirst: false });
+      } else if (sort === 'project_count') {
+        matViewQuery = matViewQuery.order('project_count', { ascending: dir === 'asc', nullsFirst: false });
+      }
+
+      // Apply pagination
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+      matViewQuery = matViewQuery.range(from, to);
+
+      // Execute query
+      const matViewResult = await matViewQuery;
+      data = matViewResult.data;
+      error = matViewResult.error;
+      count = matViewResult.count;
+
+      // Transform materialized view data to match expected format
+      if (data && data.length > 0) {
+        data = data.map((row: any) => ({
+          id: row.id,
+          name: row.name,
+          abn: row.abn,
+          employer_type: row.employer_type,
+          website: row.website,
+          email: row.email,
+          phone: row.phone,
+          estimated_worker_count: row.estimated_worker_count,
+          incolink_id: row.incolink_id,
+          bci_company_id: row.bci_company_id,
+          enterprise_agreement_status: row.enterprise_agreement_status,
+          eba_status_source: row.eba_status_source,
+          eba_status_updated_at: row.eba_status_updated_at,
+          eba_status_notes: row.eba_status_notes,
+          incolink_last_matched: row.incolink_last_matched,
+          
+          // Transform JSONB back to arrays
+          company_eba_records: row.company_eba_records_json || [],
+          worker_placements: row.worker_placements_json || [],
+          project_assignments: row.project_assignments_json || [],
+          
+          // Include precomputed analytics
+          _mat_view_data: {
+            is_engaged: row.is_engaged,
+            eba_category: row.eba_category,
+            eba_recency_score: row.eba_recency_score,
+            actual_worker_count: row.actual_worker_count,
+            project_count: row.project_count,
+            most_recent_eba_date: row.most_recent_eba_date,
+            view_refreshed_at: row.view_refreshed_at
+          }
+        }));
+      }
     } else {
+      // ============================================================================
+      // ANALYTICS VIEW PATH - Original implementation (fallback)
+      // ============================================================================
+      console.log('📊 Using analytics view for employer search');
+      
       // Use employer analytics view for filtering and sorting
       let analyticsQuery = supabase
         .from('employer_analytics')
@@ -446,20 +572,23 @@ export async function GET(request: NextRequest) {
 
       if (analyticsRows.length > 0) {
         const employerIds = analyticsRows.map((row: any) => row.employer_id);
-        const { data: employerRows, error: employerError } = await supabase
-          .from('employers')
-          .select(`
-            id,
-            name,
-            abn,
-            employer_type,
-            website,
-            email,
-            phone,
-            estimated_worker_count,
-            incolink_id,
-            enterprise_agreement_status,
-            company_eba_records!left(
+      const { data: employerRows, error: employerError } = await supabase
+        .from('employers')
+        .select(`
+          id,
+          name,
+          abn,
+          employer_type,
+          website,
+          email,
+          phone,
+          estimated_worker_count,
+          incolink_id,
+          enterprise_agreement_status,
+          eba_status_source,
+          eba_status_updated_at,
+          eba_status_notes,
+          company_eba_records!left(
               id,
               status,
               nominal_expiry_date,
@@ -559,21 +688,21 @@ export async function GET(request: NextRequest) {
       return baseEmployer;
     });
 
-    // Post-filter for engagement (until we have a view with precomputed column)
-    if (engaged) {
+    // Post-filter for engagement (SKIP if using materialized view - already precomputed)
+    if (!useMaterializedView && engaged) {
       employers = employers.filter(emp =>
         (emp.project_assignments && emp.project_assignments.length > 0) ||
         (emp.worker_placements && emp.worker_placements.length > 0)
       );
-    } else if (engaged === false) {
+    } else if (!useMaterializedView && engaged === false) {
       employers = employers.filter(emp =>
         (!emp.project_assignments || emp.project_assignments.length === 0) &&
         (!emp.worker_placements || emp.worker_placements.length === 0)
       );
     }
 
-    // Post-filter for EBA status (until we have a view with precomputed column)
-    if (eba !== 'all') {
+    // Post-filter for EBA status (SKIP if using materialized view - already precomputed)
+    if (!useMaterializedView && eba !== 'all') {
       const parseDate = (value?: string | null) => {
         if (!value) return null;
         const date = new Date(value);
@@ -591,31 +720,38 @@ export async function GET(request: NextRequest) {
       const withinYears = (value: string | null | undefined, years: number) => withinMonths(value, years * 12);
 
       employers = employers.filter(emp => {
-        const records = emp.company_eba_records || [];
-
-        const hasActiveOverride = emp.enterprise_agreement_status === true;
-        const hasRecentCertified = records.some((r: any) => withinYears(r.fwc_certified_date, 4));
-        const hasRecentLodged = records.some((r: any) => withinYears(r.eba_lodged_fwc, 1));
-        const hasRecentSigned = records.some((r: any) => withinMonths(r.date_eba_signed, 6));
-        const hasRecentVote = records.some((r: any) => withinMonths(r.date_vote_occurred, 6));
-        const hasInProgress = records.some((r: any) =>
-          r.eba_data_form_received || r.date_draft_signing_sent || r.date_barg_docs_sent
-        );
-
         if (eba === 'active') {
-          return hasActiveOverride || hasRecentCertified;
-        }
-
-        if (eba === 'lodged') {
-          return hasRecentLodged;
-        }
-
-        if (eba === 'pending') {
-          return hasRecentSigned || hasRecentVote || hasInProgress;
+          return emp.enterprise_agreement_status === true;
         }
 
         if (eba === 'no') {
-          return !hasActiveOverride && !hasRecentCertified && !hasRecentLodged && !hasRecentSigned && !hasRecentVote && !hasInProgress;
+          return emp.enterprise_agreement_status !== true;
+        }
+
+        const records = emp.company_eba_records || [];
+        const parseDate = (value?: string | null) => {
+          if (!value) return null;
+          const date = new Date(value);
+          return Number.isNaN(date.getTime()) ? null : date;
+        };
+        const withinMonths = (value: string | null | undefined, months: number) => {
+          const date = parseDate(value);
+          if (!date) return false;
+          const cutoff = new Date();
+          cutoff.setMonth(cutoff.getMonth() - months);
+          return date >= cutoff;
+        };
+        const withinYears = (value: string | null | undefined, years: number) => withinMonths(value, years * 12);
+
+        if (eba === 'lodged') {
+          return records.some((r: any) => withinYears(r.eba_lodged_fwc, 1));
+        }
+
+        if (eba === 'pending') {
+          return records.some((r: any) =>
+            withinMonths(r.date_eba_signed, 6) || withinMonths(r.date_vote_occurred, 6) ||
+            r.eba_data_form_received || r.date_draft_signing_sent || r.date_barg_docs_sent
+          );
         }
 
         return true;
@@ -638,6 +774,7 @@ export async function GET(request: NextRequest) {
       debug: {
         queryTime,
         cacheHit: false, // TODO: Implement caching in future
+        usedMaterializedView: useMaterializedView,
         aliasSearchUsed: !!(q && includeAliases),
         appliedFilters: {
           q,
