@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
+import { withRateLimit, RATE_LIMIT_PRESETS } from '@/lib/rateLimit';
 
 // Helper function to escape ILIKE special characters (%, _, \)
 function escapeLikePattern(str: string): string {
@@ -82,9 +83,10 @@ export interface ProjectsResponse {
   };
 }
 
-export async function GET(request: NextRequest) {
+// Internal handler (wrapped with rate limiting below)
+async function getProjectsHandler(request: NextRequest) {
   const startTime = Date.now();
-  
+
   try {
     const searchParams = request.nextUrl.searchParams;
     
@@ -395,6 +397,9 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+// Export rate-limited GET handler
+export const GET = withRateLimit(getProjectsHandler, RATE_LIMIT_PRESETS.EXPENSIVE_QUERY);
 
 // Health check endpoint
 export async function HEAD() {

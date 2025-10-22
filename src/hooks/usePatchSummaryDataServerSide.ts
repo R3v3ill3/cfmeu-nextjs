@@ -82,8 +82,7 @@ export function usePatchSummariesServerSide(filters: PatchSummariesFilters = {})
       }
 
       const url = `${baseUrl}/api/dashboard/patch-summaries?${searchParams.toString()}`
-      console.log('🔄 Fetching patch summaries from server:', url)
-      
+
       const response = await fetch(url, {
         method: 'GET',
         headers: {
@@ -100,7 +99,6 @@ export function usePatchSummariesServerSide(filters: PatchSummariesFilters = {})
       
       // Log performance metrics
       if (data.debug) {
-        console.log(`📊 Patch summaries query completed in ${data.debug.queryTime}ms for ${data.debug.patchCount} patches`)
         if (data.debug.queryTime > 1500) {
           console.warn('⚠️ Slow patch summaries query detected:', data.debug)
         }

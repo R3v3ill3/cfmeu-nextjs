@@ -170,7 +170,6 @@ export function useProjectsServerSide(params: ProjectsParams) {
       workerHeaders['Authorization'] = `Bearer ${token}`;
 
       const workerEndpoint = `${workerUrl.replace(/\/$/, '')}/v1/projects${urlPath}`;
-      console.log('🔄 Fetching projects:', { url: workerEndpoint, useWorker: workerUrl });
 
       try {
         const response = await fetch(workerEndpoint, { method: 'GET', headers: workerHeaders });
@@ -218,7 +217,7 @@ export function useProjectsServerSide(params: ProjectsParams) {
     refetchInterval: false,
 
     // Preserve previous data while fetching new results (prevents UI flicker)
-    keepPreviousData: true,
+    placeholderData: (previousData) => previousData,
   });
 }
 

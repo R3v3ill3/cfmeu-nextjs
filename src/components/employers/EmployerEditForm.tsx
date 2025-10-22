@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRADE_OPTIONS } from "@/constants/trades";
-import { GoogleAddressInput, GoogleAddress } from "@/components/projects/GoogleAddressInput";
+import { GoogleAddressInput, GoogleAddress, AddressValidationError } from "@/components/projects/GoogleAddressInput";
 import { IncolinkActionModal } from "./IncolinkActionModal";
 import { Plus } from "lucide-react";
 
@@ -213,7 +213,7 @@ const desiredTags = useMemo(() => {
   const currentTrades = useMemo(() => new Set(tradeCaps.map((t) => t.trade_type)), [tradeCaps]);
 const desiredTrades = useMemo(() => new Set(selectedTrades), [selectedTrades]);
 
-  const handleAddressSelect = useCallback((addr: GoogleAddress) => {
+  const handleAddressSelect = useCallback((addr: GoogleAddress, error?: AddressValidationError | null) => {
     const comps = addr.components || {};
     const streetNumber = comps["street_number"]; // e.g., 123
     const route = comps["route"]; // e.g., Main St
@@ -523,7 +523,13 @@ const onSubmit = useCallback(async (values: z.input<typeof FormSchema>) => {
   {/* Address */}
   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
     <div className="md:col-span-2">
-      <GoogleAddressInput value={addressInputValue} onChange={handleAddressSelect} placeholder="Search address" />
+      <GoogleAddressInput
+        value={addressInputValue}
+        onChange={handleAddressSelect}
+        placeholder="Search Australian address"
+        requireSelection={false}
+        showLabel={false}
+      />
     </div>
 
     <FormField

@@ -247,12 +247,9 @@ export function SingleEmployerPicker({
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ scope: 'employers' })
           });
-          console.log("Materialized view refresh triggered");
         } catch (err) {
           console.warn("Could not trigger view refresh:", err);
         }
-        
-        console.log("Employer created successfully:", emp);
 
         await persistAlias(emp.id, newEmployer.name);
       }

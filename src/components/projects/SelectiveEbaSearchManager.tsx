@@ -365,7 +365,6 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
 
       const employerList = Array.from(employerMap.values()).sort((a, b) => a.name.localeCompare(b.name));
       setEmployers(employerList);
-      console.log(`Loaded ${employerList.length} employers with roles and trades (${employerList.filter(e => e.isKeyContractor).length} key contractors)`);
 
     } catch (error) {
       console.error('Error loading project employers:', error);

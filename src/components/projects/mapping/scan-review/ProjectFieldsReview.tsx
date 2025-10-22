@@ -183,8 +183,7 @@ export function ProjectFieldsReview({
         
         from += pageSize
       }
-      
-      console.log(`[ProjectFieldsReview] Loaded ${allData.length} total employers`)
+
       setAllEmployers(allData)
       
       // Check for fuzzy match for builder
@@ -312,11 +311,9 @@ export function ProjectFieldsReview({
   const handleBuilderMatch = async (
     employerId: string, 
     employerName: string, 
-    isNewEmployer: boolean, 
+    isNewEmployer: boolean,
     extras?: { contractorType?: string }
   ) => {
-    console.log('Builder match confirmed:', { employerId, employerName, isNewEmployer, extras })
-    
     // Fetch the employer's current EBA status
     let employerEbaStatus = null
     if (!isNewEmployer) {
@@ -326,14 +323,13 @@ export function ProjectFieldsReview({
           .select('enterprise_agreement_status')
           .eq('id', employerId)
           .single()
-        
+
         employerEbaStatus = (ebaData as any)?.enterprise_agreement_status === true
-        console.log('Matched employer EBA status:', employerEbaStatus)
       } catch (error) {
         console.error('Failed to fetch employer EBA status:', error)
       }
     }
-    
+
     setDecisions(prev => {
       const updated = {
         ...prev,
@@ -360,10 +356,9 @@ export function ProjectFieldsReview({
           error: undefined,
         }
       }
-      console.log('Updated decisions after builder match:', updated)
       return updated
     })
-    
+
     setBuilderMatchOpen(false)
   }
 
@@ -371,8 +366,6 @@ export function ProjectFieldsReview({
     // When user selects "use scanned value" for EBA = Yes, offer to search for EBA
     const builderEmployerId = decisions.builder_employer_id?.value
     const builderName = decisions.builder_name?.value || extractedData.builder
-    
-    console.log('EBA Search - Builder info:', { builderEmployerId, builderName })
     
     if (builderEmployerId && builderName) {
       setEbaEmployerInfo({ employerId: builderEmployerId, employerName: builderName })

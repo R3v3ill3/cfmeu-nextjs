@@ -38,9 +38,61 @@ import { useAddressSearch } from "@/hooks/useAddressSearch"
 import { AddressSearchResults } from "@/components/projects/AddressSearchResults"
 import { toast } from "sonner"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Skeleton } from "@/components/ui/skeleton"
+import { AlertCircle } from "lucide-react"
 
 // State persistence key
 const PROJECTS_STATE_KEY = 'projects-page-state-mobile'
+
+// Skeleton loading components
+function ProjectCardSkeleton() {
+  return (
+    <div className="border rounded-lg p-4 bg-white space-y-4">
+      <div className="flex items-start justify-between">
+        <div className="flex-1 space-y-2">
+          <Skeleton className="h-5 w-3/4" />
+          <Skeleton className="h-4 w-1/2" />
+        </div>
+        <Skeleton className="h-5 w-5 rounded-full" />
+      </div>
+      <div className="flex items-center justify-between">
+        <div className="flex gap-2">
+          <Skeleton className="h-6 w-16" />
+          <Skeleton className="h-6 w-20" />
+        </div>
+        <Skeleton className="h-4 w-12" />
+      </div>
+      <div className="pt-4 border-t">
+        <Skeleton className="h-11 w-full" />
+      </div>
+    </div>
+  )
+}
+
+function ProjectListItemSkeleton() {
+  return (
+    <div className="border rounded-lg p-3 bg-white space-y-2">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 space-y-2">
+          <Skeleton className="h-4 w-3/4" />
+          <Skeleton className="h-3 w-1/2" />
+          <Skeleton className="h-3 w-2/3" />
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          <Skeleton className="h-5 w-12" />
+          <Skeleton className="h-5 w-5" />
+        </div>
+      </div>
+      <div className="flex items-center justify-between">
+        <div className="flex gap-2">
+          <Skeleton className="h-5 w-16" />
+          <Skeleton className="h-5 w-20" />
+        </div>
+        <Skeleton className="h-3 w-12" />
+      </div>
+    </div>
+  )
+}
 
 // Save state to sessionStorage
 const saveProjectsState = (params: URLSearchParams) => {
@@ -279,9 +331,15 @@ export function ProjectsMobileView() {
     eba: ebaFilter !== 'all' ? ebaFilter as any : undefined,
   })
 
-  const { projects, totalCount, hasNext, hasPrev, isLoading, isFetching } = serverSideResult
+  const { projects, totalCount, hasNext, hasPrev, isLoading, isFetching, error } = serverSideResult
   const hasLoadedData = projects.length > 0
   const isInitialLoad = isLoading && !hasLoadedData
+
+  // Track if data is being refreshed (not initial load)
+  const isRefreshing = isFetching && hasLoadedData
+
+  // Track if search is being typed (debounced)
+  const isSearchPending = searchInput !== qParam && searchMode === 'name'
   
   // For pagination display, use the actual page size
   const displayTotalCount = view === "map" ? projects.length : totalCount
@@ -300,17 +358,76 @@ export function ProjectsMobileView() {
   if (isInitialLoad) {
     return (
       <div className="px-safe py-4 pb-safe-bottom space-y-4">
-        <h1 className="text-2xl font-semibold">Projects</h1>
-        <Input placeholder="Search projects…" disabled />
+        {/* Header Skeleton */}
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-8 w-32" />
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-10 w-24" />
+            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+              <Skeleton className="h-11 w-11" />
+              <Skeleton className="h-11 w-11" />
+              <Skeleton className="h-11 w-11" />
+            </div>
+          </div>
+        </div>
+
+        {/* Search Skeleton */}
+        <Skeleton className="h-10 w-full" />
+        <div className="space-y-2">
+          <Skeleton className="h-11 w-full" />
+          <Skeleton className="h-11 w-full" />
+        </div>
+
+        {/* Results count skeleton */}
+        <Skeleton className="h-4 w-48" />
+
+        {/* Loading cards */}
         <div className="space-y-4">
           {[...Array(5)].map((_, i) => (
-            <div key={i} className="bg-gray-100 rounded-lg h-32 animate-pulse" />
+            <ProjectCardSkeleton key={i} />
           ))}
+        </div>
+
+        {/* Pagination skeleton */}
+        <div className="flex items-center justify-between pt-4">
+          <Skeleton className="h-11 w-24" />
+          <Skeleton className="h-4 w-20" />
+          <Skeleton className="h-11 w-24" />
         </div>
       </div>
     )
   }
-  
+
+  // Error state
+  if (error && !hasLoadedData) {
+    return (
+      <div className="px-safe py-4 pb-safe-bottom space-y-4">
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-semibold">Projects</h1>
+          <CreateProjectDialog />
+        </div>
+
+        <div className="border border-red-300 bg-red-50 rounded-lg p-4 space-y-3">
+          <div className="flex items-center gap-2 text-red-800">
+            <AlertCircle className="h-5 w-5" />
+            <h3 className="font-semibold">Failed to Load Projects</h3>
+          </div>
+          <p className="text-sm text-red-700">
+            {error instanceof Error ? error.message : 'An unexpected error occurred'}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.location.reload()}
+            className="w-full"
+          >
+            Reload Page
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   const cardData = projects.map(p => ({
     id: p.id,
     name: p.name,
@@ -337,6 +454,7 @@ export function ProjectsMobileView() {
             size="sm"
             className="h-11 px-3"
             onClick={() => setParam("view", "card")}
+            disabled={isRefreshing}
           >
             <Grid3X3 className="h-4 w-4" />
           </Button>
@@ -345,6 +463,7 @@ export function ProjectsMobileView() {
             size="sm"
             className="h-11 px-3"
             onClick={() => setParam("view", "list")}
+            disabled={isRefreshing}
           >
             <List className="h-4 w-4" />
           </Button>
@@ -353,6 +472,7 @@ export function ProjectsMobileView() {
             size="sm"
             className="h-11 px-3"
             onClick={() => setParam("view", "map")}
+            disabled={isRefreshing}
           >
             <MapIcon className="h-4 w-4" />
           </Button>
@@ -375,14 +495,19 @@ export function ProjectsMobileView() {
         <TabsContent value="name" className="mt-2">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input 
+            <Input
               id="project-search-mobile"
-              placeholder="Search projects…" 
+              placeholder="Search projects…"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              className="pl-10"
+              className="pl-10 pr-10"
               autoComplete="off"
             />
+            {isSearchPending && (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                <LoadingSpinner size={16} alt="Searching" />
+              </div>
+            )}
           </div>
         </TabsContent>
         <TabsContent value="address" className="mt-2">
@@ -546,10 +671,11 @@ export function ProjectsMobileView() {
         </Collapsible>
       </div>
 
-      {!isInitialLoad && isFetching && (
-        <div className="text-sm text-muted-foreground flex items-center gap-2">
-          <LoadingSpinner size={16} alt="Refreshing" />
-          Updating projects…
+      {/* Loading indicator for filter/search/pagination changes */}
+      {isRefreshing && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-2 sticky top-0 z-10 shadow-sm">
+          <LoadingSpinner size={18} alt="Refreshing" />
+          <span className="text-sm font-medium text-blue-900">Updating projects...</span>
         </div>
       )}
 
@@ -611,13 +737,12 @@ export function ProjectsMobileView() {
         <div className="space-y-3">
           {projects.length > 0 && (
             <div className="text-xs text-muted-foreground bg-blue-50 border border-blue-200 rounded-lg p-3">
-              💡 <strong>Map View:</strong> Showing all {projects.length} projects that match your current filters. 
+              💡 <strong>Map View:</strong> Showing all {projects.length} projects that match your current filters.
               Tap on any project marker to view details.
             </div>
           )}
           <ProjectsMapView
             projects={projects}
-            summaries={{}}
             onProjectClick={(id) => {
               startNavigation(`/projects/${id}`)
               setTimeout(() => router.push(`/projects/${id}`), 50)
@@ -648,6 +773,33 @@ export function ProjectsMobileView() {
         </div>
       ) : projects.length === 0 && !isLoading ? (
         <p className="text-center text-muted-foreground pt-8">No projects found.</p>
+      ) : isRefreshing ? (
+        // Show skeleton cards during refresh to prevent layout shift
+        <div className={view === "list" ? "space-y-2" : "space-y-4"}>
+          <div className="relative">
+            {/* Semi-transparent overlay with old data */}
+            <div className="opacity-40 pointer-events-none">
+              {cardData.map((p: ProjectCardData) => (
+                view === "list" ? (
+                  <ProjectListItem key={p.id} project={p} />
+                ) : (
+                  <ProjectCard key={p.id} project={p} />
+                )
+              ))}
+            </div>
+
+            {/* Skeleton overlay */}
+            <div className="absolute inset-0 space-y-2">
+              {[...Array(Math.min(cardData.length, PAGE_SIZE))].map((_, i) => (
+                view === "list" ? (
+                  <ProjectListItemSkeleton key={i} />
+                ) : (
+                  <ProjectCardSkeleton key={i} />
+                )
+              ))}
+            </div>
+          </div>
+        </div>
       ) : (
         <div className={view === "list" ? "space-y-2" : "space-y-4"}>
           {cardData.map((p: ProjectCardData) => (
@@ -663,13 +815,26 @@ export function ProjectsMobileView() {
       {/* Pagination - only show for card/list views */}
       {view !== "map" && (
         <div className="flex items-center justify-between pt-4">
-          <Button variant="outline" size="sm" className="h-11" disabled={!displayHasPrev} onClick={() => setParam('page', String(page - 1))}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-11"
+            disabled={!displayHasPrev || isRefreshing}
+            onClick={() => setParam('page', String(page - 1))}
+          >
             Previous
           </Button>
-          <div className="text-sm text-muted-foreground">
+          <div className="text-sm text-muted-foreground flex items-center gap-2">
+            {isRefreshing && <LoadingSpinner size={14} />}
             Page {page} of {Math.ceil(totalCount / PAGE_SIZE)}
           </div>
-          <Button variant="outline" size="sm" className="h-11" disabled={!displayHasNext} onClick={() => setParam('page', String(page + 1))}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-11"
+            disabled={!displayHasNext || isRefreshing}
+            onClick={() => setParam('page', String(page + 1))}
+          >
             Next
           </Button>
         </div>

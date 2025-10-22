@@ -673,26 +673,23 @@ export function ProjectsDesktopView() {
     staleTime: 30000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      console.log("🎯 Patch filtering for patches:", { patchIds })
-      
       // Use simple direct query - job_sites.patch_id is properly synced
       const { data, error } = await supabase
         .from("job_sites")
         .select("project_id")
         .in("patch_id", patchIds)
         .not("project_id", "is", null)
-      
+
       if (error) {
         console.error("❌ Patch filtering error:", error)
         throw error
       }
-      
+
       // Extract unique project IDs
       const projectIds = Array.from(
         new Set(((data as any[]) || []).map((row: any) => row.project_id).filter(Boolean))
       )
-      
-      console.log("🎯 Found projects for patches:", { patchIds, projectIds, count: projectIds.length })
+
       return projectIds
     }
   })

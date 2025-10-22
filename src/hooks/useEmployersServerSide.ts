@@ -113,8 +113,7 @@ export function useEmployersServerSide(params: EmployersParams) {
       }
 
       const url = `/api/employers?${searchParams.toString()}`;
-      console.log('🔄 Fetching employers from server:', url);
-      
+
       const response = await fetch(url, {
         method: 'GET',
         headers: {
@@ -131,7 +130,6 @@ export function useEmployersServerSide(params: EmployersParams) {
       
       // Log performance metrics for monitoring
       if (data.debug) {
-        console.log(`📊 Server-side query completed in ${data.debug.queryTime}ms`);
         if (data.debug.queryTime > 1000) {
           console.warn('⚠️ Slow query detected:', data.debug);
         }

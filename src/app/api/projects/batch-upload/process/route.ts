@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
+import { generateBatchIdempotencyKey, generateJobIdempotencyKey, isUniqueViolationError } from '@/lib/idempotency'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,6 +37,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Generate idempotency key from batch content
+    const idempotencyKey = await generateBatchIdempotencyKey(
+      user.id,
+      originalFileName,
+      originalFileSize,
+      totalPages,
+      projectDefinitions
+    )
+
+    // Check for existing batch with same idempotency key
+    const { data: existingBatch, error: lookupError } = await supabase.rpc(
+      'get_batch_by_idempotency_key',
+      {
+        p_user_id: user.id,
+        p_idempotency_key: idempotencyKey,
+      }
+    )
+
+    // If batch already exists, return it (idempotent response)
+    if (existingBatch && !lookupError) {
+      console.log('Returning existing batch for idempotency key:', idempotencyKey)
+      return NextResponse.json({
+        success: true,
+        batchId: existingBatch.batchId,
+        scanIds: existingBatch.scanIds,
+        isExisting: true,
+        message: 'Batch already exists (idempotent response)',
+      })
+    }
+
     // Prepare batch data
     const batchData = {
       original_file_url: originalFileUrl,
@@ -68,13 +99,14 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    // Call RPC to create batch and scans
+    // Call RPC to create batch and scans with idempotency key
     const { data: result, error: rpcError } = await supabase.rpc(
       'create_batch_upload_with_scans',
       {
         p_user_id: user.id,
         p_batch_data: batchData as any,
         p_scans: scanRecords as any,
+        p_idempotency_key: idempotencyKey,
       }
     )
 
@@ -111,22 +143,52 @@ export async function POST(request: NextRequest) {
     }
 
     for (const scan of scans) {
+      const jobPayload = {
+        scanId: scan.id,
+        fileUrl: scan.file_url,
+        fileName: scan.file_name,
+        uploadMode: scan.upload_mode,
+        selectedPages: scan.selected_pages, // Include selected pages
+      }
+
+      // Generate idempotency key for this job
+      const jobIdempotencyKey = await generateJobIdempotencyKey(
+        user.id,
+        scan.id,
+        'mapping_sheet_scan',
+        jobPayload
+      )
+
+      // Check if job already exists with this idempotency key
+      const { data: existingJob } = await supabase
+        .from('scraper_jobs')
+        .select('id, status')
+        .eq('idempotency_key', jobIdempotencyKey)
+        .single()
+
+      if (existingJob) {
+        console.log(`Job already exists for scan ${scan.id}:`, existingJob.id)
+        continue // Skip creating duplicate job
+      }
+
+      // Create new job with idempotency key
       const { error: jobError } = await supabase.from('scraper_jobs').insert({
         job_type: 'mapping_sheet_scan',
-        payload: {
-          scanId: scan.id,
-          fileUrl: scan.file_url,
-          fileName: scan.file_name,
-          uploadMode: scan.upload_mode,
-          selectedPages: scan.selected_pages, // Include selected pages
-        },
+        payload: jobPayload,
         status: 'queued',
         priority: 5,
         max_attempts: 3,
         created_by: user.id, // Required for RLS policy
+        idempotency_key: jobIdempotencyKey,
       })
 
       if (jobError) {
+        // Check if this is a unique violation (race condition)
+        if (isUniqueViolationError(jobError)) {
+          console.log(`Job already created by concurrent request for scan ${scan.id}`)
+          continue // Not a real error, just a race condition
+        }
+
         console.error(`Failed to enqueue job for scan ${scan.id}:`, jobError)
         // Continue with other scans even if one job fails
       }

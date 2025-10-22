@@ -182,11 +182,6 @@ export function UnifiedContractorAssignmentModal({
         throw new Error(result?.message || "Failed to assign contractor");
       }
 
-      // Log the new assignment_id for tracking multiple trade types
-      if (result?.assignment_id) {
-        console.log(`✓ Contractor assigned with Assignment ID: ${result.assignment_id}`);
-      }
-
       return result;
     },
     onSuccess: (result) => {

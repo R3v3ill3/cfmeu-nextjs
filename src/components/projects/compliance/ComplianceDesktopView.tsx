@@ -22,7 +22,7 @@ export function ComplianceDesktopView({ projectId }: ComplianceDesktopViewProps)
 
   const handleExport = () => {
     // TODO: Implement export functionality
-    console.log("Export compliance data");
+    // Export compliance data functionality placeholder
   };
 
   return (

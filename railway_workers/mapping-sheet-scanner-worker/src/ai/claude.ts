@@ -2,6 +2,12 @@ import Anthropic from '@anthropic-ai/sdk'
 import { config } from '../config'
 import { ExtractedMappingSheetData, ProcessingResult } from '../types'
 import { CLAUDE_SYSTEM_PROMPT, CLAUDE_USER_PROMPT } from './prompts'
+import {
+  withTimeoutAndRetry,
+  TimeoutError,
+  logTimeoutIncident,
+  createTimeoutController
+} from '../utils/timeout'
 
 const client = new Anthropic({
   apiKey: config.claudeApiKey,
@@ -12,7 +18,9 @@ export async function extractWithClaude(
   selectedPages?: number[]
 ): Promise<ProcessingResult> {
   const startTime = Date.now()
-  
+  let retryCount = 0
+  let timedOut = false
+
   try {
     // Build message content with PDF document
     const content: any[] = [
@@ -26,24 +34,54 @@ export async function extractWithClaude(
       },
       {
         type: 'text' as const,
-        text: selectedPages 
+        text: selectedPages
           ? `IMPORTANT: Focus ONLY on pages ${selectedPages.join(', ')} of this PDF. Ignore all other pages completely.\n\n${CLAUDE_USER_PROMPT(1, selectedPages.length)}`
           : `Analyze all pages of this PDF mapping sheet.\n\n${CLAUDE_USER_PROMPT(1, 3)}`,
       },
     ]
 
-    // Call Claude API
-    const message = await client.messages.create({
-      model: config.claudeModel,
-      max_tokens: config.maxTokens,
-      system: CLAUDE_SYSTEM_PROMPT,
-      messages: [
-        {
-          role: 'user',
-          content,
+    // Call Claude API with timeout protection and retry logic
+    const message = await withTimeoutAndRetry(
+      async () => {
+        // Create timeout controller for request cancellation
+        const { controller, cleanup } = createTimeoutController(config.claudeTimeoutMs)
+
+        try {
+          const response = await client.messages.create(
+            {
+              model: config.claudeModel,
+              max_tokens: config.maxTokens,
+              system: CLAUDE_SYSTEM_PROMPT,
+              messages: [
+                {
+                  role: 'user',
+                  content,
+                },
+              ],
+            },
+            {
+              signal: controller.signal as AbortSignal,
+            }
+          )
+          cleanup()
+          return response
+        } catch (error) {
+          cleanup()
+          throw error
+        }
+      },
+      {
+        timeoutMs: config.claudeTimeoutMs,
+        maxRetries: config.claudeMaxRetries,
+        operationName: 'Claude API call',
+        onRetry: (attempt, error) => {
+          retryCount = attempt
+          console.warn(
+            `[claude] Retry ${attempt}/${config.claudeMaxRetries} after timeout (${config.claudeTimeoutMs}ms)`
+          )
         },
-      ],
-    })
+      }
+    )
 
     // Extract JSON from response
     const responseText = message.content
@@ -94,9 +132,30 @@ export async function extractWithClaude(
       inputTokens,
       outputTokens,
       imagesProcessed: selectedPages?.length || 1,
+      timedOut: false,
+      retryCount,
     }
   } catch (error) {
+    const isTimeout = error instanceof TimeoutError
+
+    if (isTimeout) {
+      timedOut = true
+      // Log timeout incident for monitoring
+      logTimeoutIncident('Claude API extraction', config.claudeTimeoutMs, {
+        selectedPages: selectedPages?.join(', ') || 'all',
+        pdfSizeBytes: pdfBuffer.length,
+        retryCount,
+        model: config.claudeModel,
+      })
+    }
+
     console.error('[claude] Extraction failed:', error)
+    console.error('[claude] Error details:', {
+      isTimeout,
+      retryCount,
+      processingTimeMs: Date.now() - startTime,
+    })
+
     return {
       success: false,
       provider: 'claude',
@@ -104,6 +163,8 @@ export async function extractWithClaude(
       processingTimeMs: Date.now() - startTime,
       imagesProcessed: selectedPages?.length || 1,
       error: error instanceof Error ? error.message : 'Unknown error',
+      timedOut,
+      retryCount,
     }
   }
 }

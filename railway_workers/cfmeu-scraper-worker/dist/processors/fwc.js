@@ -41,6 +41,8 @@ exports.processFwcJob = processFwcJob;
 const cheerio = __importStar(require("cheerio"));
 const puppeteer_1 = __importDefault(require("puppeteer"));
 const jobs_1 = require("../jobs");
+const retry_1 = require("../utils/retry");
+const config_1 = require("../config");
 const BASE_SEARCH_PREFIX = 'cfmeu construction nsw';
 const STOP_WORDS = new Set([
     'cfmeu',
@@ -67,6 +69,14 @@ const STOP_WORDS = new Set([
     'australian',
     'the',
 ]);
+// FWC-specific retry configuration (from config or defaults)
+const FWC_RETRY_CONFIG = {
+    maxAttempts: config_1.config.retry.maxAttempts,
+    initialDelayMs: config_1.config.retry.initialDelayMs,
+    maxDelayMs: config_1.config.retry.maxDelayMs,
+    backoffMultiplier: config_1.config.retry.backoffMultiplier,
+    jitterMaxMs: config_1.config.retry.jitterMaxMs,
+};
 class FwcSearchError extends Error {
     constructor(message, context) {
         super(message);
@@ -117,11 +127,53 @@ async function processFwcJob(client, job) {
                         employerName,
                         query: candidate,
                     });
-                    const attemptResults = await searchFwcAgreements(browser, candidate);
-                    if (attemptResults.length > 0) {
-                        results = attemptResults;
+                    // Search with retry logic for transient failures
+                    const retryResult = await (0, retry_1.withRetry)(() => searchFwcAgreements(browser, candidate), FWC_RETRY_CONFIG, async (retryContext) => {
+                        // Log retry attempts
+                        console.warn('[worker] FWC search retry:', (0, retry_1.formatRetryLog)(retryContext, { ...retry_1.DEFAULT_RETRY_CONFIG, ...FWC_RETRY_CONFIG }));
+                        await (0, jobs_1.appendEvent)(client, job.id, 'fwc_search_retry', {
+                            employerId,
+                            employerName,
+                            query: candidate,
+                            attempt: retryContext.attempt,
+                            totalDelayMs: retryContext.totalDelayMs,
+                            error: retryContext.lastError?.message,
+                        });
+                    });
+                    if (retryResult.success && retryResult.data) {
+                        results = retryResult.data;
                         usedQuery = candidate;
-                        break;
+                        // Log successful search after retries
+                        if (retryResult.attempts > 1) {
+                            await (0, jobs_1.appendEvent)(client, job.id, 'fwc_search_success_after_retry', {
+                                employerId,
+                                employerName,
+                                query: candidate,
+                                attempts: retryResult.attempts,
+                                totalDelayMs: retryResult.totalDelayMs,
+                            });
+                        }
+                        if (results.length > 0) {
+                            break;
+                        }
+                    }
+                    else if (!retryResult.success) {
+                        // Search failed after all retries
+                        console.error('[worker] FWC search failed after retries:', {
+                            employerId,
+                            query: candidate,
+                            attempts: retryResult.attempts,
+                            error: retryResult.error?.message,
+                        });
+                        await (0, jobs_1.appendEvent)(client, job.id, 'fwc_search_retry_exhausted', {
+                            employerId,
+                            employerName,
+                            query: candidate,
+                            attempts: retryResult.attempts,
+                            totalDelayMs: retryResult.totalDelayMs,
+                            error: retryResult.error?.message,
+                        });
+                        // Continue to next query candidate instead of throwing
                     }
                 }
                 const limitedResults = results.slice(0, 15);
@@ -136,14 +188,38 @@ async function processFwcJob(client, job) {
                 if (results.length > 0) {
                     if (autoLink) {
                         const bestResult = results[0];
-                        await upsertEbaRecord(client, employerId, bestResult);
-                        succeeded += 1;
-                        await (0, jobs_1.appendEvent)(client, job.id, 'fwc_employer_succeeded', {
-                            employerId,
-                            employerName,
-                            resultTitle: bestResult.title,
-                            status: bestResult.status,
+                        // Retry database upsert operation
+                        const upsertResult = await (0, retry_1.withRetry)(() => upsertEbaRecord(client, employerId, bestResult), {
+                            maxAttempts: 3,
+                            initialDelayMs: 1000,
+                            backoffMultiplier: 2,
+                        }, async (retryContext) => {
+                            console.warn('[worker] Database upsert retry:', (0, retry_1.formatRetryLog)(retryContext, { ...retry_1.DEFAULT_RETRY_CONFIG, maxAttempts: 3 }));
+                            await (0, jobs_1.appendEvent)(client, job.id, 'fwc_upsert_retry', {
+                                employerId,
+                                employerName,
+                                attempt: retryContext.attempt,
+                                error: retryContext.lastError?.message,
+                            });
                         });
+                        if (upsertResult.success) {
+                            succeeded += 1;
+                            await (0, jobs_1.appendEvent)(client, job.id, 'fwc_employer_succeeded', {
+                                employerId,
+                                employerName,
+                                resultTitle: bestResult.title,
+                                status: bestResult.status,
+                                upsertAttempts: upsertResult.attempts,
+                            });
+                        }
+                        else {
+                            failed += 1;
+                            await (0, jobs_1.appendEvent)(client, job.id, 'fwc_employer_failed', {
+                                employerId,
+                                employerName,
+                                error: `Database upsert failed after ${upsertResult.attempts} attempts: ${upsertResult.error?.message}`,
+                            });
+                        }
                     }
                     else {
                         succeeded += 1;

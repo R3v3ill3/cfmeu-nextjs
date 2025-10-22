@@ -1071,10 +1071,12 @@ export default function PendingEmployersImport() {
           id: employerId,
           name: pendingEmployer.company_name
         });
-        
-        // Track if this was a duplicate resolution
+
+        // Track if this was a duplicate resolution (manual match, wizard decision, or automatic exact match)
         const detection = duplicateDetections[pendingEmployer.id];
-        if (detection?.userDecision === 'use_existing') {
+        if (detection?.userDecision === 'use_existing' ||
+            pendingEmployer.import_status === 'matched' ||
+            (employerId !== pendingEmployer.id && pendingEmployer.import_status !== 'create_new')) {
           results.duplicatesResolved++;
         }
 
@@ -1379,10 +1381,17 @@ export default function PendingEmployersImport() {
   const detectDuplicatesForImport = async (): Promise<Record<string, DuplicateDetection>> => {
     const supabase = getSupabaseBrowserClient();
     const detections: Record<string, DuplicateDetection> = {};
-    
+
     const employersToImport = pendingEmployers.filter(emp => selectedEmployers.has(emp.id));
-    
+
     for (const pendingEmployer of employersToImport) {
+      // Skip employers that already have manual matches or are marked as "create new"
+      // These decisions have already been made by the user
+      if (pendingEmployer.import_status === 'matched' || pendingEmployer.import_status === 'create_new') {
+        console.log(`⏭️  Skipping duplicate detection for "${pendingEmployer.company_name}" (already ${pendingEmployer.import_status})`);
+        continue;
+      }
+
       let exactMatches: any[] = [];
       
       // Check for BCI Company ID matches first (if available)
@@ -1671,7 +1680,17 @@ export default function PendingEmployersImport() {
     try {
       const detections = await detectDuplicatesForImport();
       setDuplicateDetections(detections);
-      
+
+      // Count how many employers were skipped due to manual matches
+      const employersToImport = pendingEmployers.filter(emp => selectedEmployers.has(emp.id));
+      const manuallyMatchedCount = employersToImport.filter(emp =>
+        emp.import_status === 'matched' || emp.import_status === 'create_new'
+      ).length;
+
+      if (manuallyMatchedCount > 0) {
+        console.log(`✅ Skipped duplicate detection for ${manuallyMatchedCount} employer(s) with manual decisions`);
+      }
+
       if (Object.keys(detections).length > 0) {
         setShowDuplicateResolution(true);
       } else {
@@ -2255,7 +2274,10 @@ export default function PendingEmployersImport() {
           <Card>
             <CardContent className="p-6 text-center">
               <div className="text-2xl font-bold text-blue-600">{importResults.duplicatesResolved}</div>
-              <p className="text-sm text-gray-600">Duplicates Resolved</p>
+              <p className="text-sm text-gray-600">Employers Merged</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                (Manual + Automatic)
+              </p>
             </CardContent>
           </Card>
           

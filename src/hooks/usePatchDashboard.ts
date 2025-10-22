@@ -24,9 +24,21 @@ export function usePatchDashboard(patchId?: string) {
   return useQuery<{ kpis: PatchKpis; rows: PatchRow[] }>({
     queryKey: ["patch-dashboard", patchId || "default"],
     queryFn: async () => {
-      // Resolve current user and optional site scoping
-      const { data: auth } = await supabase.auth.getUser()
-      const userId = auth?.user?.id
+      // OPTIMIZATION: Resolve user and sites in parallel
+      const [authResult, sitesResult] = await Promise.all([
+        supabase.auth.getUser(),
+        patchId
+          ? supabase
+              .from('patch_job_sites')
+              .select('job_sites:job_site_id(id,name,location,project_id)')
+              .is('effective_to', null)
+              .eq('patch_id', patchId)
+          : Promise.resolve({ data: null })
+      ])
+
+      const userId = authResult.data?.user?.id
+
+      // Get scoped sites if user exists
       let scopedSites: string[] = []
       if (userId) {
         const { data: prof } = await supabase.from('profiles').select('scoped_sites').eq('id', userId).single()
@@ -35,17 +47,9 @@ export function usePatchDashboard(patchId?: string) {
 
       // Resolve target site ids based on patch selection and/or legacy field
       let sites: any[] = []
-      // If a patch id is provided, collect sites strictly from patch mappings
-      if (patchId) {
-        try {
-          const { data: mappedSites } = await supabase
-            .from('patch_job_sites')
-            .select('job_sites:job_site_id(id,name,location,project_id)')
-            .is('effective_to', null)
-            .eq('patch_id', patchId)
-          const list = ((mappedSites as any[]) || []).map(r => (r as any).job_sites).filter(Boolean)
-          sites = list
-        } catch {}
+      if (patchId && sitesResult.data) {
+        const list = ((sitesResult.data as any[]) || []).map(r => (r as any).job_sites).filter(Boolean)
+        sites = list
       }
       // If no patch selected, fallback: direct query of job_sites only
       if (!patchId && sites.length === 0) {
@@ -62,116 +66,121 @@ export function usePatchDashboard(patchId?: string) {
       }
       const siteIds = sites.map(s => s.id)
 
-      // Map project names
+      // OPTIMIZATION: Parallelize all site-dependent queries
       const projectIds = Array.from(new Set(sites.map(s => s.project_id).filter(Boolean)))
+
+      const [projectsResult, placementsResult, rolesResult, visitsResult, campaignsResult, kpiDefsResult] = await Promise.all([
+        // Projects lookup
+        projectIds.length > 0
+          ? supabase.from('projects').select('id,name').in('id', projectIds)
+          : Promise.resolve({ data: [] }),
+
+        // Worker placements with workers
+        siteIds.length > 0
+          ? supabase
+              .from('worker_placements')
+              .select('job_site_id, employer_id, worker_id, workers!inner(id, union_membership_status)')
+              .in('job_site_id', siteIds)
+          : Promise.resolve({ data: [] }),
+
+        // Union roles per site
+        siteIds.length > 0
+          ? supabase
+              .from('union_roles')
+              .select('job_site_id, name')
+              .in('job_site_id', siteIds)
+          : Promise.resolve({ data: [] }),
+
+        // Last site visits
+        siteIds.length > 0
+          ? supabase
+              .from('site_visit')
+              .select('id, job_site_id, date')
+              .in('job_site_id', siteIds)
+              .order('date', { ascending: false })
+          : Promise.resolve({ data: [] }),
+
+        // Active campaign (independent of sites)
+        supabase
+          .from('campaigns')
+          .select('id, status, start_date')
+          .eq('status', 'active')
+          .order('start_date', { ascending: false })
+          .limit(1),
+
+        // KPI definitions (independent of sites)
+        supabase.from('kpi_definitions').select('id, code')
+      ])
+
       let projectNameById: Record<string, string> = {}
-      if (projectIds.length > 0) {
-        const { data: projects } = await supabase.from('projects').select('id,name').in('id', projectIds)
-        ;(projects as any[] || []).forEach(p => { projectNameById[p.id] = p.name })
-      }
+      ;(projectsResult.data as any[] || []).forEach(p => { projectNameById[p.id] = p.name })
 
-      // Worker placements with workers to compute members and employer counts
-      let placements: any[] = []
-      if (siteIds.length > 0) {
-        const { data: pl } = await supabase
-          .from('worker_placements')
-          .select('job_site_id, employer_id, worker_id, workers!inner(id, union_membership_status)')
-          .in('job_site_id', siteIds)
-        placements = (pl as any[]) || []
-      }
-
-      // Union roles per site for leaders score
-      let roles: any[] = []
-      if (siteIds.length > 0) {
-        const { data: rls } = await supabase
-          .from('union_roles')
-          .select('job_site_id, name')
-          .in('job_site_id', siteIds)
-        roles = (rls as any[]) || []
-      }
-
-      // Last site visit per site (capture id and date)
-      let visits: any[] = []
-      if (siteIds.length > 0) {
-        const { data: vs } = await supabase
-          .from('site_visit')
-          .select('id, job_site_id, date')
-          .in('job_site_id', siteIds)
-          .order('date', { ascending: false })
-        visits = (vs as any[]) || []
-      }
+      const placements = (placementsResult.data as any[]) || []
+      const roles = (rolesResult.data as any[]) || []
+      const visits = (visitsResult.data as any[]) || []
 
       // Aggregate per site
       const leaderRoleSet = new Set([ 'site_delegate', 'shift_delegate', 'company_delegate', 'hsr' ])
       const lastVisitBySite: Record<string, { id: string; date: string }> = {}
       visits.forEach(v => { if (!lastVisitBySite[v.job_site_id]) lastVisitBySite[v.job_site_id] = { id: v.id, date: v.date } })
 
-      // Fetch worker membership (DD) for placed workers in scope
-      let ddByWorkerId: Record<string, string> = {}
+      // Process campaign and KPI definitions (already fetched in parallel)
+      const activeCampaignId = (campaignsResult.data as any[])?.length ? (campaignsResult.data as any[])[0].id : null
+      const defs = (kpiDefsResult.data as any[]) || []
+      const codeMatches = (codes: string[]) => defs.filter(d => codes.some(c => String(d.code).toLowerCase().includes(c)))
+      let kpiIdByKind: { members?: string[]; dd?: string[]; leaders?: string[] } = {
+        members: codeMatches(['membership','membership_joins']).map(d => d.id),
+        dd: codeMatches(['dd','direct_debit','dd_conversion']).map(d => d.id),
+        leaders: codeMatches(['leaders','delegates_hsr','delegate','hsr']).map(d => d.id)
+      }
+
+      // OPTIMIZATION: Fetch worker memberships and targets in parallel
       const workerIds = Array.from(new Set(placements.map(p => p.worker_id).filter(Boolean)))
-      if (workerIds.length > 0) {
-        // Prefer plural table name; fallback to singular if needed
-        let wm: any[] | null = null
-        let err: any = null
-        const { data: wmPlural, error: wmPluralErr } = await supabase
-          .from('worker_memberships')
-          .select('worker_id, payment_method')
-          .in('worker_id', workerIds)
-        if (!wmPluralErr) { wm = wmPlural as any[] } else { err = wmPluralErr }
-        if (!wm) {
-          const { data: wmSing, error: wmSingErr } = await supabase
-            .from('worker_membership')
-            .select('worker_id, payment_method')
-            .in('worker_id', workerIds)
-          if (!wmSingErr) wm = wmSing as any[]
-          else err = wmSingErr
-        }
-        if (wm) {
-          wm.forEach(r => { if (!(r.worker_id in ddByWorkerId)) ddByWorkerId[r.worker_id] = r.payment_method })
-        } else if (err) {
-          // tolerate absence; DD metrics will be zero
-        }
+
+      const [wmPluralResult, wmSingResult, targetsResult] = await Promise.all([
+        // Worker memberships (try plural table name)
+        workerIds.length > 0
+          ? supabase
+              .from('worker_memberships')
+              .select('worker_id, payment_method')
+              .in('worker_id', workerIds)
+          : Promise.resolve({ data: null, error: null }),
+
+        // Worker membership (try singular table name as fallback)
+        workerIds.length > 0
+          ? supabase
+              .from('worker_membership')
+              .select('worker_id, payment_method')
+              .in('worker_id', workerIds)
+          : Promise.resolve({ data: null, error: null }),
+
+        // KPI targets
+        activeCampaignId && siteIds.length > 0 && (kpiIdByKind.members?.length || kpiIdByKind.dd?.length || kpiIdByKind.leaders?.length)
+          ? (() => {
+              let tq = supabase
+                .from('kpi_targets')
+                .select('job_site_id, kpi_id, target_value')
+                .eq('campaign_id', activeCampaignId)
+                .in('job_site_id', siteIds)
+              if (userId) tq = tq.eq('organiser_id', userId)
+              return tq
+            })()
+          : Promise.resolve({ data: [] })
+      ])
+
+      // Process worker memberships (prefer plural, fallback to singular)
+      let ddByWorkerId: Record<string, string> = {}
+      const wm = !wmPluralResult.error ? wmPluralResult.data : wmSingResult.data
+      if (wm) {
+        ;(wm as any[]).forEach(r => { if (!(r.worker_id in ddByWorkerId)) ddByWorkerId[r.worker_id] = r.payment_method })
       }
 
-      // Determine active campaign for goals
-      let activeCampaignId: string | null = null
-      {
-        const { data: campaigns } = await supabase
-          .from('campaigns')
-          .select('id, status, start_date')
-          .eq('status', 'active')
-          .order('start_date', { ascending: false })
-          .limit(1)
-        if ((campaigns as any[])?.length) activeCampaignId = (campaigns as any[])[0].id
-      }
-
-      // Resolve KPI codes → ids
-      const desiredCodes = [ 'membership', 'membership_joins', 'dd', 'direct_debit', 'dd_conversion', 'leaders', 'delegates_hsr' ]
-      let kpiIdByKind: { members?: string[]; dd?: string[]; leaders?: string[] } = {}
-      {
-        const { data: allDefs } = await supabase
-          .from('kpi_definitions')
-          .select('id, code')
-        const defs = (allDefs as any[]) || []
-        const codeMatches = (codes: string[]) => defs.filter(d => codes.some(c => String(d.code).toLowerCase().includes(c)))
-        kpiIdByKind.members = codeMatches(['membership','membership_joins']).map(d => d.id)
-        kpiIdByKind.dd = codeMatches(['dd','direct_debit','dd_conversion']).map(d => d.id)
-        kpiIdByKind.leaders = codeMatches(['leaders','delegates_hsr','delegate','hsr']).map(d => d.id)
-      }
-
-      // Load targets scoped by campaign, organiser, and site
+      // Process targets
       type TargetRow = { job_site_id: string; kpi_id: string; target_value: number }
       const targetsBySite: Record<string, { members: number; dd: number; leaders: number }> = {}
-      if (activeCampaignId && siteIds.length > 0 && (kpiIdByKind.members?.length || kpiIdByKind.dd?.length || kpiIdByKind.leaders?.length)) {
-        let tq = supabase
-          .from('kpi_targets')
-          .select('job_site_id, kpi_id, target_value')
-          .eq('campaign_id', activeCampaignId)
-          .in('job_site_id', siteIds)
-        if (userId) tq = tq.eq('organiser_id', userId)
-        const { data: tRows } = await tq
-        const list = (tRows as TargetRow[] | null) || []
+      if (activeCampaignId) {
         for (const s of siteIds) targetsBySite[s] = { members: 0, dd: 0, leaders: 0 }
+        const list = (targetsResult.data as TargetRow[] | null) || []
         list.forEach(row => {
           const bucket = targetsBySite[row.job_site_id] || (targetsBySite[row.job_site_id] = { members: 0, dd: 0, leaders: 0 })
           if (kpiIdByKind.members?.includes(row.kpi_id)) bucket.members += Number(row.target_value || 0)
@@ -180,45 +189,81 @@ export function usePatchDashboard(patchId?: string) {
         })
       }
 
-      // Preload open issues for each site's last visit to avoid await inside map
+      // OPTIMIZATION: Batch all open issues queries for all sites
       const openIssuesBySite: Record<string, number> = {}
-      for (const s of sites) {
-        const lv = lastVisitBySite[s.id]
-        let openIssues = 0
-        if (lv?.id) {
-          const visitId = lv.id
-          // Load WHS assessment (handle schema name variance)
-          const [assPlural, assSing, entRes] = await Promise.all([
-            supabase.from('whs_assesment').select('id').eq('site_visit_id', visitId),
-            supabase.from('whs_assessment').select('id').eq('site_visit_id', visitId),
-            supabase.from('entitlements_audit').select('*').eq('site_visit_id', visitId),
+      const visitIds = sites.map(s => lastVisitBySite[s.id]?.id).filter(Boolean)
+
+      if (visitIds.length > 0) {
+        // Fetch all assessments and audits for all visits in parallel
+        const [assPluralResult, assSingResult, entResult] = await Promise.all([
+          supabase.from('whs_assesment').select('id, site_visit_id').in('site_visit_id', visitIds),
+          supabase.from('whs_assessment').select('id, site_visit_id').in('site_visit_id', visitIds),
+          supabase.from('entitlements_audit').select('*, site_visit_id').in('site_visit_id', visitIds),
+        ])
+
+        // Use whichever assessment table exists
+        const assessments = (assPluralResult.data as any[]) || (assSingResult.data as any[]) || []
+        const assIds = assessments.map((a: any) => a.id)
+
+        // Map assessments to visit IDs
+        const assessmentsByVisit: Record<string, string[]> = {}
+        assessments.forEach((a: any) => {
+          if (!assessmentsByVisit[a.site_visit_id]) assessmentsByVisit[a.site_visit_id] = []
+          assessmentsByVisit[a.site_visit_id].push(a.id)
+        })
+
+        // Fetch all breaches in parallel if we have assessments
+        let breachesByAssessment: Record<string, number> = {}
+        if (assIds.length > 0) {
+          const [brAssesmentResult, brAssessmentResult] = await Promise.all([
+            supabase.from('whs_breach').select('id, whs_assesment_id').in('whs_assesment_id', assIds),
+            supabase.from('whs_breach').select('id, whs_assessment_id').in('whs_assessment_id', assIds),
           ])
-          const assIds = (((assPlural as any).data as any[]) || ((assSing as any).data as any[]) || []).map((a: any) => a.id)
-          if (assIds.length > 0) {
-            // Try both FK column spellings
-            const [brAssesment, brAssessment] = await Promise.all([
-              supabase.from('whs_breach').select('id').in('whs_assesment_id', assIds),
-              supabase.from('whs_breach').select('id').in('whs_assessment_id', assIds),
-            ])
-            const countA = (((brAssesment as any).data as any[]) || []).length
-            const countB = (((brAssessment as any).data as any[]) || []).length
-            openIssues += Math.max(countA, countB)
-          }
-          const entRows = (((entRes as any).data as any[]) || [])
-          for (const r of entRows) {
-            const flags = [
-              'supe_paid',
-              'super_paid_to_fund',
-              'reducndancy_contributions_up_to_date',
-              'wages_correct',
-              'eba_allowances_correct',
-            ]
-            flags.forEach((k) => {
-              if (k in r && typeof r[k] === 'boolean' && r[k] === false) openIssues += 1
-            })
-          }
+
+          const breaches = (brAssesmentResult.data as any[]) || (brAssessmentResult.data as any[]) || []
+          breaches.forEach((b: any) => {
+            const assId = b.whs_assesment_id || b.whs_assessment_id
+            breachesByAssessment[assId] = (breachesByAssessment[assId] || 0) + 1
+          })
         }
-        openIssuesBySite[s.id] = openIssues
+
+        // Process entitlements audits
+        const entRows = (entResult.data as any[]) || []
+        const entIssuesByVisit: Record<string, number> = {}
+        entRows.forEach((r: any) => {
+          const flags = [
+            'supe_paid',
+            'super_paid_to_fund',
+            'reducndancy_contributions_up_to_date',
+            'wages_correct',
+            'eba_allowances_correct',
+          ]
+          let count = 0
+          flags.forEach((k) => {
+            if (k in r && typeof r[k] === 'boolean' && r[k] === false) count += 1
+          })
+          entIssuesByVisit[r.site_visit_id] = (entIssuesByVisit[r.site_visit_id] || 0) + count
+        })
+
+        // Calculate total issues per site
+        for (const s of sites) {
+          const lv = lastVisitBySite[s.id]
+          let openIssues = 0
+          if (lv?.id) {
+            const visitId = lv.id
+            // Count breaches from assessments
+            const siteAssIds = assessmentsByVisit[visitId] || []
+            siteAssIds.forEach(assId => {
+              openIssues += breachesByAssessment[assId] || 0
+            })
+            // Add entitlement issues
+            openIssues += entIssuesByVisit[visitId] || 0
+          }
+          openIssuesBySite[s.id] = openIssues
+        }
+      } else {
+        // No visits, all sites have 0 issues
+        sites.forEach(s => { openIssuesBySite[s.id] = 0 })
       }
 
       const rows: PatchRow[] = sites.map(s => {

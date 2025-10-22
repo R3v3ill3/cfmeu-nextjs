@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { mapFilenameToTradeType, extractTradeLabelFromFilename } from '@/utils/ebaTradeTypeMapping'
+import { validatePdfSignature } from '@/lib/validation/fileSignature'
 
 interface ParsedEmployer {
   companyName: string
@@ -158,6 +159,20 @@ export async function POST(request: NextRequest) {
     // Check file size (limit to 50MB)
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
+
+    // SECURITY: Validate file signature (magic bytes) to prevent malicious uploads
+    const signatureValidation = await validatePdfSignature(buffer)
+    if (!signatureValidation.valid) {
+      console.warn('[eba-parse] PDF signature validation failed:', signatureValidation.error)
+      return NextResponse.json(
+        {
+          error: 'Invalid PDF file',
+          details: 'The uploaded file does not appear to be a valid PDF. File extension can be spoofed - please ensure you are uploading a genuine PDF file.',
+          securityWarning: 'Potential security risk detected: file signature mismatch'
+        },
+        { status: 400 }
+      )
+    }
 
     if (buffer.length > 50 * 1024 * 1024) {
       return NextResponse.json(

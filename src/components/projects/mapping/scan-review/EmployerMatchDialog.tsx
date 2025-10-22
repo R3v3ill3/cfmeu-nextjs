@@ -139,8 +139,6 @@ export function EmployerMatchDialog({
         if (tradeError) {
           console.warn('Failed to add trade capability:', tradeError)
           // Don't fail the whole operation if trade capability insert fails
-        } else {
-          console.log(`Added trade capability: ${tradeTypeCode} for employer ${data.name}`)
         }
       }
 

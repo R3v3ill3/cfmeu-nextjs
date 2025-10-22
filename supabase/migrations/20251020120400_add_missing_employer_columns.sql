@@ -83,3 +83,4 @@ CREATE INDEX IF NOT EXISTS idx_employers_under_review
   ON employers(currently_reviewed_by) WHERE currently_reviewed_by IS NOT NULL;
 
 
+

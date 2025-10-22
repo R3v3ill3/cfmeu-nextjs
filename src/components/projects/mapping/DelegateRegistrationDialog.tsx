@@ -225,13 +225,6 @@ export function DelegateRegistrationDialog({
         throw new Error("Missing required data for registration");
       }
 
-      console.log("Starting registration for:", {
-        selectedWorkerId,
-        mainSiteId,
-        selectedEmployerId,
-        repType: registrationData.repType
-      });
-
       // Determine union role name based on rep type
       let unionRoleName: string;
       if (registrationData.repType === 'Delegate Only') {

@@ -61,7 +61,6 @@ export async function fetchOrganizingUniverseMetrics(filters: OrganizingUniverse
   }
 
   try {
-    console.log('Organizing universe metrics fetch filters:', filters)
 
     if (USE_SERVER_SIDE) {
       const searchParams = new URLSearchParams()
@@ -104,7 +103,6 @@ export async function fetchOrganizingUniverseMetrics(filters: OrganizingUniverse
         }
 
         const data = await response.json()
-        console.log('Organizing universe metrics server result:', { filters, metrics: data?.metrics })
         return data?.metrics || getEmptyMetrics()
       } catch (error) {
         console.error('Error fetching server-side organizing metrics:', error)
@@ -149,7 +147,6 @@ export async function fetchOrganizingUniverseMetrics(filters: OrganizingUniverse
 
     // Apply patch filtering if specified
     if (filters.patchIds && filters.patchIds.length > 0) {
-      console.log('🔍 Applying patch filter:', filters.patchIds)
       
       const { data: patchSites, error: patchSitesError } = await supabase
         .from("patch_job_sites")
@@ -162,7 +159,6 @@ export async function fetchOrganizingUniverseMetrics(filters: OrganizingUniverse
       }
 
       const siteIds = patchSites?.map(ps => ps.job_site_id) || []
-      console.log('🔍 Found patch sites:', siteIds.length)
       
       if (siteIds.length > 0) {
         activeProjectsQuery = activeProjectsQuery
@@ -189,7 +185,6 @@ export async function fetchOrganizingUniverseMetrics(filters: OrganizingUniverse
       throw error
     }
 
-    console.log(`📊 Loaded ${activeProjects?.length || 0} active projects for organizing universe metrics`)
     
     // Fetch key contractor trades from database (replaces hard-coded list)
     const { data: keyTradesData, error: keyTradesError } = await (supabase as any)
@@ -210,9 +205,7 @@ export async function fetchOrganizingUniverseMetrics(filters: OrganizingUniverse
     )
     
     const metrics = calculateMetrics(activeProjects || [], keyTrades)
-    console.log('Organizing universe metrics client result:', { filters, metrics })
-    console.log('📊 Calculated organizing universe metrics:', metrics)
-    
+
     return metrics
   } catch (error) {
     console.error("Error calculating organizing universe metrics:", error)
@@ -227,8 +220,6 @@ export async function fetchOrganizingUniverseMetrics(filters: OrganizingUniverse
 function calculateMetrics(projects: any[], keyContractorTrades: Set<string>): OrganizingUniverseMetrics {
   const totalActiveProjects = projects.length
   
-  console.log(`🔢 Calculating metrics for ${totalActiveProjects} projects`)
-  console.log(`🔧 Using ${keyContractorTrades.size} key trades for metrics:`, Array.from(keyContractorTrades))
   
   const KEY_CONTRACTOR_TRADES = keyContractorTrades
 
@@ -255,7 +246,6 @@ function calculateMetrics(projects: any[], keyContractorTrades: Set<string>): Or
     const builder = builderAssignments[0]?.employers
     const builderHasEba = builder?.company_eba_records?.some((eba: any) => eba.fwc_certified_date)
     
-    console.log(`📋 Project ${project.name}: builder=${builder?.name}, hasEba=${builderHasEba}`)
 
     // 1. EBA Projects (builder has active EBA)
     if (builderHasEba) {
@@ -301,7 +291,6 @@ function calculateMetrics(projects: any[], keyContractorTrades: Set<string>): Or
     project.job_sites?.forEach((site: any) => {
       site.site_contractor_trades?.forEach((sct: any) => {
         const tradeCode = sct.trade_type // Direct enum string
-        console.log(`🔧 Checking trade: ${tradeCode} against key trades:`, KEY_CONTRACTOR_TRADES)
         
         if (tradeCode && KEY_CONTRACTOR_TRADES.has(tradeCode)) {
           projectKeyContractors.add(tradeCode)
@@ -344,17 +333,9 @@ function calculateMetrics(projects: any[], keyContractorTrades: Set<string>): Or
     ? Math.round((keyContractorsOnEbaBuilderProjects / totalKeyContractorsOnEbaBuilderProjects) * 100) 
     : 0
 
-  const keyContractorEbaPercentage = mappedKeyContractors > 0 
-    ? Math.round((keyContractorsWithEba / mappedKeyContractors) * 100) 
+  const keyContractorEbaPercentage = mappedKeyContractors > 0
+    ? Math.round((keyContractorsWithEba / mappedKeyContractors) * 100)
     : 0
-
-  console.log('🔢 Final percentages calculated:', {
-    ebaProjectsPercentage,
-    knownBuilderPercentage,
-    keyContractorCoveragePercentage,
-    keyContractorEbaBuilderPercentage,
-    keyContractorEbaPercentage
-  })
 
   return {
     ebaProjectsPercentage,

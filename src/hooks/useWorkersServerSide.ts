@@ -93,8 +93,7 @@ export function useWorkersServerSide(params: WorkersParams) {
       }
 
       const url = `/api/workers?${searchParams.toString()}`;
-      console.log('🔄 Fetching workers from server:', url);
-      
+
       const response = await fetch(url, {
         method: 'GET',
         headers: {
@@ -111,7 +110,6 @@ export function useWorkersServerSide(params: WorkersParams) {
       
       // Log performance metrics
       if (data.debug) {
-        console.log(`📊 Workers server-side query completed in ${data.debug.queryTime}ms`);
         if (data.debug.queryTime > 1000) {
           console.warn('⚠️ Slow workers query detected:', data.debug);
         }

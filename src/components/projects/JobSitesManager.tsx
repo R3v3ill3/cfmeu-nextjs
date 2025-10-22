@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { GoogleAddressInput, GoogleAddress } from "./GoogleAddressInput";
+import { GoogleAddressInput, GoogleAddress, AddressValidationError } from "./GoogleAddressInput";
 
 export default function JobSitesManager({ projectId, projectName, focusSiteId }: { projectId: string; projectName: string; focusSiteId?: string; }) {
   const queryClient = useQueryClient();
@@ -95,10 +95,15 @@ export default function JobSitesManager({ projectId, projectName, focusSiteId }:
 
   const saveSiteMutation = useMutation({
     mutationFn: async ({ id, name, address }: { id: string; name: string; address?: GoogleAddress }) => {
-const updates: any = { name };
+      const updates: any = { name };
       if (address?.formatted) {
         updates.location = address.formatted;
         updates.full_address = address.formatted;
+        // Add coordinates if available for patch matching
+        if (address.lat && address.lng) {
+          updates.latitude = address.lat;
+          updates.longitude = address.lng;
+        }
       }
       const { error } = await supabase
         .from("job_sites")
@@ -143,10 +148,15 @@ const updates: any = { name };
   const addSiteMutation = useMutation({
     mutationFn: async () => {
       if (!newSite.name) throw new Error("Site name is required");
-const payload: any = { project_id: projectId, name: newSite.name, is_main_site: false };
+      const payload: any = { project_id: projectId, name: newSite.name, is_main_site: false };
       payload.location = newSite.address?.formatted || newSite.name;
       if (newSite.address?.formatted) {
         payload.full_address = newSite.address.formatted;
+        // Add coordinates if available for patch matching
+        if (newSite.address.lat && newSite.address.lng) {
+          payload.latitude = newSite.address.lat;
+          payload.longitude = newSite.address.lng;
+        }
       }
       const { error } = await supabase.from("job_sites").insert(payload);
       if (error) throw error;
@@ -217,13 +227,15 @@ const payload: any = { project_id: projectId, name: newSite.name, is_main_site: 
                     <TableCell className="align-top w-[420px]">
                       <GoogleAddressInput
                         value={edit.address?.formatted ?? s.full_address ?? s.location ?? ""}
-                        onChange={(addr) => {
+                        onChange={(addr, error) => {
                           setEditStates((prev) => ({ ...prev, [s.id]: { ...edit, address: addr } }));
-                          // If this was selected from Google (has place details), auto-save immediately
-                          if (addr.place_id || (typeof addr.lat === 'number' && typeof addr.lng === 'number')) {
+                          // If this was selected from Google (has place details and is valid), auto-save immediately
+                          if (!error && addr.place_id && typeof addr.lat === 'number' && typeof addr.lng === 'number') {
                             saveSiteMutation.mutate({ id: s.id, name: edit.name, address: addr });
                           }
                         }}
+                        requireSelection={false}
+                        showLabel={false}
                       />
                     </TableCell>
                     <TableCell className="align-top">
@@ -258,7 +270,12 @@ const payload: any = { project_id: projectId, name: newSite.name, is_main_site: 
                   </div>
                 </TableCell>
                 <TableCell className="align-top">
-                  <GoogleAddressInput value={newSite.address?.formatted} onChange={(addr) => setNewSite((p) => ({ ...p, address: addr }))} />
+                  <GoogleAddressInput
+                    value={newSite.address?.formatted}
+                    onChange={(addr, error) => setNewSite((p) => ({ ...p, address: addr }))}
+                    requireSelection={false}
+                    showLabel={false}
+                  />
                 </TableCell>
                 <TableCell className="align-top">
                   <Button onClick={() => addSiteMutation.mutate()} disabled={addSiteMutation.isPending}>Add Site</Button>

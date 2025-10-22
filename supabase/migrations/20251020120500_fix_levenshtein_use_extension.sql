@@ -128,3 +128,4 @@ GRANT EXECUTE ON FUNCTION find_duplicate_pending_employers() TO authenticated;
 COMMENT ON FUNCTION find_duplicate_pending_employers() IS 'Scans pending employers for duplicates using fuzzy name matching with built-in levenshtein from fuzzystrmatch extension.';
 
 
+

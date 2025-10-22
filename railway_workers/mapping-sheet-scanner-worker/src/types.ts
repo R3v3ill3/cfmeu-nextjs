@@ -74,4 +74,6 @@ export interface ProcessingResult {
   outputTokens?: number
   imagesProcessed: number
   error?: string
+  timedOut?: boolean
+  retryCount?: number
 }

@@ -3,6 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 import Anthropic from '@anthropic-ai/sdk'
+import { validatePdfSignature } from '@/lib/validation/fileSignature'
 
 const ANALYSIS_SYSTEM_PROMPT = `You are an expert at analyzing CFMEU NSW MappingSheets forms. These are standardized construction project forms.
 
@@ -142,6 +143,19 @@ export async function POST(request: NextRequest) {
     // Convert file to buffer
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
+
+    // SECURITY: Validate file signature (magic bytes) to prevent malicious uploads
+    const signatureValidation = await validatePdfSignature(buffer)
+    if (!signatureValidation.valid) {
+      console.warn('[analyze] PDF signature validation failed:', signatureValidation.error)
+      return NextResponse.json(
+        {
+          error: 'Invalid PDF file',
+          details: 'The uploaded file does not appear to be a valid PDF. File extension can be spoofed - please ensure you are uploading a genuine PDF file.'
+        },
+        { status: 400 }
+      )
+    }
 
     // Check file size (limit to 50MB for performance)
     if (buffer.length > 50 * 1024 * 1024) {

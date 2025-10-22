@@ -76,8 +76,7 @@ export function useEbaTrackingServerSide(params: EbaTrackingParams) {
       }
 
       const url = `/api/eba-tracking?${searchParams.toString()}`;
-      console.log('🔄 Fetching EBA tracking data from server:', url);
-      
+
       const response = await fetch(url, {
         method: 'GET',
         headers: {
@@ -94,7 +93,6 @@ export function useEbaTrackingServerSide(params: EbaTrackingParams) {
       
       // Log performance metrics
       if (data.debug) {
-        console.log(`📊 EBA tracking server-side query completed in ${data.debug.queryTime}ms`);
         if (data.debug.queryTime > 1000) {
           console.warn('⚠️ Slow EBA tracking query detected:', data.debug);
         }

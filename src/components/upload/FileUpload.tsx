@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Upload, FileText, AlertCircle, CheckCircle } from "lucide-react";
+import { validateCsvFile } from "@/lib/validation/clientFileValidation";
 type ParsedCSV = {
   headers: string[];
   rows: Array<Record<string, any>>;
@@ -73,7 +74,7 @@ const FileUpload = ({ onFileUploaded }: FileUploadProps) => {
     });
   }, [onFileUploaded]);
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
     if (!file) return;
 
@@ -89,9 +90,19 @@ const FileUpload = ({ onFileUploaded }: FileUploadProps) => {
       return;
     }
 
+    // SECURITY: Validate file signature to prevent malicious uploads
     setUploadStatus('uploading');
-    setUploadProgress(0);
-    
+    setUploadProgress(10);
+
+    const validation = await validateCsvFile(file);
+    if (!validation.valid) {
+      setError(`Invalid CSV file: ${validation.error}. File extension can be spoofed - please ensure you are uploading a genuine CSV file.`);
+      setUploadStatus('error');
+      return;
+    }
+
+    setUploadProgress(30);
+
     // Simulate upload progress
     const progressInterval = setInterval(() => {
       setUploadProgress(prev => {

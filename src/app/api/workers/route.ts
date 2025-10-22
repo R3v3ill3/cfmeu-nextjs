@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
+import { withRateLimit, RATE_LIMIT_PRESETS } from '@/lib/rateLimit';
 
 // Helper function to escape ILIKE special characters (%, _, \)
 function escapeLikePattern(str: string): string {
@@ -65,9 +66,10 @@ export interface WorkersResponse {
   };
 }
 
-export async function GET(request: NextRequest) {
+// Internal handler (wrapped with rate limiting below)
+async function getWorkersHandler(request: NextRequest) {
   const startTime = Date.now();
-  
+
   try {
     const searchParams = request.nextUrl.searchParams;
     
@@ -320,12 +322,7 @@ export async function GET(request: NextRequest) {
             employers:employer_id (
               id,
               name,
-              enterprise_agreement_status,
-              company_eba_records (
-                id,
-                status,
-                fwc_certified_date
-              )
+              enterprise_agreement_status
             ),
             job_sites:job_site_id (
               id,
@@ -389,6 +386,73 @@ export async function GET(request: NextRequest) {
 
     const employerIdsForEba = new Set<string>();
 
+    // Collect all unique employer IDs from placements
+    placementRows.forEach((placement: any) => {
+      const employer = placement.employers;
+      if (employer?.id) {
+        const employerIdString = String(employer.id);
+        employerIdsForEba.add(employerIdString);
+      }
+    });
+
+    // OPTIMIZED: Fetch ALL EBA records in a single query instead of chunked loop
+    const ebaRecordsByEmployer = new Map<string, any[]>();
+    if (employerIdsForEba.size > 0) {
+      const idsArray = Array.from(employerIdsForEba);
+
+      // Supabase has a limit on IN clause size, so we still need to chunk
+      // but we'll do it more efficiently with Promise.all
+      const chunkSize = 200;
+      const chunks: string[][] = [];
+      for (let i = 0; i < idsArray.length; i += chunkSize) {
+        chunks.push(idsArray.slice(i, i + chunkSize));
+      }
+
+      // Execute all chunk queries in parallel
+      const ebaQueries = chunks.map(chunk =>
+        supabase
+          .from('company_eba_records')
+          .select('employer_id, status, fwc_certified_date, nominal_expiry_date')
+          .in('employer_id', chunk)
+      );
+
+      const ebaResults = await Promise.all(ebaQueries);
+
+      // Build a map of employer_id -> EBA records
+      ebaResults.forEach(({ data: ebaRows, error: ebaError }) => {
+        if (ebaError) {
+          console.error('Workers API EBA lookup error:', ebaError);
+          return;
+        }
+
+        (ebaRows || []).forEach((record: any) => {
+          const employerId = String(record.employer_id);
+          if (!ebaRecordsByEmployer.has(employerId)) {
+            ebaRecordsByEmployer.set(employerId, []);
+          }
+          ebaRecordsByEmployer.get(employerId)!.push(record);
+        });
+      });
+    }
+
+    // Helper to check if employer has active EBA based on records
+    const hasActiveEbaRecords = (employerId: string): boolean => {
+      const records = ebaRecordsByEmployer.get(employerId) || [];
+      const nowDate = new Date();
+      const statusesIndicatingActive = new Set(['active', 'current', 'live', 'certified', 'approved']);
+
+      return records.some((record: any) => {
+        const status = typeof record.status === 'string' ? record.status.toLowerCase() : '';
+        const hasCertifiedDate = Boolean(record.fwc_certified_date);
+        const nominalExpiry = record.nominal_expiry_date ? new Date(record.nominal_expiry_date) : null;
+        const hasActiveStatus = status ? statusesIndicatingActive.has(status) : false;
+        const hasFutureNominal = nominalExpiry ? nominalExpiry >= nowDate : false;
+
+        return hasCertifiedDate || hasActiveStatus || hasFutureNominal;
+      });
+    };
+
+    // Process all placements and aggregate data
     placementRows.forEach((placement: any) => {
       const workerId = placement.worker_id as string | null;
       if (!workerId) return;
@@ -402,31 +466,29 @@ export async function GET(request: NextRequest) {
         if (employer.id) {
           const employerIdString = String(employer.id);
           agg.employerIds.add(employerIdString);
-          employerIdsForEba.add(employerIdString);
-        }
-        const enterpriseStatus = employer.enterprise_agreement_status;
-        let hasActiveEba = enterpriseStatus === true;
-        if (!hasActiveEba && typeof enterpriseStatus === 'string') {
-          const normalized = enterpriseStatus.toLowerCase();
-          const activeStatusSet = new Set(['active', 'current', 'certified', 'approved', 'in_force', 'in-force', 'live', 'yes']);
-          if (activeStatusSet.has(normalized)) {
-            hasActiveEba = true;
+
+          // Check EBA status using our pre-fetched map
+          if (!agg.hasActiveEba) {
+            const enterpriseStatus = employer.enterprise_agreement_status;
+            let hasActiveEba = enterpriseStatus === true;
+
+            if (!hasActiveEba && typeof enterpriseStatus === 'string') {
+              const normalized = enterpriseStatus.toLowerCase();
+              const activeStatusSet = new Set(['active', 'current', 'certified', 'approved', 'in_force', 'in-force', 'live', 'yes']);
+              if (activeStatusSet.has(normalized)) {
+                hasActiveEba = true;
+              }
+            }
+
+            // Check against our pre-fetched EBA records
+            if (!hasActiveEba && hasActiveEbaRecords(employerIdString)) {
+              hasActiveEba = true;
+            }
+
+            if (hasActiveEba) {
+              agg.hasActiveEba = true;
+            }
           }
-        }
-        const ebaRecords = Array.isArray(employer.company_eba_records)
-          ? employer.company_eba_records
-          : employer.company_eba_records
-            ? [employer.company_eba_records]
-            : [];
-        if (!hasActiveEba) {
-          hasActiveEba = ebaRecords.some((record: any) => {
-            if (!record) return false;
-            const status = typeof record.status === 'string' ? record.status.toLowerCase() : '';
-            return status === 'active' || Boolean(record.fwc_certified_date);
-          });
-        }
-        if (hasActiveEba) {
-          agg.hasActiveEba = true;
         }
       }
 
@@ -449,49 +511,6 @@ export async function GET(request: NextRequest) {
           if (project.name) {
             agg.activeProjectNames.add(project.name);
           }
-        }
-      }
-    });
-
-    const activeEmployerIds = new Set<string>();
-    if (employerIdsForEba.size > 0) {
-      const idsArray = Array.from(employerIdsForEba);
-      const chunkSize = 200;
-      for (let i = 0; i < idsArray.length; i += chunkSize) {
-        const chunk = idsArray.slice(i, i + chunkSize);
-        const { data: ebaRows, error: ebaError } = await supabase
-          .from('company_eba_records')
-          .select('employer_id, status, fwc_certified_date, nominal_expiry_date')
-          .in('employer_id', chunk);
-
-        if (ebaError) {
-          console.error('Workers API EBA lookup error:', ebaError);
-          continue;
-        }
-
-        (ebaRows || []).forEach((record: any) => {
-          const employerId = record.employer_id as string | null;
-          if (!employerId) return;
-          const status = typeof record.status === 'string' ? record.status.toLowerCase() : '';
-          const hasCertifiedDate = Boolean(record.fwc_certified_date);
-          const nominalExpiry = record.nominal_expiry_date ? new Date(record.nominal_expiry_date) : null;
-          const nowDate = new Date();
-          const statusesIndicatingActive = new Set(['active', 'current', 'live', 'certified', 'approved']);
-          const hasActiveStatus = status ? statusesIndicatingActive.has(status) : false;
-          const hasFutureNominal = nominalExpiry ? nominalExpiry >= nowDate : false;
-          if (hasCertifiedDate || hasActiveStatus || hasFutureNominal) {
-            activeEmployerIds.add(String(employerId));
-          }
-        });
-      }
-    }
-
-    aggregates.forEach((agg) => {
-      if (agg.hasActiveEba) return;
-      for (const employerId of agg.employerIds) {
-        if (activeEmployerIds.has(employerId)) {
-          agg.hasActiveEba = true;
-          break;
         }
       }
     });
@@ -595,6 +614,9 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+// Export rate-limited GET handler
+export const GET = withRateLimit(getWorkersHandler, RATE_LIMIT_PRESETS.EXPENSIVE_QUERY);
 
 // Health check endpoint
 export async function HEAD() {

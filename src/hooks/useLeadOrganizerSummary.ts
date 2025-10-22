@@ -245,22 +245,17 @@ export function useAllLeadOrganizerSummaries() {
       const confirmedLeads = confirmedLeadsResult.data || []
       const draftLeads = draftLeadsResult.data || []
 
-      console.log('Found leads:', { confirmedLeads: confirmedLeads.length, draftLeads: draftLeads.length })
-
       // Combine confirmed and draft lead organizers
       const leads = [
         ...confirmedLeads.map(lead => ({ ...lead, isDraft: false })),
         ...draftLeads.map(lead => ({ ...lead, isDraft: true }))
       ]
 
-      console.log('Total leads after combining:', leads.length)
-
       const leadIds = leads.map((lead: any) => lead.id).filter(Boolean)
       const pendingByLead = new Map<string, any[]>()
 
       // If no leads found, return empty array early
       if (leadIds.length === 0) {
-        console.log('No lead organizers found')
         return []
       }
 
@@ -285,13 +280,11 @@ export function useAllLeadOrganizerSummaries() {
       const liveSummaries = await Promise.all(
         leads.map(async (lead: any) => {
           try {
-            console.log(`Fetching summaries for lead ${lead.id} (${lead.full_name})`)
         const serverSummaries = await fetchServerPatchSummaries({
               viewerId: user.id,
               viewerRole,
               leadOrganizerId: lead.id
             })
-            console.log(`Got ${serverSummaries.length} patch summaries for lead ${lead.id}`)
             const patchIds = serverSummaries.map(summary => summary.patchId)
 
             const aggregatedMetrics = await fetchOrganizingUniverseMetrics({

@@ -51,8 +51,7 @@ export function useOrganizingUniverseMetricsServerSide(filters: OrganizingUniver
       }
 
       const url = `/api/dashboard/organizing-metrics?${searchParams.toString()}`
-      console.log('🔄 Fetching organizing metrics from server:', url)
-      
+
       const response = await fetch(url, {
         method: 'GET',
         headers: {
@@ -69,7 +68,6 @@ export function useOrganizingUniverseMetricsServerSide(filters: OrganizingUniver
       
       // Log performance metrics
       if (data.debug) {
-        console.log(`📊 Organizing metrics query completed in ${data.debug.queryTime}ms`)
         if (data.debug.queryTime > 1000) {
           console.warn('⚠️ Slow organizing metrics query detected:', data.debug)
         }

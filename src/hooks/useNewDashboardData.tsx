@@ -88,9 +88,7 @@ export const useNewDashboardData = (opts?: { patchIds?: string[]; tier?: string;
     staleTime: 30000, // 30 seconds
     queryFn: async (): Promise<NewDashboardData> => {
       const errors: string[] = [];
-      
-      console.log('Loading dashboard data...');
-      
+
       try {
         // If worker enabled, call it with Authorization and return
         if (workerEnabled && workerUrl && session?.access_token) {
@@ -157,8 +155,6 @@ export const useNewDashboardData = (opts?: { patchIds?: string[]; tier?: string;
 
         const projectRows = (projects || []) as any[];
 
-        console.log(`📊 Loaded ${projectRows.length} total projects from database`);
-
         // Calculate real project counts
         const projectCounts = projectRows.reduce((acc: any, project) => {
           const universe = project.organising_universe || 'excluded';
@@ -185,14 +181,10 @@ export const useNewDashboardData = (opts?: { patchIds?: string[]; tier?: string;
           total: projectCounts.total || 0
         };
 
-        console.log('📊 Real project counts calculated:', project_counts);
-
         // Get active construction projects for detailed metrics
-        const activeConstructionProjects = projectRows.filter(p => 
+        const activeConstructionProjects = projectRows.filter(p =>
           p.organising_universe === 'active' && p.stage_class === 'construction'
         );
-
-        console.log(`🏗️ Found ${activeConstructionProjects.length} active construction projects`);
 
         // Get builder/employer data for active construction projects
         let total_builders = 0;
@@ -225,8 +217,6 @@ export const useNewDashboardData = (opts?: { patchIds?: string[]; tier?: string;
               return Array.isArray(records) && records.some((eba: any) => eba.fwc_certified_date)
             });
             eba_builders = new Set(buildersWithEba.map(b => b.employer_id)).size;
-            
-            console.log(`👷 Active construction: ${total_builders} builders, ${eba_builders} with EBA`);
           }
         }
 
@@ -282,13 +272,6 @@ export const useNewDashboardData = (opts?: { patchIds?: string[]; tier?: string;
           avg_assigned_workers: 0,
           avg_members: 0
         };
-
-        console.log('✅ Dashboard data loaded successfully:', {
-          totalProjects: project_counts.total,
-          activeConstruction: active_construction.total_projects,
-          activePreConstruction: active_pre_construction.total_projects,
-          errors: errors.length
-        });
 
         return {
           project_counts,

@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 import { useDropzone } from 'react-dropzone'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
+import { generateJobIdempotencyKey, isUniqueViolationError } from '@/lib/idempotency'
 // TODO: Re-add PDF thumbnails with Next.js-compatible library
 // import { usePdfThumbnails } from '@/hooks/usePdfThumbnails'
 // import Image from 'next/image'
@@ -267,21 +268,46 @@ export function UploadMappingSheetDialog(props: UploadMappingSheetDialogProps) {
         jobPayload.projectId = scanData.project_id
       }
 
-      const { error: jobError } = await supabase.from('scraper_jobs').insert({
-        job_type: jobType,
-        status: 'queued',
-        priority: 5, // Normal priority (scale: 1-10, higher = more important)
-        created_by: userId, // Important for RLS policies
-        payload: jobPayload,
-        run_at: new Date().toISOString(),
-        max_attempts: 3,
-        attempts: 0,
-        progress_completed: 0,
-        progress_total: selectedPages.length,
-      })
+      // Generate idempotency key to prevent duplicate job creation
+      const jobIdempotencyKey = await generateJobIdempotencyKey(
+        userId,
+        scanData.id,
+        jobType,
+        jobPayload
+      )
 
-      if (jobError) {
-        throw jobError
+      // Check if job already exists (handles retries/double-clicks)
+      const { data: existingJob } = await supabase
+        .from('scraper_jobs')
+        .select('id, status')
+        .eq('idempotency_key', jobIdempotencyKey)
+        .single()
+
+      if (!existingJob) {
+        // Create new job with idempotency key
+        const { error: jobError } = await supabase.from('scraper_jobs').insert({
+          job_type: jobType,
+          status: 'queued',
+          priority: 5, // Normal priority (scale: 1-10, higher = more important)
+          created_by: userId, // Important for RLS policies
+          payload: jobPayload,
+          run_at: new Date().toISOString(),
+          max_attempts: 3,
+          attempts: 0,
+          progress_completed: 0,
+          progress_total: selectedPages.length,
+          idempotency_key: jobIdempotencyKey,
+        })
+
+        if (jobError) {
+          // If unique violation due to race condition, that's okay
+          if (!isUniqueViolationError(jobError)) {
+            throw jobError
+          }
+          console.log('Job already exists (race condition detected)')
+        }
+      } else {
+        console.log('Job already exists:', existingJob.id)
       }
 
       setUploadProgress(100)

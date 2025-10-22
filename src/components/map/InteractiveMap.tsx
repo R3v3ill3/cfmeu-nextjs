@@ -109,48 +109,27 @@ export default function InteractiveMap({
   // Debug authentication and environment
   useEffect(() => {
     const checkAuth = async () => {
-      console.log("🌍 Environment check:")
-      console.log("  SUPABASE_URL:", process.env.NEXT_PUBLIC_SUPABASE_URL ? "SET" : "MISSING")
-      console.log("  SUPABASE_ANON_KEY:", process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? "SET" : "MISSING")
-      
       const { data: { user }, error: userError } = await supabase.auth.getUser()
-      console.log("🔐 Auth getUser result:", { user: user?.email, error: userError })
-      
+
       if (user) {
-        console.log("👤 User details:", {
-          id: user.id,
-          email: user.email,
-          role: user.role,
-          aud: user.aud
-        })
-        
         // Test a simple query first
         const { data: testData, error: testError } = await supabase
           .from('profiles')
           .select('role, full_name')
           .eq('id', user.id)
           .single()
-        
-        console.log("🧪 Profile query test:", { data: testData, error: testError })
-        
+
         // Test patches table access
         const { data: patchTest, error: patchError } = await supabase
           .from('patches')
           .select('count')
           .limit(1)
-        
-        console.log("🧪 Patches table access test:", { count: patchTest?.length, error: patchError })
-        
-        // Test patches_with_geojson view access  
+
+        // Test patches_with_geojson view access
         const { data: viewTest, error: viewError } = await supabase
           .from('patches_with_geojson')
           .select('id')
           .limit(1)
-        
-        console.log("🧪 Patches view access test:", { count: viewTest?.length, error: viewError })
-        
-      } else {
-        console.log("❌ No authenticated user")
       }
     }
     checkAuth()
@@ -160,20 +139,12 @@ export default function InteractiveMap({
   const { data: patches = [], error: patchesError, isLoading: patchesLoading } = useQuery<PatchData[]>({
     queryKey: ["patches-with-geometry"],
     queryFn: async () => {
-      console.log("🔍 Starting patch data fetch (via view)...")
-
       try {
         // Single-query approach: use view that exposes GeoJSON
         const { data, error } = await supabase
           .from("patches_with_geojson")
           .select("id, name, code, geom_geojson")
           .not("geom_geojson", "is", null)
-
-        console.log("📊 patches_with_geojson result:", {
-          count: data?.length || 0,
-          error,
-          sample: data?.[0]
-        })
 
         if (error) {
           console.error("❌ Patches view query failed:", error)
@@ -192,12 +163,6 @@ export default function InteractiveMap({
             supabase.from("patches").select("*", { count: "exact", head: true }).eq("type", "geo").not("geom", "is", null),
             supabase.from("patches").select("*", { count: "exact", head: true }).eq("type", "geo").eq("status", "active").not("geom", "is", null)
           ])
-          console.log("📈 Patch diagnostics:", {
-            geoTotal,
-            geoWithGeom,
-            activeGeoWithGeom,
-            viewCount: data.length
-          })
         } catch (diagErr) {
           console.warn("⚠️ Failed to compute patch diagnostics:", diagErr)
         }
@@ -212,7 +177,6 @@ export default function InteractiveMap({
           geom_geojson: row.geom_geojson
         }))
 
-        console.log("✅ Final patches with GeoJSON:", normalized.length)
         return normalized
       } catch (err) {
         console.error("❌ Patch query completely failed:", err)
@@ -224,21 +188,10 @@ export default function InteractiveMap({
     staleTime: 30000
   })
 
-  // Log patch loading state and errors
-  console.log("🗺️ Map state:", { 
-    showPatches, 
-    patchesLoading, 
-    patchesCount: patches.length, 
-    patchesError,
-    mapsLoaded 
-  })
-
   // Fetch job sites data
   const { data: jobSites = [], error: jobSitesError, isLoading: jobSitesLoading } = useQuery({
     queryKey: ["job-sites-for-map"],
     queryFn: async () => {
-      console.log("🏗️ Starting job sites fetch...")
-      
       try {
         const { data, error } = await supabase
           .from("job_sites")
@@ -265,19 +218,12 @@ export default function InteractiveMap({
           `)
           .not("latitude", "is", null)
           .not("longitude", "is", null)
-        
-        console.log("📊 Job sites query result:", {
-          count: data?.length || 0,
-          error: error,
-          sample: data?.[0]
-        })
-        
+
         if (error) {
           console.error("❌ Job sites query failed:", error)
           throw error
         }
-        
-        console.log("✅ Job sites loaded:", data?.length || 0)
+
         return (data || []) as unknown as JobSiteData[]
       } catch (err) {
         console.error("❌ Job sites query completely failed:", err)
@@ -289,13 +235,6 @@ export default function InteractiveMap({
     staleTime: 30000
   })
 
-  // Log job sites state
-  console.log("🏗️ Job sites state:", { 
-    showJobSites, 
-    jobSitesLoading, 
-    jobSitesCount: jobSites.length, 
-    jobSitesError 
-  })
 
   // Filter patches (only geographic patches are loaded)
   const filteredPatches = useMemo(() => {
@@ -562,13 +501,11 @@ export default function InteractiveMap({
       >
         {/* Render Patches as Polygons */}
         {showPatches && filteredPatches.map(patch => {
-          console.log("🎨 Rendering patch:", patch.name, patch.geom_geojson ? "has geometry" : "NO GEOMETRY")
-          
           if (!patch.geom_geojson) {
             console.warn("⚠️ Patch has no geom_geojson:", patch)
             return null
           }
-          
+
           const polygons = extractPolygonsFromGeoJSON(patch.geom_geojson)
           if (polygons.length === 0) {
             console.warn("⚠️ No paths generated for patch:", patch.name)

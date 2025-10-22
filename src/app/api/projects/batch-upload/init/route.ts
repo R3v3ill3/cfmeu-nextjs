@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
+import { validatePdfSignature } from '@/lib/validation/fileSignature'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,6 +24,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid totalPages' }, { status: 400 })
     }
 
+    // SECURITY: Validate file signature (magic bytes) before processing
+    const arrayBuffer = await file.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
+
+    const signatureValidation = await validatePdfSignature(buffer)
+    if (!signatureValidation.valid) {
+      console.warn('[batch-init] PDF signature validation failed:', signatureValidation.error)
+      return NextResponse.json(
+        {
+          error: 'Invalid PDF file',
+          details: 'The uploaded file does not appear to be a valid PDF. File extension can be spoofed - please ensure you are uploading a genuine PDF file.'
+        },
+        { status: 400 }
+      )
+    }
+
     const supabase = await createServerSupabase()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
@@ -33,11 +50,14 @@ export async function POST(request: NextRequest) {
     // Generate unique batch ID
     const batchId = crypto.randomUUID()
 
-    // Upload original PDF to storage
+    // Recreate File from buffer for upload (since we already read it for validation)
+    const validatedFile = new File([buffer], file.name, { type: 'application/pdf' })
+
+    // Upload original PDF to storage (use validated file)
     const storagePath = `${user.id}/batch-${batchId}/original-${file.name}`
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('mapping-sheet-scans')
-      .upload(storagePath, file, {
+      .upload(storagePath, validatedFile, {
         contentType: 'application/pdf',
       })
 

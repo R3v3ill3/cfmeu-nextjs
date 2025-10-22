@@ -7,11 +7,14 @@ exports.extractWithClaude = extractWithClaude;
 const sdk_1 = __importDefault(require("@anthropic-ai/sdk"));
 const config_1 = require("../config");
 const prompts_1 = require("./prompts");
+const timeout_1 = require("../utils/timeout");
 const client = new sdk_1.default({
     apiKey: config_1.config.claudeApiKey,
 });
 async function extractWithClaude(pdfBuffer, selectedPages) {
     const startTime = Date.now();
+    let retryCount = 0;
+    let timedOut = false;
     try {
         // Build message content with PDF document
         const content = [
@@ -30,17 +33,39 @@ async function extractWithClaude(pdfBuffer, selectedPages) {
                     : `Analyze all pages of this PDF mapping sheet.\n\n${(0, prompts_1.CLAUDE_USER_PROMPT)(1, 3)}`,
             },
         ];
-        // Call Claude API
-        const message = await client.messages.create({
-            model: config_1.config.claudeModel,
-            max_tokens: config_1.config.maxTokens,
-            system: prompts_1.CLAUDE_SYSTEM_PROMPT,
-            messages: [
-                {
-                    role: 'user',
-                    content,
-                },
-            ],
+        // Call Claude API with timeout protection and retry logic
+        const message = await (0, timeout_1.withTimeoutAndRetry)(async () => {
+            // Create timeout controller for request cancellation
+            const { controller, cleanup } = (0, timeout_1.createTimeoutController)(config_1.config.claudeTimeoutMs);
+            try {
+                const response = await client.messages.create({
+                    model: config_1.config.claudeModel,
+                    max_tokens: config_1.config.maxTokens,
+                    system: prompts_1.CLAUDE_SYSTEM_PROMPT,
+                    messages: [
+                        {
+                            role: 'user',
+                            content,
+                        },
+                    ],
+                }, {
+                    signal: controller.signal,
+                });
+                cleanup();
+                return response;
+            }
+            catch (error) {
+                cleanup();
+                throw error;
+            }
+        }, {
+            timeoutMs: config_1.config.claudeTimeoutMs,
+            maxRetries: config_1.config.claudeMaxRetries,
+            operationName: 'Claude API call',
+            onRetry: (attempt, error) => {
+                retryCount = attempt;
+                console.warn(`[claude] Retry ${attempt}/${config_1.config.claudeMaxRetries} after timeout (${config_1.config.claudeTimeoutMs}ms)`);
+            },
         });
         // Extract JSON from response
         const responseText = message.content
@@ -80,10 +105,28 @@ async function extractWithClaude(pdfBuffer, selectedPages) {
             inputTokens,
             outputTokens,
             imagesProcessed: selectedPages?.length || 1,
+            timedOut: false,
+            retryCount,
         };
     }
     catch (error) {
+        const isTimeout = error instanceof timeout_1.TimeoutError;
+        if (isTimeout) {
+            timedOut = true;
+            // Log timeout incident for monitoring
+            (0, timeout_1.logTimeoutIncident)('Claude API extraction', config_1.config.claudeTimeoutMs, {
+                selectedPages: selectedPages?.join(', ') || 'all',
+                pdfSizeBytes: pdfBuffer.length,
+                retryCount,
+                model: config_1.config.claudeModel,
+            });
+        }
         console.error('[claude] Extraction failed:', error);
+        console.error('[claude] Error details:', {
+            isTimeout,
+            retryCount,
+            processingTimeMs: Date.now() - startTime,
+        });
         return {
             success: false,
             provider: 'claude',
@@ -91,6 +134,8 @@ async function extractWithClaude(pdfBuffer, selectedPages) {
             processingTimeMs: Date.now() - startTime,
             imagesProcessed: selectedPages?.length || 1,
             error: error instanceof Error ? error.message : 'Unknown error',
+            timedOut,
+            retryCount,
         };
     }
 }

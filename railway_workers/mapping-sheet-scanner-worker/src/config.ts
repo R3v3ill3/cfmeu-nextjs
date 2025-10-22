@@ -42,7 +42,11 @@ export const config = {
   claudeModel: 'claude-sonnet-4-5-20250929',
   openaiModel: 'gpt-4-vision-preview',
   maxTokens: 4096,
-  
+
+  // Timeout settings (in milliseconds)
+  claudeTimeoutMs: parseInt(process.env.CLAUDE_TIMEOUT_MS || '60000', 10), // 60 seconds default
+  claudeMaxRetries: parseInt(process.env.CLAUDE_MAX_RETRIES || '1', 10), // Retry once on timeout
+
   // Cost tracking (USD per 1K tokens/images)
   claudeCostPer1kInput: 0.003,
   claudeCostPer1kOutput: 0.015,

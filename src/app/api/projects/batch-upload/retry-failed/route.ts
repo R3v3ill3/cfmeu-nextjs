@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
+import { generateJobIdempotencyKey, isUniqueViolationError } from '@/lib/idempotency'
 
 export const dynamic = 'force-dynamic'
 
@@ -89,6 +90,39 @@ export async function POST(request: NextRequest) {
 
       console.log(`[retry-failed] Scan ${scan.id}: Retry attempt ${retryAttempt}, selected_pages: ${scan.selected_pages ? JSON.stringify(scan.selected_pages) : 'null'}`)
 
+      // Prepare job payload
+      const jobPayload = {
+        scanId: scan.id,
+        fileUrl: scan.file_url,
+        fileName: scan.file_name,
+        uploadMode: scan.upload_mode,
+        selectedPages: scan.selected_pages, // CRITICAL: Include selected pages
+        aiProvider: scan.ai_provider || 'claude', // Preserve AI provider preference
+        retryAttempt: retryAttempt,
+        previousError: previousError,
+      }
+
+      // Generate idempotency key (note: includes retryAttempt to allow retries)
+      const jobIdempotencyKey = await generateJobIdempotencyKey(
+        user.id,
+        scan.id,
+        'mapping_sheet_scan',
+        jobPayload
+      )
+
+      // Check if retry job already exists
+      const { data: existingJob } = await supabase
+        .from('scraper_jobs')
+        .select('id')
+        .eq('idempotency_key', jobIdempotencyKey)
+        .single()
+
+      if (existingJob) {
+        console.log(`[retry-failed] Job already exists for scan ${scan.id}: ${existingJob.id}`)
+        jobsCreated.push(existingJob.id)
+        continue
+      }
+
       // Create new job in scraper_jobs with full context preserved
       const { data: job, error: jobError } = await supabase
         .from('scraper_jobs')
@@ -96,29 +130,29 @@ export async function POST(request: NextRequest) {
           job_type: 'mapping_sheet_scan',
           status: 'queued',
           priority: 5,
-          payload: {
-            scanId: scan.id,
-            fileUrl: scan.file_url,
-            fileName: scan.file_name,
-            uploadMode: scan.upload_mode,
-            selectedPages: scan.selected_pages, // CRITICAL: Include selected pages
-            aiProvider: scan.ai_provider || 'claude', // Preserve AI provider preference
-            retryAttempt: retryAttempt,
-            previousError: previousError,
-          },
+          payload: jobPayload,
           max_attempts: 3,
           run_at: new Date().toISOString(),
           created_by: user.id, // Required for RLS policy
+          idempotency_key: jobIdempotencyKey,
         })
         .select('id')
         .single()
 
       if (jobError) {
+        // If unique violation due to race condition, that's okay
+        if (isUniqueViolationError(jobError)) {
+          console.log(`[retry-failed] Job already created by concurrent request for scan ${scan.id}`)
+          continue
+        }
+
         console.error(`[retry-failed] Failed to create job for scan ${scan.id}:`, jobError)
         continue
       }
 
-      jobsCreated.push(job.id)
+      if (job) {
+        jobsCreated.push(job.id)
+      }
     }
 
     console.log(`[retry-failed] Retried ${scansUpdated.length} scans, created ${jobsCreated.length} jobs`)

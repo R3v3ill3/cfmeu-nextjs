@@ -38,26 +38,19 @@ export function NavigationLoadingProvider({ children }: { children: ReactNode })
   }, [pathname, isNavigating, targetPath])
 
   const startNavigation = (path: string) => {
-    console.log('🚀 startNavigation called:', { path, currentPathname: pathname })
     // Extract base paths for comparison
     const currentBasePath = pathname.split('?')[0]
     const targetBasePath = path.split('?')[0]
 
-    console.log('📍 Path comparison:', { currentBasePath, targetBasePath })
-
     // Only start navigation if actually changing pages (ignore query param changes on same page)
     if (currentBasePath !== targetBasePath) {
-      console.log('✨ Setting navigation state to true')
       setTargetPath(path)
       setIsNavigating(true)
-    } else {
-      console.log('⏭️  Skipping - same page')
     }
   }
 
   // Direct method to set loading state (for page-level loading that bypasses navigation logic)
   const setNavigationLoading = (loading: boolean, path?: string) => {
-    console.log('🔧 setNavigationLoading called:', { loading, path })
     setIsNavigating(loading)
     if (path) {
       setTargetPath(path)
@@ -83,17 +76,7 @@ export function useNavigationLoading() {
 export function NavigationLoadingOverlay() {
   const { isNavigating, targetPath } = useNavigationLoading()
 
-  useEffect(() => {
-    if (isNavigating) {
-      console.log('🔄 Navigation loading started:', targetPath)
-    } else {
-      console.log('✅ Navigation loading cleared')
-    }
-  }, [isNavigating, targetPath])
-
   if (!isNavigating) return null
-
-  console.log('🎨 Rendering NavigationLoadingOverlay')
 
   return (
     <div 
