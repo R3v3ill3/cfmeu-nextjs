@@ -686,7 +686,7 @@ export default function PendingEmployersImport() {
           .maybeSingle();
         
         if (!existingCapability) {
-          await supabase
+          const { error: tradeCapError } = await supabase
             .from('contractor_trade_capabilities')
             .insert({
               employer_id: pendingEmployer.matched_employer_id,
@@ -694,7 +694,19 @@ export default function PendingEmployersImport() {
               is_primary: true,
               notes: `Added via manual match. Original CSV role: ${pendingEmployer.csv_role}`
             });
-          console.log(`  → Added trade capability: ${finalTradeType}`);
+
+          if (tradeCapError) {
+            console.error(`❌ Failed to add trade capability (${finalTradeType}):`, tradeCapError);
+            toast({
+              title: 'Trade Capability Error',
+              description: `Could not add ${finalTradeType} to employer: ${tradeCapError.message}`,
+              variant: 'destructive',
+            });
+          } else {
+            console.log(`  → ✅ Added trade capability: ${finalTradeType}`);
+          }
+        } else {
+          console.log(`  → ℹ️  Trade capability ${finalTradeType} already exists, skipping`);
         }
       }
       
@@ -853,7 +865,7 @@ export default function PendingEmployersImport() {
           .maybeSingle();
         
         if (!existingCapability) {
-          await supabase
+          const { error: tradeCapError } = await supabase
             .from('contractor_trade_capabilities')
             .insert({
               employer_id: exactMatch.id,
@@ -861,7 +873,19 @@ export default function PendingEmployersImport() {
               is_primary: true,
               notes: `Imported from BCI data. Original CSV role: ${pendingEmployer.csv_role}`
             });
-          console.log(`✓ Added trade capability: ${finalTradeType}`);
+
+          if (tradeCapError) {
+            console.error(`❌ Failed to add trade capability (${finalTradeType}):`, tradeCapError);
+            toast({
+              title: 'Trade Capability Error',
+              description: `Could not add ${finalTradeType} to employer: ${tradeCapError.message}`,
+              variant: 'destructive',
+            });
+          } else {
+            console.log(`  → ✅ Added trade capability: ${finalTradeType}`);
+          }
+        } else {
+          console.log(`  → ℹ️  Trade capability ${finalTradeType} already exists, skipping`);
         }
       }
       
@@ -1000,10 +1024,17 @@ export default function PendingEmployersImport() {
           });
         
         if (tradeError) {
-          console.warn('Failed to create trade capability:', tradeError);
+          console.error(`❌ Failed to create trade capability (${finalTradeType}):`, tradeError);
+          toast({
+            title: 'Trade Capability Error',
+            description: `Could not add ${finalTradeType} to employer: ${tradeError.message}`,
+            variant: 'destructive',
+          });
+        } else {
+          console.log(`  → ✅ Added trade capability: ${finalTradeType}`);
         }
       } else {
-        console.log(`✓ Trade capability already exists for ${pendingEmployer.company_name}: ${finalTradeType}`);
+        console.log(`  → ℹ️  Trade capability ${finalTradeType} already exists for ${pendingEmployer.company_name}, skipping`);
       }
     }
     
