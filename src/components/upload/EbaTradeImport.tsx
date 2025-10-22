@@ -115,10 +115,11 @@ export default function EbaTradeImport({ onNavigateToPendingImport }: EbaTradeIm
   const [workflowStep, setWorkflowStep] = useState<WorkflowStep>('upload')
   const [files, setFiles] = useState<UploadedFile[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
+  const [isStoring, setIsStoring] = useState(false)
   const [batchId] = useState(() => `eba_batch_${Date.now()}`)
   const [completedCount, setCompletedCount] = useState(0)
   const [totalCost, setTotalCost] = useState(0)
-  
+
   // Review state
   const [reviewEmployers, setReviewEmployers] = useState<ReviewEmployer[]>([])
   const [editingEmployer, setEditingEmployer] = useState<ReviewEmployer | null>(null)
@@ -312,19 +313,46 @@ export default function EbaTradeImport({ onNavigateToPendingImport }: EbaTradeIm
 
   // Store reviewed employers to pending_employers table
   const storeReviewedEmployers = async (andContinue: boolean = false) => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      toast.error('User not authenticated')
+    // Prevent double-clicks
+    if (isStoring) {
+      console.log('[EBA Import] Already storing, ignoring duplicate click')
       return
     }
 
-    const validEmployers = reviewEmployers.filter((e) => e.isValid)
-    if (validEmployers.length === 0) {
-      toast.error('No valid employers to store')
-      return
-    }
+    setIsStoring(true)
+    console.log('[EBA Import] Starting store operation...', {
+      validEmployersCount: reviewEmployers.filter((e) => e.isValid).length,
+      andContinue,
+      hasCallback: !!onNavigateToPendingImport,
+    })
 
     try {
+      // Get authenticated user
+      console.log('[EBA Import] Fetching authenticated user...')
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+      if (authError) {
+        console.error('[EBA Import] Auth error:', authError)
+        toast.error(`Authentication error: ${authError.message}`)
+        return
+      }
+
+      if (!user) {
+        console.error('[EBA Import] No user found')
+        toast.error('User not authenticated. Please log in and try again.')
+        return
+      }
+
+      console.log('[EBA Import] User authenticated:', user.id)
+
+      const validEmployers = reviewEmployers.filter((e) => e.isValid)
+      if (validEmployers.length === 0) {
+        console.warn('[EBA Import] No valid employers to store')
+        toast.error('No valid employers to store')
+        return
+      }
+
+      console.log('[EBA Import] Preparing', validEmployers.length, 'employer records...')
       const employerRecords = validEmployers.map((emp) => ({
         company_name: emp.companyName,
         csv_role: emp.tradeType || 'unknown',
@@ -335,49 +363,68 @@ export default function EbaTradeImport({ onNavigateToPendingImport }: EbaTradeIm
         created_by: user.id,
         raw: {
           aliases: emp.aliases || [], // Store trading names for import
-          streetAddress: emp.streetAddress,
+          address_line_1: emp.streetAddress,
           suburb: emp.suburb,
           state: emp.state,
           postcode: emp.postcode,
           phones: emp.phones,
+          phone: emp.phones?.[0] || null,
           sectorCode: emp.sectorCode,
           sourceFile: emp.sourceFile,
           tradeLabel: emp.tradeLabel,
           batchId,
           notes: emp.notes,
-          address_line_1: emp.streetAddress,
-          suburb: emp.suburb,
-          state: emp.state,
-          postcode: emp.postcode,
-          phone: emp.phones?.[0] || null,
         },
       }))
 
-      const { error } = await supabase
+      console.log('[EBA Import] Inserting records to database...')
+      toast.loading('Storing employers to database...', { id: 'store-employers' })
+
+      const { data, error } = await supabase
         .from('pending_employers')
-        .insert(employerRecords)
+        .insert(employerRecords as any)
+        .select('id')
 
       if (error) {
-        console.error('Failed to insert pending employers:', error)
+        console.error('[EBA Import] Database insert error:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+        })
+        toast.error(`Database error: ${error.message}`, { id: 'store-employers' })
         throw new Error(`Database insert failed: ${error.message}`)
       }
 
+      console.log('[EBA Import] Insert successful!', { recordCount: data?.length || validEmployers.length })
+
       toast.success(
         `${validEmployers.length} employers added to pending import queue`,
-        { duration: 5000 }
+        { id: 'store-employers', duration: 5000 }
       )
 
       if (andContinue && onNavigateToPendingImport) {
-        // Navigate directly to pending employers
-        onNavigateToPendingImport()
+        console.log('[EBA Import] Navigating to pending employers...')
+        // Small delay to ensure toast is visible before navigation
+        setTimeout(() => {
+          onNavigateToPendingImport()
+        }, 500)
       } else {
+        console.log('[EBA Import] Moving to complete step')
         setWorkflowStep('complete')
       }
     } catch (error) {
-      console.error('Store error:', error)
-      toast.error(
-        error instanceof Error ? error.message : 'Failed to store employers'
-      )
+      console.error('[EBA Import] Store error:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to store employers'
+      console.error('[EBA Import] Error details:', {
+        name: error instanceof Error ? error.name : 'Unknown',
+        message: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined,
+      })
+      toast.error(errorMessage, { id: 'store-employers', duration: 7000 })
+    } finally {
+      setIsStoring(false)
+      console.log('[EBA Import] Store operation completed')
     }
   }
 
@@ -523,31 +570,58 @@ export default function EbaTradeImport({ onNavigateToPendingImport }: EbaTradeIm
                   <>
                     <Button
                       onClick={() => storeReviewedEmployers(false)}
-                      disabled={validEmployersCount === 0}
+                      disabled={validEmployersCount === 0 || isStoring}
                       variant="outline"
                       size="lg"
                     >
-                      <Save className="h-4 w-4 mr-2" />
-                      Store {validEmployersCount} Employers
+                      {isStoring ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Storing...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4 mr-2" />
+                          Store {validEmployersCount} Employers
+                        </>
+                      )}
                     </Button>
                     <Button
                       onClick={() => storeReviewedEmployers(true)}
-                      disabled={validEmployersCount === 0}
+                      disabled={validEmployersCount === 0 || isStoring}
                       size="lg"
                     >
-                      <Search className="h-4 w-4 mr-2" />
-                      Store & Continue to Matching
-                      <ArrowRight className="h-4 w-4 ml-2" />
+                      {isStoring ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Storing Employers...
+                        </>
+                      ) : (
+                        <>
+                          <Search className="h-4 w-4 mr-2" />
+                          Store & Continue to Matching
+                          <ArrowRight className="h-4 w-4 ml-2" />
+                        </>
+                      )}
                     </Button>
                   </>
                 ) : (
                   <Button
                     onClick={() => storeReviewedEmployers(false)}
-                    disabled={validEmployersCount === 0}
+                    disabled={validEmployersCount === 0 || isStoring}
                     size="lg"
                   >
-                    Store {validEmployersCount} Employers in Pending Queue
-                    <ArrowRight className="h-4 w-4 ml-2" />
+                    {isStoring ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Storing Employers...
+                      </>
+                    ) : (
+                      <>
+                        Store {validEmployersCount} Employers in Pending Queue
+                        <ArrowRight className="h-4 w-4 ml-2" />
+                      </>
+                    )}
                   </Button>
                 )}
               </div>
