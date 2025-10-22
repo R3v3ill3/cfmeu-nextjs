@@ -1,14 +1,17 @@
--- Rebuild employers_search_optimized materialized view and dependent helpers to include
--- the updated EBA status metadata. Dependent objects are dropped first so the view can
--- be recreated without dependency errors.
-DROP VIEW IF EXISTS public.employers_search_view_status;
-DROP FUNCTION IF EXISTS public.refresh_employers_search_view_logged(text);
-DROP FUNCTION IF EXISTS public.refresh_employers_search_view();
+-- FORCE FIX: Ensure eba_category uses new FWC workflow values
+-- This migration forcibly drops and recreates the materialized view
+-- to fix the issue where old 'active'/'no' values persist instead of
+-- new 'certified'/'lodged'/'pending'/'no_fwc_match' values
 
-DROP MATERIALIZED VIEW IF EXISTS public.employers_search_optimized;
+-- Drop all dependent objects
+DROP VIEW IF EXISTS public.employers_search_view_status CASCADE;
+DROP FUNCTION IF EXISTS public.refresh_employers_search_view_logged(text) CASCADE;
+DROP FUNCTION IF EXISTS public.refresh_employers_search_view() CASCADE;
+DROP MATERIALIZED VIEW IF EXISTS public.employers_search_optimized CASCADE;
 
+-- Recreate materialized view with correct FWC workflow category logic
 CREATE MATERIALIZED VIEW public.employers_search_optimized AS
-SELECT 
+SELECT
   e.id,
   e.name,
   e.abn,
@@ -39,12 +42,10 @@ SELECT
   ) AS is_engaged,
   (SELECT COUNT(*)::int FROM public.worker_placements wp WHERE wp.employer_id = e.id) AS actual_worker_count,
   (SELECT COUNT(*)::int FROM public.project_assignments pa WHERE pa.employer_id = e.id) AS project_count,
+  -- CRITICAL: eba_category now represents FWC workflow status (NOT canonical EBA status)
+  -- This is for the SECOND badge in the two-badge system
+  -- Values: 'certified', 'lodged', 'pending', 'no_fwc_match'
   CASE
-    -- eba_category now represents FWC workflow status (secondary badge)
-    -- certified: FWC certification found via scraping
-    -- lodged: Lodged with FWC
-    -- pending: EBA negotiation in progress
-    -- no_fwc_match: No FWC records found (doesn't mean no EBA)
     WHEN EXISTS(
       SELECT 1 FROM public.company_eba_records r
       WHERE r.employer_id = e.id
@@ -131,30 +132,31 @@ SELECT
   NOW() AS view_refreshed_at
 FROM public.employers e;
 
-CREATE UNIQUE INDEX idx_emp_search_opt_id 
+-- Recreate all indexes
+CREATE UNIQUE INDEX idx_emp_search_opt_id
   ON public.employers_search_optimized(id);
-CREATE INDEX idx_emp_search_opt_engaged 
-  ON public.employers_search_optimized(is_engaged) 
+CREATE INDEX idx_emp_search_opt_engaged
+  ON public.employers_search_optimized(is_engaged)
   WHERE is_engaged = true;
-CREATE INDEX idx_emp_search_opt_eba_category 
+CREATE INDEX idx_emp_search_opt_eba_category
   ON public.employers_search_optimized(eba_category);
-CREATE INDEX idx_emp_search_opt_employer_type 
+CREATE INDEX idx_emp_search_opt_employer_type
   ON public.employers_search_optimized(employer_type);
-CREATE INDEX idx_emp_search_opt_name_lower 
+CREATE INDEX idx_emp_search_opt_name_lower
   ON public.employers_search_optimized(name_lower);
 CREATE INDEX idx_emp_search_opt_name_pattern
   ON public.employers_search_optimized(name text_pattern_ops);
-CREATE INDEX idx_emp_search_opt_name_trgm 
+CREATE INDEX idx_emp_search_opt_name_trgm
   ON public.employers_search_optimized USING gin(name gin_trgm_ops);
-CREATE INDEX idx_emp_search_opt_engaged_eba_type 
+CREATE INDEX idx_emp_search_opt_engaged_eba_type
   ON public.employers_search_optimized(is_engaged, eba_category, employer_type)
   WHERE is_engaged = true;
-CREATE INDEX idx_emp_search_opt_estimated_workers 
+CREATE INDEX idx_emp_search_opt_estimated_workers
   ON public.employers_search_optimized(estimated_worker_count DESC NULLS LAST);
-CREATE INDEX idx_emp_search_opt_eba_recency 
+CREATE INDEX idx_emp_search_opt_eba_recency
   ON public.employers_search_optimized(eba_recency_score DESC);
-CREATE INDEX idx_emp_search_opt_abn 
-  ON public.employers_search_optimized(abn) 
+CREATE INDEX idx_emp_search_opt_abn
+  ON public.employers_search_optimized(abn)
   WHERE abn IS NOT NULL;
 CREATE INDEX idx_emp_search_opt_bci_id
   ON public.employers_search_optimized(LOWER(bci_company_id))
@@ -163,6 +165,7 @@ CREATE INDEX idx_emp_search_opt_incolink_id
   ON public.employers_search_optimized(LOWER(incolink_id))
   WHERE incolink_id IS NOT NULL;
 
+-- Recreate helper functions
 CREATE OR REPLACE FUNCTION public.refresh_employers_search_view()
 RETURNS TABLE (
   success boolean,
@@ -178,34 +181,34 @@ DECLARE
   v_duration_ms integer;
 BEGIN
   v_start_time := clock_timestamp();
-  
+
   REFRESH MATERIALIZED VIEW CONCURRENTLY public.employers_search_optimized;
-  
+
   v_end_time := clock_timestamp();
   v_duration_ms := EXTRACT(MILLISECONDS FROM (v_end_time - v_start_time))::integer;
-  
-  SELECT COUNT(*) INTO v_row_count 
+
+  SELECT COUNT(*) INTO v_row_count
   FROM public.employers_search_optimized;
-  
+
   RAISE NOTICE 'Materialized view refreshed: % rows in %ms', v_row_count, v_duration_ms;
-  
+
   IF v_duration_ms > 30000 THEN
     RAISE WARNING 'Slow materialized view refresh detected: %ms', v_duration_ms;
   END IF;
-  
+
   RETURN QUERY
-  SELECT 
+  SELECT
     true AS success,
     v_duration_ms AS duration_ms,
     v_row_count AS rows_refreshed,
     NOW() AS last_refresh,
     format('Refreshed %s rows in %sms', v_row_count, v_duration_ms) AS message;
-  
+
 EXCEPTION WHEN OTHERS THEN
   RAISE WARNING 'Failed to refresh materialized view: %', SQLERRM;
-  
+
   RETURN QUERY
-  SELECT 
+  SELECT
     false AS success,
     0 AS duration_ms,
     0::bigint AS rows_refreshed,
@@ -233,50 +236,50 @@ DECLARE
   v_error_msg text := NULL;
 BEGIN
   v_start_time := clock_timestamp();
-  
+
   BEGIN
     REFRESH MATERIALIZED VIEW CONCURRENTLY public.employers_search_optimized;
-    
+
     v_end_time := clock_timestamp();
     v_duration_ms := EXTRACT(MILLISECONDS FROM (v_end_time - v_start_time))::integer;
-    
-    SELECT COUNT(*) INTO v_row_count 
+
+    SELECT COUNT(*) INTO v_row_count
     FROM public.employers_search_optimized;
-    
+
     INSERT INTO public.mat_view_refresh_log (
       view_name, duration_ms, rows_refreshed, success, triggered_by
     ) VALUES (
       'employers_search_optimized', v_duration_ms, v_row_count, true, p_triggered_by
     );
-    
-    RAISE NOTICE 'Materialized view refreshed: % rows in %ms (triggered by: %)', 
+
+    RAISE NOTICE 'Materialized view refreshed: % rows in %ms (triggered by: %)',
       v_row_count, v_duration_ms, p_triggered_by;
-    
+
     IF v_duration_ms > 30000 THEN
       RAISE WARNING 'Slow materialized view refresh detected: %ms', v_duration_ms;
     END IF;
-    
+
   EXCEPTION WHEN OTHERS THEN
     v_success := false;
     v_error_msg := SQLERRM;
     v_duration_ms := EXTRACT(MILLISECONDS FROM (clock_timestamp() - v_start_time))::integer;
-    
+
     INSERT INTO public.mat_view_refresh_log (
       view_name, duration_ms, success, error_message, triggered_by
     ) VALUES (
       'employers_search_optimized', v_duration_ms, false, v_error_msg, p_triggered_by
     );
-    
+
     RAISE WARNING 'Failed to refresh materialized view: %', v_error_msg;
   END;
-  
+
   RETURN QUERY
-  SELECT 
+  SELECT
     v_success AS success,
     COALESCE(v_duration_ms, 0) AS duration_ms,
     COALESCE(v_row_count, 0::bigint) AS rows_refreshed,
     NOW() AS last_refresh,
-    CASE 
+    CASE
       WHEN v_success THEN format('Refreshed %s rows in %sms', v_row_count, v_duration_ms)
       ELSE format('Error: %s', v_error_msg)
     END AS message;
@@ -284,7 +287,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE VIEW public.employers_search_view_status AS
-SELECT 
+SELECT
   'employers_search_optimized'::text AS view_name,
   (SELECT view_refreshed_at FROM public.employers_search_optimized LIMIT 1) AS last_refresh,
   NOW() - (SELECT view_refreshed_at FROM public.employers_search_optimized LIMIT 1) AS staleness,
@@ -293,27 +296,29 @@ SELECT
   pg_size_pretty(pg_total_relation_size('public.employers_search_optimized') - pg_relation_size('public.employers_search_optimized')) AS indexes_size,
   (SELECT COUNT(*) FROM public.employers_search_optimized) AS row_count,
   (SELECT COUNT(*) FROM public.employers) AS source_row_count,
-  CASE 
-    WHEN (NOW() - (SELECT view_refreshed_at FROM public.employers_search_optimized LIMIT 1)) > INTERVAL '10 minutes' 
+  CASE
+    WHEN (NOW() - (SELECT view_refreshed_at FROM public.employers_search_optimized LIMIT 1)) > INTERVAL '10 minutes'
     THEN 'STALE - Refresh needed'
     WHEN (NOW() - (SELECT view_refreshed_at FROM public.employers_search_optimized LIMIT 1)) > INTERVAL '5 minutes'
     THEN 'WARNING - Approaching stale'
     ELSE 'OK'
   END AS health_status;
 
+-- Grant permissions
 GRANT SELECT ON public.employers_search_optimized TO authenticated;
 GRANT SELECT ON public.employers_search_view_status TO authenticated;
 GRANT EXECUTE ON FUNCTION public.refresh_employers_search_view() TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.refresh_employers_search_view_logged(text) TO authenticated, service_role;
 
-COMMENT ON MATERIALIZED VIEW public.employers_search_optimized IS 
-  'Optimized view for employer search/list with precomputed filters. Refresh every 5 minutes.';
-COMMENT ON FUNCTION public.refresh_employers_search_view() IS 
+-- Add comments with explicit documentation
+COMMENT ON MATERIALIZED VIEW public.employers_search_optimized IS
+  'TWO-BADGE SYSTEM: eba_category shows FWC workflow status (certified/lodged/pending/no_fwc_match). Canonical EBA status is in enterprise_agreement_status boolean.';
+COMMENT ON FUNCTION public.refresh_employers_search_view() IS
   'Refreshes the employers_search_optimized materialized view. Returns refresh statistics.';
-COMMENT ON FUNCTION public.refresh_employers_search_view_logged(text) IS 
+COMMENT ON FUNCTION public.refresh_employers_search_view_logged(text) IS
   'Refreshes the employers_search_optimized materialized view and logs the outcome in mat_view_refresh_log.';
-COMMENT ON VIEW public.employers_search_view_status IS 
+COMMENT ON VIEW public.employers_search_view_status IS
   'Monitoring view showing refresh status, staleness, and size of employers_search_optimized.';
 
+-- Initial refresh with new logic
 REFRESH MATERIALIZED VIEW public.employers_search_optimized;
-

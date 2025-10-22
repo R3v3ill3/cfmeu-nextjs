@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { getEbaStatusInfo } from "./ebaHelpers"
+import { getEbaCategory } from "./ebaHelpers"
 import { IncolinkBadge } from "@/components/ui/IncolinkBadge"
 import { CfmeuEbaBadge } from "@/components/ui/CfmeuEbaBadge"
 import { FwcSearchModal } from "./FwcSearchModal"
@@ -74,12 +74,11 @@ export function EmployerTable({ rows, onRowClick, onEmployerUpdated }: { rows: E
 
   const handleEbaBadgeClick = (emp: EmployerRow, e: React.MouseEvent) => {
     e.stopPropagation()
-    
-    const rec = emp.company_eba_records?.[0]
-    const ebaStatus = rec ? getEbaStatusInfo(rec) : null
-    const hasEba = ebaStatus?.variant === 'default'
-    
-    if (hasEba) {
+
+    // Use canonical boolean status to decide action
+    const hasActiveEba = emp.enterprise_agreement_status === true
+
+    if (hasActiveEba) {
       // Open EBA tracker
       router.push('/eba-tracking')
     } else {
@@ -131,8 +130,13 @@ export function EmployerTable({ rows, onRowClick, onEmployerUpdated }: { rows: E
         </TableHeader>
         <TableBody>
           {rows.map((emp) => {
+            // Badge 1: Canonical EBA status from boolean
+            const hasActiveEba = emp.enterprise_agreement_status === true
+
+            // Badge 2: FWC workflow status from scrape records
             const rec = emp.company_eba_records?.[0]
-            const ebaStatus = rec ? getEbaStatusInfo(rec) : null
+            const fwcStatus = rec ? getEbaCategory(rec) : { category: 'no_fwc_match', label: 'No FWC Match', variant: 'outline' as const }
+
             const contactPhone = rec?.contact_phone || emp.phone
             const contactEmail = rec?.contact_email || emp.email
 
@@ -225,33 +229,36 @@ export function EmployerTable({ rows, onRowClick, onEmployerUpdated }: { rows: E
                 <TableCell className="text-right">{emp.worker_placements?.length ?? emp.estimated_worker_count ?? 0}</TableCell>
                 
                 <TableCell>
-                  <div 
-                    className="cursor-pointer"
+                  <div
+                    className="cursor-pointer flex flex-wrap items-center gap-1"
                     onClick={(e) => handleEbaBadgeClick(emp, e)}
                   >
-                    <CfmeuEbaBadge 
-                      hasActiveEba={ebaStatus?.variant === 'default'} 
+                    {/* Badge 1: Canonical EBA Status - Blue Eureka Flag */}
+                    <CfmeuEbaBadge
+                      hasActiveEba={hasActiveEba}
                       builderName={emp.name}
                       size="sm"
                       showText={true}
                     />
-                    {ebaStatus?.variant !== 'default' && (
-                      <Badge 
-                        variant={ebaStatus?.variant || 'destructive'} 
-                        className="text-xs hover:shadow-sm transition-shadow ml-1"
-                      >
-                        {ebaStatus?.label || 'No EBA'}
+
+                    {/* Badge 2: FWC Workflow Status - Always show */}
+                    <Badge
+                      variant={fwcStatus.variant}
+                      className="text-xs hover:shadow-sm transition-shadow"
+                    >
+                      {fwcStatus.label}
+                    </Badge>
+
+                    {/* Source badge - only when canonical status is true */}
+                    {hasActiveEba && emp.eba_status_source && (
+                      <Badge variant="outline" className="text-xs">
+                        {emp.eba_status_source === 'manual'
+                          ? 'Manual'
+                          : emp.eba_status_source === 'import'
+                          ? 'Import'
+                          : 'FWC'}
                       </Badge>
                     )}
-                {emp.enterprise_agreement_status === true && emp.eba_status_source && (
-                  <Badge variant="outline" className="text-xs ml-1">
-                    {emp.eba_status_source === 'manual'
-                      ? 'Manual override'
-                      : emp.eba_status_source === 'import'
-                      ? 'Import override'
-                      : 'FWC auto'}
-                  </Badge>
-                )}
                   </div>
                 </TableCell>
                 

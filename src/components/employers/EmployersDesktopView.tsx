@@ -70,6 +70,10 @@ export function EmployersDesktopView() {
           estimated_worker_count,
           incolink_id,
           incolink_last_matched,
+          enterprise_agreement_status,
+          eba_status_source,
+          eba_status_updated_at,
+          eba_status_notes,
           company_eba_records!left(*),
           worker_placements!left(id),
           project_assignments!left(id)
@@ -297,7 +301,7 @@ export function EmployersDesktopView() {
         </div>
       </div>
       {isFetching && <p className="text-sm text-muted-foreground">Loading…</p>}
-      
+
       {/* Results summary */}
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>
@@ -341,7 +345,7 @@ export function EmployersDesktopView() {
                 eba_status_source: emp.eba_status_source,
                 eba_status_updated_at: emp.eba_status_updated_at,
                 eba_status_notes: emp.eba_status_notes,
-                ebaCategory: emp.company_eba_records?.[0] ? getEbaCategory(emp.company_eba_records[0]) : { category: 'no', label: 'No EBA', variant: 'destructive' }
+                ebaCategory: emp.company_eba_records?.[0] ? getEbaCategory(emp.company_eba_records[0]) : { category: 'no_fwc_match', label: 'No FWC Match', variant: 'outline' }
               }}
               onClick={() => {
                 setSelectedEmployerId(emp.id)

@@ -624,17 +624,30 @@ export default function EbaProjectSearch() {
 
       if (error) throw error;
 
+      // Update the canonical enterprise_agreement_status boolean
+      const { error: statusError } = await supabase.rpc('set_employer_eba_status', {
+        p_employer_id: employerId,
+        p_status: true,
+        p_source: 'manual',
+        p_notes: 'EBA record created via manual FWC search'
+      });
+
+      if (statusError) {
+        console.error('Failed to update employer EBA status:', statusError);
+        throw statusError;
+      }
+
       // Mark employer as processed
       setProcessedEmployers(prev => new Set(prev).add(employerId));
 
       // Refresh the list to update EBA status
       await loadProjectEmployers();
-      
+
       toast({
         title: 'EBA Record Created',
         description: `Successfully created EBA record for ${result.title}`,
       });
-      
+
       return true;
     } catch (error) {
       console.error('Error creating EBA record:', error);

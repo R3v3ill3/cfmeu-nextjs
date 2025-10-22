@@ -370,32 +370,45 @@ export default function PendingEmployersImport() {
       let query = supabase
         .from('pending_employers')
         .select('*');
-      
+
+      console.log(`🔍 [FILTER] Loading pending employers - showProcessedEmployers: ${showProcessedEmployers}, workflowStep: ${workflowStep}`);
+
       if (!showProcessedEmployers) {
-        // Build filter: only show unprocessed employers
-        const statuses = ['import_status.is.null', 'import_status.eq.pending'];
-        
+        // Build filter: show all unimported employers
+        // These are employers that haven't been successfully imported yet
+        const statuses = [
+          'import_status.is.null',
+          'import_status.eq.pending',
+          'import_status.eq.matched',      // Ready to import (user selected existing)
+          'import_status.eq.create_new'    // Ready to import (user confirmed new)
+        ];
+
         if (showSkipped) {
           statuses.push('import_status.eq.skipped');
         }
-        
-        // Include matched and create_new ONLY during active workflow
-        // After import, these should have been updated to 'imported'
-        if (workflowStep === 'merge' || workflowStep === 'import') {
-          statuses.push('import_status.eq.matched');
-          statuses.push('import_status.eq.create_new');
-        }
-        
+
+        // DO NOT show 'imported' - those are done
+        console.log(`🔍 [FILTER] Applying filter with statuses: ${statuses.join(', ')}`);
         query = query.or(statuses.join(','));
+      } else {
+        console.log(`🔍 [FILTER] Showing ALL employers (showProcessedEmployers = true)`);
       }
-      
+
       const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) throw error;
-      
+
       const statusText = showProcessedEmployers ? 'all' : 'unprocessed';
-      console.log(`Loaded ${(data || []).length} ${statusText} pending employers`);
-      
+      console.log(`✅ [FILTER] Loaded ${(data || []).length} ${statusText} pending employers`);
+      if (data && data.length > 0) {
+        const statusCounts = data.reduce((acc: any, emp: any) => {
+          const status = emp.import_status || 'null';
+          acc[status] = (acc[status] || 0) + 1;
+          return acc;
+        }, {});
+        console.log(`📊 [FILTER] Status breakdown:`, statusCounts);
+      }
+
       setPendingEmployers(data || []);
       // If any pending employers carry project associations, default to link-to-projects
       try {
@@ -416,7 +429,7 @@ export default function PendingEmployersImport() {
     } finally {
       setIsLoading(false);
     }
-  }, [projectLinkingMode, showProcessedEmployers, showSkipped]);
+  }, [projectLinkingMode, showProcessedEmployers, showSkipped, workflowStep]);
 
   // Load pending employers on mount and when filter changes
   useEffect(() => {
@@ -698,13 +711,24 @@ export default function PendingEmployersImport() {
       }
       
       // Mark as imported
-      await supabase
+      console.log(`🔄 [STATUS UPDATE] Updating pending employer ${pendingEmployer.id} (${pendingEmployer.company_name}) to 'imported' status...`);
+      const { data: updateData1, error: statusError1, count: updateCount1 } = await supabase
         .from('pending_employers')
-        .update({ 
+        .update({
           import_status: 'imported',
-          imported_employer_id: pendingEmployer.matched_employer_id 
+          imported_employer_id: pendingEmployer.matched_employer_id
         })
-        .eq('id', pendingEmployer.id);
+        .eq('id', pendingEmployer.id)
+        .select();
+
+      if (statusError1) {
+        console.error('❌ [STATUS UPDATE] Failed to update import_status (location 1):', statusError1);
+      } else {
+        console.log(`✅ [STATUS UPDATE] Query succeeded. Rows affected: ${updateData1?.length || 0}`, updateData1);
+        if (!updateData1 || updateData1.length === 0) {
+          console.error('⚠️ [STATUS UPDATE] UPDATE succeeded but 0 rows affected! Possible RLS policy blocking update.');
+        }
+      }
       
       return pendingEmployer.matched_employer_id;
     }
@@ -762,14 +786,25 @@ export default function PendingEmployersImport() {
         }
       }
       
-      await supabase
+      console.log(`🔄 [STATUS UPDATE] Updating pending employer ${pendingEmployer.id} (${pendingEmployer.company_name}) to 'imported' status (user selected duplicate)...`);
+      const { data: updateData2, error: statusError2 } = await supabase
         .from('pending_employers')
         .update({
           import_status: 'imported',
           imported_employer_id: detection.selectedEmployerId,
           import_notes: `Used existing employer (user selected from duplicates)`
         })
-        .eq('id', pendingEmployer.id);
+        .eq('id', pendingEmployer.id)
+        .select();
+
+      if (statusError2) {
+        console.error('❌ [STATUS UPDATE] Failed to update import_status (location 2):', statusError2);
+      } else {
+        console.log(`✅ [STATUS UPDATE] Query succeeded. Rows affected: ${updateData2?.length || 0}`, updateData2);
+        if (!updateData2 || updateData2.length === 0) {
+          console.error('⚠️ [STATUS UPDATE] UPDATE succeeded but 0 rows affected! Possible RLS policy blocking update.');
+        }
+      }
       
       return detection.selectedEmployerId;
     }
@@ -831,14 +866,25 @@ export default function PendingEmployersImport() {
       }
       
       // Update pending employer record
-      await supabase
+      console.log(`🔄 [STATUS UPDATE] Updating pending employer ${pendingEmployer.id} (${pendingEmployer.company_name}) to 'imported' status (duplicate prevention)...`);
+      const { data: updateData3, error: statusError3 } = await supabase
         .from('pending_employers')
         .update({
           import_status: 'imported',
           imported_employer_id: exactMatch.id,
           import_notes: `Used existing employer (duplicate prevention)`
         })
-        .eq('id', pendingEmployer.id);
+        .eq('id', pendingEmployer.id)
+        .select();
+
+      if (statusError3) {
+        console.error('❌ [STATUS UPDATE] Failed to update import_status (location 3):', statusError3);
+      } else {
+        console.log(`✅ [STATUS UPDATE] Query succeeded. Rows affected: ${updateData3?.length || 0}`, updateData3);
+        if (!updateData3 || updateData3.length === 0) {
+          console.error('⚠️ [STATUS UPDATE] UPDATE succeeded but 0 rows affected! Possible RLS policy blocking update.');
+        }
+      }
       
       return exactMatch.id;
     }
@@ -962,14 +1008,25 @@ export default function PendingEmployersImport() {
     }
     
     // Update the pending employer record to mark as imported
-    await supabase
+    console.log(`🔄 [STATUS UPDATE] Updating pending employer ${pendingEmployer.id} (${pendingEmployer.company_name}) to 'imported' status (new employer)...`);
+    const { data: updateData4, error: statusError4 } = await supabase
       .from('pending_employers')
       .update({
         import_status: 'imported',
         imported_employer_id: employerId,
         import_notes: `Successfully imported as ${pendingEmployer.our_role || 'employer'}`
       })
-      .eq('id', pendingEmployer.id);
+      .eq('id', pendingEmployer.id)
+      .select();
+
+    if (statusError4) {
+      console.error('❌ [STATUS UPDATE] Failed to update import_status (location 4):', statusError4);
+    } else {
+      console.log(`✅ [STATUS UPDATE] Query succeeded. Rows affected: ${updateData4?.length || 0}`, updateData4);
+      if (!updateData4 || updateData4.length === 0) {
+        console.error('⚠️ [STATUS UPDATE] UPDATE succeeded but 0 rows affected! Possible RLS policy blocking update.');
+      }
+    }
     
     return employerId;
   };
@@ -2557,7 +2614,7 @@ export default function PendingEmployersImport() {
                             <Search className="h-4 w-4 mr-1" />
                             Manual Match
                           </Button>
-                          
+
                           <Button
                             size="sm"
                             variant="outline"
@@ -2659,8 +2716,11 @@ export default function PendingEmployersImport() {
                     </Button>
                   )}
                   
-                  {/* Regular import button - only show for unprocessed employers */}
-                  {selectedEmployers.size > 0 && pendingEmployers.some(emp => selectedEmployers.has(emp.id) && (!emp.import_status || emp.import_status === 'pending')) && (
+                  {/* Regular import button - show for all unimported employers */}
+                  {selectedEmployers.size > 0 && pendingEmployers.some(emp =>
+                    selectedEmployers.has(emp.id) &&
+                    (!emp.import_status || ['pending', 'matched', 'create_new'].includes(emp.import_status))
+                  ) && (
                     <Button 
                       onClick={importSelectedEmployers}
                       disabled={isImporting || selectedEmployers.size === 0}

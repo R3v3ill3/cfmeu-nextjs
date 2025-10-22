@@ -144,7 +144,7 @@ export function EmployersMobileView() {
     eba_status_updated_at: emp.eba_status_updated_at,
     eba_status_notes: emp.eba_status_notes,
     worker_placements: emp.worker_placements || [],
-    ebaCategory: emp.company_eba_records?.[0] ? getEbaCategory(emp.company_eba_records[0]) : { category: 'no', label: 'No EBA', variant: 'destructive' },
+    ebaCategory: emp.company_eba_records?.[0] ? getEbaCategory(emp.company_eba_records[0]) : { category: 'no_fwc_match', label: 'No FWC Match', variant: 'outline' },
     projects: emp.projects,
     organisers: emp.organisers,
   }))

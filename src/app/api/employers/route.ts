@@ -219,6 +219,13 @@ export interface EmployerRecord {
   phone: string | null;
   estimated_worker_count: number | null;
   incolink_id: string | null;
+  incolink_last_matched?: string | null;
+  // EBA status fields
+  enterprise_agreement_status?: boolean | null;
+  eba_status_source?: string | null;
+  eba_status_updated_at?: string | null;
+  eba_status_notes?: string | null;
+  // Related records
   company_eba_records: any[];
   worker_placements: { id: string }[];
   project_assignments: { id: string }[];
@@ -432,8 +439,14 @@ export async function GET(request: NextRequest) {
         matViewQuery = matViewQuery.eq('is_engaged', false);
       }
 
-      // Apply EBA filter (precomputed!)
-      if (eba !== 'all') {
+      // Apply EBA filter
+      // 'active' and 'no' check canonical boolean status
+      // 'lodged' and 'pending' check FWC workflow eba_category
+      if (eba === 'active') {
+        matViewQuery = matViewQuery.eq('enterprise_agreement_status', true);
+      } else if (eba === 'no') {
+        matViewQuery = matViewQuery.or('enterprise_agreement_status.is.null,enterprise_agreement_status.eq.false');
+      } else if (eba === 'lodged' || eba === 'pending') {
         matViewQuery = matViewQuery.eq('eba_category', eba);
       }
 
@@ -667,6 +680,13 @@ export async function GET(request: NextRequest) {
         phone: row.phone,
         estimated_worker_count: row.estimated_worker_count,
         incolink_id: row.incolink_id,
+
+        // EBA status fields (CRITICAL - must be included!)
+        enterprise_agreement_status: row.enterprise_agreement_status,
+        eba_status_source: row.eba_status_source,
+        eba_status_updated_at: row.eba_status_updated_at,
+        eba_status_notes: row.eba_status_notes,
+        incolink_last_matched: row.incolink_last_matched,
 
         // Transform to match existing client structure
         company_eba_records: row.company_eba_records || [],

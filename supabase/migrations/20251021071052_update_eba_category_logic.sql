@@ -44,9 +44,17 @@ SELECT
   (SELECT COUNT(*)::int FROM public.worker_placements wp WHERE wp.employer_id = e.id) AS actual_worker_count,
   (SELECT COUNT(*)::int FROM public.project_assignments pa WHERE pa.employer_id = e.id) AS project_count,
   CASE
-    -- Only use the canonical boolean for 'active' status
-    -- FWC records serve as evidence/provenance, not as fallback status
-    WHEN e.enterprise_agreement_status = true THEN 'active'
+    -- eba_category now represents FWC workflow status (secondary badge)
+    -- certified: FWC certification found via scraping
+    -- lodged: Lodged with FWC
+    -- pending: EBA negotiation in progress
+    -- no_fwc_match: No FWC records found (doesn't mean no EBA)
+    WHEN EXISTS(
+      SELECT 1 FROM public.company_eba_records r
+      WHERE r.employer_id = e.id
+        AND r.fwc_certified_date > (CURRENT_DATE - INTERVAL '4 years')
+      LIMIT 1
+    ) THEN 'certified'
     WHEN EXISTS(
       SELECT 1 FROM public.company_eba_records r
       WHERE r.employer_id = e.id
@@ -65,7 +73,7 @@ SELECT
         )
       LIMIT 1
     ) THEN 'pending'
-    ELSE 'no'
+    ELSE 'no_fwc_match'
   END AS eba_category,
   COALESCE((
     SELECT MAX(GREATEST(

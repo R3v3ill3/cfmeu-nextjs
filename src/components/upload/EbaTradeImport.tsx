@@ -602,7 +602,7 @@ export default function EbaTradeImport({ onNavigateToPendingImport }: EbaTradeIm
                           .join(', ')}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {employer.phones.join(', ')}
+                        {(employer.phones || []).join(', ') || '-'}
                       </TableCell>
                       <TableCell>
                         <Select
@@ -750,11 +750,11 @@ export default function EbaTradeImport({ onNavigateToPendingImport }: EbaTradeIm
                 <div>
                   <label className="text-sm font-medium">Phone Numbers (comma-separated)</label>
                   <Input
-                    value={editingEmployer.phones.join(', ')}
+                    value={(editingEmployer.phones || []).join(', ')}
                     onChange={(e) =>
                       setEditingEmployer({
                         ...editingEmployer,
-                        phones: e.target.value.split(',').map((p) => p.trim()),
+                        phones: e.target.value.split(',').map((p) => p.trim()).filter(Boolean),
                       })
                     }
                   />
