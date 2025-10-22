@@ -1,25 +1,18 @@
 FROM node:18-alpine
 
-# Install pnpm
-RUN npm install -g pnpm
-
 WORKDIR /app
 
-# Copy package files
-COPY package.json pnpm-lock.yaml ./
+COPY package.json package-lock.json* pnpm-lock.yaml* yarn.lock* ./
 
-# Install dependencies using pnpm
-RUN pnpm install --frozen-lockfile
+RUN npm ci || npm install
 
-# Copy source code
 COPY tsconfig.json ./
 COPY src ./src
 
-# Build TypeScript
-RUN pnpm run build
+RUN npm run build
 
 ENV PORT=3250
 EXPOSE 3250
 
-CMD ["pnpm", "start"]
+CMD ["npm", "start"]
 
