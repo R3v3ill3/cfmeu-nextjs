@@ -10,12 +10,22 @@ RUN apt-get update && apt-get install -y \
     librsvg2-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Install pnpm
+RUN npm install -g pnpm
+
 WORKDIR /app
 
-COPY package.json package-lock.json* pnpm-lock.yaml* ./
-RUN npm ci || npm install
+# Copy package files
+COPY package.json pnpm-lock.yaml ./
 
+# Install dependencies using pnpm
+RUN pnpm install --frozen-lockfile
+
+# Copy source code
 COPY . .
-RUN npm run build
 
-CMD ["npm", "start"]
+# Build TypeScript
+RUN pnpm run build
+
+# Start the application
+CMD ["pnpm", "start"]
