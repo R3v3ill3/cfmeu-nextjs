@@ -7,11 +7,31 @@ let cachedServiceClient: SupabaseClient<Database> | null = null
 
 export function getServiceRoleClient() {
   if (!cachedServiceClient) {
-    cachedServiceClient = createClient<Database>(config.supabaseUrl, config.supabaseServiceKey, {
-      auth: { persistSession: false },
-    })
+    cachedServiceClient = createClient<Database>(
+      config.supabaseUrl,
+      config.supabaseServiceKey,
+      {
+        auth: { persistSession: false },
+        db: {
+          schema: 'public'
+        },
+        global: {
+          headers: {
+            'x-application-name': 'cfmeu-dashboard-worker'
+          }
+        }
+      }
+    )
   }
   return cachedServiceClient
+}
+
+// Add cleanup function for graceful shutdown
+export function closeServiceRoleClient() {
+  if (cachedServiceClient) {
+    // Supabase client doesn't have explicit close, but clear reference
+    cachedServiceClient = null
+  }
 }
 
 /**

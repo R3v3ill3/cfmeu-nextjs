@@ -6,13 +6,13 @@ import { supabase } from "@/integrations/supabase/client"
 import { withTimeout } from "@/lib/withTimeout"
 import { refreshSupabaseClient } from "@/integrations/supabase/client"
 import { EmployerCard } from "@/components/employers/EmployerCard"
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo, useCallback, useEffect } from "react"
 import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Toggle } from "@/components/ui/toggle"
-import { ArrowUp, ArrowDown, LayoutGrid, List as ListIcon, ChevronLeft, ChevronRight } from "lucide-react"
+import { ArrowUp, ArrowDown, LayoutGrid, List as ListIcon, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { getEbaCategory } from "@/components/employers/ebaHelpers"
@@ -20,6 +20,7 @@ import { EmployerTable } from "@/components/employers/EmployerTable"
 import { useEmployersServerSideCompatible } from "@/hooks/useEmployersServerSide"
 import { AddEmployerDialog } from "@/components/employers/AddEmployerDialog"
 import { Plus } from "lucide-react"
+import { useDebounce, useLocalStorage, useInterval } from "react-use"
 
 export function EmployersDesktopView() {
   const queryClient = useQueryClient()
@@ -34,21 +35,49 @@ export function EmployersDesktopView() {
   const dir = sp.get("dir") || "asc"
   const view = sp.get("view") || "card"
   const page = parseInt(sp.get("page") || "1")
-  const pageSize = parseInt(sp.get("pageSize") || "100")
 
   // Feature flag for server-side processing
   const USE_SERVER_SIDE = process.env.NEXT_PUBLIC_USE_SERVER_SIDE_EMPLOYERS === 'true'
+
+  // ============================================================================
+  // LOCALSTORAGE: Remember user preferences
+  // ============================================================================
+
+  // Save last search query (persists across sessions)
+  const [savedSearch, setSavedSearch] = useLocalStorage('employer-search-query', '')
+
+  // Save filter preferences (persists across sessions)
+  const [savedPreferences, setSavedPreferences] = useLocalStorage('employer-filter-preferences', {
+    view: 'card',
+    pageSize: 100,
+    sort: 'name',
+    dir: 'asc'
+  })
+
+  // Use saved pageSize if no URL param provided (with fallback)
+  const pageSize = parseInt(sp.get("pageSize") || savedPreferences?.pageSize?.toString() || "100")
 
   const setParam = (key: string, value?: string) => {
     const params = new URLSearchParams(sp.toString())
     if (!value || value === "all" || value === "") params.delete(key)
     else params.set(key, value)
-    
+
     // Reset to page 1 when filters change (but not when changing page or pageSize)
     if (key !== "page" && key !== "pageSize") {
       params.delete("page")
     }
-    
+
+    // Save filter preferences to localStorage
+    if (key === 'view' || key === 'pageSize' || key === 'sort' || key === 'dir') {
+      setSavedPreferences(prev => ({
+        view: prev?.view || 'card',
+        pageSize: prev?.pageSize || 100,
+        sort: prev?.sort || 'name',
+        dir: prev?.dir || 'asc',
+        [key]: key === 'pageSize' ? parseInt(value || '100') : value || prev?.[key as keyof typeof prev]
+      }))
+    }
+
     const qs = params.toString()
     router.replace(qs ? `${pathname}?${qs}` : pathname)
   }
@@ -117,12 +146,85 @@ export function EmployersDesktopView() {
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [isAddEmployerOpen, setIsAddEmployerOpen] = useState(false)
 
+  // Debounced search: local state for immediate UI updates
+  // Initialize from URL first, then localStorage fallback
+  const [searchInput, setSearchInput] = useState(sp.get("q") || savedSearch || "")
+
+  // Debounce search input - only update URL (triggers API call) after 300ms of no typing
+  useDebounce(
+    () => {
+      const currentQuery = sp.get("q") || ""
+      if (searchInput !== currentQuery) {
+        setParam("q", searchInput)
+      }
+      // Also save to localStorage (but don't save empty searches)
+      if (searchInput) {
+        setSavedSearch(searchInput)
+      }
+    },
+    300,
+    [searchInput]
+  )
+
+  // Sync URL changes back to local state (e.g., browser back/forward, direct URL changes)
+  useEffect(() => {
+    const urlQuery = sp.get("q") || ""
+    if (urlQuery !== searchInput) {
+      setSearchInput(urlQuery)
+    }
+  }, [sp.get("q")])
+
   const refreshEmployers = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["employers-server-side"] })
     queryClient.invalidateQueries({ queryKey: ["employers-list"] })
     queryClient.invalidateQueries({ queryKey: ["employers"] })
     refetchEmployers()
   }, [queryClient, refetchEmployers])
+
+  // ============================================================================
+  // AUTO-REFRESH: Refresh data every 5 minutes (only when tab is visible)
+  // ============================================================================
+
+  const [isPageVisible, setIsPageVisible] = useState(true)
+  const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null)
+
+  // Track page visibility
+  useEffect(() => {
+    const handleVisibility = () => {
+      const visible = document.visibilityState === 'visible'
+      setIsPageVisible(visible)
+
+      // Refresh immediately when user returns to tab
+      if (visible && lastRefreshTime) {
+        const timeSinceRefresh = Date.now() - lastRefreshTime.getTime()
+        // If more than 5 minutes since last refresh, refresh now
+        if (timeSinceRefresh > 5 * 60 * 1000) {
+          refreshEmployers()
+          setLastRefreshTime(new Date())
+        }
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [lastRefreshTime, refreshEmployers])
+
+  // Auto-refresh every 5 minutes (only when page is visible)
+  useInterval(
+    () => {
+      if (isPageVisible) {
+        console.log('🔄 Auto-refreshing employers data...')
+        refreshEmployers()
+        setLastRefreshTime(new Date())
+      }
+    },
+    isPageVisible ? 5 * 60 * 1000 : null  // 5 minutes, or null to pause
+  )
+
+  // Track initial load
+  useEffect(() => {
+    setLastRefreshTime(new Date())
+  }, [])
 
   const { filteredRows, totalCount, totalPages, currentPage } = useMemo(() => {
     if (USE_SERVER_SIDE) {
@@ -209,7 +311,30 @@ export function EmployersDesktopView() {
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Employers</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold">Employers</h1>
+          {lastRefreshTime && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  refreshEmployers()
+                  setLastRefreshTime(new Date())
+                }}
+                className="h-7"
+              >
+                <RefreshCw className={`h-3 w-3 mr-1 ${isFetching ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+              <span className="text-xs">
+                Updated {new Date().getTime() - lastRefreshTime.getTime() < 60000
+                  ? 'just now'
+                  : `${Math.floor((new Date().getTime() - lastRefreshTime.getTime()) / 60000)}m ago`}
+              </span>
+            </div>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           {/* Optional debug badge */}
           {process.env.NEXT_PUBLIC_SHOW_DEBUG_BADGES === 'true' && (
@@ -231,7 +356,11 @@ export function EmployersDesktopView() {
         <div className="flex flex-wrap items-center gap-3">
           <div className="min-w-[240px] flex-1">
             <div className="text-xs text-muted-foreground mb-1">Search</div>
-            <Input placeholder="Search…" value={sp.get("q") || ""} onChange={(e) => setParam("q", e.target.value)} />
+            <Input
+              placeholder="Search…"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+            />
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Engagement</span>

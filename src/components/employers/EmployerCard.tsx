@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Building, Phone, Mail, Users, MapPin } from "lucide-react"
@@ -43,6 +44,9 @@ export type EmployerCardData = {
     name: string;
     patch_name?: string;
   }>;
+  // Aggregated contractor categories (optional)
+  roles?: Array<{ code: string; name: string; manual: boolean; derived: boolean }>;
+  trades?: Array<{ code: string; name: string; manual: boolean; derived: boolean }>;
 };
 
 type EmployerProject = NonNullable<EmployerCardData["projects"]>[number];
@@ -92,6 +96,22 @@ export function EmployerCard({ employer, onClick, onUpdated }: { employer: Emplo
   const formatTradeName = (trade: string) => {
     return trade.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
   }
+
+  // Fallback: fetch aggregated categories if not provided by server
+  const shouldFetchCategories = !(Array.isArray(employer.roles) || Array.isArray(employer.trades))
+  const { data: fallbackCats } = useQuery({
+    queryKey: ['employer-categories', employer.id],
+    enabled: shouldFetchCategories,
+    queryFn: async () => {
+      const res = await fetch(`/api/eba/employers/${employer.id}/categories`)
+      if (!res.ok) throw new Error(await res.text())
+      const json = await res.json()
+      return json.data as { roles: Array<{ code: string; name: string; manual: boolean; derived: boolean }>; trades: Array<{ code: string; name: string; manual: boolean; derived: boolean }> }
+    }
+  })
+
+  const roles = (employer.roles && employer.roles.length > 0) ? employer.roles : (fallbackCats?.roles || [])
+  const trades = (employer.trades && employer.trades.length > 0) ? employer.trades : (fallbackCats?.trades || [])
 
   return (
     <>
@@ -160,6 +180,33 @@ export function EmployerCard({ employer, onClick, onUpdated }: { employer: Emplo
           {employer.incolink_last_matched && (
             <div className="text-xs text-muted-foreground">
               Last Incolink Payment: {new Date(employer.incolink_last_matched).toLocaleDateString()}
+            </div>
+          )}
+
+          {/* Roles and Trades (Employer-level aggregated categories) */}
+          {(Array.isArray(employer.roles) && employer.roles.length > 0) && (
+            <div className="space-y-1">
+              <div className="text-xs text-muted-foreground">Roles</div>
+              <div className="flex flex-wrap gap-1">
+                {employer.roles.map((r) => (
+                  <Badge key={r.code} variant={r.manual ? 'default' : 'secondary'} className="text-xs">
+                    {r.name}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {(Array.isArray(employer.trades) && employer.trades.length > 0) && (
+            <div className="space-y-1">
+              <div className="text-xs text-muted-foreground">Trades</div>
+              <div className="flex flex-wrap gap-1">
+                {employer.trades.map((t) => (
+                  <Badge key={t.code} variant={t.manual ? 'default' : 'secondary'} className="text-xs">
+                    {t.name}
+                  </Badge>
+                ))}
+              </div>
             </div>
           )}
 

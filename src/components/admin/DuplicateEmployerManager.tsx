@@ -1,18 +1,19 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle, AlertCircle, Info, Building2, Search, Merge, Eye, EyeOff, AlertTriangle, Users, Trash2 } from 'lucide-react';
-import { getSupabaseBrowserClient } from '@/lib/supabase/client';
-import { normalizeEmployerName } from '@/lib/employers/normalize';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Label } from '@/components/ui/label';
-import { useToast } from '@/hooks/use-toast';
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { CheckCircle, AlertCircle, Info, Building2, Search, Merge, Eye, EyeOff, AlertTriangle, Users } from 'lucide-react'
+import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import { normalizeEmployerName as normalizeEmployerNameDetailed, type NormalizedEmployerName } from '@/lib/employers/normalize'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Label } from '@/components/ui/label'
+import { useToast } from '@/hooks/use-toast'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Badge } from '@/components/ui/badge'
 
 interface EmployerRecord {
   id: string;
@@ -28,6 +29,15 @@ interface EmployerRecord {
   worker_count?: number;
   project_count?: number;
   eba_records_count?: number;
+  abn?: string;
+  website?: string | null;
+  enterprise_agreement_status?: boolean | null;
+  eba_status_source?: string | null;
+  eba_status_updated_at?: string | null;
+  eba_status_notes?: string | null;
+  normalizedName: string;
+  normalizedVariants: string[];
+  aliases: { alias: string; alias_normalized: string }[];
 }
 
 interface DuplicateGroup {
@@ -38,6 +48,7 @@ interface DuplicateGroup {
   userSelectedPrimary?: string;
   mergeDecision?: 'merge' | 'keep_separate' | 'delete_duplicates';
   confidence: 'high' | 'medium' | 'low';
+  isManual?: boolean;
 }
 
 interface MergeResult {
@@ -47,6 +58,19 @@ interface MergeResult {
   errors: string[];
   relationshipsMoved: number;
   recordsUpdated: number;
+}
+
+interface MergeFieldSelection {
+  field: string;
+  employerId: string | null;
+  value: any;
+}
+
+interface MergeFieldOption {
+  employerId: string | null;
+  employerName: string;
+  value: any;
+  displayValue: string;
 }
 
 export default function DuplicateEmployerManager() {
@@ -62,6 +86,11 @@ export default function DuplicateEmployerManager() {
   const [selectedGroup, setSelectedGroup] = useState<DuplicateGroup | null>(null);
   const [mergeResults, setMergeResults] = useState<MergeResult[]>([]);
   const [showDetails, setShowDetails] = useState<Set<string>>(new Set());
+  const [manualSelection, setManualSelection] = useState<Set<string>>(new Set());
+  const [manualSearchTerm, setManualSearchTerm] = useState('');
+  const [fieldSelections, setFieldSelections] = useState<Record<string, MergeFieldSelection>>({});
+  const [isImpactLoading, setIsImpactLoading] = useState(false);
+  const [impactData, setImpactData] = useState<Record<string, any>>({});
 
   useEffect(() => {
     loadEmployers();
@@ -76,7 +105,9 @@ export default function DuplicateEmployerManager() {
       const { data: employerData, error: employerError } = await supabase
         .from('employers')
         .select(`
-          id, name, address_line_1, suburb, state, postcode, phone, email, employer_type, created_at
+          id, name, address_line_1, suburb, state, postcode, phone, email, employer_type, created_at,
+          abn, website, enterprise_agreement_status, eba_status_source, eba_status_updated_at, eba_status_notes,
+          employer_aliases ( alias, alias_normalized )
         `)
         .order('name');
 
@@ -121,56 +152,80 @@ export default function DuplicateEmployerManager() {
         ebaCountMap.set(e.employer_id, count + 1);
       });
 
-      // Use database function for efficient relationship counting
       const employerIds = (employerData || []).map((emp: any) => emp.id).filter((id: any) => id);
-      
+      let mergeImpactMap: Map<string, any> = new Map();
+
       if (employerIds.length > 0) {
         try {
-          const { data: impactData, error: impactError } = await supabase
+          const { data: impactDataResult, error: impactError } = await supabase
             .rpc('get_employer_merge_impact', { p_employer_ids: employerIds });
           
           if (impactError) {
             console.warn('get_employer_merge_impact error (non-fatal):', impactError);
-            // Fall back to employers without impact data
-            setEmployers(employerData.map((emp: any) => ({
-              ...emp,
-              worker_count: 0,
-              project_count: 0,
-              eba_records_count: 0
-            })));
-          } else {
-            const impactMap = new Map();
-            (impactData || []).forEach((impact: any) => {
-              impactMap.set(impact.employer_id, {
-                worker_count: impact.worker_placements_count || 0,
-                project_count: (impact.project_roles_count || 0) + (impact.project_trades_count || 0) + (impact.builder_projects_count || 0),
-                eba_records_count: impact.eba_records_count || 0
-              });
+          } else if (impactDataResult) {
+            mergeImpactMap = new Map(impactDataResult.map((impact: any) => [impact.employer_id, impact]));
+            const impactRecord: Record<string, any> = {};
+            impactDataResult.forEach((impact: any) => {
+              impactRecord[impact.employer_id] = impact;
             });
-            
-            const enrichedEmployers: EmployerRecord[] = (employerData || []).map((emp: any) => {
-              const impact = impactMap.get(emp.id) || { worker_count: 0, project_count: 0, eba_records_count: 0 };
-              return {
-                ...emp,
-                ...impact
-              };
-            });
-            
-            setEmployers(enrichedEmployers);
+            setImpactData(impactRecord);
           }
         } catch (rpcError) {
           console.warn('RPC call failed (non-fatal):', rpcError);
-          // Fall back to employers without impact data
-          setEmployers(employerData.map((emp: any) => ({
-            ...emp,
-            worker_count: 0,
-            project_count: 0,
-            eba_records_count: 0
-          })));
         }
-      } else {
-        setEmployers([]);
       }
+
+      const enrichedEmployers: EmployerRecord[] = (employerData || []).map((emp: any) => {
+        const normalized: NormalizedEmployerName = normalizeEmployerNameDetailed(emp.name ?? '');
+        const aliases = (emp.employer_aliases || []).map((alias: any) => ({
+          alias: alias.alias,
+          alias_normalized: alias.alias_normalized
+        }));
+
+        const uniqueVariants = Array.from(new Set([
+          ...normalized.normalizedVariants,
+          normalized.normalized,
+          ...aliases.map(alias => alias.alias_normalized ? alias.alias_normalized.toUpperCase() : alias.alias_normalized)
+        ].filter(Boolean)));
+
+        const impact = mergeImpactMap.get(emp.id) || {
+          worker_placements_count: workerCountMap.get(emp.id) || 0,
+          project_roles_count: projectCountMap.get(emp.id) || 0,
+          project_trades_count: 0,
+          builder_projects_count: 0,
+          site_trades_count: 0,
+          site_visits_count: 0,
+          aliases_count: aliases.length,
+          eba_records_count: ebaCountMap.get(emp.id) || 0
+        };
+
+        return {
+          id: emp.id,
+          name: emp.name,
+          address_line_1: emp.address_line_1,
+          suburb: emp.suburb,
+          state: emp.state,
+          postcode: emp.postcode,
+          phone: emp.phone,
+          email: emp.email,
+          employer_type: emp.employer_type,
+          created_at: emp.created_at,
+          abn: emp.abn,
+          website: emp.website,
+          enterprise_agreement_status: emp.enterprise_agreement_status,
+          eba_status_source: emp.eba_status_source,
+          eba_status_updated_at: emp.eba_status_updated_at,
+          eba_status_notes: emp.eba_status_notes,
+          worker_count: impact.worker_placements_count || 0,
+          project_count: (impact.project_roles_count || 0) + (impact.project_trades_count || 0) + (impact.builder_projects_count || 0),
+          eba_records_count: impact.eba_records_count || 0,
+          normalizedName: normalized.normalized,
+          normalizedVariants: uniqueVariants,
+          aliases
+        };
+      });
+
+      setEmployers(enrichedEmployers);
     } catch (error) {
       console.error('Error loading employers:', error);
       toast({
@@ -217,45 +272,72 @@ export default function DuplicateEmployerManager() {
   };
 
   // Normalize company names for better matching
-  const normalizeCompanyName = (name: string): string => normalizeEmployerName(name).normalized;
+  const normalizeCompanyName = (name: string): { normalized: string; variants: string[] } => {
+    const normalized = normalizeEmployerNameDetailed(name ?? '');
+    return {
+      normalized: normalized.normalized,
+      variants: normalized.normalizedVariants
+    };
+  };
 
   // Scan for duplicates
   const scanForDuplicates = async () => {
     setIsScanning(true);
     try {
       const groups: DuplicateGroup[] = [];
-      const processed = new Set<string>();
+      const processedEmployers = new Set<string>();
+      const processedPairs = new Set<string>();
 
       for (let i = 0; i < employers.length; i++) {
         const employer1 = employers[i];
-        if (processed.has(employer1.id)) continue;
+        if (processedEmployers.has(employer1.id)) continue;
 
         const similarEmployers = [employer1];
-        processed.add(employer1.id);
+        processedEmployers.add(employer1.id);
 
         for (let j = i + 1; j < employers.length; j++) {
           const employer2 = employers[j];
-          if (processed.has(employer2.id)) continue;
+          const pairKey = `${employer1.id}:${employer2.id}`;
+          if (processedPairs.has(pairKey)) continue;
 
-          // Calculate multiple similarity metrics
-          const nameSimilarity = calculateSimilarity(
-            normalizeCompanyName(employer1.name),
-            normalizeCompanyName(employer2.name)
-          );
+          const normalized1 = employer1.normalizedVariants || [employer1.normalizedName];
+          const normalized2 = employer2.normalizedVariants || [employer2.normalizedName];
+
+          let maxNameSimilarity = 0;
+          let hasAliasMatch = false;
+
+          for (const variant1 of normalized1) {
+            for (const variant2 of normalized2) {
+              const similarity = calculateSimilarity(variant1, variant2);
+              if (similarity > maxNameSimilarity) {
+                maxNameSimilarity = similarity;
+              }
+              if (variant1 && variant1 === variant2 && variant1.length > 0) {
+                hasAliasMatch = true;
+              }
+            }
+          }
 
           const exactNameMatch = employer1.name.toLowerCase() === employer2.name.toLowerCase();
+          const aliasNameMatch = hasAliasMatch;
           const addressSimilarity = employer1.address_line_1 && employer2.address_line_1 
-            ? calculateSimilarity(employer1.address_line_1, employer2.address_line_1)
+            ? calculateSimilarity(employer1.address_line_1.toLowerCase(), employer2.address_line_1.toLowerCase())
             : 0;
 
-          // Determine if these are likely duplicates
-          const isDuplicate = exactNameMatch || 
-            (nameSimilarity >= similarityThreshold) ||
-            (nameSimilarity >= 0.6 && addressSimilarity >= 0.8);
+          const sharedAlias = employer1.aliases?.some(alias => normalized2.includes(alias.alias_normalized))
+            || employer2.aliases?.some(alias => normalized1.includes(alias.alias_normalized));
+
+          const isDuplicate = exactNameMatch
+            || aliasNameMatch
+            || sharedAlias
+            || (maxNameSimilarity >= similarityThreshold)
+            || (maxNameSimilarity >= 0.6 && addressSimilarity >= 0.8);
 
           if (isDuplicate) {
             similarEmployers.push(employer2);
-            processed.add(employer2.id);
+            processedPairs.add(`${employer1.id}:${employer2.id}`);
+            processedPairs.add(`${employer2.id}:${employer1.id}`);
+            processedEmployers.add(employer2.id);
           }
         }
 
@@ -274,7 +356,7 @@ export default function DuplicateEmployerManager() {
 
           const maxSimilarity = Math.max(
             ...similarEmployers.slice(1).map(emp => 
-              calculateSimilarity(normalizeCompanyName(similarEmployers[0].name), normalizeCompanyName(emp.name))
+              calculateSimilarity(normalizeCompanyName(similarEmployers[0].name).normalized, normalizeCompanyName(emp.name).normalized)
             )
           );
 
@@ -336,7 +418,28 @@ export default function DuplicateEmployerManager() {
 
     try {
       console.log(`Starting merge: Primary ${primaryId}, Duplicates: ${duplicateIds.join(', ')}`);
-      
+
+      const overrides: Record<string, any> = {};
+      Object.entries(fieldSelections).forEach(([field, selection]) => {
+        if (selection && selection.value !== undefined) {
+          overrides[field] = selection.value;
+        }
+      });
+
+      if (Object.keys(overrides).length > 0) {
+        const { error: primaryUpdateError } = await supabase
+          .from('employers')
+          .update(overrides)
+          .eq('id', primaryId);
+
+        if (primaryUpdateError) {
+          result.errors.push(`Primary update failed: ${primaryUpdateError.message}`);
+          console.error('Primary update error', primaryUpdateError);
+        } else {
+          result.recordsUpdated++;
+        }
+      }
+
       // Move all relationships to the primary employer
       
       // 1. Update worker placements
@@ -446,7 +549,7 @@ export default function DuplicateEmployerManager() {
         .filter(e => e.id !== primaryId)
         .map(e => ({
           alias: e.name,
-          alias_normalized: normalizeCompanyName(e.name),
+          alias_normalized: normalizeCompanyName(e.name).normalized,
           employer_id: primaryId
         }));
 
@@ -570,6 +673,144 @@ export default function DuplicateEmployerManager() {
     });
   };
 
+  const toggleManualSelection = (employerId: string) => {
+    setManualSelection(prev => {
+      const next = new Set(prev);
+      if (next.has(employerId)) {
+        next.delete(employerId);
+      } else {
+        next.add(employerId);
+      }
+      return next;
+    });
+  };
+
+  const resetManualSelection = () => {
+    setManualSelection(new Set());
+    setFieldSelections({});
+    setImpactData({});
+  };
+
+  const buildManualGroup = () => {
+    if (manualSelection.size < 2) return null;
+    const selectedEmployers = employers.filter(emp => manualSelection.has(emp.id));
+    if (selectedEmployers.length < 2) return null;
+
+    const normalizedPrimary = selectedEmployers.reduce((best, current) => {
+      const bestScore = (best.worker_count || 0) + (best.project_count || 0) + (best.eba_records_count || 0);
+      const currentScore = (current.worker_count || 0) + (current.project_count || 0) + (current.eba_records_count || 0);
+      if (currentScore > bestScore) return current;
+      if (currentScore === bestScore && new Date(current.created_at) < new Date(best.created_at)) return current;
+      return best;
+    });
+
+    const similarity = selectedEmployers.length > 1 ? 0.95 : 1;
+
+    return {
+      id: `manual-${Array.from(manualSelection).sort().join('-')}`,
+      employers: selectedEmployers,
+      similarity,
+      suggestedPrimary: normalizedPrimary,
+      confidence: 'high' as const,
+      isManual: true
+    } satisfies DuplicateGroup;
+  };
+
+  const fetchImpactData = async (employerIds: string[]) => {
+    if (!employerIds || employerIds.length === 0) return;
+    setIsImpactLoading(true);
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase.rpc('get_employer_merge_impact', { p_employer_ids: employerIds });
+      if (error) throw error;
+
+      const impactMap: Record<string, any> = {};
+      (data || []).forEach((impact: any) => {
+        impactMap[impact.employer_id] = impact;
+      });
+
+      setImpactData(prev => ({ ...prev, ...impactMap }));
+    } catch (error) {
+      console.error('Error fetching merge impact:', error);
+      toast({
+        title: 'Impact load failed',
+        description: error instanceof Error ? error.message : 'Unable to load merge impact details',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsImpactLoading(false);
+    }
+  };
+
+  const buildFieldOptions = (group: DuplicateGroup): Array<{ key: string; label: string; options: MergeFieldOption[] }> => {
+    const fields: Array<{ key: string; label: string; formatter?: (value: any) => string } > = [
+      { key: 'name', label: 'Name' },
+      { key: 'address_line_1', label: 'Address Line 1' },
+      { key: 'suburb', label: 'Suburb' },
+      { key: 'state', label: 'State' },
+      { key: 'postcode', label: 'Postcode' },
+      { key: 'phone', label: 'Phone' },
+      { key: 'email', label: 'Email' },
+      { key: 'employer_type', label: 'Employer Type' },
+      { key: 'abn', label: 'ABN' },
+      { key: 'website', label: 'Website' },
+      { key: 'enterprise_agreement_status', label: 'Has EBA?', formatter: (value) => value === true ? 'Yes' : value === false ? 'No' : 'Unknown' },
+      { key: 'eba_status_source', label: 'EBA Status Source' },
+      { key: 'eba_status_notes', label: 'EBA Status Notes' },
+    ];
+
+    return fields.map(field => {
+      const fieldOptions: MergeFieldOption[] = group.employers.map(emp => ({
+        employerId: emp.id,
+        employerName: emp.name,
+        value: (emp as any)[field.key],
+        displayValue: field.formatter ? field.formatter((emp as any)[field.key]) : ((emp as any)[field.key] ?? '—')
+      }));
+
+      if (group.suggestedPrimary) {
+        const currentValue = (group.suggestedPrimary as any)[field.key];
+        fieldOptions.unshift({
+          employerId: group.suggestedPrimary.id,
+          employerName: `${group.suggestedPrimary.name} (current)`,
+          value: currentValue,
+          displayValue: field.formatter ? field.formatter(currentValue) : (currentValue ?? '—')
+        });
+      }
+
+      return {
+        key: field.key,
+        label: field.label,
+        options: fieldOptions
+      };
+    });
+  };
+
+  const updateFieldSelection = (field: string, option: MergeFieldOption) => {
+    setFieldSelections(prev => ({
+      ...prev,
+      [field]: {
+        field,
+        employerId: option.employerId,
+        value: option.value
+      }
+    }));
+  };
+
+  const filteredEmployersForManual = useMemo(() => {
+    if (!manualSearchTerm.trim()) {
+      return employers.slice(0, 100);
+    }
+    const term = manualSearchTerm.toLowerCase();
+    return employers.filter(emp => {
+      const matchesName = emp.name.toLowerCase().includes(term);
+      const matchesAddress = emp.address_line_1?.toLowerCase().includes(term) || emp.suburb?.toLowerCase().includes(term);
+      const matchesAbn = emp.abn?.toLowerCase().includes(term);
+      const matchesAlias = emp.aliases?.some(alias => alias.alias.toLowerCase().includes(term) || alias.alias_normalized.includes(term));
+      const matchesVariant = emp.normalizedVariants?.some(variant => variant.toLowerCase().includes(term));
+      return matchesName || matchesAddress || matchesAbn || matchesAlias || matchesVariant;
+    }).slice(0, 200);
+  }, [employers, manualSearchTerm]);
+
   if (isLoading) {
     return (
       <div className="text-center space-y-4">
@@ -612,10 +853,11 @@ export default function DuplicateEmployerManager() {
       <Card>
         <CardHeader>
           <CardTitle>Search & Filter</CardTitle>
+          <CardDescription>Refine auto-detected groups or start a manual merge.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-4 items-end">
-            <div className="flex-1">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="lg:col-span-2 space-y-2">
               <Label htmlFor="search">Search Employers</Label>
               <Input
                 id="search"
@@ -623,8 +865,9 @@ export default function DuplicateEmployerManager() {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
+              <p className="text-xs text-muted-foreground">This filters the auto-detected duplicate groups below.</p>
             </div>
-            <div className="w-48">
+            <div className="space-y-2">
               <Label htmlFor="threshold">Similarity Threshold</Label>
               <Select value={similarityThreshold.toString()} onValueChange={(v) => setSimilarityThreshold(parseFloat(v))}>
                 <SelectTrigger>
@@ -638,6 +881,110 @@ export default function DuplicateEmployerManager() {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Manual Merge Section */}
+      <Card>
+        <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <CardTitle>Manual Merge Workspace</CardTitle>
+            <CardDescription>
+              Search for any employers (including trading-as names), select at least two, and review merge details.
+            </CardDescription>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={resetManualSelection} disabled={manualSelection.size === 0}>
+              Clear Selection
+            </Button>
+            <Button
+              onClick={() => {
+                const group = buildManualGroup();
+                if (!group) {
+                  toast({
+                    title: 'Select at least two employers',
+                    description: 'Choose two or more employers to review merge impact.',
+                    variant: 'destructive'
+                  });
+                  return;
+                }
+                setFieldSelections({});
+                setSelectedGroup(group);
+                setShowMergeDialog(true);
+                fetchImpactData(group.employers.map(emp => emp.id));
+              }}
+              disabled={manualSelection.size < 2}
+            >
+              Review Merge ({manualSelection.size})
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="manual-search">Search employers to add</Label>
+              <Input
+                id="manual-search"
+                placeholder="Search all employers by name, alias, address, ABN..."
+                value={manualSearchTerm}
+                onChange={(e) => setManualSearchTerm(e.target.value)}
+              />
+            </div>
+
+            <div className="max-h-80 overflow-y-auto border rounded-md p-3 bg-muted/30">
+              {filteredEmployersForManual.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No employers match that search yet. Try another keyword or scan for aliases.</p>
+              ) : (
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {filteredEmployersForManual.map((employer) => {
+                    const isSelected = manualSelection.has(employer.id);
+                    return (
+                      <div
+                        key={employer.id}
+                        className={`p-3 rounded border transition-all ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-transparent bg-white shadow-sm'}`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <h4 className="font-medium text-sm">{employer.name}</h4>
+                            <p className="text-xs text-muted-foreground">
+            {[employer.address_line_1, employer.suburb, employer.state].filter(Boolean).join(', ') || 'No address on file'}
+                            </p>
+                            {employer.abn && (
+                              <p className="text-xs text-muted-foreground mt-1">ABN: {employer.abn}</p>
+                            )}
+                          </div>
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={() => toggleManualSelection(employer.id)}
+                          />
+                        </div>
+                        <div className="text-[11px] text-muted-foreground mt-2 space-y-1">
+                          <div className="flex flex-wrap gap-1">
+                            {employer.normalizedVariants.slice(0, 3).map((variant) => (
+                              <Badge key={variant} variant="outline" className="text-[10px]">
+                                {variant}
+                              </Badge>
+                            ))}
+                          </div>
+                          {(employer.aliases || []).slice(0, 2).map(alias => (
+                            <div key={`${employer.id}-${alias.alias}`} className="italic">Alias: {alias.alias}</div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {manualSelection.size >= 2 && (
+              <Alert>
+                <AlertDescription>
+                  {manualSelection.size} employer{manualSelection.size === 1 ? '' : 's'} selected. Click “Review Merge” to configure the merge.
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -848,7 +1195,7 @@ export default function DuplicateEmployerManager() {
 
       {/* Merge Confirmation Dialog */}
       <Dialog open={showMergeDialog} onOpenChange={setShowMergeDialog}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl lg:max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Merge className="h-5 w-5" />
@@ -868,6 +1215,15 @@ export default function DuplicateEmployerManager() {
                   will be moved to the primary employer. The duplicate records will be deleted.
                 </AlertDescription>
               </Alert>
+
+              {selectedGroup.isManual && (
+                <Alert className="bg-blue-50 border-blue-200">
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    You initiated this merge manually. Ensure the selected employers represent the same company.
+                  </AlertDescription>
+                </Alert>
+              )}
 
               <div>
                 <Label>Select Primary Employer (data will be merged into this record):</Label>
@@ -898,6 +1254,93 @@ export default function DuplicateEmployerManager() {
                   ))}
                 </div>
               </div>
+
+              {selectedGroup && (
+                <div className="border rounded-md">
+                  <div className="p-3 border-b bg-muted/50 flex items-center justify-between">
+                    <div>
+                      <h5 className="font-medium">Field Conflict Resolution</h5>
+                      <p className="text-xs text-muted-foreground">Choose which source to use if data differs.</p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setFieldSelections({})}
+                    >
+                      Reset choices
+                    </Button>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto">
+                    {buildFieldOptions(selectedGroup).map(field => (
+                      <div key={field.key} className="px-3 py-2 border-b last:border-b-0">
+                        <p className="text-sm font-medium mb-1">{field.label}</p>
+                        <div className="grid gap-2">
+                          {field.options.map(option => {
+                            const selection = fieldSelections[field.key];
+                            const isSelected = selection?.employerId === option.employerId && selection?.value === option.value;
+                            return (
+                              <button
+                                key={`${field.key}-${option.employerId ?? 'null'}-${option.displayValue}`}
+                                onClick={() => updateFieldSelection(field.key, option)}
+                                className={`text-left text-sm p-2 rounded border transition-all ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-transparent hover:border-muted'}`}
+                                type="button"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className="font-medium">{option.displayValue}</span>
+                                  <span className="text-xs text-muted-foreground">{option.employerName}</span>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedGroup && (
+                <div className="border rounded-md">
+                  <div className="p-3 border-b bg-muted/50">
+                    <h5 className="font-medium">Relationship Impact</h5>
+                    <p className="text-xs text-muted-foreground">Review total records that will move to the primary employer.</p>
+                  </div>
+                  <div className="p-3 text-sm">
+                    {isImpactLoading ? (
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <img src="/spinner.gif" alt="Loading" className="w-4 h-4" />
+                        Loading impact details...
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                        {selectedGroup.employers.map(emp => (
+                          <div key={`impact-${emp.id}`} className="border rounded p-2 bg-muted/30">
+                            <p className="font-medium mb-1">{emp.name}</p>
+                            <ul className="space-y-1">
+                              {(() => {
+                                const impact = impactData[emp.id];
+                                if (!impact) {
+                                  return <li className="text-muted-foreground">No impact data available</li>;
+                                }
+                                return (
+                                  <>
+                                    <li>Workers: {impact.worker_placements_count ?? 0}</li>
+                                    <li>Projects: {(impact.project_roles_count ?? 0) + (impact.project_trades_count ?? 0) + (impact.builder_projects_count ?? 0)}</li>
+                                    <li>Trades: {(impact.site_trades_count ?? 0) + (impact.project_trades_count ?? 0)}</li>
+                                    <li>EBA Records: {impact.eba_records_count ?? 0}</li>
+                                    <li>Site Visits: {impact.site_visits_count ?? 0}</li>
+                                    <li>Aliases: {impact.aliases_count ?? 0}</li>
+                                  </>
+                                );
+                              })()}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setShowMergeDialog(false)}>

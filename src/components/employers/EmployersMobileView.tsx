@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from "react"
 import { useSearchParams, usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Search, Plus } from "lucide-react"
+import { Search, Plus, RefreshCw } from "lucide-react"
 import { useEmployersServerSideCompatible } from "@/hooks/useEmployersServerSide"
 import { EmployerCard, EmployerCardData } from "./EmployerCard"
 import { EmployerDetailModal } from "./EmployerDetailModal"
@@ -13,6 +13,7 @@ import { getEbaCategory } from "./ebaHelpers"
 import { useQueryClient } from "@tanstack/react-query"
 import { refreshSupabaseClient } from "@/integrations/supabase/client"
 import { AddEmployerDialog } from "./AddEmployerDialog"
+import { useDebounce, useLocalStorage, useInterval } from "react-use"
 
 const EMPLOYERS_STATE_KEY = 'employers-page-state-mobile'
 
@@ -46,6 +47,39 @@ export function EmployersMobileView() {
   const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [isAddEmployerOpen, setIsAddEmployerOpen] = useState(false)
+
+  // ============================================================================
+  // LOCALSTORAGE: Remember user's last search
+  // ============================================================================
+  const [savedSearch, setSavedSearch] = useLocalStorage('employer-search-query-mobile', '')
+
+  // Debounced search: local state for immediate UI updates
+  // Initialize from URL first, then localStorage fallback
+  const [searchInput, setSearchInput] = useState(sp.get("q") || savedSearch || "")
+
+  // Debounce search input - only update URL (triggers API call) after 300ms of no typing
+  useDebounce(
+    () => {
+      const currentQuery = sp.get("q") || ""
+      if (searchInput !== currentQuery) {
+        setParam("q", searchInput)
+      }
+      // Also save to localStorage (but don't save empty searches)
+      if (searchInput) {
+        setSavedSearch(searchInput)
+      }
+    },
+    300,
+    [searchInput]
+  )
+
+  // Sync URL changes back to local state (e.g., browser back/forward, direct URL changes)
+  useEffect(() => {
+    const urlQuery = sp.get("q") || ""
+    if (urlQuery !== searchInput) {
+      setSearchInput(urlQuery)
+    }
+  }, [sp.get("q")])
 
   useEffect(() => {
     saveEmployersState(sp)
@@ -98,6 +132,51 @@ export function EmployersMobileView() {
     queryClient.invalidateQueries({ queryKey: ["employers"] })
     refetch()
   }, [queryClient, refetch])
+
+  // ============================================================================
+  // AUTO-REFRESH: Refresh data every 5 minutes (only when tab is visible)
+  // ============================================================================
+
+  const [isPageVisible, setIsPageVisible] = useState(true)
+  const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null)
+
+  // Track page visibility
+  useEffect(() => {
+    const handleVisibility = () => {
+      const visible = document.visibilityState === 'visible'
+      setIsPageVisible(visible)
+
+      // Refresh immediately when user returns to tab
+      if (visible && lastRefreshTime) {
+        const timeSinceRefresh = Date.now() - lastRefreshTime.getTime()
+        // If more than 5 minutes since last refresh, refresh now
+        if (timeSinceRefresh > 5 * 60 * 1000) {
+          refreshEmployers()
+          setLastRefreshTime(new Date())
+        }
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [lastRefreshTime, refreshEmployers])
+
+  // Auto-refresh every 5 minutes (only when page is visible)
+  useInterval(
+    () => {
+      if (isPageVisible) {
+        console.log('🔄 Auto-refreshing employers data (mobile)...')
+        refreshEmployers()
+        setLastRefreshTime(new Date())
+      }
+    },
+    isPageVisible ? 5 * 60 * 1000 : null  // 5 minutes, or null to pause
+  )
+
+  // Track initial load
+  useEffect(() => {
+    setLastRefreshTime(new Date())
+  }, [])
 
   const handleCardClick = (employerId: string) => {
     setSelectedEmployerId(employerId)
@@ -153,18 +232,41 @@ export function EmployersMobileView() {
     <div className="px-safe py-4 pb-safe-bottom space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Employers</h1>
-        <Button size="sm" onClick={() => setIsAddEmployerOpen(true)}>
-          <Plus className="h-4 w-4 mr-1" />
-          Add
-        </Button>
+        <div className="flex items-center gap-2">
+          {lastRefreshTime && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                refreshEmployers()
+                setLastRefreshTime(new Date())
+              }}
+              className="h-8 px-2"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`} />
+            </Button>
+          )}
+          <Button size="sm" onClick={() => setIsAddEmployerOpen(true)}>
+            <Plus className="h-4 w-4 mr-1" />
+            Add
+          </Button>
+        </div>
       </div>
+
+      {lastRefreshTime && (
+        <div className="text-xs text-muted-foreground text-center">
+          Updated {new Date().getTime() - lastRefreshTime.getTime() < 60000
+            ? 'just now'
+            : `${Math.floor((new Date().getTime() - lastRefreshTime.getTime()) / 60000)}m ago`}
+        </div>
+      )}
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input 
-          placeholder="Search employers…" 
-          value={sp.get("q") || ""} 
-          onChange={(e) => setParam("q", e.target.value)}
+        <Input
+          placeholder="Search employers…"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
           className="pl-10"
         />
       </div>

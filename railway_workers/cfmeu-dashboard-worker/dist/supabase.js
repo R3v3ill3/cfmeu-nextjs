@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getServiceRoleClient = getServiceRoleClient;
+exports.closeServiceRoleClient = closeServiceRoleClient;
 exports.getUserClientFromToken = getUserClientFromToken;
 exports.verifyJWT = verifyJWT;
 const supabase_js_1 = require("@supabase/supabase-js");
@@ -10,9 +11,24 @@ function getServiceRoleClient() {
     if (!cachedServiceClient) {
         cachedServiceClient = (0, supabase_js_1.createClient)(config_1.config.supabaseUrl, config_1.config.supabaseServiceKey, {
             auth: { persistSession: false },
+            db: {
+                schema: 'public'
+            },
+            global: {
+                headers: {
+                    'x-application-name': 'cfmeu-dashboard-worker'
+                }
+            }
         });
     }
     return cachedServiceClient;
+}
+// Add cleanup function for graceful shutdown
+function closeServiceRoleClient() {
+    if (cachedServiceClient) {
+        // Supabase client doesn't have explicit close, but clear reference
+        cachedServiceClient = null;
+    }
 }
 /**
  * Create a Supabase client for a user based on their JWT token.

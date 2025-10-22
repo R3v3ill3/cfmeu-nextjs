@@ -64,7 +64,7 @@ export function EmployerComplianceDetailMobile({
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg">{employerName}</CardTitle>
             {hasChanges && (
-              <Button size="sm" onClick={handleSave}>
+              <Button size="sm" className="h-11" onClick={handleSave}>
                 <Save className="h-4 w-4 mr-1" />
                 Save
               </Button>

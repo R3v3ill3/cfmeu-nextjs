@@ -6,13 +6,15 @@ import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { MapPin, Building, Users, ExternalLink } from "lucide-react"
+import { MapPin, Building, Users, ExternalLink, AlertCircle } from "lucide-react"
 import Link from "next/link"
 import dynamic from "next/dynamic"
 import { usePatchOrganiserLabels } from "@/hooks/usePatchOrganiserLabels"
 import { getProjectColor } from "@/utils/projectColors"
 import { useNavigationLoading } from "@/hooks/useNavigationLoading"
 import { useGoogleMaps } from "@/providers/GoogleMapsProvider"
+import { MapErrorBoundary } from "@/components/map/MapErrorBoundary"
+import { useNetworkStatus } from "@/hooks/useNetworkStatus"
 
 interface InteractiveMapProps {
   showJobSites: boolean
@@ -96,6 +98,7 @@ export default function InteractiveMap({
 }: InteractiveMapProps) {
   const { startNavigation } = useNavigationLoading()
   const { isLoaded: mapsLoaded, loadError } = useGoogleMaps()
+  const isOnline = useNetworkStatus()
   const mapsError = loadError?.message || null
   const [map, setMap] = useState<google.maps.Map | null>(null)
   const [selectedPatch, setSelectedPatch] = useState<PatchData | null>(null)
@@ -507,14 +510,31 @@ export default function InteractiveMap({
     return namePart || orgPart || undefined
   }, [showPatchNames, showOrganisers])
 
+  // Handle offline state
+  if (!isOnline) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full bg-yellow-50 rounded-lg border-2 border-yellow-200">
+        <AlertCircle className="h-12 w-12 text-yellow-600 mb-4" />
+        <h3 className="text-lg font-semibold mb-2">You are offline</h3>
+        <p className="text-sm text-yellow-800 text-center max-w-md px-4">
+          Map features require an internet connection. Please check your network and try again.
+        </p>
+      </div>
+    )
+  }
+
   // Handle loading states
   if (mapsError) {
     return (
-      <div className="flex items-center justify-center h-full bg-gray-100">
-        <div className="text-center">
-          <MapPin className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-600">{mapsError}</p>
-        </div>
+      <div className="flex flex-col items-center justify-center h-full bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+        <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
+        <h3 className="text-lg font-semibold mb-2">Map Failed to Load</h3>
+        <p className="text-sm text-gray-600 mb-4 max-w-md text-center px-4">
+          {mapsError || 'There was an error loading Google Maps.'}
+        </p>
+        <p className="text-xs text-gray-500 mb-4">
+          Please check your internet connection or try refreshing the page.
+        </p>
       </div>
     )
   }
@@ -531,6 +551,7 @@ export default function InteractiveMap({
   }
 
   return (
+    <MapErrorBoundary>
       <GoogleMap
         mapContainerStyle={mapContainerStyle}
         center={defaultCenter}
@@ -875,5 +896,6 @@ export default function InteractiveMap({
           </InfoWindow>
         )}
       </GoogleMap>
+    </MapErrorBoundary>
   )
 }

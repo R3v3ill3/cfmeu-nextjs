@@ -240,11 +240,36 @@ app.post('/bci/normalize-xlsx', async (request, reply) => {
 
 app.get('/health', async () => ({ status: 'ok' }))
 
+let server: any
+
 app.listen({ port: PORT, host: '0.0.0.0' })
-  .then(() => app.log.info(`bci-import-worker listening on http://localhost:${PORT}`))
+  .then((addr) => {
+    server = addr
+    app.log.info(`bci-import-worker listening on http://localhost:${PORT}`)
+  })
   .catch((err) => {
     app.log.error(err)
     process.exit(1)
   })
+
+// Graceful shutdown handler for HTTP worker
+async function gracefulShutdown() {
+  app.log.info('Received shutdown signal, closing server...')
+
+  if (server) {
+    try {
+      await server.close()
+      app.log.info('HTTP server closed successfully')
+    } catch (err) {
+      app.log.error({ err }, 'Error closing HTTP server')
+    }
+  }
+
+  app.log.info('Graceful shutdown complete')
+  process.exit(0)
+}
+
+process.on('SIGTERM', gracefulShutdown)
+process.on('SIGINT', gracefulShutdown)
 
 

@@ -33,12 +33,15 @@ export interface NormalizeEmployerNameOptions {
   prefixes?: string[]
   preserveSuffixTokens?: string[]
   allowAcronymLowerBound?: number
+  skipTradingExtraction?: boolean
 }
 
 export interface NormalizedEmployerName {
   normalized: string
   tokens: string[]
   raw: string
+  normalizedVariants: string[]
+  tradingAliases?: string[]
 }
 
 export function normalizeEmployerName(
@@ -53,10 +56,16 @@ export function normalizeEmployerName(
 
   let working = value.trim()
   if (!working) {
-    return { normalized: '', tokens: [], raw: value }
+    return { normalized: '', tokens: [], raw: value, normalizedVariants: [''], tradingAliases: [] }
   }
 
-  working = removeTradingSegments(working)
+  let tradingAliases: string[] = []
+  if (!options.skipTradingExtraction) {
+    const { primary, aliases } = extractTradingSegments(working)
+    working = primary
+    tradingAliases = aliases
+  }
+
   working = normalizeUnicode(working)
   working = working.toUpperCase()
   working = replaceConnectors(working)
@@ -72,7 +81,24 @@ export function normalizeEmployerName(
     .filter((token) => token.length >= acronymMinLength || preserveTokens.includes(token) || token === '&')
 
   const normalized = tokens.join(' ')
-  return { normalized, tokens, raw: value }
+  const normalizedVariants = new Set<string>([normalized])
+
+  if (!options.skipTradingExtraction && tradingAliases.length > 0) {
+    for (const alias of tradingAliases) {
+      const result = normalizeEmployerName(alias, { ...options, skipTradingExtraction: true })
+      if (result.normalized) {
+        normalizedVariants.add(result.normalized)
+      }
+    }
+  }
+
+  return {
+    normalized,
+    tokens,
+    raw: value,
+    normalizedVariants: Array.from(normalizedVariants),
+    tradingAliases
+  }
 }
 
 function normalizeUnicode(value: string): string {
@@ -150,6 +176,69 @@ function removeTradingSegments(value: string): string {
     }
   }
   return result
+}
+
+function extractTradingSegments(value: string): { primary: string; aliases: string[] } {
+  const aliases = new Set<string>()
+  let primary = value
+
+  const patterns = [
+    /\((?:[^()]*?\bT\/A\b[^()]*)\)/gi,
+    /\((?:[^()]*?\bTRADING\s+AS\b[^()]*)\)/gi,
+    /\bT\/A\b\s*[:\-]?\s*([^,;]+)/gi,
+    /\bTRADING\s+AS\b\s*[:\-]?\s*([^,;]+)/gi
+  ]
+
+  const harvestAlias = (segment: string) => {
+    const innerPatterns = [
+      /\bT\/A\b\s*[:\-]?\s*(.+)$/i,
+      /\bTRADING\s+AS\b\s*[:\-]?\s*(.+)$/i
+    ]
+
+    for (const inner of innerPatterns) {
+      const match = inner.exec(segment)
+      if (match && match[1]) {
+        const cleaned = cleanTradingAlias(match[1])
+        if (cleaned) {
+          aliases.add(cleaned)
+        }
+        return
+      }
+    }
+
+    const cleaned = cleanTradingAlias(segment)
+    if (cleaned) {
+      aliases.add(cleaned)
+    }
+  }
+
+  let cleanedValue = value
+
+  for (const pattern of patterns) {
+    let match: RegExpExecArray | null
+    while ((match = pattern.exec(value)) !== null) {
+      const segment = match[0]
+      harvestAlias(segment)
+      cleanedValue = cleanedValue.replace(segment, ' ')
+    }
+  }
+
+  cleanedValue = cleanedValue.replace(/\b(?:T\/A|TRADING\s+AS)\b\s*[:\-]?\s*.+$/gi, ' ')
+  primary = cleanedValue.replace(/\s+/g, ' ').trim()
+  if (!primary) {
+    primary = value.trim()
+  }
+
+  return { primary, aliases: Array.from(aliases) }
+}
+
+function cleanTradingAlias(value: string): string {
+  return value
+    .replace(/[()]/g, ' ')
+    .replace(/^[^A-Z0-9]+/i, '')
+    .replace(/[^A-Z0-9&\s]+$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 export function normalizeEmployerNameForSql(value: string): string {

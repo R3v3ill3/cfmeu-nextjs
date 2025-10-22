@@ -792,8 +792,36 @@ app.get('/v1/dashboard', async (req, res) => {
     }
 });
 // Start server and schedule refreshes
+let server;
 app.listen(config_1.config.port, () => {
     logger.info({ port: config_1.config.port }, 'cfmeu-dashboard-worker listening');
     // Schedule materialized view refreshes
     (0, refresh_1.scheduleMaterializedViewRefreshes)(logger);
+})
+    .then((addr) => {
+    server = addr;
+    logger.info({ addr }, 'Server started successfully');
+})
+    .catch((err) => {
+    logger.error({ err }, 'Failed to start server');
+    process.exit(1);
 });
+// Graceful shutdown handler for HTTP worker
+async function gracefulShutdown() {
+    logger.info('Received shutdown signal, closing server...');
+    if (server) {
+        try {
+            await server.close();
+            logger.info('HTTP server closed successfully');
+        }
+        catch (err) {
+            logger.error({ err }, 'Error closing HTTP server');
+        }
+    }
+    // Close any database connections if needed
+    // The Supabase client will close automatically
+    logger.info('Graceful shutdown complete');
+    process.exit(0);
+}
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);

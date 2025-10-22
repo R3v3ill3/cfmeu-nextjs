@@ -29,9 +29,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setLoading(false);
         if (session?.user && (event === 'SIGNED_IN' || event === 'USER_UPDATED')) {
           // Sync profile and apply any pending role
-          setTimeout(() => {
-            supabase.rpc('apply_pending_user_on_login');
-          }, 0);
+          try {
+            await supabase.rpc('apply_pending_user_on_login');
+          } catch (error) {
+            console.error('Failed to apply pending user:', error);
+          }
           // If user remains viewer, raise a pending request automatically
           try {
             const { data: prof } = await supabase

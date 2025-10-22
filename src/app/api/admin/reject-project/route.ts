@@ -18,6 +18,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Check if user has admin or lead_organiser role
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (!profile || !['admin', 'lead_organiser'].includes(profile.role)) {
+      return NextResponse.json({ error: 'Unauthorized - admin access required' }, { status: 403 })
+    }
+
     const { data: result, error: rpcError } = await supabase.rpc('reject_project', {
       p_project_id: projectId,
       p_admin_user_id: user.id,

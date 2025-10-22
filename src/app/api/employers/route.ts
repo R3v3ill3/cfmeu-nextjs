@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
 import type { Database } from '@/types/database';
 
+// Helper function to escape ILIKE special characters (%, _, \)
+function escapeLikePattern(str: string): string {
+  return str.replace(/[%_\\]/g, '\\$&');
+}
+
 const ALLOWED_ROLES = ['organiser', 'lead_organiser', 'admin'] as const;
 type AllowedRole = typeof ALLOWED_ROLES[number];
 const ROLE_SET = new Set<AllowedRole>(ALLOWED_ROLES);
@@ -242,6 +247,9 @@ export interface EmployerRecord {
     name: string;
     patch_name?: string;
   }>;
+  // Contractor categories (aggregated)
+  roles?: Array<{ code: string; name: string; manual: boolean; derived: boolean }>;
+  trades?: Array<{ code: string; name: string; manual: boolean; derived: boolean }>;
   // Alias search data
   aliases?: EmployerAlias[];
   match_type?: 'canonical_name' | 'alias' | 'external_id' | 'abn';
@@ -387,8 +395,8 @@ export async function GET(request: NextRequest) {
         const { count: totalCount } = await supabase
           .from('employers')
           .select('id', { count: 'exact', head: true })
-          .ilike('name', `%${q}%`);
-        
+          .ilike('name', `%${escapeLikePattern(q)}%`);
+
         count = totalCount;
       }
     } else if (useMaterializedView) {
@@ -429,14 +437,14 @@ export async function GET(request: NextRequest) {
 
       // Apply text search filter
       if (q) {
-        matViewQuery = matViewQuery.ilike('name', `%${q}%`);
+        matViewQuery = matViewQuery.ilike('name', `%${escapeLikePattern(q)}%`);
       }
 
       // Apply engagement filter (precomputed!)
+      // Only filter when explicitly requesting engaged employers
+      // When engaged is false/undefined, show all employers (don't filter)
       if (engaged === true) {
         matViewQuery = matViewQuery.eq('is_engaged', true);
-      } else if (engaged === false) {
-        matViewQuery = matViewQuery.eq('is_engaged', false);
       }
 
       // Apply EBA filter
@@ -543,7 +551,7 @@ export async function GET(request: NextRequest) {
         `, { count: 'exact' });
 
       if (q) {
-        analyticsQuery = analyticsQuery.ilike('employer_name', `%${q}%`);
+        analyticsQuery = analyticsQuery.ilike('employer_name', `%${escapeLikePattern(q)}%`);
       }
 
       if (type !== 'all') {
@@ -661,11 +669,60 @@ export async function GET(request: NextRequest) {
 
     // Fetch enhanced data if requested
     let enhancedData: Record<string, any> = {};
+    let categoriesByEmployer: Record<string, { roles: EmployerRecord['roles']; trades: EmployerRecord['trades'] }> = {};
     if (includeEnhanced && data && data.length > 0) {
       // Deduplicate employer IDs before fetching enhanced data
       const uniqueEmployerIds = [...new Set(data.map((row: any) => row.id))];
       console.log(`Fetching enhanced data for ${uniqueEmployerIds.length} unique employers (from ${data.length} total rows)`);
       enhancedData = await fetchEnhancedEmployerData(supabase, uniqueEmployerIds);
+
+      // Fetch aggregated categories (roles + trades) for these employers
+      try {
+        const { data: catRows, error: catErr } = await supabase
+          .from('v_employer_contractor_categories')
+          .select('employer_id, category_type, category_code, category_name, source, is_current')
+          .in('employer_id', uniqueEmployerIds)
+          .eq('is_current', true);
+
+        if (catErr) {
+          console.warn('Warning: failed to fetch employer categories:', catErr.message);
+        } else {
+          const tmp: Record<string, { roles: Map<string, { code: string; name: string; manual: boolean; derived: boolean }>; trades: Map<string, { code: string; name: string; manual: boolean; derived: boolean }> }> = {};
+          uniqueEmployerIds.forEach((id) => {
+            tmp[id] = { roles: new Map(), trades: new Map() };
+          });
+
+          (catRows || []).forEach((r: any) => {
+            const empId = r.employer_id as string;
+            if (!tmp[empId]) {
+              tmp[empId] = { roles: new Map(), trades: new Map() };
+            }
+            const entry = {
+              code: r.category_code as string,
+              name: r.category_name as string,
+              manual: r.source === 'manual_capability',
+              derived: r.source !== 'manual_capability',
+            };
+            if (r.category_type === 'contractor_role') {
+              if (entry.code && !tmp[empId].roles.has(entry.code)) tmp[empId].roles.set(entry.code, entry);
+            } else if (r.category_type === 'trade') {
+              if (entry.code && !tmp[empId].trades.has(entry.code)) tmp[empId].trades.set(entry.code, entry);
+            }
+          });
+
+          categoriesByEmployer = Object.fromEntries(
+            Object.entries(tmp).map(([id, v]) => [
+              id,
+              {
+                roles: Array.from(v.roles.values()),
+                trades: Array.from(v.trades.values()),
+              },
+            ])
+          );
+        }
+      } catch (e) {
+        console.warn('Warning: unexpected error while fetching categories', e);
+      }
     }
 
     // Transform data to match client expectations and apply post-filters
@@ -695,6 +752,12 @@ export async function GET(request: NextRequest) {
 
         // Add enhanced data if available
         ...(includeEnhanced && enhancedData[row.id] ? enhancedData[row.id] : {}),
+        ...(includeEnhanced && categoriesByEmployer[row.id]
+          ? {
+              roles: categoriesByEmployer[row.id].roles || [],
+              trades: categoriesByEmployer[row.id].trades || [],
+            }
+          : {}),
       };
 
       // Add alias search data if from RPC
@@ -709,15 +772,12 @@ export async function GET(request: NextRequest) {
     });
 
     // Post-filter for engagement (SKIP if using materialized view - already precomputed)
-    if (!useMaterializedView && engaged) {
+    // Only filter when explicitly requesting engaged employers
+    // When engaged is false/undefined, show all employers (don't filter)
+    if (!useMaterializedView && engaged === true) {
       employers = employers.filter(emp =>
         (emp.project_assignments && emp.project_assignments.length > 0) ||
         (emp.worker_placements && emp.worker_placements.length > 0)
-      );
-    } else if (!useMaterializedView && engaged === false) {
-      employers = employers.filter(emp =>
-        (!emp.project_assignments || emp.project_assignments.length === 0) &&
-        (!emp.worker_placements || emp.worker_placements.length === 0)
       );
     }
 

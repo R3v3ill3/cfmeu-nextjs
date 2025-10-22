@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.reserveNextJob = reserveNextJob;
 exports.releaseJobLock = releaseJobLock;
 exports.markJobStatus = markJobStatus;
+exports.cleanupStaleLocks = cleanupStaleLocks;
 const crypto_1 = require("crypto");
 const config_1 = require("./config");
 const JOB_TABLE = 'scraper_jobs';
@@ -79,4 +80,32 @@ async function markJobStatus(client, jobId, status, updates = {}) {
         .from('scraper_jobs')
         .update({ status, ...updates })
         .eq('id', jobId);
+}
+async function cleanupStaleLocks(client, config) {
+    // Use 5 minutes as the lock timeout (jobs should not take this long)
+    const lockTimeoutMs = 5 * 60 * 1000;
+    const lockExpiry = new Date(Date.now() - lockTimeoutMs).toISOString();
+    console.log(`[cleanup] Cleaning up locks older than ${lockExpiry}`);
+    const { data, error } = await client
+        .from(JOB_TABLE)
+        .update({
+        lock_token: null,
+        locked_at: null,
+        status: 'queued',
+        last_error: 'Lock released due to timeout (worker may have crashed)',
+        run_at: new Date().toISOString()
+    })
+        .eq('status', 'processing')
+        .eq('job_type', 'mapping_sheet_scan')
+        .lt('locked_at', lockExpiry)
+        .select('id');
+    if (error) {
+        console.error('[cleanup] Failed to clean stale locks:', error);
+        return 0;
+    }
+    const count = data?.length || 0;
+    if (count > 0) {
+        console.log(`[cleanup] Released ${count} stale job locks`);
+    }
+    return count;
 }

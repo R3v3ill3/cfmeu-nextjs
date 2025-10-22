@@ -1,11 +1,18 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const config_1 = require("./config");
 const supabase_1 = require("./supabase");
 const jobs_1 = require("./jobs");
 const fwc_1 = require("./processors/fwc");
 const incolink_1 = require("./processors/incolink");
+const express_1 = __importDefault(require("express"));
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// Graceful shutdown state
+let isShuttingDown = false;
+let currentJobId = null;
 async function handleJob(job) {
     const client = (0, supabase_1.getAdminClient)();
     console.log(`[worker] handling job ${job.id} (${job.job_type})`);
@@ -102,31 +109,92 @@ async function handleJob(job) {
 }
 async function workerLoop() {
     const client = (0, supabase_1.getAdminClient)();
-    for (;;) {
+    let lastCleanup = Date.now();
+    const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+    console.log('[worker] Starting worker loop with graceful shutdown support');
+    while (!isShuttingDown) {
         try {
+            // Periodic stale lock cleanup
+            if (Date.now() - lastCleanup > CLEANUP_INTERVAL_MS) {
+                await (0, jobs_1.cleanupStaleLocks)(client, config_1.config);
+                lastCleanup = Date.now();
+            }
             const job = await (0, jobs_1.reserveNextJob)(client);
             if (!job) {
                 await sleep(config_1.config.pollIntervalMs);
                 continue;
             }
-            await handleJob(job);
+            currentJobId = job.id;
+            try {
+                await handleJob(job);
+            }
+            finally {
+                currentJobId = null;
+            }
         }
         catch (error) {
-            console.error('Worker loop error:', error);
+            console.error('[worker] Worker loop error:', error);
             await sleep(config_1.config.pollIntervalMs);
         }
     }
+    console.log('[worker] Worker loop exited gracefully');
+}
+async function gracefulShutdown() {
+    console.log('[shutdown] Received shutdown signal, initiating graceful shutdown...');
+    isShuttingDown = true;
+    // Wait for current job to complete (max 30 seconds)
+    const maxWait = 30000;
+    const startTime = Date.now();
+    while (currentJobId && (Date.now() - startTime < maxWait)) {
+        console.log(`[shutdown] Waiting for job ${currentJobId} to complete...`);
+        await sleep(1000);
+    }
+    if (currentJobId) {
+        console.warn(`[shutdown] Job ${currentJobId} did not complete in time, forcing shutdown and re-queuing`);
+        // Release the lock and re-queue the job
+        const client = (0, supabase_1.getAdminClient)();
+        try {
+            await client
+                .from('scraper_jobs')
+                .update({
+                lock_token: null,
+                locked_at: null,
+                status: 'queued',
+                last_error: 'Job interrupted by worker shutdown',
+                run_at: new Date().toISOString()
+            })
+                .eq('id', currentJobId);
+            console.log(`[shutdown] Job ${currentJobId} re-queued successfully`);
+        }
+        catch (error) {
+            console.error(`[shutdown] Failed to re-queue job ${currentJobId}:`, error);
+        }
+    }
+    console.log('[shutdown] Graceful shutdown complete');
+    (0, supabase_1.closeAdminClient)();
+    process.exit(0);
 }
 function registerShutdownHandlers() {
-    const shutdown = async () => {
-        console.log('Shutting down worker...');
-        process.exit(0);
-    };
-    process.on('SIGINT', shutdown);
-    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', gracefulShutdown);
+    process.on('SIGTERM', gracefulShutdown);
 }
+// Health check HTTP server
+const HEALTH_PORT = Number(process.env.HEALTH_PORT || 3200);
+const app = (0, express_1.default)();
+app.get('/health', (req, res) => {
+    res.json({
+        status: 'healthy',
+        currentJob: currentJobId || 'none',
+        isShuttingDown,
+        uptime: process.uptime(),
+        worker: 'cfmeu-scraper-worker'
+    });
+});
+app.listen(HEALTH_PORT, () => {
+    console.log(`[health] Health check endpoint listening on port ${HEALTH_PORT}`);
+});
 registerShutdownHandlers();
 workerLoop().catch((error) => {
-    console.error('Fatal worker error:', error);
+    console.error('[worker] Fatal worker error:', error);
     process.exit(1);
 });

@@ -1,11 +1,15 @@
 'use client';
 import { GoogleMap, Polygon, Marker } from '@react-google-maps/api';
+import { MarkerClusterer } from '@googlemaps/markerclusterer';
 import { useGoogleMaps } from '@/providers/GoogleMapsProvider';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { usePatchOrganiserLabels } from '@/hooks/usePatchOrganiserLabels';
 import { getProjectColor } from '@/utils/projectColors';
+import { MapErrorBoundary } from '@/components/map/MapErrorBoundary';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { AlertCircle } from 'lucide-react';
 
 interface MobileMapProps {
   showJobSites?: boolean;
@@ -50,19 +54,25 @@ const center = {
   lng: 151.2093,
 };
 
-function MobileMap({ 
-  showJobSites = true, 
-  showPatchNames = false, 
+function MobileMap({
+  showJobSites = true,
+  showPatchNames = false,
   showOrganisers = false,
   selectedPatchIds = [],
   projectColorBy = 'builder_eba',
   labelMode = 'always',
   autoFocusPatches = false
 }: MobileMapProps) {
-  const { isLoaded } = useGoogleMaps();
+  const { isLoaded, loadError } = useGoogleMaps();
+  const isOnline = useNetworkStatus();
 
   const [hoveredPatchId, setHoveredPatchId] = useState<string | null>(null);
   const [map, setMap] = useState<google.maps.Map | null>(null);
+
+  // Refs for marker clustering
+  const clustererRef = useRef<MarkerClusterer | null>(null);
+  const markersRef = useRef<google.maps.Marker[]>([]);
+  const labelMarkersRef = useRef<google.maps.Marker[]>([]);
 
   // Fetch patch data with geometry
   const { data: patches = [] } = useQuery<PatchData[]>({
@@ -215,6 +225,107 @@ function MobileMap({
     setHoveredPatchId(null);
   }, []);
 
+  // Marker clustering effect for job sites
+  useEffect(() => {
+    if (!map || !isLoaded || !showJobSites || jobSites.length === 0) {
+      return;
+    }
+
+    // Clear existing job site markers and clusterer
+    if (clustererRef.current) {
+      clustererRef.current.clearMarkers();
+      clustererRef.current = null;
+    }
+    markersRef.current.forEach(marker => marker.setMap(null));
+    markersRef.current = [];
+
+    // Create markers for all job sites
+    const newMarkers = jobSites.map(site => {
+      const project = site.projects || {};
+      const status = deriveBuilderStatus(project);
+      const color = getProjectColor(projectColorBy, { builder_status: status, ...project } as any);
+      const useFavicon = projectColorBy === 'builder_eba' && status === 'active_builder';
+
+      const icon = useFavicon
+        ? {
+            url: '/favicon.ico',
+            scaledSize: new google.maps.Size(32, 32),
+            anchor: new google.maps.Point(16, 16)
+          }
+        : {
+            url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="8" fill="${color}" stroke="#ffffff" stroke-width="2"/>
+                <circle cx="12" cy="12" r="3" fill="#ffffff"/>
+              </svg>
+            `),
+            scaledSize: new google.maps.Size(32, 32),
+            anchor: new google.maps.Point(16, 16)
+          };
+
+      const marker = new google.maps.Marker({
+        position: { lat: site.latitude, lng: site.longitude },
+        icon: icon as any,
+        title: site.name,
+        optimized: true
+      });
+
+      return marker;
+    });
+
+    markersRef.current = newMarkers;
+
+    // Create clusterer with mobile-optimized settings
+    const clusterer = new MarkerClusterer({
+      map,
+      markers: newMarkers,
+      renderer: {
+        render: ({ count, position }) => {
+          // Larger clusters for mobile touch targets
+          const size = count < 10 ? 50 : count < 100 ? 60 : 70;
+          const fontSize = count < 10 ? 16 : count < 100 ? 18 : 20;
+
+          return new google.maps.Marker({
+            position,
+            icon: {
+              url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
+                <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="${size/2}" cy="${size/2}" r="${size/2 - 3}" fill="#ef4444" stroke="#ffffff" stroke-width="3" opacity="0.9"/>
+                  <text x="${size/2}" y="${size/2 + fontSize/3}" text-anchor="middle" fill="white" font-size="${fontSize}" font-weight="bold" font-family="Arial">
+                    ${count}
+                  </text>
+                </svg>
+              `),
+              scaledSize: new google.maps.Size(size, size),
+              anchor: new google.maps.Point(size/2, size/2)
+            },
+            label: {
+              text: String(count),
+              color: 'transparent',
+              fontSize: '0px'
+            },
+            zIndex: Number(google.maps.Marker.MAX_ZINDEX) + count
+          });
+        }
+      },
+      algorithmOptions: {
+        radius: 120, // Slightly larger radius for mobile
+        maxZoom: 14 // Cluster until zoom level 14
+      }
+    });
+
+    clustererRef.current = clusterer;
+
+    return () => {
+      if (clustererRef.current) {
+        clustererRef.current.clearMarkers();
+        clustererRef.current = null;
+      }
+      markersRef.current.forEach(marker => marker.setMap(null));
+      markersRef.current = [];
+    };
+  }, [map, isLoaded, showJobSites, jobSites, projectColorBy, deriveBuilderStatus]);
+
   // Auto-focus on selected patches for batch printing
   useEffect(() => {
     if (!map || !autoFocusPatches || selectedPatchIds.length === 0 || filteredPatches.length === 0) return;
@@ -271,8 +382,47 @@ function MobileMap({
     return namePart || orgPart || undefined;
   }, [showPatchNames, showOrganisers]);
 
-  return isLoaded ? (
-    <GoogleMap 
+  // Handle offline state
+  if (!isOnline) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full bg-yellow-50 rounded-lg border-2 border-yellow-200">
+        <AlertCircle className="h-12 w-12 text-yellow-600 mb-4" />
+        <h3 className="text-lg font-semibold mb-2">You are offline</h3>
+        <p className="text-sm text-yellow-800 text-center max-w-md px-4">
+          Map features require an internet connection. Please check your network and try again.
+        </p>
+      </div>
+    );
+  }
+
+  // Handle map load error
+  if (loadError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+        <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
+        <h3 className="text-lg font-semibold mb-2">Map Failed to Load</h3>
+        <p className="text-sm text-gray-600 mb-4 max-w-md text-center px-4">
+          {loadError.message || 'There was an error loading Google Maps.'}
+        </p>
+      </div>
+    );
+  }
+
+  // Handle loading state
+  if (!isLoaded) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+          <p className="text-gray-600">Loading map...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <MapErrorBoundary>
+      <GoogleMap 
       mapContainerStyle={containerStyle} 
       center={center} 
       zoom={10}
@@ -464,41 +614,10 @@ function MobileMap({
         });
       })()}
 
-      {/* Render Job Sites as Markers */}
-      {showJobSites && jobSites.map(site => {
-        const project = site.projects || {}
-        if (projectColorBy === 'builder_eba') {
-          const status = deriveBuilderStatus(project)
-          const color = getProjectColor('builder_eba', { builder_status: status } as any)
-          const useFavicon = status === 'active_builder'
-          const icon = useFavicon
-            ? { url: '/favicon.ico', scaledSize: new google.maps.Size(20, 20), anchor: new google.maps.Point(10, 10) }
-            : {
-                url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
-                  <svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n                    <circle cx=\"12\" cy=\"12\" r=\"8\" fill=\"${color}\" stroke=\"#ffffff\" stroke-width=\"2\"/>\n                    <circle cx=\"12\" cy=\"12\" r=\"3\" fill=\"#ffffff\"/>\n                  </svg>\n                `),
-                scaledSize: new google.maps.Size(20, 20),
-                anchor: new google.maps.Point(10, 10)
-              }
-          return (
-            <Marker key={site.id} position={{ lat: site.latitude, lng: site.longitude }} icon={icon as any} />
-          )
-        }
-        const color = getProjectColor(projectColorBy, project as any)
-        return (
-          <Marker
-            key={site.id}
-            position={{ lat: site.latitude, lng: site.longitude }}
-            icon={{
-              url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
-                <svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n                  <circle cx=\"12\" cy=\"12\" r=\"8\" fill=\"${color}\" stroke=\"#ffffff\" stroke-width=\"2\"/>\n                  <circle cx=\"12\" cy=\"12\" r=\"3\" fill=\"#ffffff\"/>\n                </svg>\n              `),
-              scaledSize: new google.maps.Size(20, 20),
-              anchor: new google.maps.Point(10, 10)
-            }}
-          />
-        )
-      })}
+      {/* Job site markers are now rendered via clustering effect - see useEffect above */}
     </GoogleMap>
-  ) : <></>;
+    </MapErrorBoundary>
+  );
 }
 
 export default MobileMap;

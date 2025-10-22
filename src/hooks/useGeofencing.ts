@@ -293,6 +293,12 @@ export function useGeofencing(enabled: boolean = false) {
     }
   }, [isSupported])
 
+  // Store checkNearbySites in a ref to avoid dependency issues
+  const checkNearbySitesRef = useRef(checkNearbySites)
+  useEffect(() => {
+    checkNearbySitesRef.current = checkNearbySites
+  }, [checkNearbySites])
+
   // Start watching position
   const startWatching = useCallback(() => {
     if (!enabled || !isSupported || !hasPermission) return
@@ -301,7 +307,7 @@ export function useGeofencing(enabled: boolean = false) {
 
     const successCallback = (position: GeolocationPosition) => {
       setCurrentPosition(position)
-      checkNearbySites(position)
+      checkNearbySitesRef.current(position)
     }
 
     const errorCallback = (error: GeolocationPositionError) => {
@@ -318,7 +324,7 @@ export function useGeofencing(enabled: boolean = false) {
         maximumAge: POSITION_CHECK_INTERVAL,
       }
     )
-  }, [enabled, isSupported, hasPermission, checkNearbySites])
+  }, [enabled, isSupported, hasPermission])
 
   // Stop watching position
   const stopWatching = useCallback(() => {
@@ -339,7 +345,7 @@ export function useGeofencing(enabled: boolean = false) {
     return () => {
       stopWatching()
     }
-  }, [enabled, hasPermission, isSupported, startWatching, stopWatching])
+  }, [enabled, hasPermission, isSupported])
 
   return {
     isSupported,

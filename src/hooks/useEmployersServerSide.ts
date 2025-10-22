@@ -45,6 +45,8 @@ export interface EmployerRecord {
     name: string;
     patch_name?: string;
   }>;
+  roles?: Array<{ code: string; name: string; manual: boolean; derived: boolean }>;
+  trades?: Array<{ code: string; name: string; manual: boolean; derived: boolean }>;
 }
 
 export interface EmployersResponse {

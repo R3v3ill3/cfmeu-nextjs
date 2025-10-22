@@ -64,6 +64,7 @@ export function ComplianceMobileView({ projectId }: ComplianceMobileViewProps) {
             <Button
               variant="ghost"
               size="sm"
+              className="h-11"
               onClick={() => setShowReportingSettings(!showReportingSettings)}
             >
               <Settings className="h-4 w-4" />

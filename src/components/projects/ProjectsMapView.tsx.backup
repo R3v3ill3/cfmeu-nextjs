@@ -1,8 +1,7 @@
 "use client"
 
-import { useEffect, useState, useMemo, useCallback, useRef } from "react"
+import { useEffect, useState, useMemo, useCallback } from "react"
 import { GoogleMap, Polygon, Marker, InfoWindow, Circle } from "@react-google-maps/api"
-import { MarkerClusterer } from "@googlemaps/markerclusterer"
 import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { Badge } from "@/components/ui/badge"
@@ -99,10 +98,6 @@ export default function ProjectsMapView({
   const [selectedPatch, setSelectedPatch] = useState<PatchData | null>(null)
   const [infoWindowPosition, setInfoWindowPosition] = useState<{ lat: number, lng: number } | null>(null)
   const [projectColorBy, setProjectColorBy] = useState<'tier' | 'organising_universe' | 'stage' | 'builder_eba' | 'default'>('builder_eba')
-
-  // Ref to store marker clusterer instance
-  const clustererRef = useRef<MarkerClusterer | null>(null)
-  const markersRef = useRef<google.maps.Marker[]>([])
 
   // Use centralized Google Maps context
   const { isLoaded, loadError } = useGoogleMaps()
@@ -296,107 +291,6 @@ export default function ProjectsMapView({
     setSelectedPatch(null)
     setInfoWindowPosition(null)
   }, [])
-
-  // Marker clustering effect - creates and manages clustered markers
-  useEffect(() => {
-    if (!map || !isLoaded || jobSites.length === 0) {
-      return
-    }
-
-    // Clear existing markers and clusterer
-    if (clustererRef.current) {
-      clustererRef.current.clearMarkers()
-      clustererRef.current = null
-    }
-    markersRef.current.forEach(marker => marker.setMap(null))
-    markersRef.current = []
-
-    // Create markers for all job sites
-    const newMarkers = jobSites.map(site => {
-      const project = site.projects || {}
-      const status = deriveBuilderStatus(project)
-      const color = getProjectColor(projectColorBy, { builder_status: status, ...project } as any)
-      const useFavicon = projectColorBy === 'builder_eba' && status === 'active_builder'
-
-      const icon = useFavicon
-        ? {
-            url: '/favicon.ico',
-            scaledSize: new google.maps.Size(28, 28),
-            anchor: new google.maps.Point(14, 14)
-          }
-        : {
-            url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="12" cy="12" r="8" fill="${color}" stroke="#ffffff" stroke-width="2"/>
-                <circle cx="12" cy="12" r="3" fill="#ffffff"/>
-              </svg>
-            `),
-            scaledSize: new google.maps.Size(28, 28),
-            anchor: new google.maps.Point(14, 14)
-          }
-
-      const marker = new google.maps.Marker({
-        position: { lat: site.latitude, lng: site.longitude },
-        icon: icon as any,
-        title: site.name,
-        optimized: true
-      })
-
-      marker.addListener('click', () => handleJobSiteClick(site))
-      return marker
-    })
-
-    markersRef.current = newMarkers
-
-    // Create clusterer with custom renderer
-    const clusterer = new MarkerClusterer({
-      map,
-      markers: newMarkers,
-      renderer: {
-        render: ({ count, position }) => {
-          const size = count < 10 ? 45 : count < 100 ? 55 : 65
-          const fontSize = count < 10 ? 14 : count < 100 ? 16 : 18
-
-          return new google.maps.Marker({
-            position,
-            icon: {
-              url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
-                <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="${size/2}" cy="${size/2}" r="${size/2 - 3}" fill="#ef4444" stroke="#ffffff" stroke-width="3" opacity="0.9"/>
-                  <text x="${size/2}" y="${size/2 + fontSize/3}" text-anchor="middle" fill="white" font-size="${fontSize}" font-weight="bold" font-family="Arial">
-                    ${count}
-                  </text>
-                </svg>
-              `),
-              scaledSize: new google.maps.Size(size, size),
-              anchor: new google.maps.Point(size/2, size/2)
-            },
-            label: {
-              text: String(count),
-              color: 'transparent',
-              fontSize: '0px'
-            },
-            zIndex: Number(google.maps.Marker.MAX_ZINDEX) + count
-          })
-        }
-      },
-      algorithmOptions: {
-        radius: 100,
-        maxZoom: 15
-      }
-    })
-
-    clustererRef.current = clusterer
-
-    return () => {
-      if (clustererRef.current) {
-        clustererRef.current.clearMarkers()
-        clustererRef.current = null
-      }
-      markersRef.current.forEach(marker => marker.setMap(null))
-      markersRef.current = []
-    }
-  }, [map, isLoaded, jobSites, projectColorBy, handleJobSiteClick])
 
   // Auto-fit bounds when data changes - focus on first project and ensure all are visible
   useEffect(() => {
@@ -646,7 +540,45 @@ export default function ProjectsMapView({
             )
           })}
 
-          {/* Markers are now rendered via clustering effect - see useEffect above */}
+          {/* Render Job Sites as Markers */}
+          {jobSites.map(site => {
+            const project = site.projects || {}
+            if (projectColorBy === 'builder_eba') {
+              const status = deriveBuilderStatus(project)
+              const color = getProjectColor('builder_eba', { builder_status: status } as any)
+              const useFavicon = status === 'active_builder'
+              const icon = useFavicon
+                ? { url: '/favicon.ico', scaledSize: new google.maps.Size(24, 24), anchor: new google.maps.Point(12, 12) }
+                : {
+                    url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
+                      <svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n                        <circle cx=\"12\" cy=\"12\" r=\"8\" fill=\"${color}\" stroke=\"#ffffff\" stroke-width=\"2\"/>\n                        <circle cx=\"12\" cy=\"12\" r=\"3\" fill=\"#ffffff\"/>\n                      </svg>\n                    `),
+                    scaledSize: new google.maps.Size(24, 24),
+                    anchor: new google.maps.Point(12, 12)
+                  }
+              return (
+                <Marker
+                  key={site.id}
+                  position={{ lat: site.latitude, lng: site.longitude }}
+                  icon={icon as any}
+                  onClick={() => handleJobSiteClick(site)}
+                />
+              )
+            }
+            const color = getProjectColor(projectColorBy, project as any)
+            return (
+              <Marker
+                key={site.id}
+                position={{ lat: site.latitude, lng: site.longitude }}
+                icon={{
+                  url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
+                    <svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n                      <circle cx=\"12\" cy=\"12\" r=\"8\" fill=\"${color}\" stroke=\"#ffffff\" stroke-width=\"2\"/>\n                      <circle cx=\"12\" cy=\"12\" r=\"3\" fill=\"#ffffff\"/>\n                    </svg>\n                  `),
+                  scaledSize: new google.maps.Size(24, 24),
+                  anchor: new google.maps.Point(12, 12)
+                }}
+                onClick={() => handleJobSiteClick(site)}
+              />
+            )
+          })}
 
           {/* Info Window for Job Sites */}
           {selectedJobSite && infoWindowPosition && (

@@ -846,10 +846,35 @@ app.get('/v1/dashboard', async (req, res) => {
 })
 
 // Start server and schedule refreshes
-app.listen(config.port, () => {
+let server: any
+
+server = app.listen(config.port, () => {
   logger.info({ port: config.port }, 'cfmeu-dashboard-worker listening')
   // Schedule materialized view refreshes
   scheduleMaterializedViewRefreshes(logger)
 })
+
+// Graceful shutdown handler for HTTP worker
+async function gracefulShutdown() {
+  logger.info('Received shutdown signal, closing server...')
+
+  if (server) {
+    try {
+      await server.close()
+      logger.info('HTTP server closed successfully')
+    } catch (err) {
+      logger.error({ err }, 'Error closing HTTP server')
+    }
+  }
+
+  // Close any database connections if needed
+  // The Supabase client will close automatically
+
+  logger.info('Graceful shutdown complete')
+  process.exit(0)
+}
+
+process.on('SIGTERM', gracefulShutdown)
+process.on('SIGINT', gracefulShutdown)
 
 

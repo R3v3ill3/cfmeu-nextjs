@@ -31,6 +31,22 @@ export function normalizeEmployerName(name: string): string {
   return sharedNormalizeEmployerName(name).normalized.toLowerCase();
 }
 
+function getNameVariants(name: string): { normalized: string; variants: string[] } {
+  const normalized = sharedNormalizeEmployerName(name)
+  const variants = new Set<string>(normalized.normalizedVariants.map((variant) => variant.toLowerCase()))
+  variants.add(normalized.normalized.toLowerCase())
+  if (normalized.tradingAliases && normalized.tradingAliases.length > 0) {
+    for (const alias of normalized.tradingAliases) {
+      variants.add(alias.toLowerCase())
+    }
+  }
+
+  return {
+    normalized: normalized.normalized.toLowerCase(),
+    variants: Array.from(variants)
+  }
+}
+
 /**
  * Calculate similarity between two strings using Levenshtein distance
  */
@@ -94,15 +110,20 @@ export function areEmployersLikelySame(name1: string, name2: string): {
   }
   
   // Normalized match (after removing business suffixes)
-  const norm1 = normalizeEmployerName(name1);
-  const norm2 = normalizeEmployerName(name2);
+  const norm1 = getNameVariants(name1);
+  const norm2 = getNameVariants(name2);
   
-  if (norm1 === norm2) {
+  const sharedVariant = norm1.variants.find((variant) => norm2.variants.includes(variant));
+
+  if (sharedVariant) {
     reasons.push('Same after normalizing business suffixes');
+    if (sharedVariant !== norm1.normalized || sharedVariant !== norm2.normalized) {
+      reasons.push(`Trading alias match (${sharedVariant})`);
+    }
     confidence = 0.95;
   } else {
     // Fuzzy similarity
-    const similarity = calculateSimilarity(norm1, norm2);
+    const similarity = calculateSimilarity(norm1.normalized, norm2.normalized);
     confidence = similarity;
     
     if (similarity >= 0.9) {
@@ -114,13 +135,13 @@ export function areEmployersLikelySame(name1: string, name2: string): {
     }
     
     // Check for common variations
-    if (containsAllKeywords(norm1, norm2)) {
+    if (containsAllKeywords(norm1.normalized, norm2.normalized)) {
       reasons.push('Contains all key words');
       confidence = Math.max(confidence, 0.85);
     }
     
     // Check for abbreviation patterns
-    if (isLikelyAbbreviation(norm1, norm2)) {
+    if (isLikelyAbbreviation(norm1.normalized, norm2.normalized)) {
       reasons.push('Likely abbreviation pattern');
       confidence = Math.max(confidence, 0.8);
     }

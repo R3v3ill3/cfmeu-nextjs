@@ -166,7 +166,7 @@ export function EmployerComplianceMobile({ projectId }: EmployerComplianceMobile
           variant={filterStatus === 'all' ? 'default' : 'outline'}
           size="sm"
           onClick={() => setFilterStatus('all')}
-          className="whitespace-nowrap"
+          className="whitespace-nowrap h-11"
         >
           All ({contractors.length})
         </Button>
@@ -174,7 +174,7 @@ export function EmployerComplianceMobile({ projectId }: EmployerComplianceMobile
           variant={filterStatus === 'checked' ? 'default' : 'outline'}
           size="sm"
           onClick={() => setFilterStatus('checked')}
-          className="whitespace-nowrap"
+          className="whitespace-nowrap h-11"
         >
           Checked
         </Button>
@@ -182,7 +182,7 @@ export function EmployerComplianceMobile({ projectId }: EmployerComplianceMobile
           variant={filterStatus === 'issues' ? 'default' : 'outline'}
           size="sm"
           onClick={() => setFilterStatus('issues')}
-          className="whitespace-nowrap"
+          className="whitespace-nowrap h-11"
         >
           Issues
         </Button>
@@ -190,7 +190,7 @@ export function EmployerComplianceMobile({ projectId }: EmployerComplianceMobile
           variant={filterStatus === 'pending' ? 'default' : 'outline'}
           size="sm"
           onClick={() => setFilterStatus('pending')}
-          className="whitespace-nowrap"
+          className="whitespace-nowrap h-11"
         >
           Pending
         </Button>

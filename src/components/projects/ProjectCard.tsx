@@ -75,7 +75,7 @@ export function ProjectCard({ project }: { project: ProjectCardData }) {
         </div>
         {project.full_address && (
           <div className="mt-4 pt-4 border-t">
-            <Button variant="outline" size="sm" className="w-full" onClick={handleDirectionsClick}>
+            <Button variant="outline" size="sm" className="w-full h-11" onClick={handleDirectionsClick}>
               Get Directions
             </Button>
           </div>

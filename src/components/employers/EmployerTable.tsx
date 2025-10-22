@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -42,9 +43,60 @@ type EmployerRow = {
     name: string
     patch_name?: string
   }>
+  // Aggregated categories
+  roles?: Array<{ code: string; name: string; manual: boolean; derived: boolean }>
+  trades?: Array<{ code: string; name: string; manual: boolean; derived: boolean }>
 }
 
 type EmployerProject = NonNullable<EmployerRow["projects"]>[number]
+
+function RowCategories({ employerId, roles, trades }: { employerId: string; roles?: Array<{ code: string; name: string; manual: boolean; derived: boolean }>; trades?: Array<{ code: string; name: string; manual: boolean; derived: boolean }> }) {
+  const shouldFetch = !(Array.isArray(roles) && roles.length > 0) && !(Array.isArray(trades) && trades.length > 0)
+  const { data } = useQuery({
+    queryKey: ['employer-categories', employerId],
+    enabled: shouldFetch,
+    queryFn: async () => {
+      const res = await fetch(`/api/eba/employers/${employerId}/categories`)
+      if (!res.ok) throw new Error(await res.text())
+      const json = await res.json()
+      return json.data as { roles: Array<{ code: string; name: string; manual: boolean; derived: boolean }>; trades: Array<{ code: string; name: string; manual: boolean; derived: boolean }> }
+    }
+  })
+
+  const r = (roles && roles.length > 0) ? roles : (data?.roles || [])
+  const t = (trades && trades.length > 0) ? trades : (data?.trades || [])
+
+  if ((r.length === 0) && (t.length === 0)) return null
+
+  return (
+    <div className="space-y-1 max-w-xs mb-2">
+      {r.length > 0 && (
+        <div>
+          <div className="text-xs text-muted-foreground mb-1">Roles</div>
+          <div className="flex flex-wrap gap-1">
+            {r.map((item) => (
+              <Badge key={item.code} variant={item.manual ? 'default' : 'secondary'} className="text-xs">
+                {item.name}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+      {t.length > 0 && (
+        <div>
+          <div className="text-xs text-muted-foreground mb-1">Trades</div>
+          <div className="flex flex-wrap gap-1">
+            {t.map((item) => (
+              <Badge key={item.code} variant={item.manual ? 'default' : 'secondary'} className="text-xs">
+                {item.name}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export function EmployerTable({ rows, onRowClick, onEmployerUpdated }: { rows: EmployerRow[]; onRowClick: (id: string) => void; onEmployerUpdated?: () => void }) {
   const [fwcSearchModal, setFwcSearchModal] = useState<{ open: boolean; employerId: string; employerName: string }>({
@@ -153,6 +205,8 @@ export function EmployerTable({ rows, onRowClick, onEmployerUpdated }: { rows: E
                 </TableCell>
                 
                 <TableCell>
+                  {/* Employer-level roles/trades (no limit) with fallback fetch */}
+                  <RowCategories employerId={emp.id} roles={emp.roles} trades={emp.trades} />
                   {emp.projects && emp.projects.length > 0 ? (
                     <div className="space-y-1 max-w-xs">
                       {emp.projects.slice(0, 2).map((project, index) => (
@@ -185,7 +239,7 @@ export function EmployerTable({ rows, onRowClick, onEmployerUpdated }: { rows: E
                         </div>
                       )}
                     </div>
-                  ) : (
+                      ) : (
                     <span className="text-xs text-muted-foreground">—</span>
                   )}
                 </TableCell>

@@ -335,7 +335,7 @@ export function ProjectsMobileView() {
           <Button
             variant={view === "card" ? "default" : "ghost"}
             size="sm"
-            className="h-8 px-3"
+            className="h-11 px-3"
             onClick={() => setParam("view", "card")}
           >
             <Grid3X3 className="h-4 w-4" />
@@ -343,7 +343,7 @@ export function ProjectsMobileView() {
           <Button
             variant={view === "list" ? "default" : "ghost"}
             size="sm"
-            className="h-8 px-3"
+            className="h-11 px-3"
             onClick={() => setParam("view", "list")}
           >
             <List className="h-4 w-4" />
@@ -351,7 +351,7 @@ export function ProjectsMobileView() {
           <Button
             variant={view === "map" ? "default" : "ghost"}
             size="sm"
-            className="h-8 px-3"
+            className="h-11 px-3"
             onClick={() => setParam("view", "map")}
           >
             <MapIcon className="h-4 w-4" />
@@ -401,7 +401,7 @@ export function ProjectsMobileView() {
         {/* Filters */}
         <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
           <CollapsibleTrigger asChild>
-            <Button variant="outline" size="sm" className="w-full">
+            <Button variant="outline" size="sm" className="w-full h-11">
               <Filter className="h-4 w-4 mr-2" />
               Filters
               {activeFilters > 0 && (
@@ -418,7 +418,7 @@ export function ProjectsMobileView() {
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Tier</label>
               <Select value={tierFilter} onValueChange={(value) => setParam("tier", value)}>
-                <SelectTrigger className="h-8">
+                <SelectTrigger className="h-11">
                   <SelectValue placeholder="All" />
                 </SelectTrigger>
                 <SelectContent>
@@ -429,11 +429,11 @@ export function ProjectsMobileView() {
                 </SelectContent>
               </Select>
             </div>
-            
+
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Stage</label>
               <Select value={stageFilter} onValueChange={(value) => setParam("stage", value)}>
-                <SelectTrigger className="h-8">
+                <SelectTrigger className="h-11">
                   <SelectValue placeholder="All" />
                 </SelectTrigger>
                 <SelectContent>
@@ -445,11 +445,11 @@ export function ProjectsMobileView() {
                 </SelectContent>
               </Select>
             </div>
-            
+
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Universe</label>
               <Select value={universeFilter} onValueChange={(value) => setParam("universe", value)}>
-                <SelectTrigger className="h-8">
+                <SelectTrigger className="h-11">
                   <SelectValue placeholder="All" />
                 </SelectTrigger>
                 <SelectContent>
@@ -460,11 +460,11 @@ export function ProjectsMobileView() {
                 </SelectContent>
               </Select>
             </div>
-            
+
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">EBA</label>
               <Select value={ebaFilter} onValueChange={(value) => setParam("eba", value)}>
-                <SelectTrigger className="h-8">
+                <SelectTrigger className="h-11">
                   <SelectValue placeholder="All" />
                 </SelectTrigger>
                 <SelectContent>
@@ -489,7 +489,7 @@ export function ProjectsMobileView() {
                 setParam("eba", "all")
                 setParam("workers", "all")
               }}
-              className="w-full text-muted-foreground"
+              className="w-full text-muted-foreground h-11"
             >
               <X className="h-4 w-4 mr-2" />
               Clear All Filters
@@ -502,7 +502,7 @@ export function ProjectsMobileView() {
         {/* Sort */}
         <Collapsible open={sortOpen} onOpenChange={setSortOpen}>
           <CollapsibleTrigger asChild>
-            <Button variant="outline" size="sm" className="w-full">
+            <Button variant="outline" size="sm" className="w-full h-11">
               {dir === "asc" ? <SortAsc className="h-4 w-4 mr-2" /> : <SortDesc className="h-4 w-4 mr-2" />}
               Sort
               {sortOpen ? <ChevronUp className="h-4 w-4 ml-2" /> : <ChevronDown className="h-4 w-4 ml-2" />}
@@ -514,7 +514,7 @@ export function ProjectsMobileView() {
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Sort By</label>
               <Select value={sort} onValueChange={(value) => setParam("sort", value)}>
-                <SelectTrigger className="h-8">
+                <SelectTrigger className="h-11">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -527,11 +527,11 @@ export function ProjectsMobileView() {
                 </SelectContent>
               </Select>
             </div>
-            
+
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Direction</label>
               <Select value={dir} onValueChange={(value) => setParam("dir", value)}>
-                <SelectTrigger className="h-8">
+                <SelectTrigger className="h-11">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -663,13 +663,13 @@ export function ProjectsMobileView() {
       {/* Pagination - only show for card/list views */}
       {view !== "map" && (
         <div className="flex items-center justify-between pt-4">
-          <Button variant="outline" size="sm" disabled={!displayHasPrev} onClick={() => setParam('page', String(page - 1))}>
+          <Button variant="outline" size="sm" className="h-11" disabled={!displayHasPrev} onClick={() => setParam('page', String(page - 1))}>
             Previous
           </Button>
           <div className="text-sm text-muted-foreground">
             Page {page} of {Math.ceil(totalCount / PAGE_SIZE)}
           </div>
-          <Button variant="outline" size="sm" disabled={!displayHasNext} onClick={() => setParam('page', String(page + 1))}>
+          <Button variant="outline" size="sm" className="h-11" disabled={!displayHasNext} onClick={() => setParam('page', String(page + 1))}>
             Next
           </Button>
         </div>

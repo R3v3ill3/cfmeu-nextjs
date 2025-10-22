@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
 
+// Helper function to escape ILIKE special characters (%, _, \)
+function escapeLikePattern(str: string): string {
+  return str.replace(/[%_\\]/g, '\\$&');
+}
+
 const ALLOWED_ROLES = ['organiser', 'lead_organiser', 'admin'] as const;
 type AllowedRole = typeof ALLOWED_ROLES[number];
 const ROLE_SET = new Set<AllowedRole>(ALLOWED_ROLES);
@@ -102,7 +107,7 @@ export async function GET(request: NextRequest) {
     
     // Text search filter
     if (q) {
-      query = query.ilike('search_text', `%${q}%`);
+      query = query.ilike('search_text', `%${escapeLikePattern(q)}%`);
     }
 
     // Status filter (stale vs all)

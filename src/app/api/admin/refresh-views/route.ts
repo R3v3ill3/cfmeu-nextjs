@@ -24,18 +24,31 @@ export interface RefreshViewsResponse {
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
-  
+
   try {
-    // Basic authentication check (you may want to add proper auth)
-    const authHeader = request.headers.get('authorization');
-    const hostname = request.nextUrl.hostname;
-    const isLocalhost = hostname === 'localhost';
-    const isDevelopment = process.env.NODE_ENV === 'development';
-    
-    if (!isLocalhost && !isDevelopment && !authHeader?.includes('Bearer')) {
+    const supabase = await createServerSupabase();
+
+    // Check authentication
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
+      );
+    }
+
+    // Check if user has admin or lead_organiser role
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+    if (!profile || !['admin', 'lead_organiser'].includes(profile.role)) {
+      return NextResponse.json(
+        { error: 'Unauthorized - admin access required' },
+        { status: 403 }
       );
     }
 
@@ -44,8 +57,6 @@ export async function POST(request: NextRequest) {
     const force = body.force || false;
 
     console.log(`🔄 Admin refresh triggered: scope=${scope}, force=${force}`);
-
-    const supabase = await createServerSupabase();
     const refreshedViews: string[] = [];
 
     // Check staleness first (unless forced)

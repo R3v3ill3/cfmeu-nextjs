@@ -5,6 +5,7 @@ exports.appendEvent = appendEvent;
 exports.updateProgress = updateProgress;
 exports.markJobStatus = markJobStatus;
 exports.releaseJobLock = releaseJobLock;
+exports.cleanupStaleLocks = cleanupStaleLocks;
 const crypto_1 = require("crypto");
 const config_1 = require("./config");
 const JOB_TABLE = 'scraper_jobs';
@@ -94,4 +95,29 @@ async function releaseJobLock(client, jobId) {
     if (error) {
         throw new Error(`Failed to release job lock: ${error.message}`);
     }
+}
+async function cleanupStaleLocks(client, config) {
+    const lockExpiry = new Date(Date.now() - config.lockTimeoutMs).toISOString();
+    console.log(`[cleanup] Cleaning up locks older than ${lockExpiry}`);
+    const { data, error } = await client
+        .from(JOB_TABLE)
+        .update({
+        lock_token: null,
+        locked_at: null,
+        status: 'queued',
+        last_error: 'Lock released due to timeout (worker may have crashed)',
+        run_at: new Date().toISOString()
+    })
+        .eq('status', 'running')
+        .lt('locked_at', lockExpiry)
+        .select('id');
+    if (error) {
+        console.error('[cleanup] Failed to clean stale locks:', error);
+        return 0;
+    }
+    const count = data?.length || 0;
+    if (count > 0) {
+        console.log(`[cleanup] Released ${count} stale job locks`);
+    }
+    return count;
 }

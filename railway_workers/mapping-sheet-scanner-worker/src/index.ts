@@ -1,10 +1,15 @@
 import { config } from './config'
-import { getAdminClient } from './supabase'
-import { reserveNextJob, releaseJobLock, markJobStatus } from './jobs'
+import { getAdminClient, closeAdminClient } from './supabase'
+import { reserveNextJob, releaseJobLock, markJobStatus, cleanupStaleLocks } from './jobs'
 import { processMappingSheetScan } from './processors/mappingSheetProcessor'
 import { MappingSheetScanJob } from './types'
+import express from 'express'
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+// Graceful shutdown state
+let isShuttingDown = false
+let currentJobId: string | null = null
 
 async function handleJob(job: MappingSheetScanJob) {
   const client = getAdminClient()
@@ -52,7 +57,10 @@ async function handleJob(job: MappingSheetScanJob) {
 
 async function workerLoop() {
   const client = getAdminClient()
-  console.log('[worker] Starting mapping sheet scanner worker')
+  let lastCleanup = Date.now()
+  const CLEANUP_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
+
+  console.log('[worker] Starting mapping sheet scanner worker with graceful shutdown support')
   if (config.verboseLogs) {
     console.log('[worker] Configuration:', {
       supabaseUrl: config.supabaseUrl,
@@ -62,32 +70,97 @@ async function workerLoop() {
     })
   }
 
-  for (;;) {
+  while (!isShuttingDown) {
     try {
+      // Periodic stale lock cleanup
+      if (Date.now() - lastCleanup > CLEANUP_INTERVAL_MS) {
+        await cleanupStaleLocks(client, config)
+        lastCleanup = Date.now()
+      }
+
       const job = await reserveNextJob(client)
-      
+
       if (!job) {
         await sleep(config.pollIntervalMs)
         continue
       }
 
-      await handleJob(job)
+      currentJobId = job.id
+      try {
+        await handleJob(job)
+      } finally {
+        currentJobId = null
+      }
     } catch (error) {
       console.error('[worker] Loop error:', error)
       await sleep(config.pollIntervalMs)
     }
   }
+
+  console.log('[worker] Worker loop exited gracefully')
+}
+
+async function gracefulShutdown() {
+  console.log('[shutdown] Received shutdown signal, initiating graceful shutdown...')
+  isShuttingDown = true
+
+  // Wait for current job to complete (max 30 seconds)
+  const maxWait = 30000
+  const startTime = Date.now()
+
+  while (currentJobId && (Date.now() - startTime < maxWait)) {
+    console.log(`[shutdown] Waiting for job ${currentJobId} to complete...`)
+    await sleep(1000)
+  }
+
+  if (currentJobId) {
+    console.warn(`[shutdown] Job ${currentJobId} did not complete in time, forcing shutdown and re-queuing`)
+    // Release the lock and re-queue the job
+    const client = getAdminClient()
+    try {
+      await client
+        .from('scraper_jobs')
+        .update({
+          lock_token: null,
+          locked_at: null,
+          status: 'queued',
+          last_error: 'Job interrupted by worker shutdown',
+          run_at: new Date().toISOString()
+        })
+        .eq('id', currentJobId)
+      console.log(`[shutdown] Job ${currentJobId} re-queued successfully`)
+    } catch (error) {
+      console.error(`[shutdown] Failed to re-queue job ${currentJobId}:`, error)
+    }
+  }
+
+  console.log('[shutdown] Graceful shutdown complete')
+  closeAdminClient()
+  process.exit(0)
 }
 
 function registerShutdownHandlers() {
-  const shutdown = () => {
-    console.log('[worker] Shutting down...')
-    process.exit(0)
-  }
-
-  process.on('SIGINT', shutdown)
-  process.on('SIGTERM', shutdown)
+  process.on('SIGINT', gracefulShutdown)
+  process.on('SIGTERM', gracefulShutdown)
 }
+
+// Health check HTTP server
+const HEALTH_PORT = Number(process.env.HEALTH_PORT || 3210)
+const app = express()
+
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    currentJob: currentJobId || 'none',
+    isShuttingDown,
+    uptime: process.uptime(),
+    worker: 'mapping-sheet-scanner-worker'
+  })
+})
+
+app.listen(HEALTH_PORT, () => {
+  console.log(`[health] Health check endpoint listening on port ${HEALTH_PORT}`)
+})
 
 registerShutdownHandlers()
 
