@@ -32,59 +32,59 @@ BEGIN
     COALESCE(bp.count, 0)::INTEGER as builder_projects_count
   FROM employers e
   LEFT JOIN (
-    SELECT employer_id, COUNT(*) as count 
+    SELECT employer_id AS wp_employer_id, COUNT(*) as count 
     FROM worker_placements 
     WHERE employer_id = ANY(p_employer_ids)
     GROUP BY employer_id
-  ) wp ON e.id = wp.employer_id
+  ) wp ON e.id = wp.wp_employer_id
   LEFT JOIN (
-    SELECT employer_id, COUNT(*) as count 
+    SELECT employer_id AS per_employer_id, COUNT(*) as count 
     FROM project_employer_roles 
     WHERE employer_id = ANY(p_employer_ids)
     GROUP BY employer_id
-  ) per ON e.id = per.employer_id
+  ) per ON e.id = per.per_employer_id
   LEFT JOIN (
-    SELECT employer_id, COUNT(*) as count 
+    SELECT employer_id AS pct_employer_id, COUNT(*) as count 
     FROM project_contractor_trades 
     WHERE employer_id = ANY(p_employer_ids)
     GROUP BY employer_id
-  ) pct ON e.id = pct.employer_id
+  ) pct ON e.id = pct.pct_employer_id
   LEFT JOIN (
-    SELECT employer_id, COUNT(*) as count 
+    SELECT employer_id AS sct_employer_id, COUNT(*) as count 
     FROM site_contractor_trades 
     WHERE employer_id = ANY(p_employer_ids)
     GROUP BY employer_id
-  ) sct ON e.id = sct.employer_id
+  ) sct ON e.id = sct.sct_employer_id
   LEFT JOIN (
-    SELECT employer_id, COUNT(*) as count 
+    SELECT employer_id AS eba_employer_id, COUNT(*) as count 
     FROM company_eba_records 
     WHERE employer_id = ANY(p_employer_ids)
     GROUP BY employer_id
-  ) eba ON e.id = eba.employer_id
+  ) eba ON e.id = eba.eba_employer_id
   LEFT JOIN (
-    SELECT employer_id, COUNT(*) as count 
+    SELECT employer_id AS sv_employer_id, COUNT(*) as count 
     FROM site_visit 
     WHERE employer_id = ANY(p_employer_ids)
     GROUP BY employer_id
-  ) sv ON e.id = sv.employer_id
+  ) sv ON e.id = sv.sv_employer_id
   LEFT JOIN (
-    SELECT employer_id, COUNT(*) as count 
+    SELECT employer_id AS tc_employer_id, COUNT(*) as count 
     FROM contractor_trade_capabilities 
     WHERE employer_id = ANY(p_employer_ids)
     GROUP BY employer_id
-  ) tc ON e.id = tc.employer_id
+  ) tc ON e.id = tc.tc_employer_id
   LEFT JOIN (
-    SELECT employer_id, COUNT(*) as count 
+    SELECT employer_id AS ea_employer_id, COUNT(*) as count 
     FROM employer_aliases 
     WHERE employer_id = ANY(p_employer_ids)
     GROUP BY employer_id
-  ) ea ON e.id = ea.employer_id
+  ) ea ON e.id = ea.ea_employer_id
   LEFT JOIN (
-    SELECT builder_id as employer_id, COUNT(*) as count 
+    SELECT builder_id as builder_employer_id, COUNT(*) as count 
     FROM projects 
     WHERE builder_id = ANY(p_employer_ids)
     GROUP BY builder_id
-  ) bp ON e.id = bp.employer_id
+  ) bp ON e.id = bp.builder_employer_id
   WHERE e.id = ANY(p_employer_ids)
   ORDER BY e.name;
 END;
@@ -263,6 +263,10 @@ BEGIN
     UPDATE pending_employers
     SET matched_employer_id = p_primary_employer_id
     WHERE matched_employer_id = ANY(p_duplicate_employer_ids);
+    
+    UPDATE pending_employers
+    SET imported_employer_id = p_primary_employer_id
+    WHERE imported_employer_id = ANY(p_duplicate_employer_ids);
     GET DIAGNOSTICS v_records_updated = ROW_COUNT;
   EXCEPTION WHEN OTHERS THEN
     v_errors := v_errors || ('Pending employers: ' || SQLERRM);

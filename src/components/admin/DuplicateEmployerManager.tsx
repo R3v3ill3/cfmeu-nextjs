@@ -285,15 +285,14 @@ export default function DuplicateEmployerManager() {
     setIsScanning(true);
     try {
       const groups: DuplicateGroup[] = [];
-      const processedEmployers = new Set<string>();
       const processedPairs = new Set<string>();
+      const processedEmployers = new Set<string>();
 
       for (let i = 0; i < employers.length; i++) {
         const employer1 = employers[i];
         if (processedEmployers.has(employer1.id)) continue;
 
         const similarEmployers = [employer1];
-        processedEmployers.add(employer1.id);
 
         for (let j = i + 1; j < employers.length; j++) {
           const employer2 = employers[j];
@@ -337,7 +336,6 @@ export default function DuplicateEmployerManager() {
             similarEmployers.push(employer2);
             processedPairs.add(`${employer1.id}:${employer2.id}`);
             processedPairs.add(`${employer2.id}:${employer1.id}`);
-            processedEmployers.add(employer2.id);
           }
         }
 
@@ -367,6 +365,8 @@ export default function DuplicateEmployerManager() {
             suggestedPrimary,
             confidence: maxSimilarity >= 0.95 ? 'high' : maxSimilarity >= 0.8 ? 'medium' : 'low'
           });
+
+          similarEmployers.forEach(emp => processedEmployers.add(emp.id));
         }
       }
 
