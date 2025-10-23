@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/hooks/useAuth';
 
 // Types matching the API endpoint
 export interface EmployersParams {
@@ -66,32 +67,36 @@ export interface EmployersResponse {
 
 /**
  * Server-side hook for fetching employers with optimized database queries
- * This replaces client-side filtering/sorting with server-side processing
+ * Uses Railway worker for better performance with automatic fallback to Next.js API
  */
 export function useEmployersServerSide(params: EmployersParams) {
+  const { session } = useAuth();
+  const workerEnabled = process.env.NEXT_PUBLIC_USE_WORKER_EMPLOYERS === 'true';
+  const workerUrl = process.env.NEXT_PUBLIC_DASHBOARD_WORKER_URL || '';
+
   return useQuery<EmployersResponse>({
-    queryKey: ['employers-server-side', params],
+    queryKey: ['employers-server-side', params, workerEnabled],
     queryFn: async () => {
       // Build URL parameters, only including non-default values to keep URLs clean
       const searchParams = new URLSearchParams();
-      
+
       searchParams.set('page', params.page.toString());
       searchParams.set('pageSize', params.pageSize.toString());
       searchParams.set('sort', params.sort);
       searchParams.set('dir', params.dir);
-      
+
       if (params.q) {
         searchParams.set('q', params.q);
       }
-      
+
       if (params.engaged !== undefined) {
         searchParams.set('engaged', params.engaged ? '1' : '0');
       }
-      
+
       if (params.eba && params.eba !== 'all') {
         searchParams.set('eba', params.eba);
       }
-      
+
       if (params.type && params.type !== 'all') {
         searchParams.set('type', params.type);
       }
@@ -107,35 +112,95 @@ export function useEmployersServerSide(params: EmployersParams) {
       if (params.projectTier && params.projectTier !== 'all') {
         searchParams.set('projectTier', params.projectTier);
       }
-      
+
+      // Enhanced is always true for Railway worker (included in comprehensive view)
+      // Kept for backward compatibility with Next.js API fallback
       if (params.enhanced) {
         searchParams.set('enhanced', 'true');
       }
 
-      const url = `/api/employers?${searchParams.toString()}`;
+      const urlPath = `?${searchParams.toString()}`;
+      const useWorker = workerEnabled && workerUrl;
+      const baseHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+      const appUrl = `/api/employers${urlPath}`;
 
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      // Helper to enrich debug info with source
+      const enrichDebug = (data: any, via: 'worker' | 'worker_fallback' | 'app_api') => {
+        if (data && typeof data === 'object') {
+          (data as any).debug = {
+            ...(data.debug || {}),
+            via,
+          };
+        }
+        return data;
+      };
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to fetch employers: ${response.status} ${errorText}`);
-      }
+      // Fallback function to use Next.js API route
+      const fetchApp = async () => {
+        console.warn('⚠️ Falling back to app route for employers');
+        const response = await fetch(appUrl, { method: 'GET', headers: baseHeaders });
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Failed to fetch employers: ${response.status} ${errorText}`);
+        }
+        const data = await response.json();
 
-      const data = await response.json();
-      
-      // Log performance metrics for monitoring
-      if (data.debug) {
-        if (data.debug.queryTime > 1000) {
+        // Log performance metrics
+        if (data.debug?.queryTime > 1000) {
           console.warn('⚠️ Slow query detected:', data.debug);
         }
+
+        return enrichDebug(data, useWorker ? 'worker_fallback' : 'app_api');
+      };
+
+      // Use app route if worker not configured
+      if (!useWorker) {
+        return fetchApp();
       }
 
-      return data;
+      // Use Railway worker
+      const workerHeaders = { ...baseHeaders };
+      const token = session?.access_token;
+      if (!token) {
+        console.warn('⚠️ No auth token available for worker employers request; using app route');
+        return fetchApp();
+      }
+      workerHeaders['Authorization'] = `Bearer ${token}`;
+
+      const workerEndpoint = `${workerUrl.replace(/\/$/, '')}/v1/employers${urlPath}`;
+
+      try {
+        const response = await fetch(workerEndpoint, { method: 'GET', headers: workerHeaders });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          const status = response.status;
+          // Retry locally for network-ish failures (5xx or gateway issues)
+          if (status >= 500 || status === 429) {
+            console.warn(`⚠️ Worker responded with ${status}, falling back to app route`, errorText);
+            return fetchApp();
+          }
+          throw new Error(`Failed to fetch employers: ${status} ${errorText}`);
+        }
+
+        const data = await response.json();
+
+        // Log performance and cache metrics
+        if (data.debug) {
+          const cacheStatus = response.headers.get('X-Cache') || 'UNKNOWN';
+          if (data.debug.queryTime > 1000 && cacheStatus !== 'HIT') {
+            console.warn('⚠️ Slow query detected:', { ...data.debug, cacheStatus });
+          }
+          if (cacheStatus === 'HIT') {
+            console.log('✅ Cache hit for employers query');
+          }
+        }
+
+        return enrichDebug(data, 'worker');
+      } catch (error) {
+        console.warn('⚠️ Worker employers request failed, falling back to app route', error);
+        return fetchApp();
+      }
     },
     
     // Balanced caching for performance vs freshness

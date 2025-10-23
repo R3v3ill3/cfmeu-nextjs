@@ -14,15 +14,26 @@ export function scheduleMaterializedViewRefreshes(logger: Logger) {
       await svc.rpc('refresh_patch_project_mapping_view')
       await svc.rpc('refresh_project_list_comprehensive_view')
 
-      // Also refresh employers_search_optimized if the function exists
+      // Refresh employers comprehensive view (primary view used by Railway worker)
       try {
-        await svc.rpc('refresh_employers_search_view_logged', { p_triggered_by: 'worker-cron' })
+        await svc.rpc('refresh_employers_comprehensive_view_logged', { p_triggered_by: 'worker-cron' })
+        logger.info('✅ Refreshed employers_list_comprehensive')
       } catch (employerRefreshErr: any) {
         // Log as warning if employers view refresh fails, but don't break other refreshes
         if (employerRefreshErr?.message?.includes('does not exist')) {
-          logger.debug('Employers search view not available, skipping')
+          logger.debug('Employers comprehensive view not available yet, skipping')
         } else {
-          logger.warn({ err: employerRefreshErr }, 'Failed to refresh employers search view')
+          logger.warn({ err: employerRefreshErr }, 'Failed to refresh employers comprehensive view')
+        }
+      }
+
+      // Also refresh legacy employers_search_optimized if it exists (for backward compatibility)
+      try {
+        await svc.rpc('refresh_employers_search_view_logged', { p_triggered_by: 'worker-cron' })
+        logger.info('✅ Refreshed employers_search_optimized (legacy)')
+      } catch (legacyRefreshErr: any) {
+        if (!legacyRefreshErr?.message?.includes('does not exist')) {
+          logger.debug({ err: legacyRefreshErr }, 'Legacy employers view refresh skipped')
         }
       }
 

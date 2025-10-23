@@ -845,6 +845,179 @@ app.get('/v1/dashboard', async (req, res) => {
   }
 })
 
+// ============================================================================
+// GET /v1/employers — Employer list with comprehensive data and caching
+// ============================================================================
+app.get('/v1/employers', async (req, res) => {
+  const startTime = Date.now()
+  const token = getBearerToken(req)
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+
+  // Parse query parameters
+  const page = parseInt(String(req.query.page || '1'), 10)
+  const pageSize = Math.min(parseInt(String(req.query.pageSize || '100'), 10), 200) // Cap at 200
+  const sort = (req.query.sort ? String(req.query.sort) : 'name') as 'name' | 'estimated' | 'eba_recency' | 'project_count'
+  const dir = (req.query.dir ? String(req.query.dir) : 'asc') as 'asc' | 'desc'
+  const q = req.query.q ? String(req.query.q) : undefined
+  const engaged = req.query.engaged === '1' || req.query.engaged === 'true'
+  const eba = (req.query.eba ? String(req.query.eba) : 'all') as 'all' | 'active' | 'lodged' | 'pending' | 'no'
+  const type = (req.query.type ? String(req.query.type) : 'all') as 'all' | 'builder' | 'principal_contractor' | 'large_contractor' | 'small_contractor' | 'individual'
+
+  // Build cache key
+  const cacheKey = makeCacheKey('employers', hashToken(token), {
+    page,
+    pageSize,
+    sort,
+    dir,
+    q,
+    engaged,
+    eba,
+    type,
+  })
+
+  const cached = cache.get<any>(cacheKey)
+  if (cached) {
+    return res.status(200).set({ 'X-Cache': 'HIT' }).json(cached)
+  }
+
+  try {
+    const { client: sb } = await ensureAuthorizedUser(token)
+
+    // Query the comprehensive materialized view
+    let query = sb
+      .from('employers_list_comprehensive')
+      .select('*', { count: 'exact' })
+
+    // Apply text search filter
+    if (q) {
+      query = query.ilike('name', `%${q}%`)
+    }
+
+    // Apply engagement filter
+    if (engaged === true) {
+      query = query.eq('is_engaged', true)
+    }
+
+    // Apply EBA filter
+    if (eba === 'active') {
+      query = query.eq('enterprise_agreement_status', true)
+    } else if (eba === 'no') {
+      query = query.or('enterprise_agreement_status.is.null,enterprise_agreement_status.eq.false')
+    } else if (eba === 'lodged' || eba === 'pending') {
+      query = query.eq('eba_category', eba)
+    }
+
+    // Apply employer type filter
+    if (type !== 'all') {
+      query = query.eq('employer_type', type)
+    }
+
+    // Apply sorting
+    if (sort === 'name') {
+      query = query.order('name', { ascending: dir === 'asc' })
+    } else if (sort === 'estimated') {
+      query = query.order('estimated_worker_count', { ascending: dir === 'asc', nullsFirst: false })
+    } else if (sort === 'eba_recency') {
+      query = query.order('eba_recency_score', { ascending: dir === 'asc', nullsFirst: false })
+    } else if (sort === 'project_count') {
+      query = query.order('project_count', { ascending: dir === 'asc', nullsFirst: false })
+    }
+
+    // Apply pagination
+    const from = (page - 1) * pageSize
+    const to = from + pageSize - 1
+    query = query.range(from, to)
+
+    // Execute query
+    const { data, error, count } = await query
+
+    if (error) {
+      logger.error({ error }, 'Employers query error')
+      return res.status(500).json({ error: 'Failed to fetch employers' })
+    }
+
+    // Transform JSONB arrays back to JavaScript arrays
+    const employers = (data || []).map((row: any) => ({
+      id: row.id,
+      name: row.name,
+      abn: row.abn,
+      employer_type: row.employer_type,
+      website: row.website,
+      email: row.email,
+      phone: row.phone,
+      estimated_worker_count: row.estimated_worker_count,
+      incolink_id: row.incolink_id,
+      bci_company_id: row.bci_company_id,
+      enterprise_agreement_status: row.enterprise_agreement_status,
+      eba_status_source: row.eba_status_source,
+      eba_status_updated_at: row.eba_status_updated_at,
+      eba_status_notes: row.eba_status_notes,
+      incolink_last_matched: row.incolink_last_matched,
+
+      // Transform JSONB back to arrays
+      company_eba_records: row.company_eba_records_json || [],
+      worker_placements: row.worker_placements_json || [],
+      project_assignments: row.project_assignments_json || [],
+
+      // Enhanced data from comprehensive view
+      projects: row.projects_json || [],
+      organisers: row.organisers_json || [],
+      roles: row.roles_json || [],
+      trades: row.trades_json || [],
+    }))
+
+    const totalCount = count || 0
+    const totalPages = Math.ceil(totalCount / pageSize)
+    const queryTime = Date.now() - startTime
+
+    const response = {
+      employers,
+      pagination: {
+        page,
+        pageSize,
+        totalCount,
+        totalPages,
+      },
+      debug: {
+        queryTime,
+        cacheHit: false,
+        usedMaterializedView: true,
+        appliedFilters: {
+          q,
+          engaged,
+          eba,
+          type,
+          sort,
+          dir,
+        },
+      },
+    }
+
+    // Cache for 30 seconds
+    cache.set(cacheKey, response, 30_000)
+
+    res
+      .status(200)
+      .set({ 'Cache-Control': 'public, max-age=30', 'X-Cache': 'MISS' })
+      .json(response)
+  } catch (err: any) {
+    if (err?.message === 'Unauthorized') {
+      return res.status(401).json({ error: 'Unauthorized' })
+    }
+    if (err?.message === 'Forbidden') {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+    if (err?.message === 'profile_load_failed') {
+      logger.error({ err }, 'Profile load failed')
+      return res.status(500).json({ error: 'Unable to load user profile' })
+    }
+    logger.error({ err }, 'Employers endpoint error')
+    res.status(500).json({ error: 'Failed to fetch employers' })
+  }
+})
+
 // Start server and schedule refreshes
 let server: any
 
