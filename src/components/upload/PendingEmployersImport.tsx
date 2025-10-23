@@ -672,41 +672,60 @@ export default function PendingEmployersImport() {
       
       // Add trade capabilities if needed
       if (pendingEmployer.our_role === 'subcontractor') {
-        const finalTradeType = tradeTypeOverrides[pendingEmployer.id] || 
-                              pendingEmployer.user_confirmed_trade_type || 
-                              pendingEmployer.inferred_trade_type || 
+        const finalTradeType = tradeTypeOverrides[pendingEmployer.id] ||
+                              pendingEmployer.user_confirmed_trade_type ||
+                              pendingEmployer.inferred_trade_type ||
                               'general_construction';
-        
-        // Check if trade capability already exists
-        const { data: existingCapability } = await supabase
-          .from('contractor_trade_capabilities')
-          .select('id')
-          .eq('employer_id', pendingEmployer.matched_employer_id)
-          .eq('trade_type', finalTradeType)
-          .maybeSingle();
-        
-        if (!existingCapability) {
-          const { error: tradeCapError } = await supabase
-            .from('contractor_trade_capabilities')
-            .insert({
-              employer_id: pendingEmployer.matched_employer_id,
-              trade_type: finalTradeType,
-              is_primary: true,
-              notes: `Added via manual match. Original CSV role: ${pendingEmployer.csv_role}`
-            });
 
-          if (tradeCapError) {
-            console.error(`❌ Failed to add trade capability (${finalTradeType}):`, tradeCapError);
-            toast({
-              title: 'Trade Capability Error',
-              description: `Could not add ${finalTradeType} to employer: ${tradeCapError.message}`,
-              variant: 'destructive',
-            });
-          } else {
-            console.log(`  → ✅ Added trade capability: ${finalTradeType}`);
-          }
+        // Look up trade_type_id from trade_types table
+        const { data: tradeTypeData } = await supabase
+          .from('trade_types')
+          .select('id, name')
+          .eq('code', finalTradeType)
+          .maybeSingle();
+
+        if (!tradeTypeData) {
+          console.error(`❌ Trade type "${finalTradeType}" not found in trade_types table`);
+          toast({
+            title: 'Trade Type Not Found',
+            description: `Trade type "${finalTradeType}" does not exist. Please contact admin.`,
+            variant: 'destructive',
+          });
         } else {
-          console.log(`  → ℹ️  Trade capability ${finalTradeType} already exists, skipping`);
+          // Check if trade capability already exists in employer_capabilities
+          const { data: existingCapability } = await supabase
+            .from('employer_capabilities')
+            .select('id')
+            .eq('employer_id', pendingEmployer.matched_employer_id)
+            .eq('capability_type', 'trade')
+            .eq('trade_type_id', tradeTypeData.id)
+            .maybeSingle();
+
+          if (!existingCapability) {
+            const { error: tradeCapError } = await supabase
+              .from('employer_capabilities')
+              .insert({
+                employer_id: pendingEmployer.matched_employer_id,
+                capability_type: 'trade',
+                trade_type_id: tradeTypeData.id,
+                is_primary: true,
+                proficiency_level: 'intermediate',
+                notes: `Added via manual match. Original CSV role: ${pendingEmployer.csv_role}`
+              });
+
+            if (tradeCapError) {
+              console.error(`❌ Failed to add trade capability (${finalTradeType}):`, tradeCapError);
+              toast({
+                title: 'Trade Capability Error',
+                description: `Could not add ${finalTradeType} to employer: ${tradeCapError.message}`,
+                variant: 'destructive',
+              });
+            } else {
+              console.log(`  → ✅ Added trade capability: ${finalTradeType} (${tradeTypeData.name})`);
+            }
+          } else {
+            console.log(`  → ℹ️  Trade capability ${finalTradeType} already exists, skipping`);
+          }
         }
       }
       
@@ -779,22 +798,55 @@ export default function PendingEmployersImport() {
                               pendingEmployer.inferred_trade_type || 
                               'general_construction';
         
-        const { data: existingCapability } = await supabase
-          .from('contractor_trade_capabilities')
-          .select('id')
-          .eq('employer_id', detection.selectedEmployerId)
-          .eq('trade_type', finalTradeType)
+        // Look up trade_type_id from trade_types table
+        const { data: tradeTypeData } = await supabase
+          .from('trade_types')
+          .select('id, name')
+          .eq('code', finalTradeType)
           .maybeSingle();
-        
-        if (!existingCapability) {
-          await supabase
-            .from('contractor_trade_capabilities')
-            .insert({
-              employer_id: detection.selectedEmployerId,
-              trade_type: finalTradeType,
-              is_primary: true,
-              notes: `Imported from BCI data. Original CSV role: ${pendingEmployer.csv_role}`
-            });
+
+        if (!tradeTypeData) {
+          console.error(`❌ Trade type "${finalTradeType}" not found in trade_types table`);
+          toast({
+            title: 'Trade Type Not Found',
+            description: `Trade type "${finalTradeType}" does not exist. Please contact admin.`,
+            variant: 'destructive',
+          });
+        } else {
+          // Check if trade capability already exists in employer_capabilities
+          const { data: existingCapability } = await supabase
+            .from('employer_capabilities')
+            .select('id')
+            .eq('employer_id', detection.selectedEmployerId)
+            .eq('capability_type', 'trade')
+            .eq('trade_type_id', tradeTypeData.id)
+            .maybeSingle();
+
+          if (!existingCapability) {
+            const { error: tradeCapError } = await supabase
+              .from('employer_capabilities')
+              .insert({
+                employer_id: detection.selectedEmployerId,
+                capability_type: 'trade',
+                trade_type_id: tradeTypeData.id,
+                is_primary: true,
+                proficiency_level: 'intermediate',
+                notes: `Imported from BCI data. Original CSV role: ${pendingEmployer.csv_role}`
+              });
+
+            if (tradeCapError) {
+              console.error(`❌ Failed to add trade capability (${finalTradeType}):`, tradeCapError);
+              toast({
+                title: 'Trade Capability Error',
+                description: `Could not add ${finalTradeType} to employer: ${tradeCapError.message}`,
+                variant: 'destructive',
+              });
+            } else {
+              console.log(`  → ✅ Added trade capability: ${finalTradeType} (${tradeTypeData.name})`);
+            }
+          } else {
+            console.log(`  → ℹ️  Trade capability ${finalTradeType} already exists, skipping`);
+          }
         }
       }
       
@@ -851,41 +903,60 @@ export default function PendingEmployersImport() {
       
       // Still create trade capabilities if needed
       if (pendingEmployer.our_role === 'subcontractor') {
-        const finalTradeType = tradeTypeOverrides[pendingEmployer.id] || 
-                              pendingEmployer.user_confirmed_trade_type || 
-                              pendingEmployer.inferred_trade_type || 
+        const finalTradeType = tradeTypeOverrides[pendingEmployer.id] ||
+                              pendingEmployer.user_confirmed_trade_type ||
+                              pendingEmployer.inferred_trade_type ||
                               'general_construction';
-        
-        // Check for existing trade capability
-        const { data: existingCapability } = await supabase
-          .from('contractor_trade_capabilities')
-          .select('id')
-          .eq('employer_id', exactMatch.id)
-          .eq('trade_type', finalTradeType)
-          .maybeSingle();
-        
-        if (!existingCapability) {
-          const { error: tradeCapError } = await supabase
-            .from('contractor_trade_capabilities')
-            .insert({
-              employer_id: exactMatch.id,
-              trade_type: finalTradeType,
-              is_primary: true,
-              notes: `Imported from BCI data. Original CSV role: ${pendingEmployer.csv_role}`
-            });
 
-          if (tradeCapError) {
-            console.error(`❌ Failed to add trade capability (${finalTradeType}):`, tradeCapError);
-            toast({
-              title: 'Trade Capability Error',
-              description: `Could not add ${finalTradeType} to employer: ${tradeCapError.message}`,
-              variant: 'destructive',
-            });
-          } else {
-            console.log(`  → ✅ Added trade capability: ${finalTradeType}`);
-          }
+        // Look up trade_type_id from trade_types table
+        const { data: tradeTypeData } = await supabase
+          .from('trade_types')
+          .select('id, name')
+          .eq('code', finalTradeType)
+          .maybeSingle();
+
+        if (!tradeTypeData) {
+          console.error(`❌ Trade type "${finalTradeType}" not found in trade_types table`);
+          toast({
+            title: 'Trade Type Not Found',
+            description: `Trade type "${finalTradeType}" does not exist. Please contact admin.`,
+            variant: 'destructive',
+          });
         } else {
-          console.log(`  → ℹ️  Trade capability ${finalTradeType} already exists, skipping`);
+          // Check if trade capability already exists in employer_capabilities
+          const { data: existingCapability } = await supabase
+            .from('employer_capabilities')
+            .select('id')
+            .eq('employer_id', exactMatch.id)
+            .eq('capability_type', 'trade')
+            .eq('trade_type_id', tradeTypeData.id)
+            .maybeSingle();
+
+          if (!existingCapability) {
+            const { error: tradeCapError } = await supabase
+              .from('employer_capabilities')
+              .insert({
+                employer_id: exactMatch.id,
+                capability_type: 'trade',
+                trade_type_id: tradeTypeData.id,
+                is_primary: true,
+                proficiency_level: 'intermediate',
+                notes: `Imported from BCI data. Original CSV role: ${pendingEmployer.csv_role}`
+              });
+
+            if (tradeCapError) {
+              console.error(`❌ Failed to add trade capability (${finalTradeType}):`, tradeCapError);
+              toast({
+                title: 'Trade Capability Error',
+                description: `Could not add ${finalTradeType} to employer: ${tradeCapError.message}`,
+                variant: 'destructive',
+              });
+            } else {
+              console.log(`  → ✅ Added trade capability: ${finalTradeType} (${tradeTypeData.name})`);
+            }
+          } else {
+            console.log(`  → ℹ️  Trade capability ${finalTradeType} already exists, skipping`);
+          }
         }
       }
       
@@ -1005,36 +1076,55 @@ export default function PendingEmployersImport() {
                             pendingEmployer.inferred_trade_type || 
                             'general_construction';
       
-      // Check for existing trade capability to prevent duplicates
-      const { data: existingCapability } = await supabase
-        .from('contractor_trade_capabilities')
-        .select('id, trade_type')
-        .eq('employer_id', employerId)
-        .eq('trade_type', finalTradeType)
+      // Look up trade_type_id from trade_types table
+      const { data: tradeTypeData } = await supabase
+        .from('trade_types')
+        .select('id, name')
+        .eq('code', finalTradeType)
         .maybeSingle();
-      
-      if (!existingCapability) {
-        const { error: tradeError } = await supabase
-          .from('contractor_trade_capabilities')
-          .insert({
-            employer_id: employerId,
-            trade_type: finalTradeType,
-            is_primary: true,
-            notes: `Imported from BCI data. Original CSV role: ${pendingEmployer.csv_role}`
-          });
-        
-        if (tradeError) {
-          console.error(`❌ Failed to create trade capability (${finalTradeType}):`, tradeError);
-          toast({
-            title: 'Trade Capability Error',
-            description: `Could not add ${finalTradeType} to employer: ${tradeError.message}`,
-            variant: 'destructive',
-          });
-        } else {
-          console.log(`  → ✅ Added trade capability: ${finalTradeType}`);
-        }
+
+      if (!tradeTypeData) {
+        console.error(`❌ Trade type "${finalTradeType}" not found in trade_types table`);
+        toast({
+          title: 'Trade Type Not Found',
+          description: `Trade type "${finalTradeType}" does not exist. Please contact admin.`,
+          variant: 'destructive',
+        });
       } else {
-        console.log(`  → ℹ️  Trade capability ${finalTradeType} already exists for ${pendingEmployer.company_name}, skipping`);
+        // Check if trade capability already exists in employer_capabilities
+        const { data: existingCapability } = await supabase
+          .from('employer_capabilities')
+          .select('id')
+          .eq('employer_id', employerId)
+          .eq('capability_type', 'trade')
+          .eq('trade_type_id', tradeTypeData.id)
+          .maybeSingle();
+
+        if (!existingCapability) {
+          const { error: tradeCapError } = await supabase
+            .from('employer_capabilities')
+            .insert({
+              employer_id: employerId,
+              capability_type: 'trade',
+              trade_type_id: tradeTypeData.id,
+              is_primary: true,
+              proficiency_level: 'intermediate',
+              notes: `Imported from BCI data. Original CSV role: ${pendingEmployer.csv_role}`
+            });
+
+          if (tradeCapError) {
+            console.error(`❌ Failed to add trade capability (${finalTradeType}):`, tradeCapError);
+            toast({
+              title: 'Trade Capability Error',
+              description: `Could not add ${finalTradeType} to employer: ${tradeCapError.message}`,
+              variant: 'destructive',
+            });
+          } else {
+            console.log(`  → ✅ Added trade capability: ${finalTradeType} (${tradeTypeData.name})`);
+          }
+        } else {
+          console.log(`  → ℹ️  Trade capability ${finalTradeType} already exists for ${pendingEmployer.company_name}, skipping`);
+        }
       }
     }
     
