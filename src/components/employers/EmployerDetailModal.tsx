@@ -21,6 +21,7 @@ import {
   Database,
   Search,
   Plus,
+  AlertCircle,
 } from "lucide-react";
 import { getEbaStatusInfo } from "./ebaHelpers";
 import { EmployerWorkersList } from "../workers/EmployerWorkersList";
@@ -311,9 +312,15 @@ export const EmployerDetailModal = ({
     setIsEditing(false);
   }, []);
 
-  const handleEditSaved = useCallback(async (_updated?: { id: string; name: string; employer_type: string }) => {
-    setIsEditing(false);
-    await invalidateEmployerData();
+  const handleEditSaved = useCallback(async (updated?: { id: string; name: string; employer_type: string }) => {
+    try {
+      setIsEditing(false);
+      await invalidateEmployerData();
+    } catch (error) {
+      console.error('Error invalidating employer data after save:', error);
+      // Still exit edit mode even if invalidation fails
+      setIsEditing(false);
+    }
   }, [invalidateEmployerData]);
 
   if (!isOpen) return null;
@@ -330,8 +337,19 @@ export const EmployerDetailModal = ({
     }
   };
 
+  const handleDialogClose = (open: boolean) => {
+    if (!open) {
+      if (isEditing) {
+        // If in edit mode, just exit edit mode, don't close the dialog
+        setIsEditing(false);
+      } else {
+        handleClose();
+      }
+    }
+  };
+
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
+    <Dialog open={isOpen} onOpenChange={handleDialogClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" aria-describedby="employer-dialog-description">
         <DialogDescription id="employer-dialog-description" className="sr-only">
           View and edit employer details, including company info, EBA, worksites, and workers.

@@ -399,198 +399,77 @@ export default function DuplicateEmployerManager() {
 
   // Merge employers
   const mergeEmployers = async (group: DuplicateGroup): Promise<MergeResult> => {
-    const supabase = getSupabaseBrowserClient();
-    const primaryId = group.userSelectedPrimary || group.suggestedPrimary?.id;
-    
-    if (!primaryId) {
-      throw new Error('No primary employer selected');
-    }
-
-    const duplicateIds = group.employers.filter(e => e.id !== primaryId).map(e => e.id);
-    const result: MergeResult = {
-      success: false,
-      primaryEmployerId: primaryId,
-      mergedEmployerIds: duplicateIds,
-      errors: [],
-      relationshipsMoved: 0,
-      recordsUpdated: 0
-    };
-
-    try {
-      console.log(`Starting merge: Primary ${primaryId}, Duplicates: ${duplicateIds.join(', ')}`);
-
-      const overrides: Record<string, any> = {};
-      Object.entries(fieldSelections).forEach(([field, selection]) => {
-        if (selection && selection.value !== undefined) {
-          overrides[field] = selection.value;
-        }
-      });
-
-      if (Object.keys(overrides).length > 0) {
-        const { error: primaryUpdateError } = await supabase
-          .from('employers')
-          .update(overrides)
-          .eq('id', primaryId);
-
-        if (primaryUpdateError) {
-          result.errors.push(`Primary update failed: ${primaryUpdateError.message}`);
-          console.error('Primary update error', primaryUpdateError);
-        } else {
-          result.recordsUpdated++;
-        }
-      }
-
-      // Move all relationships to the primary employer
-      
-      // 1. Update worker placements
-      const { error: workerError } = await supabase
-        .from('worker_placements')
-        .update({ employer_id: primaryId })
-        .in('employer_id', duplicateIds);
-      
-      if (workerError) result.errors.push(`Worker placements: ${workerError.message}`);
-      else result.relationshipsMoved++;
-
-      // 2. Update project employer roles
-      const { error: roleError } = await supabase
-        .from('project_employer_roles')
-        .update({ employer_id: primaryId })
-        .in('employer_id', duplicateIds);
-      
-      if (roleError) result.errors.push(`Project roles: ${roleError.message}`);
-      else result.relationshipsMoved++;
-
-      // 3. Update project contractor trades
-      const { error: tradeError } = await supabase
-        .from('project_contractor_trades')
-        .update({ employer_id: primaryId })
-        .in('employer_id', duplicateIds);
-      
-      if (tradeError) result.errors.push(`Project trades: ${tradeError.message}`);
-      else result.relationshipsMoved++;
-
-      // 4. Update site contractor trades
-      const { error: siteTradeError } = await supabase
-        .from('site_contractor_trades')
-        .update({ employer_id: primaryId })
-        .in('employer_id', duplicateIds);
-      
-      if (siteTradeError) result.errors.push(`Site trades: ${siteTradeError.message}`);
-      else result.relationshipsMoved++;
-
-      // 5. Update company EBA records
-      const { error: ebaError } = await supabase
-        .from('company_eba_records')
-        .update({ employer_id: primaryId })
-        .in('employer_id', duplicateIds);
-      
-      if (ebaError) result.errors.push(`EBA records: ${ebaError.message}`);
-      else result.relationshipsMoved++;
-
-      // 6. Update site visits
-      const { error: visitError } = await supabase
-        .from('site_visit')
-        .update({ employer_id: primaryId })
-        .in('employer_id', duplicateIds);
-      
-      if (visitError) result.errors.push(`Site visits: ${visitError.message}`);
-      else result.relationshipsMoved++;
-
-      // 7. Handle contractor trade capabilities (merge unique trades)
-      const { data: existingCapabilities } = await supabase
-        .from('contractor_trade_capabilities')
-        .select('trade_type, is_primary, notes')
-        .eq('employer_id', primaryId);
-
-      const existingTradeTypes = new Set((existingCapabilities || []).map((c: any) => c.trade_type));
-
-      const { data: duplicateCapabilities } = await supabase
-        .from('contractor_trade_capabilities')
-        .select('trade_type, is_primary, notes')
-        .in('employer_id', duplicateIds);
-
-      // Add unique trade capabilities from duplicates
-      const newCapabilities = (duplicateCapabilities || []).filter((cap: any) => 
-        !existingTradeTypes.has(cap.trade_type)
-      );
-
-      if (newCapabilities.length > 0) {
-        const { error: capError } = await supabase
-          .from('contractor_trade_capabilities')
-          .insert(newCapabilities.map((cap: any) => ({
-            employer_id: primaryId,
-            trade_type: cap.trade_type,
-            is_primary: cap.is_primary,
-            notes: `${cap.notes || ''} (merged from duplicate employer)`.trim()
-          })));
-        
-        if (capError) result.errors.push(`Trade capabilities: ${capError.message}`);
-        else result.recordsUpdated += newCapabilities.length;
-      }
-
-      // 8. Delete duplicate trade capabilities
-      const { error: deleteCapError } = await supabase
-        .from('contractor_trade_capabilities')
-        .delete()
-        .in('employer_id', duplicateIds);
-      
-      if (deleteCapError) result.errors.push(`Delete capabilities: ${deleteCapError.message}`);
-
-      // 9. Update employer aliases to point to primary
-      const { error: aliasError } = await supabase
-        .from('employer_aliases')
-        .update({ employer_id: primaryId })
-        .in('employer_id', duplicateIds);
-      
-      if (aliasError) result.errors.push(`Aliases: ${aliasError.message}`);
-
-      // 10. Create aliases for the merged employer names
-      const aliasInserts = group.employers
-        .filter(e => e.id !== primaryId)
-        .map(e => ({
-          alias: e.name,
-          alias_normalized: normalizeCompanyName(e.name).normalized,
-          employer_id: primaryId
-        }));
-
-      if (aliasInserts.length > 0) {
-        const { error: newAliasError } = await supabase
-          .from('employer_aliases')
-          .upsert(aliasInserts, { onConflict: 'alias_normalized' });
-        
-        if (newAliasError) result.errors.push(`New aliases: ${newAliasError.message}`);
-        else result.recordsUpdated += aliasInserts.length;
-      }
-
-      // 11. Update projects.builder_id references
-      const { error: builderError } = await supabase
-        .from('projects')
-        .update({ builder_id: primaryId })
-        .in('builder_id', duplicateIds);
-      
-      if (builderError) result.errors.push(`Project builders: ${builderError.message}`);
-      else result.relationshipsMoved++;
-
-      // 12. Finally, delete the duplicate employer records
-      const { error: deleteError } = await supabase
-        .from('employers')
-        .delete()
-        .in('id', duplicateIds);
-      
-      if (deleteError) {
-        result.errors.push(`Delete duplicates: ${deleteError.message}`);
-      } else {
-        result.success = true;
-        result.recordsUpdated += duplicateIds.length;
-        console.log(`✓ Successfully merged ${duplicateIds.length} employers into ${primaryId}`);
-      }
-
-    } catch (error) {
-      result.errors.push(`Merge failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-
-    return result;
-  };
+     const supabase = getSupabaseBrowserClient();
+     const primaryId = group.userSelectedPrimary || group.suggestedPrimary?.id;
+     
+     if (!primaryId) {
+       throw new Error('No primary employer selected');
+     }
+ 
+     const duplicateIds = group.employers.filter(e => e.id !== primaryId).map(e => e.id);
+     const result: MergeResult = {
+       success: false,
+       primaryEmployerId: primaryId,
+       mergedEmployerIds: duplicateIds,
+       errors: [],
+       relationshipsMoved: 0,
+       recordsUpdated: 0
+     };
+ 
+     try {
+       console.log(`Starting merge: Primary ${primaryId}, Duplicates: ${duplicateIds.join(', ')}`);
+ 
+       const overrides: Record<string, any> = {};
+       Object.entries(fieldSelections).forEach(([field, selection]) => {
+         if (selection && selection.value !== undefined) {
+           overrides[field] = selection.value;
+         }
+       });
+ 
+       if (Object.keys(overrides).length > 0) {
+         const { error: primaryUpdateError } = await supabase
+           .from('employers')
+           .update(overrides)
+           .eq('id', primaryId);
+ 
+         if (primaryUpdateError) {
+           result.errors.push(`Primary update failed: ${primaryUpdateError.message}`);
+           console.error('Primary update error', primaryUpdateError);
+         } else {
+           result.recordsUpdated++;
+         }
+       }
+ 
+       if (duplicateIds.length === 0) {
+         result.success = true;
+         return result;
+       }
+ 
+       const { data: rpcData, error: rpcError } = await supabase.rpc('merge_employers', {
+         p_primary_employer_id: primaryId,
+         p_duplicate_employer_ids: duplicateIds
+       });
+ 
+       if (rpcError) {
+         console.error('merge_employers RPC error', rpcError);
+         result.errors.push(`merge_employers RPC failed: ${rpcError.message}`);
+       } else if (rpcData) {
+         result.success = rpcData.success ?? true;
+         result.relationshipsMoved += rpcData.relationships_moved ?? 0;
+         result.recordsUpdated += rpcData.records_updated ?? 0;
+         if (Array.isArray(rpcData.errors) && rpcData.errors.length > 0) {
+           result.errors.push(...rpcData.errors);
+         }
+       } else {
+         // If no data returned, assume success unless errors exist
+         result.success = result.errors.length === 0;
+       }
+     } catch (error) {
+       result.errors.push(`Merge failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+     }
+ 
+     return result;
+   };
 
   // Perform merge operation
   const performMerge = async (group: DuplicateGroup) => {

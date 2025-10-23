@@ -327,9 +327,25 @@ export default function EbaTradeImport({ onNavigateToPendingImport }: EbaTradeIm
     })
 
     try {
-      // Get authenticated user
+      // Get authenticated user with timeout protection
       console.log('[EBA Import] Fetching authenticated user...')
-      const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+      let authResult
+      try {
+        // Add 10 second timeout to prevent hanging
+        authResult = await Promise.race([
+          supabase.auth.getUser(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Authentication timeout - request took too long')), 10000)
+          )
+        ]) as any
+      } catch (timeoutError: any) {
+        console.error('[EBA Import] Auth request timeout:', timeoutError)
+        toast.error('Authentication request timed out. Please refresh the page and try again.', { id: 'store-employers' })
+        return
+      }
+
+      const { data: { user }, error: authError } = authResult
 
       if (authError) {
         console.error('[EBA Import] Auth error:', authError)
