@@ -15,7 +15,6 @@
     "worker:scanner:dev:mac": "npm --prefix railway_workers/mapping-sheet-scanner-worker run dev:mac",
     "stop:ports": "bash -lc 'for p in 3000 3001 3101 3250; do f=$(lsof -ti :$p); if [ -n \"$f\" ]; then echo Killing $p: $f; kill -9 $f || true; fi; done'",
     "stop:all": "pkill -f \"concurrently -n app,scraper,dashboard,bci\" || true; npm run -s stop:ports",
-    "preinstall": "echo 'Build scripts pre-approved via .npmrc configuration' || true",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
