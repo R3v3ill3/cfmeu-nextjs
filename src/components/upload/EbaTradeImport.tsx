@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useDropzone } from 'react-dropzone'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -54,7 +55,6 @@ import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import {
   mapFilenameToTradeType,
   extractTradeLabelFromFilename,
-  getAllTradeOptions,
   type TradeType,
 } from '@/utils/ebaTradeTypeMapping'
 
@@ -125,6 +125,24 @@ export default function EbaTradeImport({ onNavigateToPendingImport }: EbaTradeIm
   const [editingEmployer, setEditingEmployer] = useState<ReviewEmployer | null>(null)
 
   const supabase = getSupabaseBrowserClient()
+
+  // Fetch all trade types from database (replaces hardcoded list)
+  const { data: tradeTypesData, isLoading: isLoadingTradeTypes } = useQuery({
+    queryKey: ['eba-categories', 'trade'],
+    queryFn: async () => {
+      const res = await fetch('/api/eba/categories?type=trade')
+      if (!res.ok) throw new Error(await res.text())
+      const json = await res.json()
+      return (json.data || []) as Array<{ category_code: string; category_name: string }>
+    },
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  })
+
+  // Transform to dropdown format: { value: code, label: name }
+  const tradeOptions = (tradeTypesData || []).map((trade) => ({
+    value: trade.category_code,
+    label: trade.category_name,
+  }))
 
   // File upload handling
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -486,7 +504,7 @@ export default function EbaTradeImport({ onNavigateToPendingImport }: EbaTradeIm
   const parsedFiles = files.filter((f) => f.status === 'parsed')
   const errorFiles = files.filter((f) => f.status === 'error')
 
-  const tradeOptions = getAllTradeOptions()
+  // tradeOptions now comes from the useQuery hook above (database-driven)
   const validEmployersCount = reviewEmployers.filter((e) => e.isValid).length
 
   // Render different screens based on workflow step
@@ -706,12 +724,13 @@ export default function EbaTradeImport({ onNavigateToPendingImport }: EbaTradeIm
                               )
                             )
                           }}
+                          disabled={isLoadingTradeTypes}
                         >
                           <SelectTrigger className="w-[180px]">
-                            <SelectValue />
+                            <SelectValue placeholder={isLoadingTradeTypes ? 'Loading...' : 'Select trade'} />
                           </SelectTrigger>
                           <SelectContent>
-                            {getAllTradeOptions().map((option) => (
+                            {tradeOptions.map((option) => (
                               <SelectItem key={option.value} value={option.value}>
                                 {option.label}
                               </SelectItem>
@@ -857,12 +876,13 @@ export default function EbaTradeImport({ onNavigateToPendingImport }: EbaTradeIm
                     onValueChange={(value) =>
                       setEditingEmployer({ ...editingEmployer, tradeType: value as TradeType })
                     }
+                    disabled={isLoadingTradeTypes}
                   >
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder={isLoadingTradeTypes ? 'Loading...' : 'Select trade'} />
                     </SelectTrigger>
                     <SelectContent>
-                      {getAllTradeOptions().map((option) => (
+                      {tradeOptions.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
                           {option.label}
                         </SelectItem>
@@ -1021,9 +1041,10 @@ export default function EbaTradeImport({ onNavigateToPendingImport }: EbaTradeIm
                       onValueChange={(value) =>
                         updateTradeType(uploadedFile.id, value as TradeType)
                       }
+                      disabled={isLoadingTradeTypes}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select trade..." />
+                        <SelectValue placeholder={isLoadingTradeTypes ? 'Loading...' : 'Select trade...'} />
                       </SelectTrigger>
                       <SelectContent>
                         {tradeOptions.map((option) => (

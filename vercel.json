@@ -5,5 +5,7 @@
       "schedule": "0 2 * * *"
     }
   ],
-  "ignoreCommand": "bash -c '[[ -z $VERCEL_GIT_PREVIOUS_SHA ]] || git diff --quiet $VERCEL_GIT_PREVIOUS_SHA $VERCEL_GIT_COMMIT_SHA -- . \":!railway_workers/**\" || exit 1'"
+  "ignoreCommand": "bash -c '[[ -z $VERCEL_GIT_PREVIOUS_SHA ]] || git diff --quiet $VERCEL_GIT_PREVIOUS_SHA $VERCEL_GIT_COMMIT_SHA -- . \":!railway_workers/**\" || exit 1'",
+  "installCommand": "npm install --legacy-peer-deps",
+  "buildCommand": "npm run build"
 }

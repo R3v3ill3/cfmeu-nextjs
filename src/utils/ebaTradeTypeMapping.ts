@@ -1,28 +1,18 @@
 /**
  * EBA Trade Import - Trade Type Mapping
- * 
- * Maps PDF filename patterns from EBA trade PDFs to database trade_type enum values.
+ *
+ * Maps PDF filename patterns from EBA trade PDFs to database trade_type codes.
  * These PDFs are categorized by trade and contain employers with active EBAs.
+ *
+ * NOTE: Trade type options are now fetched from the database (trade_types table)
+ * via the /api/eba/categories endpoint to ensure consistency across the application.
  */
 
-export type TradeType = 
-  | 'bricklaying'
-  | 'civil_infrastructure'
-  | 'cleaning'
-  | 'head_contractor'
-  | 'concrete'
-  | 'form_work'
-  | 'internal_walls'
-  | 'labour_hire'
-  | 'mobile_crane'
-  | 'painting'
-  | 'scaffolding'
-  | 'steel_fixing'
-  | 'post_tensioning'
-  | 'tower_crane'
-  | 'general_construction'
-  | 'traffic_control'
-  | 'waterproofing'
+/**
+ * Trade type code - matches the 'code' column in trade_types table
+ * This is now a string to allow for all 53+ database-driven trade types
+ */
+export type TradeType = string
 
 /**
  * Maps friendly trade names (from PDF filenames) to database trade_type enum
@@ -81,6 +71,12 @@ export function getTradeLabelFromType(tradeType: TradeType): string {
 
 /**
  * Gets all available trade types for dropdown selection
+ *
+ * @deprecated This function returns a limited set of 16 hardcoded trades.
+ * Components should now fetch trade types from /api/eba/categories?type=trade
+ * to get all 53+ database-driven trade types for consistency across the app.
+ *
+ * This function is kept only for backwards compatibility with the filename mapping.
  */
 export function getAllTradeOptions(): Array<{ value: TradeType; label: string }> {
   return Object.entries(EBA_TRADE_MAP).map(([label, value]) => ({
