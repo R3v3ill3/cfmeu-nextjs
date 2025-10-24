@@ -1,3 +1,1 @@
-# Allow build scripts for all dependencies
-# This is needed for puppeteer (web scraping), sharp (image processing), etc.
-ignore-compatibility-db=true
+# pnpm configuration is now in package.json for single-repo setup
