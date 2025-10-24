@@ -964,8 +964,11 @@ app.get('/v1/employers', async (req, res) => {
       // Enhanced data from comprehensive view
       projects: row.projects_json || [],
       organisers: row.organisers_json || [],
-      roles: row.roles_json || [],
-      trades: row.trades_json || [],
+      // NOTE: Don't include roles_json/trades_json here to avoid double-rendering
+      // in EmployerCard (which renders both employer-level AND project-level badges).
+      // The project-level roles/trades are already in projects_json.
+      // If employer-level aggregated categories are needed, they should be fetched
+      // separately via /api/eba/employers/:id/categories
     }))
 
     const totalCount = count || 0
