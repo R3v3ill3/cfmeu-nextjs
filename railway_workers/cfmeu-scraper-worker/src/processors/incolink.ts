@@ -13,10 +13,22 @@ type ParsedMember = {
   raw: string
 }
 
+type InvoiceDebugInfo = {
+  totalMs: number
+  afterLoginMs?: number
+  searchSubmitMs?: number
+  invoiceClickMs?: number
+  memberExtractionMs?: number
+  tableWaitTimedOut?: boolean
+  pageTitle?: string
+  htmlSnippet?: string
+}
+
 type InvoiceResult = {
   members: ParsedMember[]
   invoiceNumber: string
   invoiceDate: string | null
+  debug?: InvoiceDebugInfo
 }
 
 export interface IncolinkSummary {
@@ -83,6 +95,15 @@ export async function processIncolinkJob(client: SupabaseClient, job: ScraperJob
       try {
         const invoiceResult = await fetchMembersFromIncolink(browser, employerInfo.incolinkId, payload.invoiceNumber)
 
+        if ((invoiceResult.members?.length ?? 0) === 0) {
+          await appendEvent(client, job.id, 'incolink_employer_empty_result', {
+            employerId,
+            invoiceNumber: invoiceResult.invoiceNumber,
+            invoiceDate: invoiceResult.invoiceDate,
+            debug: invoiceResult.debug ?? null,
+          })
+        }
+
         const processed = await persistMembers(client, employerId, invoiceResult)
         succeeded += 1
         createdWorkers += processed.createdWorkers
@@ -98,6 +119,7 @@ export async function processIncolinkJob(client: SupabaseClient, job: ScraperJob
             ...processed,
             totalParsed: invoiceResult.members.length,
           },
+          debug: invoiceResult.debug ?? null,
         })
       } catch (error) {
         failed += 1
@@ -153,6 +175,11 @@ async function getBrowser(): Promise<Browser> {
 }
 
 async function fetchMembersFromIncolink(browser: Browser, incolinkNumber: string, invoiceNumber?: string): Promise<InvoiceResult> {
+  const startTime = Date.now()
+  const debug: InvoiceDebugInfo = {
+    totalMs: 0,
+  }
+
   const email = config.incolinkEmail
   const password = config.incolinkPassword
 
@@ -171,6 +198,7 @@ async function fetchMembersFromIncolink(browser: Browser, incolinkNumber: string
     page.setDefaultNavigationTimeout(60000)
 
     await page.goto('https://compliancelink.incolink.org.au/', { waitUntil: 'networkidle2' })
+    debug.afterLoginMs = Date.now() - startTime
 
     const emailInput = (await page.$('input[type="email"]')) || (await page.$('input[placeholder*="Email" i]'))
     if (!emailInput) throw new Error('Incolink email input not found')
@@ -212,6 +240,7 @@ async function fetchMembersFromIncolink(browser: Browser, incolinkNumber: string
     await searchInput.type(String(incolinkNumber), { delay: 25 })
     await page.keyboard.press('Enter')
     await sleep(1500)
+    debug.searchSubmitMs = Date.now() - startTime
 
     let targetInvoice = invoiceNumber
     if (!targetInvoice) {
@@ -225,12 +254,28 @@ async function fetchMembersFromIncolink(browser: Browser, incolinkNumber: string
     await sleep(1000)
     try {
       await waitForSelectorAnyFrame(page, ['table tbody tr', 'div[role="grid"] div[role="row"]'], 20000)
-    } catch {}
+    } catch {
+      debug.tableWaitTimedOut = true
+    }
+    debug.invoiceClickMs = Date.now() - startTime
 
     const invoiceDate = await extractInvoiceDate(page)
     const members = await extractMembers(page)
+    debug.memberExtractionMs = Date.now() - startTime
 
-    return { members, invoiceNumber: targetInvoice, invoiceDate }
+    if (members.length === 0) {
+      try {
+        debug.pageTitle = await page.title()
+      } catch {}
+      try {
+        const html = await page.content()
+        debug.htmlSnippet = html.slice(0, 2000)
+      } catch {}
+    }
+
+    debug.totalMs = Date.now() - startTime
+
+    return { members, invoiceNumber: targetInvoice, invoiceDate, debug }
   } finally {
     try {
       await page.close()
