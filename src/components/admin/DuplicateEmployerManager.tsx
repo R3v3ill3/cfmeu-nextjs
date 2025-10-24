@@ -111,6 +111,8 @@ export default function DuplicateEmployerManager() {
         const from = page * PAGE_SIZE;
         const to = from + PAGE_SIZE - 1;
 
+        console.log(`[DuplicateEmployerManager] Loading page ${page}, range ${from}-${to}`);
+
         const { data, error } = await supabase
           .from('employers')
           .select(`
@@ -122,19 +124,26 @@ export default function DuplicateEmployerManager() {
           .range(from, to);
 
         if (error) {
+          console.error(`[DuplicateEmployerManager] Error loading page ${page}:`, error);
           if (page === 0) throw error; // Only throw on first page
-          console.warn(`Error loading employers page ${page}:`, error);
+          console.warn(`Stopping pagination due to error on page ${page}`);
           break; // Stop on error for subsequent pages
         }
+
+        const recordsLoaded = data?.length || 0;
+        console.log(`[DuplicateEmployerManager] Page ${page} loaded ${recordsLoaded} records`);
 
         if (data && data.length > 0) {
           allEmployerData = [...allEmployerData, ...data];
           hasMore = data.length === PAGE_SIZE;
           page++;
+          console.log(`[DuplicateEmployerManager] Total records so far: ${allEmployerData.length}, hasMore: ${hasMore}`);
         } else {
           hasMore = false;
         }
       }
+
+      console.log(`[DuplicateEmployerManager] Pagination complete. Total employers loaded: ${allEmployerData.length}`);
 
       const employerData = allEmployerData;
       const employerError = allEmployerData.length === 0 ? new Error('No employers loaded') : null;
