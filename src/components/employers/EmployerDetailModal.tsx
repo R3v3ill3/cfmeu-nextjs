@@ -107,7 +107,7 @@ export const EmployerDetailModal = ({
   const [isFwcSearchOpen, setIsFwcSearchOpen] = useState(false);
   const [isIncolinkModalOpen, setIsIncolinkModalOpen] = useState(false);
   const queryClient = useQueryClient();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
   
   const isPendingReview = mode === 'pending_review';
@@ -235,7 +235,7 @@ export const EmployerDetailModal = ({
         throw err;
       }
     },
-    enabled: !!employerId && isOpen,
+    enabled: !!employerId && isOpen && !authLoading,
     retry: 1,
   });
 
@@ -262,7 +262,7 @@ export const EmployerDetailModal = ({
         throw err;
       }
     },
-    enabled: !!employerId && isOpen,
+    enabled: !!employerId && isOpen && !authLoading,
     retry: 1,
   });
 
@@ -282,7 +282,7 @@ export const EmployerDetailModal = ({
   // Worksites for this employer, across all projects
   const { data: employerSites = [], isFetching: isFetchingSites } = useQuery({
     queryKey: ["employer-sites", employerId],
-    enabled: !!employerId && isOpen,
+    enabled: !!employerId && isOpen && !authLoading,
     queryFn: async () => {
       if (!employerId) return [];
       const supabase = getSupabaseBrowserClient();
