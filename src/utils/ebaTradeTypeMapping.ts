@@ -19,7 +19,7 @@ export type TradeType = string
  */
 export const EBA_TRADE_MAP: Record<string, TradeType> = {
   'Bricklaying': 'bricklaying',
-  'Civil': 'civil_infrastructure',
+  'Civil': 'civil',
   'Cleaning': 'cleaning',
   'Commercial Builders': 'head_contractor',
   'Concrete': 'concrete',
