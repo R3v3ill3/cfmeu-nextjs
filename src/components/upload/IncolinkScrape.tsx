@@ -178,7 +178,10 @@ export default function IncolinkScrape() {
   const pollJob = async (
     jobId: string
   ): Promise<{ job: ScraperJob; events: ScraperJobEvent[] }> => {
-    for (;;) {
+    const MAX_ATTEMPTS = 10
+    const RETRY_DELAY = 2000
+
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       const response = await fetch(`/api/scraper-jobs?id=${jobId}&includeEvents=1`, {
         cache: "no-store",
       })
@@ -187,11 +190,20 @@ export default function IncolinkScrape() {
       }
       const data = (await response.json()) as { job: ScraperJob; events?: ScraperJobEvent[] }
       const events = data.events ?? []
-      if (["succeeded", "failed", "cancelled"].includes(data.job.status)) {
-        return { job: data.job, events }
+      const { status } = data.job
+
+      if (["succeeded", "failed", "cancelled"].includes(status)) {
+        const hasSuccessEvent = events.some((event) => event.event_type === "incolink_employer_succeeded")
+
+        if (status !== "succeeded" || hasSuccessEvent || attempt === MAX_ATTEMPTS - 1) {
+          return { job: data.job, events }
+        }
       }
-      await sleep(3000)
+
+      await sleep(attempt === 0 ? 3000 : RETRY_DELAY)
     }
+
+    throw new Error("Incolink job finished but success event never arrived")
   }
 
   const extractSummary = (
