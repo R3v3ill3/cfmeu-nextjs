@@ -83,6 +83,8 @@ export function useProjectsServerSide(params: ProjectsParams) {
 
   return useQuery<ProjectsResponse>({
     queryKey: ['projects-server-side', params, workerEnabled],
+    // Wait for session to load before running query to avoid token race condition
+    enabled: !loading,
     queryFn: async () => {
       // Build URL parameters, only including non-default values
       const searchParams = new URLSearchParams();

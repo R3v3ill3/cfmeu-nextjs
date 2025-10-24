@@ -70,12 +70,14 @@ export interface EmployersResponse {
  * Uses Railway worker for better performance with automatic fallback to Next.js API
  */
 export function useEmployersServerSide(params: EmployersParams) {
-  const { session } = useAuth();
+  const { session, loading } = useAuth();
   const workerEnabled = process.env.NEXT_PUBLIC_USE_WORKER_EMPLOYERS === 'true';
   const workerUrl = process.env.NEXT_PUBLIC_DASHBOARD_WORKER_URL || '';
 
   return useQuery<EmployersResponse>({
     queryKey: ['employers-server-side', params, workerEnabled],
+    // Wait for session to load before running query to avoid token race condition
+    enabled: !loading,
     queryFn: async () => {
       // Build URL parameters, only including non-default values to keep URLs clean
       const searchParams = new URLSearchParams();

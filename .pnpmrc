@@ -1,1 +1,1 @@
-# pnpm-workspace.yaml now handles build script approvals
+# Removed - consolidating all config to .npmrc for Vercel compatibility
