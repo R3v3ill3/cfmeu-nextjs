@@ -1,1 +1,1 @@
-# pnpm configuration is now in package.json for single-repo setup
+# pnpm-workspace.yaml now handles build script approvals

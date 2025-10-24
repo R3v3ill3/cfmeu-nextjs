@@ -164,7 +164,7 @@ SELECT
   -- ============================================================================
 
   COALESCE((
-    SELECT jsonb_agg(
+    SELECT jsonb_agg(DISTINCT
       jsonb_build_object(
         'id', p.project_id,
         'name', p.project_name,
@@ -174,7 +174,7 @@ SELECT
       )
     )
     FROM (
-      SELECT DISTINCT
+      SELECT
         proj.id as project_id,
         proj.name as project_name,
         proj.tier,

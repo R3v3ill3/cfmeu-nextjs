@@ -1,0 +1,10 @@
+packages:
+  - .
+
+onlyBuiltDependencies:
+  - "@tailwindcss/oxide"
+  - "esbuild"
+  - "puppeteer"
+  - "sharp"
+  - "unrs-resolver"
+  - "@sparticuz/chromium"
