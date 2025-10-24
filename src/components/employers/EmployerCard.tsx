@@ -225,36 +225,36 @@ export function EmployerCard({ employer, onClick, onUpdated }: { employer: Emplo
                     </button>
                     {project.roles && project.roles.length > 0 && (
                       <div className="flex flex-wrap gap-1">
-                        {project.roles.slice(0, 2).map((role, roleIndex) => (
-                          <Badge 
-                            key={roleIndex} 
-                            variant="default" 
+                        {[...new Set(project.roles)].slice(0, 2).map((role) => (
+                          <Badge
+                            key={role}
+                            variant="default"
                             className="text-xs bg-blue-600 hover:bg-blue-700 text-white"
                           >
                             {formatRoleName(role)}
                           </Badge>
                         ))}
-                        {project.roles.length > 2 && (
+                        {[...new Set(project.roles)].length > 2 && (
                           <Badge variant="outline" className="text-xs border-blue-600 text-blue-600">
-                            +{project.roles.length - 2}
+                            +{[...new Set(project.roles)].length - 2}
                           </Badge>
                         )}
                       </div>
                     )}
                     {project.trades && project.trades.length > 0 && (
                       <div className="flex flex-wrap gap-1">
-                        {project.trades.slice(0, 3).map((trade, tradeIndex) => (
-                          <Badge 
-                            key={tradeIndex} 
-                            variant="outline" 
+                        {[...new Set(project.trades)].slice(0, 3).map((trade) => (
+                          <Badge
+                            key={trade}
+                            variant="outline"
                             className="text-xs border-gray-400 text-gray-700"
                           >
                             {formatTradeName(trade)}
                           </Badge>
                         ))}
-                        {project.trades.length > 3 && (
+                        {[...new Set(project.trades)].length > 3 && (
                           <Badge variant="outline" className="text-xs border-gray-400 text-gray-700">
-                            +{project.trades.length - 3}
+                            +{[...new Set(project.trades)].length - 3}
                           </Badge>
                         )}
                       </div>
