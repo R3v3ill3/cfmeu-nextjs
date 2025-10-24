@@ -100,16 +100,44 @@ export default function DuplicateEmployerManager() {
     setIsLoading(true);
     try {
       const supabase = getSupabaseBrowserClient();
-      
-      // Load employers with additional stats
-      const { data: employerData, error: employerError } = await supabase
-        .from('employers')
-        .select(`
-          id, name, address_line_1, suburb, state, postcode, phone, email, employer_type, created_at,
-          abn, website, enterprise_agreement_status, eba_status_source, eba_status_updated_at, eba_status_notes,
-          employer_aliases ( alias, alias_normalized )
-        `)
-        .order('name');
+
+      // Load employers with pagination to get all records (Supabase default limit is 1000)
+      const PAGE_SIZE = 1000;
+      let allEmployerData: any[] = [];
+      let page = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        const from = page * PAGE_SIZE;
+        const to = from + PAGE_SIZE - 1;
+
+        const { data, error } = await supabase
+          .from('employers')
+          .select(`
+            id, name, address_line_1, suburb, state, postcode, phone, email, employer_type, created_at,
+            abn, website, enterprise_agreement_status, eba_status_source, eba_status_updated_at, eba_status_notes,
+            employer_aliases ( alias, alias_normalized )
+          `)
+          .order('name')
+          .range(from, to);
+
+        if (error) {
+          if (page === 0) throw error; // Only throw on first page
+          console.warn(`Error loading employers page ${page}:`, error);
+          break; // Stop on error for subsequent pages
+        }
+
+        if (data && data.length > 0) {
+          allEmployerData = [...allEmployerData, ...data];
+          hasMore = data.length === PAGE_SIZE;
+          page++;
+        } else {
+          hasMore = false;
+        }
+      }
+
+      const employerData = allEmployerData;
+      const employerError = allEmployerData.length === 0 ? new Error('No employers loaded') : null;
 
       if (employerError) throw employerError;
 
@@ -677,7 +705,7 @@ export default function DuplicateEmployerManager() {
 
   const filteredEmployersForManual = useMemo(() => {
     if (!manualSearchTerm.trim()) {
-      return employers.slice(0, 100);
+      return employers.slice(0, 500);
     }
     const term = manualSearchTerm.toLowerCase();
     return employers.filter(emp => {
@@ -687,7 +715,7 @@ export default function DuplicateEmployerManager() {
       const matchesAlias = emp.aliases?.some(alias => alias.alias.toLowerCase().includes(term) || alias.alias_normalized.includes(term));
       const matchesVariant = emp.normalizedVariants?.some(variant => variant.toLowerCase().includes(term));
       return matchesName || matchesAddress || matchesAbn || matchesAlias || matchesVariant;
-    }).slice(0, 200);
+    }).slice(0, 1000);
   }, [employers, manualSearchTerm]);
 
   if (isLoading) {
@@ -813,9 +841,14 @@ export default function DuplicateEmployerManager() {
 
             <div className="max-h-80 overflow-y-auto border rounded-md p-3 bg-muted/30">
               {filteredEmployersForManual.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No employers match that search yet. Try another keyword or scan for aliases.</p>
+                <p className="text-sm text-muted-foreground">No employers match that search. Try another keyword.</p>
               ) : (
-                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Showing {filteredEmployersForManual.length} of {employers.length} total employers
+                    {manualSearchTerm && ` matching "${manualSearchTerm}"`}
+                  </p>
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {filteredEmployersForManual.map((employer) => {
                     const isSelected = manualSelection.has(employer.id);
                     return (
@@ -854,6 +887,7 @@ export default function DuplicateEmployerManager() {
                     );
                   })}
                 </div>
+                </>
               )}
             </div>
 
