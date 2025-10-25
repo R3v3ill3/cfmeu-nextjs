@@ -17,9 +17,13 @@ export function getAdminClient(): SupabaseClient<any> {
           headers: {
             'x-application-name': 'mapping-sheet-scanner-worker'
           }
-        }
+        },
+        // Supabase JS uses REST API (not persistent connections)
+        // Connection pooling is handled by Supabase's edge functions
+        // This singleton pattern ensures we reuse the HTTP client across requests
       }
     )
+    console.log('[supabase] Admin client initialized (singleton pattern, REST API)')
   }
   return adminClientInstance
 }

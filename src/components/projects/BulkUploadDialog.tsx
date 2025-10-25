@@ -449,8 +449,10 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
 
   // Poll batch status
   const pollBatchStatus = async (batchId: string) => {
-    const maxAttempts = 60
+    const maxAttempts = 150 // 5 minutes (150 × 2s) - allows for parallel worker processing
     let attempts = 0
+
+    console.log(`[bulk-upload] Starting to poll batch ${batchId} (max ${maxAttempts} attempts, ${maxAttempts * 2 / 60} minutes)`)
 
     while (attempts < maxAttempts) {
       try {
@@ -458,9 +460,13 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
         if (!response.ok) throw new Error('Failed to fetch status')
 
         const batch = await response.json()
-        setCompletedScans(batch.projects_completed || 0)
+        const completed = batch.projects_completed || 0
+        setCompletedScans(completed)
+
+        console.log(`[bulk-upload] Poll attempt ${attempts + 1}/${maxAttempts}: ${completed}/${totalScans} scans completed (status: ${batch.status})`)
 
         if (batch.status === 'completed' || batch.status === 'partial') {
+          console.log(`[bulk-upload] Batch processing complete: ${batch.status}`)
           return
         }
 
@@ -471,12 +477,14 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
         await new Promise((resolve) => setTimeout(resolve, 2000))
         attempts++
       } catch (err) {
-        console.error('Status poll error:', err)
+        console.error('[bulk-upload] Status poll error:', err)
         throw err
       }
     }
 
-    throw new Error('Processing timeout')
+    const errorMessage = `Processing timeout after ${maxAttempts * 2 / 60} minutes. ${completedScans}/${totalScans} scans completed. Check batch status page for details.`
+    console.error(`[bulk-upload] ${errorMessage}`)
+    throw new Error(errorMessage)
   }
 
   // Reset dialog
@@ -786,10 +794,21 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
               </div>
 
               {totalScans > 0 && (
-                <div className="text-center">
-                  <p className="text-sm text-muted-foreground">
+                <div className="text-center space-y-2">
+                  <p className="text-sm font-medium">
                     Processing {completedScans} of {totalScans} scans
                   </p>
+                  <p className="text-xs text-muted-foreground">
+                    Multiple workers processing in parallel. This may take 2-5 minutes.
+                  </p>
+                  {completedScans > 0 && (
+                    <div className="flex items-center justify-center gap-2">
+                      <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse" />
+                      <p className="text-xs text-green-600">
+                        {completedScans} scan{completedScans !== 1 ? 's' : ''} completed
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
