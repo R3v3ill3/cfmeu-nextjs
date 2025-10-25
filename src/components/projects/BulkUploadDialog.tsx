@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { PDFDocument } from 'pdf-lib'
 import {
@@ -34,12 +34,16 @@ import {
   Sparkles,
   Search,
   Brain,
+  BarChart3,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { splitPdfByProjects, ProjectDefinition, SplitResult } from '@/lib/pdf/splitPdfByProjects'
 import { uploadSplitPdfs } from '@/lib/pdf/uploadSplitPdfs'
+import { OptimizedPdfProcessor, OptimizedPdfUploader } from '@/lib/pdf/optimizedPdfProcessor'
+import { AdaptivePoller, RequestDeduplicator, PerformanceMonitor } from '@/lib/performance/adaptivePolling'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { ProjectSearchDialog } from './ProjectSearchDialog'
+import { BatchManagementDashboard } from './BatchManagementDashboard'
 
 type Step = 'upload' | 'analyze' | 'define' | 'processing' | 'complete'
 
@@ -78,6 +82,26 @@ interface BulkUploadDialogProps {
   onOpenChange: (open: boolean) => void
 }
 
+// Progress persistence utilities
+const PROGRESS_STORAGE_KEY = 'bulk_upload_progress'
+
+interface SavedProgress {
+  step: Step
+  file: {
+    name: string
+    size: number
+    lastModified: number
+  } | null
+  totalPages: number
+  projectDefinitions: ProjectDefinitionForm[]
+  batchId: string
+  batchUploaderId: string
+  useAI: boolean
+  aiAnalysis: AnalysisResult | null
+  selectedProjects: Record<string, Project>
+  timestamp: number
+}
+
 export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) {
   const [step, setStep] = useState<Step>('upload')
   const [file, setFile] = useState<File | null>(null)
@@ -97,6 +121,155 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
   const [searchDialogOpen, setSearchDialogOpen] = useState(false)
   const [searchingForDefId, setSearchingForDefId] = useState<string | null>(null)
   const [selectedProjects, setSelectedProjects] = useState<Record<string, Project>>({})
+  const [screenReaderAnnouncement, setScreenReaderAnnouncement] = useState('')
+  const announcementRef = useRef<HTMLDivElement>(null)
+
+  // Progress persistence and cancellation
+  const [showRecoveryDialog, setShowRecoveryDialog] = useState(false)
+  const [savedProgress, setSavedProgress] = useState<SavedProgress | null>(null)
+  const [isCancelling, setIsCancelling] = useState(false)
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const autoSaveIntervalRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Performance optimization state
+  const [useOptimizedProcessing, setUseOptimizedProcessing] = useState(true)
+  const [performanceMetrics, setPerformanceMetrics] = useState<any>(null)
+  const [processingStats, setProcessingStats] = useState({
+    memoryUsage: 0,
+    processingTime: 0,
+    networkRequests: 0
+  })
+
+  // Refs for performance utilities
+  const adaptivePollerRef = useRef<AdaptivePoller | null>(null)
+  const requestDeduplicatorRef = useRef<RequestDeduplicator | null>(null)
+  const performanceMonitorRef = useRef<PerformanceMonitor | null>(null)
+  const pdfProcessorRef = useRef<OptimizedPdfProcessor | null>(null)
+  const pdfUploaderRef = useRef<OptimizedPdfUploader | null>(null)
+
+  // Dashboard state
+  const [dashboardOpen, setDashboardOpen] = useState(false)
+
+  // Screen reader announcements
+  const announceToScreenReader = useCallback((message: string) => {
+    setScreenReaderAnnouncement(message)
+    // Clear announcement after it's been read
+    setTimeout(() => setScreenReaderAnnouncement(''), 1000)
+  }, [])
+
+  // Progress persistence functions
+  const saveProgress = useCallback(() => {
+    if (!file || step === 'upload') return
+
+    const progress: SavedProgress = {
+      step,
+      file: {
+        name: file.name,
+        size: file.size,
+        lastModified: file.lastModified,
+      },
+      totalPages,
+      projectDefinitions,
+      batchId,
+      batchUploaderId,
+      useAI,
+      aiAnalysis,
+      selectedProjects,
+      timestamp: Date.now(),
+    }
+
+    try {
+      sessionStorage.setItem(PROGRESS_STORAGE_KEY, JSON.stringify(progress))
+    } catch (error) {
+      console.warn('Failed to save progress:', error)
+    }
+  }, [file, step, totalPages, projectDefinitions, batchId, batchUploaderId, useAI, aiAnalysis, selectedProjects])
+
+  const loadSavedProgress = useCallback((): SavedProgress | null => {
+    try {
+      const saved = sessionStorage.getItem(PROGRESS_STORAGE_KEY)
+      if (!saved) return null
+
+      const progress = JSON.parse(saved) as SavedProgress
+
+      // Check if progress is recent (less than 24 hours)
+      const hoursSince = (Date.now() - progress.timestamp) / (1000 * 60 * 60)
+      if (hoursSince > 24) {
+        sessionStorage.removeItem(PROGRESS_STORAGE_KEY)
+        return null
+      }
+
+      return progress
+    } catch (error) {
+      console.warn('Failed to load saved progress:', error)
+      return null
+    }
+  }, [])
+
+  const clearSavedProgress = useCallback(() => {
+    try {
+      sessionStorage.removeItem(PROGRESS_STORAGE_KEY)
+    } catch (error) {
+      console.warn('Failed to clear saved progress:', error)
+    }
+  }, [])
+
+  const restoreProgress = useCallback(async (progress: SavedProgress) => {
+    try {
+      // Restore file if we can (re-upload required)
+      if (progress.file) {
+        toast.info('Please re-upload your PDF file to restore progress')
+        setStep('upload')
+        setUseAI(progress.useAI)
+        return
+      }
+
+      // Restore other state
+      setStep(progress.step)
+      setTotalPages(progress.totalPages)
+      setProjectDefinitions(progress.projectDefinitions)
+      setBatchId(progress.batchId)
+      setBatchUploaderId(progress.batchUploaderId)
+      setUseAI(progress.useAI)
+      setAiAnalysis(progress.aiAnalysis)
+      setSelectedProjects(progress.selectedProjects)
+
+      toast.success('Progress restored successfully')
+    } catch (error) {
+      console.error('Failed to restore progress:', error)
+      toast.error('Failed to restore progress')
+    }
+  }, [])
+
+  // Auto-save effect
+  useEffect(() => {
+    if (open && step !== 'upload' && step !== 'complete') {
+      autoSaveIntervalRef.current = setInterval(saveProgress, 30000) // Save every 30 seconds
+    } else {
+      if (autoSaveIntervalRef.current) {
+        clearInterval(autoSaveIntervalRef.current)
+        autoSaveIntervalRef.current = null
+      }
+    }
+
+    return () => {
+      if (autoSaveIntervalRef.current) {
+        clearInterval(autoSaveIntervalRef.current)
+        autoSaveIntervalRef.current = null
+      }
+    }
+  }, [open, step, saveProgress])
+
+  // Check for saved progress on mount
+  useEffect(() => {
+    if (open) {
+      const progress = loadSavedProgress()
+      if (progress) {
+        setSavedProgress(progress)
+        setShowRecoveryDialog(true)
+      }
+    }
+  }, [open, loadSavedProgress])
 
   // File upload handling
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
@@ -121,17 +294,7 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
       const pageCount = pdfDoc.getPageCount()
       setTotalPages(pageCount)
 
-      toast.success(`PDF loaded: ${pageCount} pages - starting AI analysis...`)
-
-      // Automatically start AI analysis after successful file load
-      // Small delay to allow state to update
-      setTimeout(() => {
-        if (useAI) {
-          analyzeWithAI()
-        } else {
-          autoSegmentProjects()
-        }
-      }, 100)
+      toast.success(`PDF loaded: ${pageCount} pages`)
     } catch (err) {
       console.error('Failed to read PDF:', err)
       toast.error('Failed to read PDF file')
@@ -152,6 +315,7 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
     setStep('analyze')
     setIsProcessing(true)
     setProcessingStatus('Analyzing PDF with AI...')
+    announceToScreenReader('Starting AI analysis. This may take 10-20 seconds.')
 
     try {
       const formData = new FormData()
@@ -188,6 +352,7 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
       )
 
       setStep('define')
+      announceToScreenReader(`AI analysis complete. Found ${definitions.length} project${definitions.length !== 1 ? 's' : ''}. Please review and configure each project.`)
     } catch (err) {
       console.error('AI analysis failed:', err)
       toast.error('AI analysis failed. Using manual mode.')
@@ -198,7 +363,7 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
     }
   }
 
-  // Auto-segmentation (fallback)
+  // Auto-segmentation (fallback) with improved naming
   const autoSegmentProjects = () => {
     const pagesPerProject = 2
     const numProjects = Math.ceil(totalPages / pagesPerProject)
@@ -209,12 +374,17 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
       const startPage = i * pagesPerProject + 1
       const endPage = Math.min((i + 1) * pagesPerProject, totalPages)
 
+      // Create more descriptive project names using page ranges
+      const projectName = numProjects === 1
+        ? `Full Document (Pages ${startPage}-${endPage})`
+        : `Section ${i + 1} (Pages ${startPage}-${endPage})`
+
       definitions.push({
         id: crypto.randomUUID(),
         startPage,
         endPage,
         mode: 'new',
-        tentativeName: `Project ${i + 1}`,
+        tentativeName: projectName,
       })
     }
 
@@ -248,7 +418,7 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
         startPage: newStartPage,
         endPage: totalPages,
         mode: 'new',
-        tentativeName: `Project ${projectDefinitions.length + 1}`,
+        tentativeName: `Section ${projectDefinitions.filter(def => def.mode !== 'skip').length + 1} (Pages ${newStartPage}-${totalPages})`,
       },
     ])
   }
@@ -330,7 +500,41 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
     return true
   }
 
-  // Process batch upload
+  // Cancel processing with cleanup
+  const cancelProcessing = useCallback(() => {
+    // Cancel abort controller
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+    }
+
+    // Stop adaptive polling
+    if (adaptivePollerRef.current) {
+      adaptivePollerRef.current.stop()
+    }
+
+    // Clear request deduplicator
+    if (requestDeduplicatorRef.current) {
+      requestDeduplicatorRef.current.clear()
+    }
+
+    // Stop performance monitoring
+    if (performanceMonitorRef.current) {
+      performanceMonitorRef.current.stop()
+    }
+
+    if (autoSaveIntervalRef.current) {
+      clearInterval(autoSaveIntervalRef.current)
+      autoSaveIntervalRef.current = null
+    }
+
+    setIsCancelling(false)
+    setIsProcessing(false)
+    toast.info('Processing cancelled')
+    setStep('define')
+  }, [])
+
+  // Process batch upload with performance optimizations
   const processBatchUpload = async () => {
     if (!file || !pdfBytes) {
       toast.error('No file selected')
@@ -341,9 +545,17 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
       return
     }
 
+    // Initialize performance monitoring
+    performanceMonitorRef.current = new PerformanceMonitor()
+    performanceMonitorRef.current.start()
+
+    // Create new abort controller for this processing session
+    abortControllerRef.current = new AbortController()
     setIsProcessing(true)
     setStep('processing')
     setError(null)
+    setIsCancelling(false)
+    announceToScreenReader('Processing started. This will take several minutes as we process all the mapping sheets.')
 
     try {
       // Step 1: Initialize batch upload (upload original PDF)
@@ -372,7 +584,7 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
       }
       setUploadProgress(25)
 
-      // Step 2: Split PDFs client-side
+      // Step 2: Split PDFs client-side with optimization
       setProcessingStatus('Splitting PDF by projects...')
       // Filter out skipped projects before processing
       const activeProjectDefinitions = projectDefinitions.filter((def) => def.mode !== 'skip')
@@ -384,10 +596,50 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
         projectId: def.projectId,
       }))
 
-      const splitResults: SplitResult[] = await splitPdfByProjects(pdfBytes, definitions)
+      let splitResults: SplitResult[]
+
+      if (useOptimizedProcessing) {
+        // Use optimized PDF processor
+        if (!pdfProcessorRef.current) {
+          pdfProcessorRef.current = new OptimizedPdfProcessor({
+            enableMemoryOptimization: true,
+            batchSize: 3,
+            concurrency: 2,
+            onProgress: (progress, current) => {
+              const overallProgress = 25 + (progress * 0.25) // 25-50% range
+              setUploadProgress(overallProgress)
+              setProcessingStatus(`Splitting PDFs: ${current}`)
+            },
+            onMemoryWarning: (warning) => {
+              toast.warning(warning)
+            }
+          })
+        }
+
+        const optimizedResults = await pdfProcessorRef.current.processPdfInBatches(pdfBytes, definitions)
+        splitResults = optimizedResults.map(result => ({
+          fileName: result.fileName,
+          pdfBytes: result.pdfBytes,
+          pageCount: result.pageCount,
+          definition: result.definition
+        }))
+
+        // Update processing stats
+        const metrics = pdfProcessorRef.current.getPerformanceMetrics()
+        setProcessingStats(prev => ({
+          ...prev,
+          processingTime: metrics.timing.duration,
+          memoryUsage: metrics.memoryUsage?.used || 0
+        }))
+
+      } else {
+        // Fallback to original processing
+        splitResults = await splitPdfByProjects(pdfBytes, definitions)
+      }
+
       setUploadProgress(50)
 
-      // Step 3: Upload split PDFs
+      // Step 3: Upload split PDFs with parallel processing
       setProcessingStatus('Uploading split PDFs...')
       let effectiveUploaderId = uploaderIdFromInit || batchUploaderId
       if (!effectiveUploaderId) {
@@ -400,7 +652,33 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
         setBatchUploaderId(user.id)
       }
 
-      const uploadedScans = await uploadSplitPdfs(uploadedBatchId, effectiveUploaderId, splitResults)
+      let uploadedScans
+
+      if (useOptimizedProcessing) {
+        // Use optimized parallel uploader
+        if (!pdfUploaderRef.current) {
+          pdfUploaderRef.current = new OptimizedPdfUploader()
+        }
+
+        uploadedScans = await pdfUploaderRef.current.uploadSplitPdfsInParallel(
+          uploadedBatchId,
+          effectiveUploaderId,
+          splitResults,
+          3 // Parallel uploads
+        )
+
+        // Update processing stats
+        const uploadMetrics = pdfUploaderRef.current.getPerformanceMetrics()
+        setProcessingStats(prev => ({
+          ...prev,
+          networkRequests: uploadMetrics.network.requests
+        }))
+
+      } else {
+        // Fallback to original sequential upload
+        uploadedScans = await uploadSplitPdfs(uploadedBatchId, effectiveUploaderId, splitResults)
+      }
+
       setUploadProgress(75)
 
       // Step 4: Create batch and scan records
@@ -431,64 +709,168 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
       setBatchId(actualBatchId)
       setUploadProgress(90)
 
-      // Step 5: Poll for completion
+      // Step 5: Poll for completion using adaptive polling
       setProcessingStatus('Processing scans...')
       await pollBatchStatus(actualBatchId)
 
       setUploadProgress(100)
       setStep('complete')
+
+      // Final performance metrics
+      if (performanceMonitorRef.current) {
+        performanceMonitorRef.current.stop()
+        const finalMetrics = performanceMonitorRef.current.getMetrics()
+        setPerformanceMetrics(finalMetrics)
+
+        console.log('Performance metrics:', finalMetrics)
+      }
+
+      announceToScreenReader(`Upload complete! Successfully processed ${totalScans} mapping sheet${totalScans !== 1 ? 's' : ''}.`)
       toast.success('Batch upload completed successfully!')
     } catch (err) {
+      if (abortControllerRef.current?.signal.aborted) {
+        console.log('Processing was cancelled')
+        return
+      }
+
       console.error('Batch upload error:', err)
       setError(err instanceof Error ? err.message : 'Upload failed')
       toast.error('Batch upload failed')
     } finally {
-      setIsProcessing(false)
-    }
-  }
+      if (!abortControllerRef.current?.signal.aborted) {
+        setIsProcessing(false)
+      }
+      abortControllerRef.current = null
 
-  // Poll batch status
-  const pollBatchStatus = async (batchId: string) => {
-    const maxAttempts = 150 // 5 minutes (150 × 2s) - allows for parallel worker processing
-    let attempts = 0
-
-    console.log(`[bulk-upload] Starting to poll batch ${batchId} (max ${maxAttempts} attempts, ${maxAttempts * 2 / 60} minutes)`)
-
-    while (attempts < maxAttempts) {
-      try {
-        const response = await fetch(`/api/projects/batch-upload/${batchId}/status`)
-        if (!response.ok) throw new Error('Failed to fetch status')
-
-        const batch = await response.json()
-        const completed = batch.projects_completed || 0
-        setCompletedScans(completed)
-
-        console.log(`[bulk-upload] Poll attempt ${attempts + 1}/${maxAttempts}: ${completed}/${totalScans} scans completed (status: ${batch.status})`)
-
-        if (batch.status === 'completed' || batch.status === 'partial') {
-          console.log(`[bulk-upload] Batch processing complete: ${batch.status}`)
-          return
-        }
-
-        if (batch.status === 'failed') {
-          throw new Error(batch.error_message || 'Batch processing failed')
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, 2000))
-        attempts++
-      } catch (err) {
-        console.error('[bulk-upload] Status poll error:', err)
-        throw err
+      // Stop performance monitoring
+      if (performanceMonitorRef.current) {
+        performanceMonitorRef.current.stop()
       }
     }
-
-    const errorMessage = `Processing timeout after ${maxAttempts * 2 / 60} minutes. ${completedScans}/${totalScans} scans completed. Check batch status page for details.`
-    console.error(`[bulk-upload] ${errorMessage}`)
-    throw new Error(errorMessage)
   }
 
-  // Reset dialog
+  // Optimized adaptive polling for batch status
+  const pollBatchStatus = async (batchId: string) => {
+    if (!adaptivePollerRef.current) {
+      adaptivePollerRef.current = new AdaptivePoller({
+        initialInterval: 1000, // Start with 1 second
+        maxInterval: 30000,    // Max 30 seconds
+        fastInterval: 1000,    // 1 second during active processing
+        idleInterval: 5000,    // 5 seconds when idle
+        maxAttempts: 300,      // Allow more attempts with adaptive polling
+        timeout: 600000,       // 10 minutes total timeout
+      })
+    }
+
+    if (!requestDeduplicatorRef.current) {
+      requestDeduplicatorRef.current = new RequestDeduplicator()
+    }
+
+    const poller = adaptivePollerRef.current
+    const deduplicator = requestDeduplicatorRef.current
+
+    console.log(`[bulk-upload] Starting adaptive polling for batch ${batchId}`)
+
+    try {
+      const result = await poller.start(
+        async (signal) => {
+          // Deduplicate requests to avoid multiple concurrent status checks
+          return deduplicator.deduplicate(
+            `status-${batchId}-${Date.now()}`,
+            async () => {
+              const response = await fetch(`/api/projects/batch-upload/${batchId}/status`, {
+                signal,
+                headers: {
+                  'Cache-Control': 'no-cache',
+                },
+              })
+
+              if (!response.ok) {
+                throw new Error('Failed to fetch status')
+              }
+
+              performanceMonitorRef.current?.recordRequest()
+              return response.json()
+            }
+          )
+        },
+        (batch) => {
+          // Check if batch is complete
+          return batch.status === 'completed' || batch.status === 'partial'
+        },
+        (batch) => {
+          // Check for activity - processing is active if status is 'processing' or if progress is being made
+          const completed = batch.projects_completed || 0
+          const total = batch.total_scans || totalScans
+          const progressPercentage = total > 0 ? (completed / total) * 100 : 0
+
+          // Consider active if status is processing or if we're making progress (< 100%)
+          return batch.status === 'processing' || progressPercentage < 100
+        }
+      )
+
+      // Update final state
+      const completed = result.projects_completed || 0
+      const total = result.total_scans || totalScans
+      setCompletedScans(completed)
+      setTotalScans(total)
+
+      console.log(`[bulk-upload] Adaptive polling complete: ${result.status} (${completed}/${total} scans)`)
+
+      if (result.status === 'failed') {
+        throw new Error(result.error_message || 'Batch processing failed')
+      }
+
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('aborted')) {
+        console.log('[bulk-upload] Adaptive polling cancelled')
+        return
+      }
+      console.error('[bulk-upload] Adaptive polling error:', error)
+      performanceMonitorRef.current?.recordFailure()
+      throw error
+    } finally {
+      // Cleanup
+      deduplicator.clear()
+    }
+  }
+
+  // Reset dialog with performance cleanup
   const resetDialog = () => {
+    // Cancel any ongoing processing
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+    }
+
+    // Stop adaptive polling
+    if (adaptivePollerRef.current) {
+      adaptivePollerRef.current.stop()
+      adaptivePollerRef.current = null
+    }
+
+    // Clear request deduplicator
+    if (requestDeduplicatorRef.current) {
+      requestDeduplicatorRef.current.clear()
+      requestDeduplicatorRef.current = null
+    }
+
+    // Stop performance monitoring
+    if (performanceMonitorRef.current) {
+      performanceMonitorRef.current.stop()
+      performanceMonitorRef.current = null
+    }
+
+    // Clear auto-save interval
+    if (autoSaveIntervalRef.current) {
+      clearInterval(autoSaveIntervalRef.current)
+      autoSaveIntervalRef.current = null
+    }
+
+    // Clear saved progress
+    clearSavedProgress()
+
+    // Reset all state
     setStep('upload')
     setFile(null)
     setPdfBytes(null)
@@ -504,6 +886,16 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
     setUseAI(true)
     setAiAnalysis(null)
     setSelectedProjects({})
+    setShowRecoveryDialog(false)
+    setSavedProgress(null)
+    setIsCancelling(false)
+    setUseOptimizedProcessing(true)
+    setPerformanceMetrics(null)
+    setProcessingStats({
+      memoryUsage: 0,
+      processingTime: 0,
+      networkRequests: 0
+    })
   }
 
   const handleClose = () => {
@@ -530,13 +922,48 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
 
   return (
     <>
+      {/* Screen reader live region for announcements */}
+      <div
+        ref={announcementRef}
+        aria-live="polite"
+        aria-atomic="true"
+        className="sr-only"
+        role="status"
+      >
+        {screenReaderAnnouncement}
+      </div>
+
       <Dialog open={open} onOpenChange={handleClose}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent
+          className="max-w-4xl max-h-[90vh] overflow-y-auto"
+          aria-describedby="bulk-upload-description"
+        >
           <DialogHeader>
-            <DialogTitle>Bulk Upload Mapping Sheets</DialogTitle>
-            <DialogDescription>
-              Upload a PDF containing multiple projects and split them into individual scans
-            </DialogDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle>Bulk Upload Mapping Sheets</DialogTitle>
+                <DialogDescription id="bulk-upload-description">
+                  Upload a PDF containing multiple projects and split them into individual scans
+                  {step !== 'upload' && (
+                    <span className="block mt-1">
+                      Current step: {step === 'analyze' ? 'Analyzing with AI' :
+                                    step === 'define' ? 'Define projects' :
+                                    step === 'processing' ? 'Processing upload' :
+                                    step === 'complete' ? 'Upload complete' : 'Upload file'}
+                    </span>
+                  )}
+                </DialogDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDashboardOpen(true)}
+                className="ml-4"
+              >
+                <BarChart3 className="h-4 w-4 mr-2" />
+                Batch History
+              </Button>
+            </div>
           </DialogHeader>
 
           {/* Step 1: Upload */}
@@ -573,18 +1000,33 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
               </div>
 
               {file && (
-                <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <Brain className="h-5 w-5 text-primary" />
-                    <div>
-                      <p className="font-medium">AI-Assisted Detection</p>
-                      <p className="text-sm text-muted-foreground">
-                        Automatically detect projects and extract names
-                      </p>
+                <>
+                  <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <Brain className="h-5 w-5 text-primary" />
+                      <div>
+                        <p className="font-medium">AI-Assisted Detection</p>
+                        <p className="text-sm text-muted-foreground">
+                          Automatically detect projects and extract names
+                        </p>
+                      </div>
                     </div>
+                    <Switch checked={useAI} onCheckedChange={setUseAI} />
                   </div>
-                  <Switch checked={useAI} onCheckedChange={setUseAI} />
-                </div>
+
+                  <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <Upload className="h-5 w-5 text-primary" />
+                      <div>
+                        <p className="font-medium">Performance Optimization</p>
+                        <p className="text-sm text-muted-foreground">
+                          Faster processing with parallel uploads and memory optimization
+                        </p>
+                      </div>
+                    </div>
+                    <Switch checked={useOptimizedProcessing} onCheckedChange={setUseOptimizedProcessing} />
+                  </div>
+                </>
               )}
 
               {error && (
@@ -787,10 +1229,16 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
 
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span>{processingStatus}</span>
-                  <span>{uploadProgress}%</span>
+                  <span id="processing-status" aria-live="polite">{processingStatus}</span>
+                  <span aria-label={`Upload progress: ${uploadProgress} percent complete`}>{uploadProgress}%</span>
                 </div>
-                <Progress value={uploadProgress} />
+                <Progress
+                  value={uploadProgress}
+                  aria-labelledby="processing-status"
+                  aria-valuenow={uploadProgress}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                />
               </div>
 
               {totalScans > 0 && (
@@ -815,7 +1263,55 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
               {error && (
                 <div className="flex items-center gap-2 p-3 bg-destructive/10 text-destructive rounded-lg">
                   <AlertCircle className="h-4 w-4" />
-                  <p className="text-sm">{error}</p>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">{error}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {batchId && (
+                        <>
+                          Batch ID: {batchId}. You can check the batch status page later or try again.
+                        </>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {error && batchId && (
+                <div className="flex justify-center gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => window.location.href = `/projects/batches/${batchId}`}
+                  >
+                    View Batch Status
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setError(null)
+                      setIsProcessing(false)
+                      setStep('define')
+                    }}
+                  >
+                    Try Again
+                  </Button>
+                </div>
+              )}
+
+              {!error && (
+                <div className="flex justify-center">
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsCancelling(true)}
+                    disabled={isCancelling}
+                  >
+                    {isCancelling ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Cancelling...
+                      </>
+                    ) : (
+                      'Cancel Processing'
+                    )}
+                  </Button>
                 </div>
               )}
             </div>
@@ -849,6 +1345,38 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
                   <span className="text-sm">Completed:</span>
                   <span className="text-sm font-medium">{completedScans}</span>
                 </div>
+
+                {performanceMetrics && (
+                  <>
+                    <div className="border-t pt-2 mt-2">
+                      <p className="text-sm font-medium mb-2">Performance Metrics</p>
+                      <div className="flex justify-between">
+                        <span className="text-sm">Processing Time:</span>
+                        <span className="text-sm">
+                          {((performanceMetrics.timing.duration || 0) / 1000).toFixed(1)}s
+                        </span>
+                      </div>
+                      {performanceMetrics.memoryUsage && (
+                        <div className="flex justify-between">
+                          <span className="text-sm">Memory Used:</span>
+                          <span className="text-sm">
+                            {((performanceMetrics.memoryUsage.used || 0) / 1024 / 1024).toFixed(1)}MB
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex justify-between">
+                        <span className="text-sm">Network Requests:</span>
+                        <span className="text-sm">{performanceMetrics.network.requests}</span>
+                      </div>
+                      {useOptimizedProcessing && (
+                        <div className="flex items-center gap-2 mt-2">
+                          <div className="h-2 w-2 bg-green-500 rounded-full" />
+                          <span className="text-xs text-green-600">Performance optimization enabled</span>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="flex justify-end gap-2">
@@ -861,6 +1389,82 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Recovery Dialog */}
+      <Dialog open={showRecoveryDialog} onOpenChange={setShowRecoveryDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Resume Previous Upload?</DialogTitle>
+            <DialogDescription>
+              We found saved progress from a previous bulk upload session. Would you like to restore it?
+            </DialogDescription>
+          </DialogHeader>
+
+          {savedProgress && (
+            <div className="space-y-2 text-sm">
+              <p><strong>File:</strong> {savedProgress.file?.name}</p>
+              <p><strong>Pages:</strong> {savedProgress.totalPages}</p>
+              <p><strong>Projects:</strong> {savedProgress.projectDefinitions.length}</p>
+              <p><strong>Step:</strong> {savedProgress.step}</p>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowRecoveryDialog(false)
+                clearSavedProgress()
+              }}
+            >
+              Start Fresh
+            </Button>
+            <Button
+              onClick={() => {
+                if (savedProgress) {
+                  restoreProgress(savedProgress)
+                }
+                setShowRecoveryDialog(false)
+              }}
+            >
+              Restore Progress
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancellation Confirmation Dialog */}
+      <Dialog open={isCancelling} onOpenChange={setIsCancelling}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cancel Processing?</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to cancel the bulk upload process? This will stop all ongoing operations and you may lose progress.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p>• All ongoing uploads will be stopped</p>
+            <p>• Any completed scans will be saved</p>
+            <p>• Your current settings will be preserved</p>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setIsCancelling(false)}
+            >
+              Continue Processing
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={cancelProcessing}
+            >
+              Cancel Upload
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -879,6 +1483,12 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
             ? projectDefinitions.find((d) => d.id === searchingForDefId)?.tentativeAddress
             : undefined
         }
+      />
+
+      {/* Batch Management Dashboard */}
+      <BatchManagementDashboard
+        open={dashboardOpen}
+        onOpenChange={setDashboardOpen}
       />
     </>
   )

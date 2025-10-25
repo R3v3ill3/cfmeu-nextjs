@@ -202,10 +202,11 @@ export function ProjectSearchDialog({
             e.preventDefault()
           }
         }}
+        aria-describedby="search-dialog-description"
       >
         <DialogHeader>
           <DialogTitle>Search for Existing Project</DialogTitle>
-          <DialogDescription>
+          <DialogDescription id="search-dialog-description">
             Search by project name or find nearby projects by address
             {suggestedAddress && (
               <span className="block mt-2 text-xs">
@@ -237,6 +238,8 @@ export function ProjectSearchDialog({
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
                 autoFocus={searchMode === 'name'}
+                aria-label="Search projects by name"
+                aria-describedby={results.length > 0 ? 'search-results-count' : undefined}
               />
             </div>
 
@@ -268,12 +271,21 @@ export function ProjectSearchDialog({
                 )}
 
                 {!isLoading && results.length > 0 && (
-                  <CommandGroup heading={`${results.length} project${results.length !== 1 ? 's' : ''} found`}>
-                    {results.map((project) => (
+                  <CommandGroup
+                    heading={`${results.length} project${results.length !== 1 ? 's' : ''} found`}
+                    id="search-results-count"
+                    role="group"
+                    aria-label={`Search results: ${results.length} projects found`}
+                  >
+                    {results.map((project, index) => (
                       <CommandItem
                         key={project.id}
                         onSelect={() => handleSelect(project)}
                         className="cursor-pointer"
+                        role="option"
+                        aria-label={`${project.name}${project.full_address ? `, located at ${project.full_address}` : ''}${project.builder_name ? `, built by ${project.builder_name}` : ''}. Press Enter to select this project.`}
+                        aria-posinset={index + 1}
+                        aria-setsize={results.length}
                       >
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
