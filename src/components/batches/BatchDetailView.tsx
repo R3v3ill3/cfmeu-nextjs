@@ -449,7 +449,7 @@ export function BatchDetailView({ batch: initialBatch }: BatchDetailViewProps) {
                     <TableCell>
                       <div className="flex gap-1">
                         {/* Review button for scans tied to an existing project */}
-                        {canReviewExisting && (
+                        {canReviewExisting && (scan.project_id || scan.created_project_id) && (
                           <Button
                             asChild
                             variant={scan.status === 'completed' ? 'default' : 'outline'}

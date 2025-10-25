@@ -20,14 +20,19 @@ export default function ScanReviewPage({ params }: PageProps) {
   const { projectId, scanId } = params
   const queryClient = useQueryClient()
 
+  // Guard against invalid project IDs (null, undefined, "null", "undefined")
+  const isValidProjectId = projectId && projectId !== 'null' && projectId !== 'undefined'
+
   // Force REMOVE cache entirely when component mounts to prevent stuck loading states
   // removeQueries is more aggressive than invalidateQueries - ensures completely fresh fetch
   useEffect(() => {
-    console.log('[scan-review] Page mounted with params:', { projectId, scanId })
+    console.log('[scan-review] Page mounted with params:', { projectId, scanId, isValidProjectId })
     console.log('[scan-review] Removing all scan and project cache entries')
     queryClient.removeQueries({ queryKey: ['mapping_sheet_scan'] })
-    queryClient.removeQueries({ queryKey: ['project', projectId] })
-  }, [queryClient, projectId])
+    if (isValidProjectId) {
+      queryClient.removeQueries({ queryKey: ['project', projectId] })
+    }
+  }, [queryClient, projectId, isValidProjectId])
 
   // Fetch scan data
   const { data: scanData, error: scanError, isLoading: scanLoading, isFetching: scanFetching } = useQuery({
@@ -53,10 +58,10 @@ export default function ScanReviewPage({ params }: PageProps) {
     retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
   })
 
-  // Fetch project data
-  const { data: projectData, isLoading: projectLoading } = useQuery({
+  // Fetch project data (only if we have a valid project ID)
+  const { data: projectData, isLoading: projectLoading, error: projectError } = useQuery({
     queryKey: ['project', projectId],
-    enabled: !!projectId,
+    enabled: isValidProjectId,
     queryFn: async () => {
       console.log('[scan-review] Fetching project data for:', projectId)
       const { data, error } = await supabase
@@ -80,7 +85,7 @@ export default function ScanReviewPage({ params }: PageProps) {
   // Get job sites for patch lookup (same as main mapping sheet page)
   const { data: sites = [] } = useQuery({
     queryKey: ["project-sites", projectId],
-    enabled: !!projectId,
+    enabled: isValidProjectId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("job_sites")
@@ -100,7 +105,7 @@ export default function ScanReviewPage({ params }: PageProps) {
   // Get patches (same as main mapping sheet page)
   const { data: projectPatches = [] } = useQuery({
     queryKey: ["project-patches", projectId, sortedSiteIds],
-    enabled: !!projectId && sortedSiteIds.length > 0,
+    enabled: isValidProjectId && sortedSiteIds.length > 0,
     queryFn: async () => {
       const { data } = await supabase
         .from("patch_job_sites")
@@ -147,7 +152,7 @@ export default function ScanReviewPage({ params }: PageProps) {
   })
 
   // Also try to get builder from mapping sheet data (alternative approach)
-  const { data: mappingSheetData } = useMappingSheetData(projectId)
+  const { data: mappingSheetData } = useMappingSheetData(isValidProjectId ? projectId : '')
   const builderFromMapping = useMemo(() => {
     return mappingSheetData?.contractorRoles.find(role => role.role === 'builder')
   }, [mappingSheetData])
@@ -205,6 +210,20 @@ export default function ScanReviewPage({ params }: PageProps) {
       return data || []
     },
   })
+
+  // Handle invalid project ID early
+  if (!isValidProjectId) {
+    return (
+      <div className="max-w-4xl mx-auto py-8 px-4">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Invalid project ID. This scan may need to be reviewed from the batch upload page or create a new project first.
+          </AlertDescription>
+        </Alert>
+      </div>
+    )
+  }
 
   if (scanError) {
     return (
