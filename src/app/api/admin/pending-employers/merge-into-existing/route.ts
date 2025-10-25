@@ -58,9 +58,16 @@ export async function POST(request: NextRequest) {
     const result = await mergePendingIntoExisting(supabase, params);
 
     if (!result.success) {
-      console.error('[merge-into-existing] Merge failed:', result.error);
+      console.error('[merge-into-existing] Merge failed:', {
+        error: result.error,
+        pendingEmployerId: params.pendingEmployerId,
+        existingEmployerId: params.existingEmployerId,
+      });
       return NextResponse.json({
-        error: result.error || 'Merge into existing failed'
+        error: result.error || 'Merge into existing failed',
+        details: result.error, // Return actual error for debugging
+        pendingEmployerId: params.pendingEmployerId,
+        existingEmployerId: params.existingEmployerId,
       }, { status: 500 });
     }
 

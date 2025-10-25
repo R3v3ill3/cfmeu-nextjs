@@ -145,10 +145,14 @@ export function PendingEmployersTable({
         }),
       });
 
-      if (!response.ok) throw new Error('Failed to merge');
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Merge API error response:', errorData);
+        throw new Error(errorData.details || errorData.error || 'Failed to merge');
+      }
 
       const result = await response.json();
-      
+
       toast({
         title: 'Employer merged successfully',
         description: `Merged into existing employer. ${result.projects_transferred} projects, ${result.trades_transferred} trades transferred.`,
@@ -157,8 +161,10 @@ export function PendingEmployersTable({
       completeReview('merged');
     } catch (error) {
       console.error('Error merging employers:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       toast({
         title: 'Failed to merge employers',
+        description: errorMessage,
         variant: 'destructive',
       });
     }

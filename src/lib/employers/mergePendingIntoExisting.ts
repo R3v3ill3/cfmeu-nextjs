@@ -42,8 +42,13 @@ export async function mergePendingIntoExisting(
       .eq('approval_status', 'pending')
       .single();
 
-    if (fetchError || !pendingEmployer) {
-      throw new Error('Pending employer not found or not pending');
+    if (fetchError) {
+      console.error('Error fetching pending employer:', fetchError);
+      throw new Error(`Pending employer fetch error: ${fetchError.message || JSON.stringify(fetchError)}`);
+    }
+
+    if (!pendingEmployer) {
+      throw new Error(`Pending employer not found with ID: ${pendingEmployerId}`);
     }
 
     // 2. Verify existing employer exists and is active
@@ -54,8 +59,13 @@ export async function mergePendingIntoExisting(
       .eq('approval_status', 'active')
       .single();
 
-    if (existingError || !existingEmployer) {
-      throw new Error('Existing employer not found or not active');
+    if (existingError) {
+      console.error('Error fetching existing employer:', existingError);
+      throw new Error(`Existing employer fetch error: ${existingError.message || JSON.stringify(existingError)}`);
+    }
+
+    if (!existingEmployer) {
+      throw new Error(`Existing employer not found or not active with ID: ${existingEmployerId}`);
     }
 
     // 3. Transfer project assignments
@@ -212,7 +222,16 @@ export async function mergePendingIntoExisting(
     };
 
   } catch (error) {
-    console.error('Error merging pending into existing employer:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    const errorDetails = error instanceof Error ? error.stack : String(error);
+
+    console.error('Error merging pending into existing employer:', {
+      message: errorMessage,
+      stack: errorDetails,
+      pendingEmployerId,
+      existingEmployerId,
+    });
+
     return {
       success: false,
       existing_employer_id: existingEmployerId,
@@ -221,7 +240,7 @@ export async function mergePendingIntoExisting(
       projects_transferred: 0,
       trades_transferred: 0,
       alias_created: false,
-      error: error instanceof Error ? error.message : 'Unknown error occurred',
+      error: errorMessage,
     };
   }
 }
