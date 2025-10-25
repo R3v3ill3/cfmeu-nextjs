@@ -627,17 +627,86 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
       />
 
       {/* Change Contractor Role Modal */}
-      {changingRoleId && mappingData?.contractorRoles.find(r => r.id === changingRoleId) && (
-        <SingleEmployerDialogPicker
-          label={`Change ${mappingData.contractorRoles.find(r => r.id === changingRoleId)?.roleLabel || 'Contractor'}`}
-          selectedId={mappingData.contractorRoles.find(r => r.id === changingRoleId)?.employerId || ''}
-          onChange={handleChangeRole}
-          prioritizedTag={mappingData.contractorRoles.find(r => r.id === changingRoleId)?.role === 'builder' ? 'builder' : 'head_contractor'}
-          triggerText="Select Employer"
-          isOpen={!!changingRoleId}
-          onClose={() => setChangingRoleId(null)}
-        />
-      )}
+      {changingRoleId && (() => {
+        const contractorRole = mappingData?.contractorRoles.find(r => r.id === changingRoleId);
+        if (!contractorRole) return null;
+
+        const filteredEmployers = allEmployers.filter(emp =>
+          emp.name.toLowerCase().includes(employerSearchTerm.toLowerCase())
+        );
+
+        return (
+          <Dialog
+            open={!!changingRoleId}
+            onOpenChange={(open) => {
+              if (!open) {
+                setChangingRoleId(null);
+                setEmployerSearchTerm('');
+              } else {
+                loadEmployers();
+              }
+            }}
+          >
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+              <DialogHeader>
+                <DialogTitle>Change {contractorRole.roleLabel}</DialogTitle>
+                <DialogDescription>
+                  Search and select a new employer for this role. Current: {contractorRole.employerName}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4 flex-1 overflow-hidden flex flex-col">
+                {/* Search Input */}
+                <div>
+                  <Label htmlFor="employer-search">Search Employers</Label>
+                  <div className="relative">
+                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="employer-search"
+                      placeholder="Search by company name..."
+                      value={employerSearchTerm}
+                      onChange={(e) => setEmployerSearchTerm(e.target.value)}
+                      className="pl-8"
+                      autoFocus
+                    />
+                  </div>
+                </div>
+
+                {/* Employer List */}
+                <div className="border rounded-lg flex-1 overflow-y-auto">
+                  {filteredEmployers.length === 0 ? (
+                    <div className="p-4 text-center text-gray-500">
+                      {employerSearchTerm ? 'No employers found. Try different search terms.' : 'Start typing to search employers.'}
+                    </div>
+                  ) : (
+                    <div className="divide-y">
+                      {filteredEmployers.slice(0, 50).map(emp => (
+                        <div
+                          key={emp.id}
+                          className="p-3 cursor-pointer transition-colors hover:bg-gray-50"
+                          onClick={() => handleChangeRole(emp.id)}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="font-medium">{emp.name}</div>
+                            {emp.enterprise_agreement_status && emp.enterprise_agreement_status !== 'no_eba' && (
+                              <Badge variant="secondary" className="text-xs">Has EBA</Badge>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      {filteredEmployers.length > 50 && (
+                        <div className="p-3 text-sm text-center text-muted-foreground">
+                          Showing first 50 results. Refine your search to see more.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
     </div>
   );
 }
