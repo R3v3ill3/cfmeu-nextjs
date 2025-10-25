@@ -1,12 +1,18 @@
-import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { normalizeEmployerName } from './normalize';
 import type { MergeIntoExistingParams, MergeIntoExistingResult } from '@/types/pendingEmployerReview';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@/types/database';
 
 /**
  * Merges a pending employer into an existing active employer
  * Transfers all associations and creates an alias for the pending name
+ *
+ * @param supabase - Supabase client instance (must be server-side client for API routes)
+ * @param params - Merge parameters including employer IDs and transfer options
+ * @returns Result object with success status and transfer counts
  */
 export async function mergePendingIntoExisting(
+  supabase: SupabaseClient<Database>,
   params: MergeIntoExistingParams
 ): Promise<MergeIntoExistingResult> {
   const {
@@ -17,8 +23,6 @@ export async function mergePendingIntoExisting(
     transferTrades = true,
     createAlias = true,
   } = params;
-
-  const supabase = getSupabaseBrowserClient();
   
   let jobsitesTransferred = 0;
   let projectsTransferred = 0;

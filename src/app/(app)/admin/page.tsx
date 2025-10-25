@@ -7,6 +7,7 @@ import { AddDraftUserDialog } from "@/components/admin/AddDraftUserDialog"
 import { PendingProjectsTable } from "@/components/admin/PendingProjectsTable"
 import { PendingEmployersTable } from "@/components/admin/PendingEmployersTable"
 import { PendingEmployerDuplicateDetector } from "@/components/admin/PendingEmployerDuplicateDetector"
+import { PendingProjectDuplicateDetector } from "@/components/admin/PendingProjectDuplicateDetector"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
@@ -344,10 +345,18 @@ export default function AdminPage() {
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <div className="mt-3 space-y-6">
-                      <div>
-                        <h3 className="text-base font-semibold mb-3">
+                      <div className="space-y-4">
+                        <h3 className="text-base font-semibold">
                           Pending Projects ({pendingProjects.length})
                         </h3>
+
+                        {/* Duplicate Detection */}
+                        <PendingProjectDuplicateDetector
+                          pendingCount={pendingProjects.length}
+                          onMergeComplete={fetchPendingItems}
+                        />
+
+                        {/* Pending Projects Table */}
                         <PendingProjectsTable
                           projects={pendingProjects}
                           onApprove={handleApproveProject}
@@ -553,10 +562,18 @@ export default function AdminPage() {
                 )}
               </div>
               <div className="space-y-8">
-                <div>
-                  <h4 className="text-base font-semibold mb-4">
+                <div className="space-y-4">
+                  <h4 className="text-base font-semibold">
                     Pending Projects ({pendingProjects.length})
                   </h4>
+
+                  {/* Duplicate Detection */}
+                  <PendingProjectDuplicateDetector
+                    pendingCount={pendingProjects.length}
+                    onMergeComplete={fetchPendingItems}
+                  />
+
+                  {/* Pending Projects Table */}
                   <PendingProjectsTable
                     projects={pendingProjects}
                     onApprove={handleApproveProject}

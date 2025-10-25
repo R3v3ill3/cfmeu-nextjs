@@ -15,12 +15,16 @@ import { useMappingSheetData } from "@/hooks/useMappingSheetData";
 import { AutoMatchIndicator } from "@/components/projects/mapping/AutoMatchIndicator";
 import { ShareLinkGenerator } from "./ShareLinkGenerator";
 import { UploadMappingSheetDialog } from "./UploadMappingSheetDialog";
-import { Upload } from "lucide-react";
+import { Upload, Check, X, RefreshCw, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigationLoading } from "@/hooks/useNavigationLoading";
 import { useRouter } from "next/navigation";
 import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal";
 import { LastVisitBadge } from "@/components/projects/LastVisitBadge";
+import { useQueryClient } from "@tanstack/react-query";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 
 type ProjectData = {
   id: string;
@@ -58,9 +62,13 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null);
   const [isEmployerDetailOpen, setIsEmployerDetailOpen] = useState(false);
+  const [changingRoleId, setChangingRoleId] = useState<string | null>(null);
+  const [employerSearchTerm, setEmployerSearchTerm] = useState('');
+  const [allEmployers, setAllEmployers] = useState<Array<{ id: string; name: string; enterprise_agreement_status?: string }>>([]);
   const { startNavigation } = useNavigationLoading();
   const router = useRouter();
-  
+  const queryClient = useQueryClient();
+
   // Get unified contractor data
   const { data: mappingData, isLoading: isLoadingContractors } = useMappingSheetData(projectData.id);
 
@@ -121,6 +129,123 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
       case 'idle':
       default:
         return <span>&nbsp;</span>; // Keep space to prevent layout shift
+    }
+  };
+
+  // Handler to confirm BCI auto-match
+  const handleConfirmMatch = async (contractorRoleId: string) => {
+    const assignmentId = contractorRoleId.replace('role_assignment:', '');
+
+    try {
+      const { error } = await supabase
+        .from('project_assignments')
+        .update({
+          match_status: 'confirmed',
+          confirmed_at: new Date().toISOString()
+        })
+        .eq('id', assignmentId);
+
+      if (error) throw error;
+
+      toast.success('Builder confirmed', {
+        description: 'BCI match has been confirmed'
+      });
+
+      // Refresh data
+      queryClient.invalidateQueries({ queryKey: ["mapping-sheet-data", projectData.id] });
+    } catch (error: any) {
+      toast.error('Failed to confirm match', {
+        description: error.message
+      });
+    }
+  };
+
+  // Load employers when change dialog is opened
+  const loadEmployers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('employers')
+        .select('id, name, enterprise_agreement_status')
+        .order('name');
+
+      if (error) throw error;
+      setAllEmployers(data || []);
+    } catch (error: any) {
+      toast.error('Failed to load employers', {
+        description: error.message
+      });
+    }
+  };
+
+  // Handler to change contractor role employer
+  const handleChangeRole = async (employerId: string) => {
+    if (!changingRoleId) return;
+
+    const contractorRole = mappingData?.contractorRoles.find(r => r.id === changingRoleId);
+    if (!contractorRole) return;
+
+    // Extract assignment ID
+    const assignmentId = changingRoleId.replace('role_assignment:', '');
+
+    try {
+      const { error } = await supabase
+        .from('project_assignments')
+        .update({
+          employer_id: employerId,
+          source: 'manual',
+          match_status: 'confirmed',
+          match_confidence: 1.0,
+          match_notes: null,
+          confirmed_at: new Date().toISOString()
+        })
+        .eq('id', assignmentId);
+
+      if (error) throw error;
+
+      toast.success(`${contractorRole.roleLabel} changed`, {
+        description: 'Contractor has been updated'
+      });
+
+      // Refresh data
+      queryClient.invalidateQueries({ queryKey: ["mapping-sheet-data", projectData.id] });
+      queryClient.invalidateQueries({ queryKey: ["project-detail", projectData.id] });
+
+      // Close dialog and reset search
+      setChangingRoleId(null);
+      setEmployerSearchTerm('');
+    } catch (error: any) {
+      toast.error('Failed to change contractor', {
+        description: error.message
+      });
+    }
+  };
+
+  // Handler to remove contractor role
+  const handleRemoveRole = async (contractorRoleId: string) => {
+    const assignmentId = contractorRoleId.replace('role_assignment:', '');
+    const contractorRole = mappingData?.contractorRoles.find(r => r.id === contractorRoleId);
+
+    if (!contractorRole) return;
+
+    try {
+      const { error } = await supabase
+        .from('project_assignments')
+        .delete()
+        .eq('id', assignmentId);
+
+      if (error) throw error;
+
+      toast.success(`${contractorRole.roleLabel} removed`, {
+        description: `${contractorRole.employerName} has been removed`
+      });
+
+      // Refresh data
+      queryClient.invalidateQueries({ queryKey: ["mapping-sheet-data", projectData.id] });
+      queryClient.invalidateQueries({ queryKey: ["project-detail", projectData.id] });
+    } catch (error: any) {
+      toast.error('Failed to remove contractor', {
+        description: error.message
+      });
     }
   };
 
@@ -210,8 +335,8 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
                         setIsEmployerDetailOpen(true);
                       }}
                       className={`rounded-none border-0 border-b border-black px-0 flex-1 text-left underline hover:text-primary ${
-                        contractor.matchStatus === 'auto_matched' 
-                          ? 'italic text-gray-500' 
+                        contractor.matchStatus === 'auto_matched'
+                          ? 'italic text-gray-500'
                           : ''
                       }`}
                     >
@@ -233,6 +358,38 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
                     />
                   )}
                 </div>
+                {/* Show action buttons for BCI matches that need review */}
+                {contractor.matchStatus === 'auto_matched' && (
+                  <div className="flex items-center gap-2 mt-2 no-print">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleConfirmMatch(contractor.id)}
+                      className="gap-1 h-7 text-xs"
+                    >
+                      <Check className="h-3 w-3" />
+                      Confirm
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setChangingRoleId(contractor.id)}
+                      className="gap-1 h-7 text-xs"
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                      Change
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleRemoveRole(contractor.id)}
+                      className="gap-1 h-7 text-xs hover:bg-red-50 hover:text-red-600 hover:border-red-300"
+                    >
+                      <X className="h-3 w-3" />
+                      Remove
+                    </Button>
+                  </div>
+                )}
               </div>
             ))}
             {mappingData?.contractorRoles.length === 0 && (
@@ -295,8 +452,8 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
                             setIsEmployerDetailOpen(true);
                           }}
                           className={`rounded-none border-0 border-b border-black px-0 flex-1 text-left underline hover:text-primary ${
-                            contractor.matchStatus === 'auto_matched' 
-                              ? 'italic text-gray-500' 
+                            contractor.matchStatus === 'auto_matched'
+                              ? 'italic text-gray-500'
                               : ''
                           }`}
                         >
@@ -329,6 +486,38 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
                         />
                       )}
                     </div>
+                    {/* Show action buttons for BCI matches that need review */}
+                    {contractor.matchStatus === 'auto_matched' && (
+                      <div className="flex items-center gap-2 mt-2 no-print">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleConfirmMatch(contractor.id)}
+                          className="gap-1 h-7 text-xs"
+                        >
+                          <Check className="h-3 w-3" />
+                          Confirm
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setChangingRoleId(contractor.id)}
+                          className="gap-1 h-7 text-xs"
+                        >
+                          <RefreshCw className="h-3 w-3" />
+                          Change
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleRemoveRole(contractor.id)}
+                          className="gap-1 h-7 text-xs hover:bg-red-50 hover:text-red-600 hover:border-red-300"
+                        >
+                          <X className="h-3 w-3" />
+                          Remove
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -436,6 +625,19 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
         onClose={() => setIsEmployerDetailOpen(false)}
         initialTab="overview"
       />
+
+      {/* Change Contractor Role Modal */}
+      {changingRoleId && mappingData?.contractorRoles.find(r => r.id === changingRoleId) && (
+        <SingleEmployerDialogPicker
+          label={`Change ${mappingData.contractorRoles.find(r => r.id === changingRoleId)?.roleLabel || 'Contractor'}`}
+          selectedId={mappingData.contractorRoles.find(r => r.id === changingRoleId)?.employerId || ''}
+          onChange={handleChangeRole}
+          prioritizedTag={mappingData.contractorRoles.find(r => r.id === changingRoleId)?.role === 'builder' ? 'builder' : 'head_contractor'}
+          triggerText="Select Employer"
+          isOpen={!!changingRoleId}
+          onClose={() => setChangingRoleId(null)}
+        />
+      )}
     </div>
   );
 }

@@ -249,28 +249,69 @@ export function EditProjectDialog({
         .eq("assignment_type", "contractor_role");
       if (delErr) throw delErr;
 
-      // Add builders using the RPC function
-      for (const builderId of builderIds) {
+      // Validate: prevent same employer being assigned to both builder and head contractor
+      if (headContractorId && builderIds.includes(headContractorId)) {
+        // If builder and head contractor are the same (common when no JV), only assign as builder
+        // The builder will also serve as head contractor logically
         const { error: builderErr } = await supabase.rpc('assign_contractor_role', {
           p_project_id: project.id,
-          p_employer_id: builderId,
-          p_role_code: 'builder',
-          p_company_name: 'Builder', // Will be looked up from employer
-          p_is_primary: true
-        });
-        if (builderErr) console.warn('Failed to assign builder:', builderErr);
-      }
-
-      // Add head contractor using the RPC function  
-      if (headContractorId) {
-        const { error: headErr } = await supabase.rpc('assign_contractor_role', {
-          p_project_id: project.id,
           p_employer_id: headContractorId,
-          p_role_code: 'head_contractor', 
-          p_company_name: 'Head Contractor', // Will be looked up from employer
-          p_is_primary: true
+          p_role_code: 'builder',
+          p_company_name: 'Builder',
+          p_is_primary: true,
+          p_source: 'manual',
+          p_match_confidence: 1.0,
+          p_match_notes: null
         });
-        if (headErr) throw headErr;
+        if (builderErr) throw builderErr;
+
+        // Assign other builders (if any)
+        for (const builderId of builderIds) {
+          if (builderId !== headContractorId) {
+            const { error: otherBuilderErr } = await supabase.rpc('assign_contractor_role', {
+              p_project_id: project.id,
+              p_employer_id: builderId,
+              p_role_code: 'builder',
+              p_company_name: 'Builder',
+              p_is_primary: false,
+              p_source: 'manual',
+              p_match_confidence: 1.0,
+              p_match_notes: null
+            });
+            if (otherBuilderErr) console.warn('Failed to assign builder:', otherBuilderErr);
+          }
+        }
+      } else {
+        // Normal case: separate builder(s) and head contractor
+        // Add builders using the RPC function
+        for (const builderId of builderIds) {
+          const { error: builderErr } = await supabase.rpc('assign_contractor_role', {
+            p_project_id: project.id,
+            p_employer_id: builderId,
+            p_role_code: 'builder',
+            p_company_name: 'Builder',
+            p_is_primary: true,
+            p_source: 'manual',
+            p_match_confidence: 1.0,
+            p_match_notes: null
+          });
+          if (builderErr) console.warn('Failed to assign builder:', builderErr);
+        }
+
+        // Add head contractor using the RPC function
+        if (headContractorId) {
+          const { error: headErr } = await supabase.rpc('assign_contractor_role', {
+            p_project_id: project.id,
+            p_employer_id: headContractorId,
+            p_role_code: 'head_contractor',
+            p_company_name: 'Head Contractor',
+            p_is_primary: true,
+            p_source: 'manual',
+            p_match_confidence: 1.0,
+            p_match_notes: null
+          });
+          if (headErr) throw headErr;
+        }
       }
     },
     onSuccess: () => {

@@ -17,6 +17,7 @@ import { ConfidenceIndicator } from './ConfidenceIndicator'
 import { EmployerMatchDialog } from './EmployerMatchDialog'
 import { FwcEbaSearchModal } from '@/components/employers/FwcEbaSearchModal'
 import { BatchEbaSearchModal } from './BatchEbaSearchModal'
+import { AddAdditionalEmployerModal } from './AddAdditionalEmployerModal'
 import { findBestEmployerMatch } from '@/utils/fuzzyMatching'
 import { useMappingSheetData } from '@/hooks/useMappingSheetData'
 import { toast } from 'sonner'
@@ -99,11 +100,15 @@ export function SubcontractorsReview({
   const [ebaSearchOpen, setEbaSearchOpen] = useState(false)
   const [batchEbaSearchOpen, setBatchEbaSearchOpen] = useState(false)
   const [selectedEbaEmployer, setSelectedEbaEmployer] = useState<{employerId: string, employerName: string} | null>(null)
-  
+
   // Inline editing state for "other" trades with missing company names
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editingCompanyName, setEditingCompanyName] = useState('')
   const [editingTradeName, setEditingTradeName] = useState('')
+
+  // Add additional employer state
+  const [addAdditionalOpen, setAddAdditionalOpen] = useState(false)
+  const [addAdditionalIndex, setAddAdditionalIndex] = useState<number | null>(null)
 
   // Fetch all employers for matching
   // NOTE: Removed the Supabase default row limit to ensure we get ALL employers
@@ -198,17 +203,55 @@ export function SubcontractorsReview({
   }, [extractedSubcontractors, allEmployers, mappingData]) // Removed confidence and decisions from deps
 
   // Notify parent (only when decisions actually change, not on every render)
+  // Flatten decisions: create separate decision for each employer to add
   useEffect(() => {
-    const processedDecisions = decisions.map(decision => ({
-      ...decision,
-      // Include information about existing employers to keep/remove
-      existingEmployersToKeep: decision.existingEmployers?.filter((e: any) => e.keepDecision) || [],
-      existingEmployersToRemove: decision.existingEmployers?.filter((e: any) => !e.keepDecision) || [],
-      // Only include scanned company if action is import or replace_one
-      importScannedCompany: ['import', 'replace_one'].includes(decision.action) && decision.matchedEmployer,
-    }))
-    
-    onDecisionsChange(processedDecisions)
+    const flattenedDecisions: any[] = []
+
+    decisions.forEach(decision => {
+      // 1. Add scanned company (if action is import or replace_one)
+      if (['import', 'replace_one'].includes(decision.action) && decision.matchedEmployer) {
+        flattenedDecisions.push({
+          ...decision,
+          existingEmployersToKeep: decision.existingEmployers?.filter((e: any) => e.keepDecision) || [],
+          existingEmployersToRemove: decision.existingEmployers?.filter((e: any) => !e.keepDecision) || [],
+          importScannedCompany: true,
+        })
+      } else {
+        // Skip action - still need to track existing employers
+        flattenedDecisions.push({
+          ...decision,
+          existingEmployersToKeep: decision.existingEmployers?.filter((e: any) => e.keepDecision) || [],
+          existingEmployersToRemove: decision.existingEmployers?.filter((e: any) => !e.keepDecision) || [],
+          importScannedCompany: false,
+        })
+      }
+
+      // 2. Add each additional employer as separate decision
+      decision.additionalEmployers?.forEach((addEmp: any) => {
+        flattenedDecisions.push({
+          trade: decision.trade,
+          stage: decision.stage,
+          trade_type_code: decision.trade_type_code,
+          company: addEmp.name,
+          matchedEmployer: {
+            id: addEmp.id,
+            name: addEmp.name,
+            confidence: 'exact'
+          },
+          status: addEmp.status,
+          action: 'import',
+          confidence: 1.0,
+          matchConfidence: 1.0,
+          needsReview: false,
+          isAdditionalAssignment: true,  // Flag for tracking
+          existingEmployers: [],
+          existingEmployersToKeep: [],
+          existingEmployersToRemove: [],
+        })
+      })
+    })
+
+    onDecisionsChange(flattenedDecisions)
   }, [decisions]) // Removed onDecisionsChange from deps to prevent infinite loop
 
   // Handle action change for subcontractor
@@ -337,6 +380,59 @@ export function SubcontractorsReview({
     setEditingTradeName('')
   }
 
+  // Handle opening add additional employer modal
+  const handleAddAdditional = (index: number) => {
+    setAddAdditionalIndex(index)
+    setAddAdditionalOpen(true)
+  }
+
+  // Handle confirming addition of employer
+  const handleConfirmAdditional = (employerId: string, employerName: string, status: TradeStatus) => {
+    if (addAdditionalIndex === null) return
+
+    setDecisions(prev => {
+      const updated = [...prev]
+      const decision = updated[addAdditionalIndex]
+
+      // Initialize additionalEmployers if not exists
+      if (!decision.additionalEmployers) {
+        decision.additionalEmployers = []
+      }
+
+      // Add new employer
+      decision.additionalEmployers.push({
+        id: employerId,
+        name: employerName,
+        status,
+        isNew: true
+      })
+
+      return updated
+    })
+
+    setAddAdditionalOpen(false)
+    setAddAdditionalIndex(null)
+
+    toast.success('Subcontractor added', {
+      description: `${employerName} will be added to ${decisions[addAdditionalIndex].trade}`
+    })
+  }
+
+  // Handle removing additional employer
+  const handleRemoveAdditional = (decisionIndex: number, additionalIndex: number) => {
+    const employerName = decisions[decisionIndex].additionalEmployers[additionalIndex].name
+
+    setDecisions(prev => {
+      const updated = [...prev]
+      updated[decisionIndex].additionalEmployers.splice(additionalIndex, 1)
+      return updated
+    })
+
+    toast.info('Subcontractor removed', {
+      description: `${employerName} will not be added`
+    })
+  }
+
   // Get list of employers that need EBA status updated to Active
   const employersNeedingEbaUpdate = decisions
     .filter(d => d.action === 'import' && d.shouldUpdateEbaStatus && d.matchedEmployer)
@@ -410,7 +506,8 @@ export function SubcontractorsReview({
                 <TableRow>
                   <TableHead className="min-w-[6rem]">Stage</TableHead>
                   <TableHead className="min-w-[8rem]">Trade</TableHead>
-                  <TableHead className="min-w-[12rem]">Current Employer</TableHead>
+                  <TableHead className="min-w-[12rem]">Current Employers</TableHead>
+                  <TableHead className="min-w-[12rem]">Additional to Add</TableHead>
                   <TableHead className="min-w-[10rem]">Scanned Company</TableHead>
                   <TableHead className="min-w-[12rem]">Matched Employer</TableHead>
                   <TableHead className="min-w-[10rem]">Action</TableHead>
@@ -477,7 +574,36 @@ export function SubcontractorsReview({
                         <span className="text-gray-400 italic">None assigned</span>
                       )}
                     </TableCell>
-                    
+
+                    {/* Additional Employers to Add */}
+                    <TableCell>
+                      {decision.additionalEmployers && decision.additionalEmployers.length > 0 ? (
+                        <div className="space-y-1">
+                          {decision.additionalEmployers.map((emp: any, empIndex: number) => (
+                            <div key={empIndex} className="flex items-center gap-2 p-2 bg-green-50 rounded border border-green-200">
+                              <Plus className="h-4 w-4 text-green-600 flex-shrink-0" />
+                              <span className="text-green-800 font-medium flex-1">{emp.name}</span>
+                              <Badge variant="outline" className="text-xs">{emp.status}</Badge>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleRemoveAdditional(index, empIndex)}
+                                className="h-6 w-6 p-0 hover:bg-red-100"
+                                title="Remove this subcontractor"
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          ))}
+                          <div className="text-xs text-green-600 mt-1 font-medium">
+                            +{decision.additionalEmployers.length} to be added
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 italic">None</span>
+                      )}
+                    </TableCell>
+
                     {/* Scanned Company */}
                     <TableCell>
                       {editingIndex === index ? (
@@ -664,6 +790,18 @@ export function SubcontractorsReview({
                                 <span className="truncate">Search EBA</span>
                               </Button>
                             )}
+
+                            {/* Add Additional Subcontractor button */}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleAddAdditional(index)}
+                              className="w-full gap-1"
+                              title="Add another employer to this trade (useful for tender stage with multiple contractors)"
+                            >
+                              <Plus className="h-3 w-3" />
+                              Add Subcontractor
+                            </Button>
                           </>
                         )}
                       </div>
@@ -713,6 +851,24 @@ export function SubcontractorsReview({
             setBatchEbaSearchOpen(false)
             // TODO: Refresh all employer data
           }}
+        />
+      )}
+
+      {/* Add Additional Employer Modal */}
+      {addAdditionalOpen && addAdditionalIndex !== null && (
+        <AddAdditionalEmployerModal
+          open={addAdditionalOpen}
+          onClose={() => {
+            setAddAdditionalOpen(false)
+            setAddAdditionalIndex(null)
+          }}
+          trade={decisions[addAdditionalIndex]?.trade || ''}
+          tradeCode={decisions[addAdditionalIndex]?.trade_type_code || ''}
+          allEmployers={allEmployers}
+          currentEmployers={decisions[addAdditionalIndex]?.existingEmployers?.map((e: any) => ({ id: e.id, name: e.name })) || []}
+          additionalEmployers={decisions[addAdditionalIndex]?.additionalEmployers?.map((e: any) => ({ id: e.id, name: e.name })) || []}
+          scannedEmployerId={decisions[addAdditionalIndex]?.matchedEmployer?.id || null}
+          onConfirm={handleConfirmAdditional}
         />
       )}
     </div>

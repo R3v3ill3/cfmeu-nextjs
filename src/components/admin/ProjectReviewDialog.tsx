@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -14,8 +14,12 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Check, X, AlertTriangle } from 'lucide-react'
+import { Check, X, AlertTriangle, Loader2, Building2, MapPin, DollarSign } from 'lucide-react'
 import { format } from 'date-fns'
+import { PendingProjectMatchSearch } from './PendingProjectMatchSearch'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
+import type { ProjectMatchSearchResult } from '@/types/pendingProjectReview'
 
 interface ProjectReviewDialogProps {
   open: boolean
@@ -37,6 +41,53 @@ export function ProjectReviewDialog({
   const [isApproving, setIsApproving] = useState(false)
   const [isRejecting, setIsRejecting] = useState(false)
   const [showRejectConfirm, setShowRejectConfirm] = useState(false)
+  const [showMatchSearch, setShowMatchSearch] = useState(false)
+  const [isLoadingDuplicates, setIsLoadingDuplicates] = useState(false)
+  const [duplicates, setDuplicates] = useState<ProjectMatchSearchResult[]>([])
+  const [duplicatesError, setDuplicatesError] = useState<string | null>(null)
+
+  // Auto-detect duplicates when dialog opens
+  useEffect(() => {
+    if (open && project) {
+      detectDuplicates()
+    }
+    if (!open) {
+      setDuplicates([])
+      setDuplicatesError(null)
+    }
+  }, [open, project])
+
+  const detectDuplicates = async () => {
+    setIsLoadingDuplicates(true)
+    setDuplicatesError(null)
+
+    try {
+      const response = await fetch(`/api/admin/pending-projects/search?q=${encodeURIComponent(project.name)}&limit=10`)
+
+      if (!response.ok) {
+        throw new Error('Failed to search for duplicates')
+      }
+
+      const data = await response.json()
+      setDuplicates(data.results || [])
+    } catch (err) {
+      console.error('Error detecting duplicates:', err)
+      setDuplicatesError(err instanceof Error ? err.message : 'Unknown error')
+    } finally {
+      setIsLoadingDuplicates(false)
+    }
+  }
+
+  const handleSelectExisting = (projectId: string) => {
+    // TODO: Implement merge into existing project
+    console.log('Selected existing project:', projectId)
+    setShowMatchSearch(false)
+  }
+
+  const handleCreateNew = () => {
+    setShowMatchSearch(false)
+    // Proceed with approval
+  }
 
   const handleApprove = async () => {
     setIsApproving(true)
@@ -114,14 +165,92 @@ export function ProjectReviewDialog({
           </TabsContent>
 
           <TabsContent value="duplicates">
-            <Alert>
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>
-                Duplicate detection not yet implemented. Manually verify this
-                project does not already exist in the system.
-              </AlertDescription>
-            </Alert>
-            {/* TODO: Implement duplicate detection logic */}
+            {isLoadingDuplicates ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                <span className="ml-3 text-muted-foreground">Checking for duplicates...</span>
+              </div>
+            ) : duplicatesError ? (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  Error checking for duplicates: {duplicatesError}
+                </AlertDescription>
+              </Alert>
+            ) : duplicates.length > 0 ? (
+              <div className="space-y-4">
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    Found {duplicates.length} potential duplicate project(s). Please review before approving.
+                  </AlertDescription>
+                </Alert>
+
+                <div className="space-y-2">
+                  {duplicates.map((duplicate) => (
+                    <Card key={duplicate.id} className="border-2 border-yellow-200">
+                      <CardContent className="p-4">
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="font-semibold">{duplicate.name}</h4>
+                            <Badge variant="secondary">
+                              {Math.round(duplicate.searchScore)}% match
+                            </Badge>
+                            {duplicate.matchType === 'name' && (
+                              <Badge variant="default" className="bg-green-600">
+                                Name Match
+                              </Badge>
+                            )}
+                            {duplicate.matchType === 'address' && (
+                              <Badge variant="secondary">Address Match</Badge>
+                            )}
+                            {duplicate.matchType === 'value' && (
+                              <Badge variant="outline">Value Match</Badge>
+                            )}
+                          </div>
+
+                          <div className="text-sm text-muted-foreground space-y-1">
+                            {duplicate.value !== null && (
+                              <div className="flex items-center gap-1">
+                                <DollarSign className="h-3 w-3" />
+                                ${duplicate.value.toLocaleString()}
+                              </div>
+                            )}
+                            {duplicate.main_job_site?.full_address && (
+                              <div className="flex items-center gap-1">
+                                <MapPin className="h-3 w-3" />
+                                {duplicate.main_job_site.full_address}
+                              </div>
+                            )}
+                            {duplicate.builder && (
+                              <div className="flex items-center gap-1">
+                                <Building2 className="h-3 w-3" />
+                                Builder: {duplicate.builder.name}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+
+                <Button
+                  variant="outline"
+                  onClick={() => setShowMatchSearch(true)}
+                  className="w-full"
+                >
+                  Search for More Matches
+                </Button>
+              </div>
+            ) : (
+              <Alert>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  No potential duplicates found. This project appears to be unique.
+                </AlertDescription>
+              </Alert>
+            )}
           </TabsContent>
         </Tabs>
 
@@ -208,6 +337,15 @@ export function ProjectReviewDialog({
             </DialogFooter>
           </div>
         )}
+
+        {/* Match Search Dialog */}
+        <PendingProjectMatchSearch
+          isOpen={showMatchSearch}
+          onClose={() => setShowMatchSearch(false)}
+          pendingProject={project}
+          onSelectExisting={handleSelectExisting}
+          onCreateNew={handleCreateNew}
+        />
       </DialogContent>
     </Dialog>
   )
