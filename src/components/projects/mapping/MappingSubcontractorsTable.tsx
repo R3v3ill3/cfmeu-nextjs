@@ -21,6 +21,7 @@ import { useKeyContractorTradesSet } from "@/hooks/useKeyContractorTrades";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { StatusSelectSimple } from "@/components/ui/StatusSelect";
 import { TradeStatus } from "@/components/ui/StatusBadge";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 type Row = {
   key: string; // stage|trade value
@@ -69,6 +70,9 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
   
   // Status filtering state
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed'>('all');
+
+  // EBA filtering state
+  const [ebaFilter, setEbaFilter] = useState<'all' | 'known_only' | 'unknown_only'>('all');
   
   // Get unified mapping data which includes trade contractors
   const { data: mappingData, isLoading } = useMappingSheetData(projectId);
@@ -439,37 +443,48 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
         {tradesForStage.map(trade => {
           const assignments = filteredRowsByTrade[trade.value] || [];
           if (assignments.length === 0) return null;
-          return assignments.map((row, index) => (
-            <TableRow key={row.key}>
-              <TableCell className={"w-56 " + (row.employer_id ? "bg-muted/20" : "")}>
-                {index === 0 ? row.trade_label : ''}
-              </TableCell>
-              <TableCell>
-                {companyCell(row)}
-              </TableCell>
-              <TableCell className="w-36">
-                {row.isSkeleton || !row.employer_id ? (
-                  <StatusBadge status="unknown" showLabel={false} size="sm" />
-                ) : (
-                  <StatusSelectSimple
-                    value={(row.status as TradeStatus) || 'active'}
-                    onChange={(status) => updateStatus(row, status)}
-                    size="sm"
-                  />
-                )}
-              </TableCell>
-              <TableCell className="w-40">{ebaCell(row)}</TableCell>
-              <TableCell className="w-20 text-center">
-                {row.employer_id && (
-                  <ComplianceIndicator
-                    projectId={projectId}
-                    employerId={row.employer_id}
-                    complianceData={complianceData}
-                  />
-                )}
-              </TableCell>
-            </TableRow>
-          ));
+          return assignments.map((row, index) => {
+            // Determine row background color based on EBA status
+            let rowBgClass = "";
+            if (row.employer_id && row.eba === true) {
+              rowBgClass = "bg-green-50/50"; // Light green for EBA active
+            } else if (row.employer_id && row.eba === false) {
+              rowBgClass = "bg-red-50/50"; // Light red for EBA false
+            }
+            // For EBA unknown (null) or no employer, use default background
+
+            return (
+              <TableRow key={row.key} className={rowBgClass}>
+                <TableCell className={"w-56 " + (row.employer_id ? "bg-muted/20" : "")}>
+                  {index === 0 ? row.trade_label : ''}
+                </TableCell>
+                <TableCell>
+                  {companyCell(row)}
+                </TableCell>
+                <TableCell className="w-36">
+                  {row.isSkeleton || !row.employer_id ? (
+                    <StatusBadge status="unknown" showLabel={false} size="sm" />
+                  ) : (
+                    <StatusSelectSimple
+                      value={(row.status as TradeStatus) || 'active'}
+                      onChange={(status) => updateStatus(row, status)}
+                      size="sm"
+                    />
+                  )}
+                </TableCell>
+                <TableCell className="w-40">{ebaCell(row)}</TableCell>
+                <TableCell className="w-20 text-center">
+                  {row.employer_id && (
+                    <ComplianceIndicator
+                      projectId={projectId}
+                      employerId={row.employer_id}
+                      complianceData={complianceData}
+                    />
+                  )}
+                </TableCell>
+              </TableRow>
+            );
+          });
         })}
       </>
     )
@@ -489,25 +504,42 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
     return acc;
   }, { total: 0, active: 0, completed: 0 });
 
-  // Apply status filter
+  // Apply status and EBA filters
   const filteredRowsByTrade = Object.entries(rowsByTrade).reduce((acc, [trade, rows]) => {
+    let filteredRows = rows;
+
+    // Apply status filter
     if (statusFilter === 'all') {
-      acc[trade] = rows;
+      filteredRows = rows;
     } else if (statusFilter === 'active') {
-      acc[trade] = rows.filter(r => {
+      filteredRows = rows.filter(r => {
         if (r.isSkeleton || !r.employer_id) return true; // Keep skeleton rows
         const status = r.status || 'active';
         return ['active', 'planned', 'tendering', 'not_yet_tendered', 'unknown', 'on_hold'].includes(status);
       });
     } else if (statusFilter === 'completed') {
-      acc[trade] = rows.filter(r => {
+      filteredRows = rows.filter(r => {
         if (r.isSkeleton || !r.employer_id) return false; // Hide skeleton rows
         return r.status === 'completed';
       });
     }
+
+    // Apply EBA filter
+    if (ebaFilter !== 'all') {
+      filteredRows = filteredRows.filter(r => {
+        if (r.isSkeleton || !r.employer_id) return false; // Hide skeleton rows for EBA filtering
+        if (ebaFilter === 'known_only') {
+          return r.eba !== null; // Show only rows with known EBA status (true or false)
+        } else if (ebaFilter === 'unknown_only') {
+          return r.eba === null; // Show only rows with unknown EBA status
+        }
+        return true;
+      });
+    }
+
     // Only include trade if it has rows
-    if (acc[trade].length > 0) {
-      return acc;
+    if (filteredRows.length > 0) {
+      acc[trade] = filteredRows;
     }
     return acc;
   }, {} as Record<string, Row[]>);
@@ -541,7 +573,30 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
               Completed ({statusCounts.completed})
             </Button>
           </div>
-          
+
+          {/* EBA Filter */}
+          <div className="flex items-center gap-2">
+            <Label className="text-sm font-medium">EBA Status:</Label>
+            <RadioGroup
+              value={ebaFilter}
+              onValueChange={(value) => setEbaFilter(value as 'all' | 'known_only' | 'unknown_only')}
+              className="flex flex-row gap-3"
+            >
+              <div className="flex items-center space-x-1">
+                <RadioGroupItem value="all" id="eba-all" className="w-3 h-3" />
+                <Label htmlFor="eba-all" className="text-sm cursor-pointer">All</Label>
+              </div>
+              <div className="flex items-center space-x-1">
+                <RadioGroupItem value="known_only" id="eba-known" className="w-3 h-3" />
+                <Label htmlFor="eba-known" className="text-sm cursor-pointer">Known</Label>
+              </div>
+              <div className="flex items-center space-x-1">
+                <RadioGroupItem value="unknown_only" id="eba-unknown" className="w-3 h-3" />
+                <Label htmlFor="eba-unknown" className="text-sm cursor-pointer">Unknown</Label>
+              </div>
+            </RadioGroup>
+          </div>
+
           {/* Key Contractors Filter */}
           <div className="flex items-center space-x-2">
             <Checkbox
