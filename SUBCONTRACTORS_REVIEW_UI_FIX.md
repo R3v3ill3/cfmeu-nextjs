@@ -1,10 +1,14 @@
 # Subcontractors Review UI Fix - Implementation Summary
 
+**Status:** ⚠️ SUPERSEDED - See `SUBCONTRACTORS_STICKY_COLUMN_REFINEMENT.md` for refined solution
+
 **Issue:** Search and EBA buttons partially off-screen or disappearing in Subcontractors Review table
 
 **Root Cause:** Wide table with 10 columns overflowing viewport, pushing Actions column off-screen
 
-**Solution:** Sticky Actions column + accessibility improvements
+**Original Solution:** Sticky Actions column + accessibility improvements (caused black overlay in dark mode)
+
+**Refined Solution:** Theme-aware sticky column with border separator (see refinement doc)
 
 ---
 

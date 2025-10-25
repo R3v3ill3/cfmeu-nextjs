@@ -417,7 +417,7 @@ export function SubcontractorsReview({
                   <TableHead className="min-w-[8rem]">Status</TableHead>
                   <TableHead className="min-w-[4rem]">EBA</TableHead>
                   <TableHead className="min-w-[6rem]">Confidence</TableHead>
-                  <TableHead className="sticky right-0 bg-white dark:bg-slate-950 min-w-[13rem] shadow-[-2px_0_4px_rgba(0,0,0,0.1)] z-10">Actions</TableHead>
+                  <TableHead className="sticky right-0 bg-white min-w-[13rem] border-l border-gray-200 z-10">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -596,7 +596,7 @@ export function SubcontractorsReview({
                     </TableCell>
                     
                     {/* Actions */}
-                    <TableCell className="sticky right-0 bg-white dark:bg-slate-950 min-w-[13rem] shadow-[-2px_0_4px_rgba(0,0,0,0.1)] z-10">
+                    <TableCell className={`sticky right-0 min-w-[13rem] border-l border-gray-200 z-10 ${decision.needsReview ? 'bg-yellow-50' : 'bg-white'}`}>
                       <div className="space-y-1">
                         {editingIndex === index ? (
                           <>
