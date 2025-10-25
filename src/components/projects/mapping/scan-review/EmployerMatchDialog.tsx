@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -184,6 +184,9 @@ export function EmployerMatchDialog({
             <Building2 className="h-5 w-5" />
             Match Employer for "{companyName}"
           </DialogTitle>
+          <DialogDescription>
+            Search and match the scanned company to an existing employer, or create a new employer record
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -71,6 +71,9 @@ export function BatchEbaSearchModal({
               <FileSearch className="h-5 w-5" />
               Batch EBA Search ({currentEmployerIndex + 1} of {employers.length})
             </DialogTitle>
+            <DialogDescription>
+              Search and link Enterprise Bargaining Agreement details from Fair Work Commission database for employers that need EBA status updates
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">

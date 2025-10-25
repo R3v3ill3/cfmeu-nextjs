@@ -404,20 +404,20 @@ export function SubcontractorsReview({
           <CardTitle>Subcontractors</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <Table className="table-auto w-full">
+          <div className="overflow-x-auto max-w-full relative">
+            <Table className="w-full">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-24">Stage</TableHead>
-                  <TableHead className="w-32">Trade</TableHead>
-                  <TableHead className="w-48">Current Employer</TableHead>
-                  <TableHead className="w-40">Scanned Company</TableHead>
-                  <TableHead className="w-48">Matched Employer</TableHead>
-                  <TableHead className="w-40">Action</TableHead>
-                  <TableHead className="w-32">Status</TableHead>
-                  <TableHead className="w-16">EBA</TableHead>
-                  <TableHead className="w-24">Confidence</TableHead>
-                  <TableHead className="min-w-[200px]">Actions</TableHead>
+                  <TableHead className="min-w-[6rem]">Stage</TableHead>
+                  <TableHead className="min-w-[8rem]">Trade</TableHead>
+                  <TableHead className="min-w-[12rem]">Current Employer</TableHead>
+                  <TableHead className="min-w-[10rem]">Scanned Company</TableHead>
+                  <TableHead className="min-w-[12rem]">Matched Employer</TableHead>
+                  <TableHead className="min-w-[10rem]">Action</TableHead>
+                  <TableHead className="min-w-[8rem]">Status</TableHead>
+                  <TableHead className="min-w-[4rem]">EBA</TableHead>
+                  <TableHead className="min-w-[6rem]">Confidence</TableHead>
+                  <TableHead className="sticky right-0 bg-white dark:bg-slate-950 min-w-[13rem] shadow-[-2px_0_4px_rgba(0,0,0,0.1)] z-10">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -596,7 +596,7 @@ export function SubcontractorsReview({
                     </TableCell>
                     
                     {/* Actions */}
-                    <TableCell className="min-w-[200px]">
+                    <TableCell className="sticky right-0 bg-white dark:bg-slate-950 min-w-[13rem] shadow-[-2px_0_4px_rgba(0,0,0,0.1)] z-10">
                       <div className="space-y-1">
                         {editingIndex === index ? (
                           <>
