@@ -47,10 +47,12 @@ export function ScanReviewContainer({
   const { startNavigation } = useNavigationLoading()
   const [activeTab, setActiveTab] = useState('project')
   const [isImporting, setIsImporting] = useState(false)
+  const [isSavingDraft, setIsSavingDraft] = useState(false)
   const [duplicateCheck, setDuplicateCheck] = useState<any>(null)
   const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false)
   const [allowProceed, setAllowProceed] = useState(false)
   const [linkedProjectId, setLinkedProjectId] = useState<string | null>(null)
+  const [draftLoaded, setDraftLoaded] = useState(false)
 
   const extractedData: ExtractedMappingSheetData =
     (scanData.extracted_data as ExtractedMappingSheetData | null) ?? {
@@ -76,9 +78,39 @@ export function ScanReviewContainer({
   const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set(['project'])) // Start with project tab visited
 
   // Check if all tabs have been visited
-  const allTabsVisited = visitedTabs.has('project') && 
-                         visitedTabs.has('contacts') && 
+  const allTabsVisited = visitedTabs.has('project') &&
+                         visitedTabs.has('contacts') &&
                          visitedTabs.has('subcontractors')
+
+  // Load from draft state if available (runs once on mount)
+  useEffect(() => {
+    if (draftLoaded) return // Already loaded
+
+    const reviewData = scanData.review_data as any
+    if (reviewData) {
+      console.log('[scan-review] Loading saved draft from review_data')
+
+      // Restore decisions from draft
+      if (reviewData.projectDecisions) {
+        setProjectDecisions(reviewData.projectDecisions)
+      }
+      if (reviewData.contactsDecisions) {
+        setContactsDecisions(reviewData.contactsDecisions)
+      }
+      if (reviewData.subcontractorDecisions) {
+        setSubcontractorDecisions(reviewData.subcontractorDecisions)
+      }
+      if (reviewData.visitedTabs && Array.isArray(reviewData.visitedTabs)) {
+        setVisitedTabs(new Set(reviewData.visitedTabs))
+      }
+
+      toast.info('Loaded saved progress', {
+        description: reviewData.savedAt ? `Saved ${new Date(reviewData.savedAt).toLocaleString()}` : undefined
+      })
+    }
+
+    setDraftLoaded(true)
+  }, [scanData.review_data, draftLoaded])
 
   // Update scan status to under_review when component mounts
   useEffect(() => {
@@ -93,6 +125,45 @@ export function ScanReviewContainer({
         .then()
     }
   }, [scanData.id, scanData.status])
+
+  // Auto-save draft every 30 seconds
+  useEffect(() => {
+    if (!draftLoaded) return // Wait until initial load complete
+
+    const saveDraft = async () => {
+      try {
+        setIsSavingDraft(true)
+
+        const draftData = {
+          projectDecisions,
+          contactsDecisions,
+          subcontractorDecisions,
+          visitedTabs: Array.from(visitedTabs),
+          savedAt: new Date().toISOString()
+        }
+
+        const { error } = await supabase
+          .from('mapping_sheet_scans')
+          .update({ review_data: draftData })
+          .eq('id', scanData.id)
+
+        if (error) {
+          console.error('[scan-review] Auto-save failed:', error)
+        } else {
+          console.log('[scan-review] Auto-saved draft')
+        }
+      } catch (error) {
+        console.error('[scan-review] Auto-save error:', error)
+      } finally {
+        setIsSavingDraft(false)
+      }
+    }
+
+    // Auto-save every 30 seconds
+    const interval = setInterval(saveDraft, 30000)
+
+    return () => clearInterval(interval)
+  }, [draftLoaded, projectDecisions, contactsDecisions, subcontractorDecisions, visitedTabs, scanData.id])
 
   // Check for duplicate project names when creating new project
   useEffect(() => {
@@ -131,13 +202,50 @@ export function ScanReviewContainer({
     checkDuplicates()
   }, [allowProjectCreation, projectDecisions.name, extractedData.project?.project_name, projectData?.name])
 
-  const handleCancel = () => {
+  const handleCancel = async () => {
     if (allowProjectCreation && onCancel) {
       onCancel()
       return
     }
 
-    // If part of batch upload, go back to batch detail page
+    // Save draft before navigating
+    try {
+      setIsSavingDraft(true)
+
+      const draftData = {
+        projectDecisions,
+        contactsDecisions,
+        subcontractorDecisions,
+        visitedTabs: Array.from(visitedTabs),
+        savedAt: new Date().toISOString()
+      }
+
+      console.log('[scan-review] Saving draft before navigation')
+
+      const { error } = await supabase
+        .from('mapping_sheet_scans')
+        .update({
+          status: 'under_review',
+          review_data: draftData,
+          review_started_at: scanData.review_started_at || new Date().toISOString()
+        })
+        .eq('id', scanData.id)
+
+      if (error) {
+        console.error('[scan-review] Failed to save draft:', error)
+        toast.error('Failed to save progress')
+      } else {
+        console.log('[scan-review] Draft saved successfully')
+        toast.success('Progress saved!')
+      }
+    } catch (error) {
+      console.error('[scan-review] Error saving draft:', error)
+      toast.error('Failed to save progress')
+    } finally {
+      setIsSavingDraft(false)
+    }
+
+    // Navigate away
     if (scanData.batch_id) {
       startNavigation(`/projects/batches/${scanData.batch_id}`)
       setTimeout(() => router.push(`/projects/batches/${scanData.batch_id}`), 50)
@@ -278,6 +386,18 @@ export function ScanReviewContainer({
       toast.success('Import completed successfully!', {
         description: descriptionParts.join(' • '),
       })
+
+      // Clear draft data after successful import
+      try {
+        console.log('[scan-review] Clearing draft data after successful import')
+        await supabase
+          .from('mapping_sheet_scans')
+          .update({ review_data: null })
+          .eq('id', scanData.id)
+      } catch (error) {
+        console.error('[scan-review] Failed to clear draft data:', error)
+        // Don't block navigation if this fails
+      }
 
       if (allowProjectCreation && result.projectId) {
         startNavigation(`/projects/${result.projectId}`)
@@ -454,8 +574,21 @@ export function ScanReviewContainer({
               Reject Scan
             </Button>
             <div className="flex items-center gap-3">
-              <Button variant="outline" onClick={handleCancel} disabled={isImporting}>
-                {allowProjectCreation ? 'Cancel' : 'Save & Continue Later'}
+              {isSavingDraft && (
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <span>Saving...</span>
+                </div>
+              )}
+              <Button variant="outline" onClick={handleCancel} disabled={isImporting || isSavingDraft}>
+                {isSavingDraft ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  allowProjectCreation ? 'Cancel' : 'Save & Continue Later'
+                )}
               </Button>
               <Button
                 onClick={handleConfirmImport}

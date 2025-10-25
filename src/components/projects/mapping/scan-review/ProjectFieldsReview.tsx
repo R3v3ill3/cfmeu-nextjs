@@ -655,7 +655,7 @@ export function ProjectFieldsReview({
               {config.type === 'date' ? (
                 <DateInput
                   value={decision.value || ''}
-                  onChange={(value) => handleDecisionChange(config.existingKey, 'custom', value)}
+                  onChange={(e) => handleDecisionChange(config.existingKey, 'custom', e.target.value)}
                   className={decision.error ? 'border-red-500' : ''}
                 />
               ) : config.type === 'boolean' ? (

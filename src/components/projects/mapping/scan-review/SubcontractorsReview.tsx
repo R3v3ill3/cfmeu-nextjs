@@ -298,7 +298,7 @@ export function SubcontractorsReview({
 
   const handleSaveEdit = async (index: number) => {
     if (!editingCompanyName.trim()) {
-      toast({ title: 'Please enter a company name', variant: 'destructive' })
+      toast.error('Please enter a company name')
       return
     }
 
@@ -323,11 +323,11 @@ export function SubcontractorsReview({
     setEditingIndex(null)
     setEditingCompanyName('')
     setEditingTradeName('')
-    
+
     if (match) {
-      toast({ title: 'Match found', description: `Matched to: ${match.name}` })
+      toast.success('Match found', { description: `Matched to: ${match.name}` })
     } else {
-      toast({ title: 'No match found', description: 'You can manually search for the employer' })
+      toast.info('No match found', { description: 'You can manually search for the employer' })
     }
   }
 
