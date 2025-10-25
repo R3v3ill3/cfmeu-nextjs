@@ -17,6 +17,16 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
+    // Prevent merging an employer into itself
+    if (params.pendingEmployerId === params.existingEmployerId) {
+      console.error('[merge-into-existing] Cannot merge employer into itself:', params.pendingEmployerId);
+      return NextResponse.json({
+        error: 'Cannot merge an employer into itself. Please select a different existing employer.',
+        pendingEmployerId: params.pendingEmployerId,
+        existingEmployerId: params.existingEmployerId,
+      }, { status: 400 });
+    }
+
     // Create server-side Supabase client
     const supabase = await createServerSupabase();
     const { data: { user }, error: authError } = await supabase.auth.getUser();

@@ -217,10 +217,20 @@ export async function POST(request: NextRequest) {
     console.log(`[analyze] Claude response (${processingTime}ms):`, responseText.substring(0, 200))
     console.log(`[analyze] Full Claude response:`, responseText)
 
-    // Parse JSON response (handle markdown code blocks)
+    // Parse JSON response (handle markdown code blocks with explanatory text before them)
     let jsonText = responseText.trim()
-    if (jsonText.startsWith('```')) {
-      jsonText = jsonText.replace(/^```(?:json)?\n/, '').replace(/\n```$/, '')
+
+    // Extract JSON from markdown code block if present
+    const codeBlockMatch = jsonText.match(/```(?:json)?\s*\n([\s\S]*?)\n```/)
+    if (codeBlockMatch) {
+      jsonText = codeBlockMatch[1].trim()
+    } else {
+      // Fallback: try to find JSON object boundaries
+      const firstBrace = jsonText.indexOf('{')
+      const lastBrace = jsonText.lastIndexOf('}')
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        jsonText = jsonText.substring(firstBrace, lastBrace + 1)
+      }
     }
 
     let analysis: AnalysisResult
@@ -230,11 +240,13 @@ export async function POST(request: NextRequest) {
     } catch (parseError) {
       console.error('[analyze] Failed to parse Claude response:', parseError)
       console.error('[analyze] Raw response:', responseText)
+      console.error('[analyze] Attempted to parse:', jsonText.substring(0, 500))
       return NextResponse.json(
         {
           error: 'Failed to parse AI response',
           details: parseError instanceof Error ? parseError.message : 'Unknown error',
           rawResponse: responseText.substring(0, 500),
+          attemptedParse: jsonText.substring(0, 500),
         },
         { status: 500 }
       )

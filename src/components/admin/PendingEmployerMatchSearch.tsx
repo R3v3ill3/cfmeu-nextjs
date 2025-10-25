@@ -28,8 +28,11 @@ export function PendingEmployerMatchSearch({
 }: PendingEmployerMatchSearchProps) {
   const [searchTerm, setSearchTerm] = useState('');
 
-  const [{ results, isSearching, hasSearched, error }, { search, clear }] =
+  const [{ results: rawResults, isSearching, hasSearched, error }, { search, clear }] =
     useAliasAwareEmployerSearch({ limit: 40, includeAliases: true, aliasMatchMode: 'any' });
+
+  // Filter out the pending employer itself from results
+  const results = rawResults.filter(result => result.id !== pendingEmployer.id);
 
   // Initialize search with pending employer name
   useEffect(() => {
