@@ -23,13 +23,17 @@ export async function mergePendingIntoExisting(
     transferTrades = true,
     createAlias = true,
   } = params;
-  
+
   let jobsitesTransferred = 0;
   let projectsTransferred = 0;
   let tradesTransferred = 0;
   let aliasCreated = false;
 
   try {
+    // Get user ID once at the beginning (important for serverless environments)
+    const { data: { user } } = await supabase.auth.getUser();
+    const userId = user?.id || null;
+
     // 1. Get pending employer details
     const { data: pendingEmployer, error: fetchError } = await supabase
       .from('employers')
@@ -133,7 +137,7 @@ export async function mergePendingIntoExisting(
     // 6. Create employer alias for the pending name
     if (createAlias && pendingEmployer.name !== existingEmployer.name) {
       const normalized = normalizeEmployerName(pendingEmployer.name);
-      
+
       const { error: aliasError } = await supabase
         .from('employer_aliases')
         .upsert({
@@ -143,12 +147,15 @@ export async function mergePendingIntoExisting(
           source_system: 'pending_employer_merge',
           source_identifier: pendingEmployerId,
           collected_at: new Date().toISOString(),
-          collected_by: (await supabase.auth.getUser()).data.user?.id || null,
+          collected_by: userId,
           notes: `Merged from pending employer review`,
         }, {
           onConflict: 'employer_id,alias_normalized'
         });
 
+      if (aliasError) {
+        console.error('Error creating employer alias:', aliasError);
+      }
       aliasCreated = !aliasError;
     }
 
@@ -158,23 +165,24 @@ export async function mergePendingIntoExisting(
       .update({
         approval_status: 'rejected',
         rejection_reason: `Merged into existing employer: ${existingEmployer.name} (ID: ${existingEmployerId})`,
-        approved_by: (await supabase.auth.getUser()).data.user?.id || null,
+        approved_by: userId,
         approved_at: new Date().toISOString(),
       })
       .eq('id', pendingEmployerId);
 
     if (updateError) {
+      console.error('Error updating pending employer status:', updateError);
       throw new Error(`Failed to update pending employer: ${updateError.message}`);
     }
 
     // 8. Record in approval history
-    await supabase
+    const { error: historyError } = await supabase
       .from('approval_history')
       .insert({
         entity_type: 'employer',
         entity_id: pendingEmployerId,
         action: 'rejected',
-        performed_by: (await supabase.auth.getUser()).data.user?.id || null,
+        performed_by: userId,
         previous_status: 'pending',
         new_status: 'rejected',
         reason: `Merged into existing employer: ${existingEmployer.name}`,
@@ -187,6 +195,11 @@ export async function mergePendingIntoExisting(
           alias_created: aliasCreated,
         },
       });
+
+    if (historyError) {
+      console.error('Error recording approval history:', historyError);
+      // Don't throw - approval history is not critical
+    }
 
     return {
       success: true,
