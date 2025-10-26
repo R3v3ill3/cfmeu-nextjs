@@ -409,12 +409,12 @@ export function EmployersDesktopView() {
           </div>
           <div className="w-40">
             <div className="text-xs text-muted-foreground mb-1">Rating</div>
-            <Select value={sp.get("rating") || ""} onValueChange={(v) => setParam("rating", v)}>
+            <Select value={sp.get("rating") || undefined} onValueChange={(v) => setParam("rating", v || undefined)}>
               <SelectTrigger>
                 <SelectValue placeholder="All ratings" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All ratings</SelectItem>
+                <SelectItem value={undefined}>All ratings</SelectItem>
                 <SelectItem value="green">Green</SelectItem>
                 <SelectItem value="amber">Amber</SelectItem>
                 <SelectItem value="yellow">Yellow</SelectItem>
