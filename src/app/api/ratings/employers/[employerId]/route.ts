@@ -21,8 +21,8 @@ export async function GET(request: NextRequest, { params }: { params: { employer
       headers: {
         'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
         'Content-Type': 'application/json',
-        'X-Data-Source': 'production-fix',
-        'X-Status': 'working-implementation',
+        'X-Data-Source': 'production-fix-v2',
+        'X-Status': 'working-implementation-cleared-cache',
         'X-Employer-ID': employerId,
         'X-Timestamp': new Date().toISOString()
       }
