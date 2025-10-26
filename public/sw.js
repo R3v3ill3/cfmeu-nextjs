@@ -1,10 +1,13 @@
 // Service Worker for CFMEU Employer Rating System PWA
-// Version 1.0.0
+// Enhanced with Mobile Performance Optimizations
+// Version 2.0.0
 
-const CACHE_NAME = 'cfmeu-ratings-v1.0.0'
-const STATIC_CACHE = 'cfmeu-static-v1.0.0'
-const API_CACHE = 'cfmeu-api-v1.0.0'
-const DYNAMIC_CACHE = 'cfmeu-dynamic-v1.0.0'
+const CACHE_NAME = 'cfmeu-ratings-v2.0.0'
+const STATIC_CACHE = 'cfmeu-static-v2.0.0'
+const API_CACHE = 'cfmeu-api-v2.0.0'
+const DYNAMIC_CACHE = 'cfmeu-dynamic-v2.0.0'
+const MOBILE_CACHE = 'cfmeu-mobile-v2.0.0'
+const CRITICAL_DATA_CACHE = 'cfmeu-critical-v2.0.0'
 
 // Critical assets to cache immediately
 const STATIC_ASSETS = [
@@ -30,29 +33,60 @@ const API_ENDPOINTS = [
   '/api/employers/eba-quick-list'
 ]
 
-// Install event - cache static assets
+// Critical mobile endpoints for offline access
+const CRITICAL_MOBILE_APIS = [
+  '/api/employers/quick-list',
+  '/api/projects/quick-list',
+  '/api/eba/quick-list',
+  '/api/employers/bulk-aliases'
+]
+
+// Mobile-specific assets
+const MOBILE_ASSETS = [
+  '/mobile/ratings',
+  '/mobile/projects',
+  '/mobile/employers',
+  '/manifest.json',
+  '/_next/static/chunks/framework-*.js',
+  '_next/static/chunks/main-*.js'
+]
+
+// Install event - cache static assets and critical mobile data
 self.addEventListener('install', (event) => {
-  console.log('[SW] Installing service worker v1.0.0')
+  console.log('[SW] Installing service worker v2.0.0')
 
   event.waitUntil(
-    caches.open(STATIC_CACHE)
-      .then((cache) => {
-        console.log('[SW] Caching static assets')
-        return cache.addAll(STATIC_ASSETS)
-      })
+    Promise.all([
+      // Cache static assets
+      caches.open(STATIC_CACHE)
+        .then((cache) => {
+          console.log('[SW] Caching static assets')
+          return cache.addAll(STATIC_ASSETS)
+        }),
+
+      // Cache mobile-specific assets
+      caches.open(MOBILE_CACHE)
+        .then((cache) => {
+          console.log('[SW] Caching mobile assets')
+          return cache.addAll(MOBILE_ASSETS.filter(asset => !asset.includes('*')))
+        }),
+
+      // Pre-cache critical mobile data for offline access
+      preCacheCriticalMobileData()
+    ])
       .then(() => {
-        console.log('[SW] Static assets cached successfully')
+        console.log('[SW] Mobile optimization caches ready')
         return self.skipWaiting()
       })
       .catch((error) => {
-        console.error('[SW] Failed to cache static assets:', error)
+        console.error('[SW] Failed to cache mobile assets:', error)
       })
   )
 })
 
 // Activate event - clean up old caches
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activating service worker v1.0.0')
+  console.log('[SW] Activating service worker v2.0.0')
 
   event.waitUntil(
     caches.keys()
@@ -61,7 +95,9 @@ self.addEventListener('activate', (event) => {
           cacheNames.map((cacheName) => {
             if (cacheName !== STATIC_CACHE &&
                 cacheName !== API_CACHE &&
-                cacheName !== DYNAMIC_CACHE) {
+                cacheName !== DYNAMIC_CACHE &&
+                cacheName !== MOBILE_CACHE &&
+                cacheName !== CRITICAL_DATA_CACHE) {
               console.log('[SW] Deleting old cache:', cacheName)
               return caches.delete(cacheName)
             }
@@ -69,7 +105,7 @@ self.addEventListener('activate', (event) => {
         )
       })
       .then(() => {
-        console.log('[SW] Service worker activated')
+        console.log('[SW] Mobile-optimized service worker activated')
         return self.clients.claim()
       })
   )
@@ -337,7 +373,7 @@ self.addEventListener('notificationclick', (event) => {
   }
 })
 
-// Fetch event - handle all network requests
+// Fetch event - handle all network requests with mobile optimizations
 self.addEventListener('fetch', (event) => {
   const { request } = event
   const url = new URL(request.url)
@@ -351,9 +387,30 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // API requests - network first
+  // Detect mobile user agent for optimizations
+  const isMobile = request.headers.get('user-agent')?.includes('Mobile')
+  const isSlowConnection = request.headers.get('X-Connection-Speed') === 'slow'
+
+  // Critical mobile APIs - network first with longer cache for slow connections
+  if (CRITICAL_MOBILE_APIS.some(api => url.pathname.startsWith(api))) {
+    if (isSlowConnection) {
+      event.respondWith(cacheFirstWithLongTTL(request))
+    } else {
+      event.respondWith(networkFirstWithMobileOptimization(request))
+    }
+    return
+  }
+
+  // API requests - network first with mobile optimizations
   if (url.pathname.startsWith('/api/')) {
-    event.respondWith(networkFirst(request))
+    event.respondWith(networkFirstWithMobileOptimization(request))
+    return
+  }
+
+  // Mobile routes - cache first for offline navigation
+  if (url.pathname.startsWith('/mobile/') ||
+      url.pathname.includes('/mobile/')) {
+    event.respondWith(cacheFirstForMobile(request))
     return
   }
 
@@ -376,8 +433,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Dynamic content - stale while revalidate
-  if (url.pathname.startsWith('/mobile/') ||
-      url.pathname === '/' ||
+  if (url.pathname === '/' ||
       url.pathname.includes('/ratings')) {
     event.respondWith(staleWhileRevalidate(request))
     return
@@ -518,4 +574,364 @@ async function cleanupCache() {
   }
 }
 
-console.log('[SW] Service worker script loaded')
+// Mobile-optimized caching strategies
+
+// Pre-cache critical mobile data
+async function preCacheCriticalMobileData() {
+  console.log('[SW] Pre-caching critical mobile data...')
+
+  try {
+    const cache = await caches.open(CRITICAL_DATA_CACHE)
+
+    // Cache critical mobile APIs with mobile-optimized parameters
+    const criticalDataPromises = CRITICAL_MOBILE_APIS.map(async (api) => {
+      try {
+        const response = await fetch(`${api}?mobile=true&optimized=true&limit=50`, {
+          headers: {
+            'Cache-Control': 'max-age=3600',
+            'Mobile-Optimized': 'true',
+            'X-Mobile-Cache': 'critical'
+          }
+        })
+
+        if (response.ok) {
+          await cache.put(api, response.clone())
+          console.log(`[SW] Cached critical mobile data: ${api}`)
+        }
+      } catch (error) {
+        console.warn(`[SW] Failed to cache ${api}:`, error)
+      }
+    })
+
+    await Promise.all(criticalDataPromises)
+    console.log('[SW] Critical mobile data caching complete')
+  } catch (error) {
+    console.error('[SW] Failed to pre-cache critical mobile data:', error)
+  }
+}
+
+// Network first with mobile optimization
+async function networkFirstWithMobileOptimization(request) {
+  const cache = await caches.open(API_CACHE)
+
+  try {
+    console.log('[SW] Network-first (mobile optimized):', request.url)
+
+    // Add mobile optimization headers
+    const mobileHeaders = {
+      'Mobile-Optimized': 'true',
+      'X-Connection-Speed': 'detect',
+      'Accept-Encoding': 'gzip, deflate, br'
+    }
+
+    const networkResponse = await fetch(request, {
+      headers: {
+        ...Object.fromEntries(request.headers.entries()),
+        ...mobileHeaders
+      }
+    })
+
+    // Cache successful responses with mobile-specific TTL
+    if (networkResponse.ok) {
+      const responseClone = networkResponse.clone()
+      const cacheControl = request.url.includes('quick-list')
+        ? 'max-age=1800' // 30 minutes for quick lists
+        : 'max-age=600'  // 10 minutes for other APIs
+
+      const modifiedResponse = new Response(responseClone.body, {
+        status: responseClone.status,
+        statusText: responseClone.statusText,
+        headers: {
+          ...responseClone.headers,
+          'Cache-Control': cacheControl,
+          'X-Mobile-Cached': 'true'
+        }
+      })
+
+      await cache.put(request, modifiedResponse)
+    }
+
+    return networkResponse
+  } catch (error) {
+    console.log('[SW] Network failed, trying mobile cache:', request.url)
+    const cachedResponse = await cache.match(request)
+
+    if (cachedResponse) {
+      return cachedResponse
+    }
+
+    // Try critical data cache as fallback
+    const criticalCache = await caches.open(CRITICAL_DATA_CACHE)
+    const criticalResponse = await criticalCache.match(request.url)
+
+    if (criticalResponse) {
+      return criticalResponse
+    }
+
+    // Return offline response for mobile
+    return new Response(JSON.stringify({
+      error: 'Offline',
+      message: 'No cached data available',
+      mobileOffline: true
+    }), {
+      status: 503,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+}
+
+// Cache first for mobile routes
+async function cacheFirstForMobile(request) {
+  const cache = await caches.open(MOBILE_CACHE)
+  const cachedResponse = await cache.match(request)
+
+  if (cachedResponse) {
+    console.log('[SW] Mobile cache hit:', request.url)
+    return cachedResponse
+  }
+
+  console.log('[SW] Mobile cache miss, fetching:', request.url)
+
+  try {
+    const networkResponse = await fetch(request)
+
+    if (networkResponse.ok) {
+      const responseClone = networkResponse.clone()
+      await cache.put(request, responseClone)
+      console.log('[SW] Mobile route cached:', request.url)
+    }
+
+    return networkResponse
+  } catch (error) {
+    console.error('[SW] Failed to fetch mobile route:', request.url, error)
+
+    // Return offline page for mobile routes
+    if (request.headers.get('accept')?.includes('text/html')) {
+      return new Response(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>CFMEU - Offline</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                   padding: 20px; text-align: center; background: #f5f5f5; }
+            .offline-icon { width: 80px; height: 80px; margin: 20px auto; }
+            .message { color: #666; margin: 20px 0; }
+            .retry-btn { background: #2563eb; color: white; border: none;
+                         padding: 12px 24px; border-radius: 8px; cursor: pointer; }
+          </style>
+        </head>
+        <body>
+          <div class="offline-icon">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414a1 1 0 00-1.414 0"/>
+            </svg>
+          </div>
+          <h2>You're offline</h2>
+          <p class="message">Please check your internet connection and try again.</p>
+          <button class="retry-btn" onclick="window.location.reload()">Retry</button>
+        </body>
+        </html>
+      `, {
+        status: 503,
+        headers: { 'Content-Type': 'text/html' }
+      })
+    }
+
+    throw error
+  }
+}
+
+// Cache first with longer TTL for slow connections
+async function cacheFirstWithLongTTL(request) {
+  const cache = await caches.open(CRITICAL_DATA_CACHE)
+  const cachedResponse = await cache.match(request)
+
+  if (cachedResponse) {
+    console.log('[SW] Long TTL cache hit:', request.url)
+    return cachedResponse
+  }
+
+  try {
+    const networkResponse = await fetch(request)
+
+    if (networkResponse.ok) {
+      const responseClone = networkResponse.clone()
+      const modifiedResponse = new Response(responseClone.body, {
+        status: responseClone.status,
+        statusText: responseClone.statusText,
+        headers: {
+          ...responseClone.headers,
+          'Cache-Control': 'max-age=3600', // 1 hour for slow connections
+          'X-Slow-Connection-Cached': 'true'
+        }
+      })
+
+      await cache.put(request, modifiedResponse)
+    }
+
+    return networkResponse
+  } catch (error) {
+    console.error('[SW] Long TTL cache failed:', request.url, error)
+    throw error
+  }
+}
+
+// Enhanced background sync for mobile
+self.addEventListener('sync', (event) => {
+  console.log('[SW] Mobile background sync triggered:', event.tag)
+
+  if (event.tag === 'background-sync-ratings') {
+    event.waitUntil(syncRatings())
+  } else if (event.tag === 'background-sync-employers') {
+    event.waitUntil(syncEmployers())
+  } else if (event.tag === 'mobile-sync-critical-data') {
+    event.waitUntil(preCacheCriticalMobileData())
+  } else if (event.tag === 'mobile-offline-requests') {
+    event.waitUntil(syncMobileOfflineRequests())
+  }
+})
+
+// Sync mobile offline requests
+async function syncMobileOfflineRequests() {
+  console.log('[SW] Syncing mobile offline requests...')
+
+  try {
+    const db = await openIndexedDB()
+    const offlineRequests = await getMobileOfflineRequests(db)
+
+    if (offlineRequests.length === 0) {
+      console.log('[SW] No mobile offline requests to sync')
+      return
+    }
+
+    console.log(`[SW] Syncing ${offlineRequests.length} mobile offline requests`)
+
+    for (const requestData of offlineRequests) {
+      try {
+        const response = await fetch(requestData.url, {
+          method: requestData.method,
+          headers: {
+            ...requestData.headers,
+            'X-Mobile-Sync': 'true',
+            'X-Offline-Sync': 'true'
+          },
+          body: requestData.body
+        })
+
+        if (response.ok) {
+          await deleteMobileOfflineRequest(db, requestData.id)
+          console.log(`[SW] ✅ Synced mobile request: ${requestData.url}`)
+        } else {
+          console.warn(`[SW] ❌ Failed to sync mobile request: ${requestData.url}`, response.status)
+        }
+      } catch (error) {
+        console.error(`[SW] ❌ Error syncing mobile request: ${requestData.url}`, error)
+      }
+    }
+
+    // Notify mobile clients about sync completion
+    const clients = await self.clients.matchAll()
+    clients.forEach(client => {
+      client.postMessage({
+        type: 'mobile-sync-complete',
+        syncedCount: offlineRequests.length,
+        timestamp: Date.now()
+      })
+    })
+  } catch (error) {
+    console.error('[SW] Error during mobile background sync:', error)
+  }
+}
+
+// Enhanced IndexedDB helpers for mobile
+async function openIndexedDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('cfmeu-mobile-offline-db', 2)
+
+    request.onerror = () => reject(request.error)
+    request.onsuccess = () => resolve(request.result)
+
+    request.onupgradeneeded = (event) => {
+      const db = event.target.result
+
+      // Create stores for different types of offline data
+      if (!db.objectStoreNames.contains('mobile-offline-requests')) {
+        db.createObjectStore('mobile-offline-requests', { keyPath: 'id', autoIncrement: true })
+      }
+
+      if (!db.objectStoreNames.contains('mobile-critical-data')) {
+        db.createObjectStore('mobile-critical-data', { keyPath: 'url' })
+      }
+
+      if (!db.objectStoreNames.contains('mobile-user-preferences')) {
+        db.createObjectStore('mobile-user-preferences', { keyPath: 'key' })
+      }
+    }
+  })
+}
+
+async function getMobileOfflineRequests(db) {
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['mobile-offline-requests'], 'readonly')
+    const store = transaction.objectStore('mobile-offline-requests')
+    const request = store.getAll()
+
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+}
+
+async function deleteMobileOfflineRequest(db, id) {
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['mobile-offline-requests'], 'readwrite')
+    const store = transaction.objectStore('mobile-offline-requests')
+    const request = store.delete(id)
+
+    request.onsuccess = () => resolve()
+    request.onerror = () => reject(request.error)
+  })
+}
+
+// Enhanced message handling for mobile clients
+self.addEventListener('message', (event) => {
+  console.log('[SW] Mobile message received:', event.data)
+
+  switch (event.data.type) {
+    case 'SKIP_WAITING':
+      self.skipWaiting()
+      break
+    case 'MOBILE_SYNC_NOW':
+      event.waitUntil(preCacheCriticalMobileData())
+      break
+    case 'MOBILE_CLEAR_CACHE':
+      event.waitUntil(clearMobileCaches())
+      break
+    case 'MOBILE_OFFLINE_STATUS':
+      event.ports[0].postMessage({
+        type: 'offline-status',
+        online: navigator.onLine,
+        cachedRequests: 'count', // Would need to be implemented
+        lastSync: Date.now()
+      })
+      break
+  }
+})
+
+// Clear mobile-specific caches
+async function clearMobileCaches() {
+  console.log('[SW] Clearing mobile caches...')
+
+  const mobileCaches = [MOBILE_CACHE, CRITICAL_DATA_CACHE]
+
+  for (const cacheName of mobileCaches) {
+    await caches.delete(cacheName)
+    console.log(`[SW] Cleared mobile cache: ${cacheName}`)
+  }
+
+  console.log('[SW] Mobile caches cleared')
+}
+
+console.log('[SW] Mobile-optimized service worker script loaded')

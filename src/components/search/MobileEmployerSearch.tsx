@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import {  useState, useEffect, useCallback, useMemo  } from 'react'
+import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { MobileSearchInput, SearchSuggestion } from './MobileSearchInput';
 import { MobileCard, MobileCardListItem } from '@/components/ui/MobileCard';
@@ -106,7 +107,7 @@ interface MobileEmployerSearchProps {
 
   // Action props
   actions?: Array<{
-    icon: React.ReactNode;
+    icon: ReactNode;
     label: string;
     onPress: (employer: Employer) => void;
     color?: 'primary' | 'secondary' | 'success' | 'warning' | 'error';
@@ -117,7 +118,7 @@ interface MobileEmployerSearchProps {
     key: string;
     label: string;
     filter: Partial<EmployerSearchFilters>;
-    icon?: React.ReactNode;
+    icon?: ReactNode;
   }>;
 
   // Styling

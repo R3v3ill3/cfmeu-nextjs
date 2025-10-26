@@ -1,6 +1,7 @@
 "use client"
 
-import React, { useRef, useEffect, useState } from 'react'
+import {  useRef, useEffect, useState  } from 'react'
+import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { mobileSpacing, mobileTokens, device } from '@/styles/mobile-design-tokens'
 import { cssAnimation } from '@/styles/mobile-animations'
@@ -12,7 +13,7 @@ export interface MobileCardProps extends React.HTMLAttributes<HTMLDivElement> {
   title?: string
   subtitle?: string
   description?: string
-  children?: React.ReactNode
+  children?: ReactNode
 
   // Visual props
   variant?: 'default' | 'elevated' | 'outlined' | 'filled'
@@ -28,13 +29,13 @@ export interface MobileCardProps extends React.HTMLAttributes<HTMLDivElement> {
   // Swipe actions
   swipeActions?: {
     left?: Array<{
-      icon: React.ReactNode
+      icon: ReactNode
       label?: string
       color?: 'primary' | 'secondary' | 'success' | 'warning' | 'error'
       onPress: () => void
     }>
     right?: Array<{
-      icon: React.ReactNode
+      icon: ReactNode
       label?: string
       color?: 'primary' | 'secondary' | 'success' | 'warning' | 'error'
       onPress: () => void

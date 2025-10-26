@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useCallback, useMemo } from 'react';
+import {  useState, useCallback, useMemo  } from 'react'
+import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { MobileSearchInput, SearchSuggestion } from './MobileSearchInput';
 import { MobileCard, MobileCardListItem } from '@/components/ui/MobileCard';
@@ -131,7 +132,7 @@ interface MobileProjectSearchProps {
 
   // Action props
   actions?: Array<{
-    icon: React.ReactNode;
+    icon: ReactNode;
     label: string;
     onPress: (project: Project) => void;
     color?: 'primary' | 'secondary' | 'success' | 'warning' | 'error';
@@ -142,7 +143,7 @@ interface MobileProjectSearchProps {
     key: string;
     label: string;
     filter: Partial<ProjectSearchFilters>;
-    icon?: React.ReactNode;
+    icon?: ReactNode;
     color?: 'default' | 'primary' | 'success' | 'warning' | 'error';
   }>;
 

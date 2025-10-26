@@ -27,6 +27,13 @@ const nextConfig = {
     ],
     // Server components
     serverComponentsExternalPackages: ['sharp'],
+    // Mobile optimizations
+    scrollRestoration: true,
+    largePageDataBytes: 128 * 1000, // 128KB for mobile
+    optimizeCss: true,
+    optimizeServerReact: true,
+    // Enable web vitals reporting
+    webVitalsAttribution: ['CLS', 'LCP'],
   },
 
   // Bundle analyzer for development
@@ -64,7 +71,7 @@ const nextConfig = {
             },
             // Mobile components
             mobile: {
-              test: /[\\/]src[\\/]components[\\/]mobile[\\/]/,
+              test: /[\\/]src[\\/]components[\\/](mobile|Mobile)[\\/]/,
               name: 'mobile',
               chunks: 'async',
               priority: 30,
@@ -82,6 +89,24 @@ const nextConfig = {
               name: 'utils',
               chunks: 'async',
               priority: 15,
+            },
+            // Heavy components for lazy loading
+            heavy: {
+              test: /[\\/]src[\\/]components[\\/](Projects|Employers|RatingSystem)[\\/]/,
+              name: 'heavy',
+              chunks: 'async',
+              priority: 25,
+              minSize: 50000,
+              maxSize: 150000,
+            },
+            // Critical above-the-fold components
+            critical: {
+              test: /[\\/]src[\\/]components[\\/](Header|Navigation|Layout)[\\/]/,
+              name: 'critical',
+              chunks: 'all',
+              priority: 40,
+              minSize: 0,
+              enforce: true,
             },
           },
         },
@@ -113,7 +138,7 @@ const nextConfig = {
     minimumCacheTTL: 60 * 60 * 24 * 30, // 30 days
     dangerouslyAllowSVG: true,
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
-  },
+    },
 
   // Headers optimization
   async headers() {

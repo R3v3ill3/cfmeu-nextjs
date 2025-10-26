@@ -1,18 +1,19 @@
 "use client"
 
-import React, { useRef, useState, useEffect, useCallback } from 'react'
+import {  useRef, useState, useEffect, useCallback  } from 'react'
+import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { mobileTokens } from '@/styles/mobile-design-tokens'
 
 export interface SwipeAction {
-  icon: React.ReactNode
+  icon: ReactNode
   label?: string
   color?: 'primary' | 'secondary' | 'success' | 'warning' | 'error'
   onPress: () => void
 }
 
 export interface SwipeActionsProps {
-  children: React.ReactNode
+  children: ReactNode
   leftActions?: SwipeAction[]
   rightActions?: SwipeAction[]
   onActionStart?: () => void

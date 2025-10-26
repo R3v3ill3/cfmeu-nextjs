@@ -1,6 +1,7 @@
 "use client"
 
-import React, { useState, useRef, useEffect } from 'react'
+import {  useState, useRef, useEffect  } from 'react'
+import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { mobileTokens, device } from '@/styles/mobile-design-tokens'
 import { SkeletonLoader } from './SkeletonLoader'
@@ -13,11 +14,11 @@ export interface MobileTableColumn<T = any> {
   width?: string
   sortable?: boolean
   filterable?: boolean
-  render?: (value: any, item: T, index: number) => React.ReactNode
+  render?: (value: any, item: T, index: number) => ReactNode
   mobile?: {
     priority?: 'high' | 'medium' | 'low'
     hidden?: boolean
-    render?: (value: any, item: T, index: number) => React.ReactNode
+    render?: (value: any, item: T, index: number) => ReactNode
   }
 }
 
@@ -25,7 +26,7 @@ export interface MobileTableProps<T = any> {
   data: T[]
   columns: MobileTableColumn<T>[]
   loading?: boolean
-  empty?: React.ReactNode
+  empty?: ReactNode
   className?: string
   variant?: 'table' | 'cards' | 'list'
   searchable?: boolean
@@ -42,7 +43,7 @@ export interface MobileTableProps<T = any> {
   onFilter?: (filters: Record<string, any>) => void
   onSearch?: (query: string) => void
   expandable?: boolean
-  expandedRow?: (item: T, index: number) => React.ReactNode
+  expandedRow?: (item: T, index: number) => ReactNode
   stickyHeader?: boolean
   striped?: boolean
   bordered?: boolean

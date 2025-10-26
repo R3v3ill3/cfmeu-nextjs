@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext, useReducer, useCallback } from 'react'
-import type { ReactNode } from 'react'
+import type { ReactNode, Dispatch } from 'react'
 
 // Types
 export type Step = 'upload' | 'analyze' | 'define' | 'processing' | 'complete'
@@ -255,7 +255,7 @@ function bulkUploadReducer(state: BulkUploadState, action: BulkUploadAction): Bu
 // Context
 interface BulkUploadContextType {
   state: BulkUploadState
-  dispatch: React.Dispatch<BulkUploadAction>
+  dispatch: Dispatch<BulkUploadAction>
 
   // Convenience actions
   setStep: (step: Step) => void

@@ -1,6 +1,7 @@
 "use client"
 
-import React, { useState, useRef, useEffect } from 'react'
+import {  useState, useRef, useEffect  } from 'react'
+import type { ReactNode, TouchEvent } from 'react'
 import { cn } from '@/lib/utils'
 import { mobileTokens } from '@/styles/mobile-design-tokens'
 import { SkeletonLoader } from './SkeletonLoader'
@@ -14,9 +15,9 @@ export interface MobileGridItem<T = any> {
   subtitle?: string
   description?: string
   image?: string
-  icon?: React.ReactNode
-  badge?: React.ReactNode
-  actions?: React.ReactNode
+  icon?: ReactNode
+  badge?: ReactNode
+  actions?: ReactNode
   aspectRatio?: 'square' | 'portrait' | 'landscape' | 'video'
   size?: 'sm' | 'md' | 'lg'
   disabled?: boolean
@@ -25,7 +26,7 @@ export interface MobileGridItem<T = any> {
 export interface MobileGridProps<T = any> {
   items: MobileGridItem<T>[]
   loading?: boolean
-  empty?: React.ReactNode
+  empty?: ReactNode
   className?: string
   columns?: {
     mobile?: number
@@ -145,13 +146,13 @@ export function MobileGrid<T = any>({
   }
 
   // Pull to refresh handlers
-  const handleTouchStart = (e: React.TouchEvent) => {
+  const handleTouchStart = (e: TouchEvent) => {
     if (!pullToRefresh) return
     setTouchStartY(e.targetTouches[0].clientY)
     setIsPulling(true)
   }
 
-  const handleTouchMove = (e: React.TouchEvent) => {
+  const handleTouchMove = (e: TouchEvent) => {
     if (!pullToRefresh || !isPulling) return
 
     const currentY = e.targetTouches[0].clientY

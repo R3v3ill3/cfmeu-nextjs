@@ -1,6 +1,6 @@
 "use client"
 
-
+import type { MouseEventHandler } from 'react'
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Link2, Plus } from "lucide-react"
@@ -25,7 +25,7 @@ interface IncolinkBadgeProps {
   /**
    * Click handler for the badge
    */
-  onClick?: React.MouseEventHandler<HTMLDivElement>
+  onClick?: MouseEventHandler<HTMLDivElement>
   
   /**
    * Whether the badge is clickable/interactive

@@ -280,20 +280,98 @@ body {
   padding-right: env(safe-area-inset-right);
 }
 
+/* =========================================
+   SAFE AREA CSS VARIABLES AND UTILITIES
+   ========================================= */
+
+/* Core Safe Area CSS Variables */
+:root {
+  /* Safe area insets - Fallback to 0 for non-iOS devices */
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
+
+  /* Dynamic Island specific variables */
+  --dynamic-island-height: 32px;
+  --dynamic-island-width: 126px;
+  --dynamic-island-padding: 8px;
+
+  /* Home indicator variables */
+  --home-indicator-height: 34px; /* Portrait */
+  --home-indicator-height-landscape: 21px; /* Landscape */
+
+  /* Device-specific safe area calculations */
+  --safe-top-padding: max(var(--safe-area-inset-top), 8px);
+  --safe-bottom-padding: max(var(--safe-area-inset-bottom), 8px);
+  --safe-left-padding: max(var(--safe-area-inset-left), 8px);
+  --safe-right-padding: max(var(--safe-area-inset-right), 8px);
+
+  /* Safe area-aware spacing utilities */
+  --safe-spacing-xs: 4px;
+  --safe-spacing-sm: 8px;
+  --safe-spacing-md: 16px;
+  --safe-spacing-lg: 24px;
+  --safe-spacing-xl: 32px;
+  --safe-spacing-2xl: 48px;
+}
+
+/* Modern device detection with supports queries */
+@supports (padding: max(0px)) {
+  :root {
+    /* Enhanced safe area calculations with minimum values */
+    --safe-top-padding: max(var(--safe-area-inset-top), var(--safe-spacing-md));
+    --safe-bottom-padding: max(var(--safe-area-inset-bottom), var(--safe-spacing-md));
+    --safe-left-padding: max(var(--safe-area-inset-left), var(--safe-spacing-md));
+    --safe-right-padding: max(var(--safe-area-inset-right), var(--safe-spacing-md));
+  }
+}
+
 /* iPhone-specific safe area utilities */
 @supports (padding: max(0px)) {
-  .pb-safe-bottom {
-    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  .safe-area-inset-top {
+    padding-top: var(--safe-top-padding);
   }
-  
-  .pt-safe-top {
-    padding-top: max(0px, env(safe-area-inset-top));
+
+  .safe-area-inset-bottom {
+    padding-bottom: var(--safe-bottom-padding);
   }
-  
-  .px-safe {
-    padding-left: max(1rem, env(safe-area-inset-left));
-    padding-right: max(1rem, env(safe-area-inset-right));
+
+  .safe-area-inset-left {
+    padding-left: var(--safe-left-padding);
   }
+
+  .safe-area-inset-right {
+    padding-right: var(--safe-right-padding);
+  }
+
+  .safe-area-all {
+    padding: var(--safe-top-padding) var(--safe-right-padding) var(--safe-bottom-padding) var(--safe-left-padding);
+  }
+
+  .safe-area-horizontal {
+    padding-left: var(--safe-left-padding);
+    padding-right: var(--safe-right-padding);
+  }
+
+  .safe-area-vertical {
+    padding-top: var(--safe-top-padding);
+    padding-bottom: var(--safe-bottom-padding);
+  }
+}
+
+/* Legacy safe area classes for backward compatibility */
+.pb-safe-bottom {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+.pt-safe-top {
+  padding-top: max(0px, env(safe-area-inset-top));
+}
+
+.px-safe {
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
 }
 
 /* Extra small screen utilities */
@@ -353,16 +431,151 @@ body {
   }
 }
 
+/* =========================================
+   DEVICE-SPECIFIC SAFE AREA STYLES
+   ========================================= */
+
 /* iPhone X+ models with notch/Dynamic Island */
 @media screen and (max-width: 767px) and (min-height: 812px) {
   /* Ensure header doesn't get hidden behind notch */
   header {
     padding-top: max(0.5rem, env(safe-area-inset-top));
   }
-  
+
   /* Adjust header height for notch */
   header .flex.h-16 {
     min-height: calc(4rem + env(safe-area-inset-top));
+  }
+}
+
+/* Dynamic Island Support - iPhone 14 Pro+ and 15 Pro+ models */
+@media screen and (max-width: 430px) and (min-height: 844px) {
+  /* Dynamic Island enhanced support */
+  .dynamic-island-aware {
+    padding-top: max(3rem, calc(var(--safe-area-inset-top) + var(--dynamic-island-height)));
+  }
+
+  /* Header positioning for Dynamic Island */
+  .header-dynamic-island {
+    padding-top: max(1.5rem, var(--safe-area-inset-top));
+    padding-bottom: 1rem;
+  }
+
+  /* Modal positioning to avoid Dynamic Island overlap */
+  .modal-dynamic-island {
+    top: max(calc(5rem + var(--dynamic-island-height)), 20vh);
+  }
+}
+
+/* iPhone 14 Pro/15 Pro specific (Dynamic Island, 6.1") */
+@media screen and (max-width: 393px) and (min-height: 852px) {
+  :root {
+    --dynamic-island-height: 32px;
+    --dynamic-island-width: 126px;
+    --safe-top-padding: max(var(--safe-area-inset-top), calc(var(--dynamic-island-height) + 16px));
+  }
+
+  .safe-area-inset-top {
+    padding-top: var(--safe-top-padding);
+  }
+
+  /* Enhanced safe area for 6.1" Pro models */
+  .safe-area-pro-enhanced {
+    padding:
+      calc(var(--safe-area-inset-top) + 20px)
+      max(1rem, var(--safe-area-inset-right))
+      calc(var(--safe-area-inset-bottom) + 12px)
+      max(1rem, var(--safe-area-inset-left));
+  }
+}
+
+/* iPhone 14 Pro Max/15 Pro Max specific (Dynamic Island, 6.7") */
+@media screen and (min-width: 430px) and (max-width: 430px) and (min-height: 932px) {
+  :root {
+    --dynamic-island-height: 32px;
+    --dynamic-island-width: 126px;
+    --safe-top-padding: max(var(--safe-area-inset-top), calc(var(--dynamic-island-height) + 20px));
+    --safe-bottom-padding: max(var(--safe-area-inset-bottom), calc(var(--home-indicator-height) + 8px));
+  }
+
+  /* Pro Max enhanced safe area handling */
+  .safe-area-pro-max-enhanced {
+    padding:
+      calc(var(--safe-area-inset-top) + 24px)
+      max(1.5rem, var(--safe-area-inset-right))
+      calc(var(--safe-area-inset-bottom) + 16px)
+      max(1.5rem, var(--safe-area-inset-left));
+  }
+
+  /* Pro Max modal positioning */
+  .modal-pro-max {
+    max-width: min(95vw, 400px);
+    margin-top: var(--safe-top-padding);
+  }
+}
+
+/* iPhone 13/14 standard models (Notch, no Dynamic Island) */
+@media screen and (max-width: 390px) and (min-height: 844px) {
+  .notch-aware {
+    padding-top: max(2rem, var(--safe-area-inset-top));
+  }
+
+  /* Standard iPhone safe area handling */
+  .safe-area-standard-enhanced {
+    padding:
+      calc(var(--safe-area-inset-top) + 16px)
+      max(1rem, var(--safe-area-inset-right))
+      calc(var(--safe-area-inset-bottom) + 8px)
+      max(1rem, var(--safe-area-inset-left));
+  }
+}
+
+/* iPhone 13/14 Plus/15 Plus models (6.7" notch) */
+@media screen and (min-width: 428px) and (max-width: 428px) and (min-height: 926px) {
+  /* Plus model safe area handling */
+  .safe-area-plus-enhanced {
+    padding:
+      calc(var(--safe-area-inset-top) + 18px)
+      max(1.25rem, var(--safe-area-inset-right))
+      calc(var(--safe-area-inset-bottom) + 12px)
+      max(1.25rem, var(--safe-area-inset-left));
+  }
+}
+
+/* Landscape orientation safe area handling */
+@media screen and (orientation: landscape) and (max-width: 926px) {
+  :root {
+    --home-indicator-height: var(--home-indicator-height-landscape);
+    --safe-top-padding: max(var(--safe-area-inset-top), 4px);
+    --safe-bottom-padding: max(var(--safe-area-inset-bottom), 4px);
+  }
+
+  /* Landscape safe area utilities */
+  .safe-area-landscape {
+    padding: 4px max(var(--safe-area-inset-left), var(--safe-area-inset-right), 8px) 4px;
+  }
+
+  /* Landscape header adjustments */
+  header .flex.h-16 {
+    min-height: calc(3rem + max(var(--safe-area-inset-top), var(--safe-area-inset-bottom)));
+  }
+
+  /* Landscape modal positioning */
+  .modal-landscape {
+    max-height: calc(100vh - var(--safe-top-padding) - var(--safe-bottom-padding) - 2rem);
+    margin-top: var(--safe-top-padding);
+    margin-bottom: var(--safe-bottom-padding);
+  }
+}
+
+/* Small iPhone models (iPhone SE, iPhone 12 mini) */
+@media screen and (max-width: 375px) and (max-height: 812px) {
+  .safe-area-compact {
+    padding:
+      max(12px, var(--safe-area-inset-top))
+      max(12px, var(--safe-area-inset-right))
+      max(12px, var(--safe-area-inset-bottom))
+      max(12px, var(--safe-area-inset-left));
   }
 }
 

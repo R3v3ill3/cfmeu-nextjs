@@ -37,11 +37,13 @@ const DialogContent = forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-gray-300 bg-white p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
-        // Mobile optimization - critical viewport constraints
+        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-gray-300 bg-white shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
+        // Enhanced mobile optimization with comprehensive safe area support
         "max-lg:max-w-[95vw] max-lg:max-h-[90vh] max-lg:overflow-y-auto max-lg:p-4",
-        // Safe area support for notched devices
-        "[@supports(padding:env(safe-area-inset-top))]:pt-[calc(1.5rem+env(safe-area-inset-top))] [@supports(padding:env(safe-area-inset-bottom))]:pb-[calc(1.5rem+env(safe-area-inset-bottom))]",
+        // Enhanced safe area support using CSS variables
+        "p-[var(--safe-spacing-md)] max-lg:pt-[var(--safe-top-padding)] max-lg:pb-[var(--safe-bottom-padding)] max-lg:px-[var(--safe-left-padding)]",
+        // Device-specific safe area optimizations
+        "safe-area-inset-top safe-area-inset-bottom safe-area-horizontal max-lg:safe-area-all",
         className
       )}
       {...props}

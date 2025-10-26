@@ -1,6 +1,6 @@
 "use client"
 
-import React from 'react'
+
 import { cn } from '@/lib/utils'
 import { mobileTokens } from '@/styles/mobile-design-tokens'
 
@@ -334,7 +334,7 @@ export const MobileSkeletonCard: React.FC<MobileSkeletonCardProps> = ({
 export interface ProgressiveSkeletonProps {
   items: Array<{
     id: string
-    component: React.ReactNode
+    component: ReactNode
     loading?: boolean
   }>
   className?: string

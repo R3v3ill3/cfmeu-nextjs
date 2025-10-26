@@ -1,6 +1,7 @@
 "use client"
 
-import React, { useState, useRef, useEffect } from 'react'
+import {  useState, useRef, useEffect  } from 'react'
+import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { mobileTokens } from '@/styles/mobile-design-tokens'
 import { SwipeActions } from './SwipeActions'
@@ -14,11 +15,11 @@ export interface MobileListItem<T = any> {
   title?: string
   subtitle?: string
   description?: string
-  leftElement?: React.ReactNode
-  rightElement?: React.ReactNode
-  badge?: React.ReactNode
+  leftElement?: ReactNode
+  rightElement?: ReactNode
+  badge?: ReactNode
   actions?: Array<{
-    icon: React.ReactNode
+    icon: ReactNode
     label: string
     color?: 'primary' | 'secondary' | 'success' | 'warning' | 'error'
     onPress: () => void
@@ -30,7 +31,7 @@ export interface MobileListItem<T = any> {
 export interface MobileListProps<T = any> {
   items: MobileListItem<T>[]
   loading?: boolean
-  empty?: React.ReactNode
+  empty?: ReactNode
   className?: string
   variant?: 'default' | 'compact' | 'detailed'
   searchable?: boolean
