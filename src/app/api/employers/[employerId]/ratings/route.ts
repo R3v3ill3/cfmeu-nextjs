@@ -196,17 +196,10 @@ async function getFinalRatingsHandler(request: NextRequest, { params }: { params
       return NextResponse.json({ error: 'Employer not found' }, { status: 404 });
     }
 
-    // Build query
+    // Build query - simplified to avoid complex join issues
     let query = supabase
       .from('employer_final_ratings')
-      .select(`
-        *,
-        profiles!calculated_by(id, first_name, surname),
-        profiles!approved_by(id, first_name, surname),
-        profiles!created_by(id, first_name, surname),
-        profiles!updated_by(id, first_name, surname),
-        rating_calculation_methods!calculation_method_id(method_name, algorithm_type)
-      `, { count: 'exact' });
+      .select('*', { count: 'exact' });
 
     // Apply filters
     query = query.eq('employer_id', employerId);
@@ -466,13 +459,10 @@ async function calculateFinalRatingHandler(request: NextRequest, { params }: { p
       return NextResponse.json({ error: 'Failed to save final rating' }, { status: 500 });
     }
 
-    // Get the created/updated rating for response
+    // Get the created/updated rating for response - simplified to avoid join issues
     const { data: finalRating, error: fetchError } = await supabase
       .from('employer_final_ratings')
-      .select(`
-        *,
-        rating_calculation_methods!calculation_method_id(method_name, algorithm_type)
-      `)
+      .select('*')
       .eq('id', ratingId)
       .single();
 
