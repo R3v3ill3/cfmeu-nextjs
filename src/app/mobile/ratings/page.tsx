@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+
+export const dynamic = 'force-dynamic'
 import { useRouter } from "next/navigation"
 import { RatingDashboard } from "@/components/mobile/rating-system/RatingDashboard"
 import { EmployerRatingData, RoleType } from "@/types/rating"

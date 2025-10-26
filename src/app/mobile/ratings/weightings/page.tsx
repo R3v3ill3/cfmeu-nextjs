@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+
+export const dynamic = 'force-dynamic'
 import { useRouter } from "next/navigation"
 import { ArrowLeft, Save, Eye } from "lucide-react"
 import { Button } from "@/components/ui/button"

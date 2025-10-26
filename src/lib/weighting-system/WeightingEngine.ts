@@ -13,7 +13,6 @@ import {
   ConfidenceThresholds,
   TrafficLightRating,
   ConfidenceLevel,
-  CalculationMethod,
   WeightingFieldPath,
   WeightingImpactLevel,
   WeightingSummary,

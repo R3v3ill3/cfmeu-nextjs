@@ -25,10 +25,6 @@ const nextConfig = {
       'date-fns',
       'recharts',
     ],
-    // Optimize images
-    optimizeCss: true,
-    // Webpack optimizations
-    webpackBuildWorker: true,
     // Server components
     serverComponentsExternalPackages: ['sharp'],
   },
