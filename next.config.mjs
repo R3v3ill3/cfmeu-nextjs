@@ -48,6 +48,33 @@ const nextConfig = {
       'react-dom': 'react-dom',
     }
 
+    // In development, simplify bundle splitting to avoid module resolution issues
+    if (dev) {
+      config.optimization.splitChunks = {
+        chunks: 'all',
+        minSize: 0,
+        maxSize: 250000,
+        cacheGroups: {
+          default: false,
+          vendors: false,
+          // Simple vendor chunk for node_modules
+          vendor: {
+            test: /[\\/]node_modules[\\/]/,
+            name: 'vendors',
+            priority: 10,
+            chunks: 'all',
+          },
+          // Bundle everything else together to avoid missing dependencies
+          app: {
+            name: 'app',
+            chunks: 'all',
+            priority: 20,
+          },
+        },
+      }
+      return config
+    }
+
     // Force React to be bundled on server side instead of externalized
     if (isServer) {
       // Filter out React from externals while keeping other Node.js modules
@@ -105,12 +132,21 @@ const nextConfig = {
               chunks: 'async',
               priority: 30,
             },
-            // Common utilities
+            // Common utilities - bundle synchronously to avoid missing dependencies
             utils: {
-              test: /[\\/]src[\\/]lib[\\/]/,
+              test: /[\\/]src[\\/]lib[\\/](?!utils\.ts$).*\.ts$/,
               name: 'utils',
               chunks: 'async',
               priority: 15,
+            },
+            // Critical utilities that must be available synchronously
+            criticalUtils: {
+              test: /[\\/]src[\\/]lib[\\/]utils\.ts$/,
+              name: 'critical-utils',
+              chunks: 'all',
+              priority: 50,
+              enforce: true,
+              minSize: 0,
             },
             // Heavy components for lazy loading
             heavy: {
