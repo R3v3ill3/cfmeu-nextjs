@@ -1,7 +1,7 @@
 // CFMEU Employer Rating System - Weighting Management API
 // Main API endpoints for user-configurable weighting system
 
-import { createClient } from '@/integrations/supabase/server';
+import { createServerSupabase } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
 import {
   UserWeightingProfile,
@@ -24,7 +24,7 @@ import { WeightingValidator } from '@/lib/weighting-system/WeightingValidator';
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient();
+    const supabase = createServerSupabase();
     const { searchParams } = new URL(request.url);
 
     // Parse query parameters
@@ -128,7 +128,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createClient();
+    const supabase = createServerSupabase();
 
     // Get current user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -289,7 +289,7 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const supabase = createClient();
+    const supabase = createServerSupabase();
 
     // Get current user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -515,7 +515,7 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = createClient();
+    const supabase = createServerSupabase();
 
     // Get current user
     const { data: { user }, error: authError } = await supabase.auth.getUser();

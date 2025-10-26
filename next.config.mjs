@@ -25,8 +25,6 @@ const nextConfig = {
       'date-fns',
       'recharts',
     ],
-    // Enable React concurrent features
-    reactCompiler: true,
     // Optimize images
     optimizeCss: true,
     // Webpack optimizations

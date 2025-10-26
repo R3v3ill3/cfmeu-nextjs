@@ -208,7 +208,7 @@ export function useMobileOptimizations(
   }, [enableLazyLoading, isMobile])
 
   // Virtual scrolling utility
-  const virtualizeList = React.useCallback(<T>(
+  const virtualizeList = useCallback(<T,>(
     items: T[],
     renderItem: (item: T, index: number) => React.ReactNode,
     options: VirtualScrollOptions = {}

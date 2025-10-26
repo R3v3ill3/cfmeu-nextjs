@@ -1,7 +1,7 @@
 // CFMEU Employer Rating System - Weighting Preview API
 // Real-time preview of weighting changes on employer ratings
 
-import { createClient } from '@/integrations/supabase/server';
+import { createServerSupabase } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
 import {
   UserWeightingProfile,
@@ -26,7 +26,7 @@ import { WeightingValidator } from '@/lib/weighting-system/WeightingValidator';
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createClient();
+    const supabase = createServerSupabase();
 
     // Get current user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
