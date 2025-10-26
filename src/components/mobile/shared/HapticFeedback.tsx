@@ -1,6 +1,6 @@
 "use client"
 
-import React, { ReactNode, useCallback, useContext, createContext, forwardRef, ComponentType } from 'react'
+import {  ReactNode, useCallback, useContext, createContext, forwardRef, ComponentType  } from 'react'
 
 // Types for haptic feedback
 export type HapticType =
