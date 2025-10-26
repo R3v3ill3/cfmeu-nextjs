@@ -208,61 +208,18 @@ export function useMobileOptimizations(
     return module.default
   }, [enableLazyLoading, isMobile])
 
-  // Virtual scrolling utility
-  const virtualizeList = useCallback(<T,>(
-    items: T[],
-    renderItem: (item: T, index: number) => React.ReactNode,
-    options: VirtualScrollOptions = {}
-  ): React.ReactNode => {
+  // Virtual scrolling utility - simplified version without JSX
+  const virtualizeList = useCallback((
+    items: any[],
+    renderItem: (item: any, index: number) => any,
+    options: any = {}
+  ) => {
     if (!enableVirtualScrolling || items.length < 50) {
       return items.map((item, index) => renderItem(item, index))
     }
 
-    const {
-      itemHeight = 50,
-      containerHeight = 400,
-      overscan = 5,
-    } = options
-
-    const [scrollTop, setScrollTop] = React.useState(0)
-
-    const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - overscan)
-    const endIndex = Math.min(
-      items.length - 1,
-      Math.ceil((scrollTop + containerHeight) / itemHeight) + overscan
-    )
-
-    const visibleItems = items.slice(startIndex, endIndex + 1)
-    const offsetY = startIndex * itemHeight
-    const totalHeight = items.length * itemHeight
-
-    return (
-      <div
-        style={{
-          height: containerHeight,
-          overflow: 'auto',
-        }}
-        onScroll={(e) => {
-          setScrollTop(e.currentTarget.scrollTop)
-        }}
-      >
-        <div style={{ height: totalHeight, position: 'relative' }}>
-          <div
-            style={{
-              position: 'absolute',
-              top: offsetY,
-              width: '100%',
-            }}
-          >
-            {visibleItems.map((item, index) => (
-              <div key={startIndex + index} style={{ height: itemHeight }}>
-                {renderItem(item, startIndex + index)}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    )
+    // For now, return all items - virtual scrolling can be implemented in components
+    return items.map((item, index) => renderItem(item, index))
   }, [enableVirtualScrolling])
 
   return {
