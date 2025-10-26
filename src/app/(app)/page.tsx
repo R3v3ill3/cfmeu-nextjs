@@ -1,5 +1,6 @@
 "use client"
 
+import React from "react"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { DesktopDashboardView } from "@/components/dashboard/DesktopDashboardView"
 import { MobileDashboardView } from "@/components/dashboard/MobileDashboardView"

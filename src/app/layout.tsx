@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import type { ReactNode } from "react";
 import { Inter, Roboto_Mono } from "next/font/google";
 import { headers } from "next/headers";
 import "./globals.css";

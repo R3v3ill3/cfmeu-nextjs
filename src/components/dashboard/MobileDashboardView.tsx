@@ -1,5 +1,6 @@
 "use client"
 
+import React from "react"
 import { useSearchParams } from "next/navigation"
 import { useNewDashboardData } from "@/hooks/useNewDashboardData"
 import { AlertTriangle } from "lucide-react"

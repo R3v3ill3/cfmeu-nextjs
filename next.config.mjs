@@ -38,7 +38,15 @@ const nextConfig = {
 
   // Bundle analyzer for development
   webpack: (config, { isServer, dev }) => {
-    // Remove manual React aliasing to let Next.js handle JSX transform properly
+    // Simplified React aliasing - let Next.js handle JSX transform
+    if (isServer) {
+      // Only add React aliasing for server-side compilation
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        'react': 'react',
+        'react-dom': 'react-dom',
+      }
+    }
     // Bundle splitting optimizations
     if (!isServer && !dev) {
       config.optimization = {
