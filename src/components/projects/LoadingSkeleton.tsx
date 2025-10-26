@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 
 interface LoadingSkeletonProps {
   className?: string
-  children?: React.ReactNode
+  children?: ReactNode
 }
 
 export function LoadingSkeleton({ className, children }: LoadingSkeletonProps) {

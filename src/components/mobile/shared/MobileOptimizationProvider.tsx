@@ -1,6 +1,7 @@
 "use client"
 
-import * as React from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import type { ReactNode } from 'react'
 import { PerformanceMonitor, PerformanceMetricsDisplay } from "@/lib/performance/performance-monitoring"
 import { PWAProvider, PWAStatus } from "@/lib/pwa/pwa-utils"
 import { GestureProvider } from "@/hooks/useMobileGestures"
@@ -9,7 +10,7 @@ import { useNetworkOptimization } from "@/lib/network/network-optimization"
 import { useDeviceCapabilities } from "@/hooks/useMobilePerformance"
 
 interface MobileOptimizationProviderProps {
-  children: React.ReactNode
+  children: ReactNode
   enablePerformanceMonitoring?: boolean
   enablePWAFeatures?: boolean
   enableGestureSupport?: boolean
@@ -375,11 +376,11 @@ export function MobileLayout({
   actions,
   className = ""
 }: {
-  children: React.ReactNode
+  children: ReactNode
   title?: string
   showBackButton?: boolean
   onBack?: () => void
-  actions?: React.ReactNode
+  actions?: ReactNode
   className?: string
 }) {
   return (

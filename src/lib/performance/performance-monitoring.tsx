@@ -1,6 +1,7 @@
 "use client"
 
-import * as React from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import type { ReactNode } from 'react'
 import { usePerformanceMonitoring } from "@/hooks/useMobilePerformance"
 
 // Performance thresholds for mobile devices
@@ -226,7 +227,7 @@ export function generatePerformanceReport(metrics: PerformanceMetrics): Performa
 
 // Performance monitoring component
 interface PerformanceMonitorProps {
-  children: React.ReactNode
+  children: ReactNode
   onReport?: (report: PerformanceReport) => void
   enabled?: boolean
   interval?: number

@@ -1,12 +1,13 @@
 "use client"
 
-import * as React from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import type { ReactNode } from 'react'
 import { cn } from "@/lib/utils"
 import { Loader2, RefreshCw } from "lucide-react"
 
 interface PullToRefreshProps {
   onRefresh: () => Promise<void> | void
-  children: React.ReactNode
+  children: ReactNode
   className?: string
   threshold?: number
   disabled?: boolean

@@ -51,7 +51,7 @@ export function PendingEmployerMatchSearch({
   };
 
   const renderMatchBadges = (result: MatchSearchResult) => {
-    const badges: JSX.Element[] = [];
+    const badges: React.ReactElement[] = [];
 
     switch (result.matchType) {
       case 'canonical_name':

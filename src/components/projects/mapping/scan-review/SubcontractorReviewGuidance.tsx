@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from 'react'
+import type { ReactNode } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -48,7 +49,7 @@ interface GuideStep {
   id: string
   title: string
   description: string
-  icon: React.ReactNode
+  icon: ReactNode
   action?: {
     label: string
     onClick: () => void

@@ -10,6 +10,9 @@ export const metadata = {
   description: 'View your batch upload history',
 }
 
+// Force dynamic rendering to avoid build-time React import issues
+export const dynamic = 'force-dynamic'
+
 async function BatchesContent() {
   const supabase = await createServerSupabase()
   const {

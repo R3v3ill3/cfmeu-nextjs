@@ -19,7 +19,7 @@ async function getUserRole(userId: string): Promise<AppRole | null> {
 
 export const dynamic = 'force-dynamic'
 
-export default async function AppLayout({ children }: { children: React.ReactNode }) {
+export default async function AppLayout({ children }: { children: ReactNode }) {
   const supabase = await createServerSupabase()
   let user = null as null | { id: string }
   try {

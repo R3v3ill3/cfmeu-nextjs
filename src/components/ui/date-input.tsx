@@ -1,3 +1,5 @@
+import { HTMLAttributes } from 'react'
+import type { HTMLAttributes } from 'react'
 import { useEffect, useState } from "react"
 import { format, parse, isValid } from "date-fns"
 import { Input } from "@/components/ui/input"

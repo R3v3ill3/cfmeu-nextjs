@@ -19,7 +19,7 @@ import { HelpLauncher } from "@/components/help/HelpLauncher";
 const cfmeuLogoLight = "/favicon.svg" as unknown as string;
 
 interface LayoutProps {
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
 const Layout = ({ children }: LayoutProps) => {

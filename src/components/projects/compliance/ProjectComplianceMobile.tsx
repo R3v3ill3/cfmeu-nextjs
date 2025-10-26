@@ -52,7 +52,7 @@ export function ProjectComplianceMobile({ projectId }: ProjectComplianceMobilePr
     icon: any; 
     title: string; 
     status: boolean; 
-    children: React.ReactNode;
+    children: ReactNode;
   }) => (
     <Card>
       <CardContent className="p-4">

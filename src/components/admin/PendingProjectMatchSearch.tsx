@@ -80,7 +80,7 @@ export function PendingProjectMatchSearch({
   };
 
   const renderMatchBadges = (result: ProjectMatchSearchResult) => {
-    const badges: JSX.Element[] = [];
+    const badges: React.ReactElement[] = [];
 
     switch (result.matchType) {
       case 'name':

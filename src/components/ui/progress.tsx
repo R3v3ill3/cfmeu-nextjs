@@ -1,4 +1,5 @@
-import * as React from "react"
+import { useState, useEffect, useCallback, useMemo, useRef, forwardRef } from 'react'
+import type {  } from 'react'
 import * as ProgressPrimitive from "@radix-ui/react-progress"
 
 import { cn } from "@/lib/utils"
@@ -9,7 +10,7 @@ interface ProgressProps extends React.ComponentPropsWithoutRef<typeof ProgressPr
   indicatorClassName?: string;
 }
 
-const Progress = React.forwardRef<
+const Progress = forwardRef<
   React.ElementRef<typeof ProgressPrimitive.Root>,
   ProgressProps
 >(({ className, value, indicatorClassName, ...props }, ref) => (

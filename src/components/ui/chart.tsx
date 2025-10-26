@@ -1,4 +1,6 @@
-import * as React from "react"
+import { useState, useEffect, useCallback, useMemo, useRef, forwardRef } from 'react'
+import type { ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import * as RechartsPrimitive from "recharts"
 
 import { cn } from "@/lib/utils"
@@ -8,7 +10,7 @@ const THEMES = { light: "", dark: ".dark" } as const
 
 export type ChartConfig = {
   [k in string]: {
-    label?: React.ReactNode
+    label?: ReactNode
     icon?: React.ComponentType
   } & (
     | { color?: string; theme?: never }
@@ -32,7 +34,7 @@ function useChart() {
   return context
 }
 
-const ChartContainer = React.forwardRef<
+const ChartContainer = forwardRef<
   HTMLDivElement,
   React.ComponentProps<"div"> & {
     config: ChartConfig
@@ -117,12 +119,12 @@ type TooltipFormatter = (
   item: TooltipPayload,
   index: number,
   payload: Record<string, unknown>
-) => React.ReactNode
+) => ReactNode
 
 type TooltipLabelFormatter = (
   value: string | number | Date | null | undefined,
   payload?: TooltipPayload[]
-) => React.ReactNode
+) => ReactNode
 
 type TooltipLabel = string | number | Date | null | undefined
 
@@ -142,7 +144,7 @@ type CustomTooltipProps = {
   labelClassName?: string
 }
 
-const ChartTooltipContent = React.forwardRef<
+const ChartTooltipContent = forwardRef<
   HTMLDivElement,
   CustomTooltipProps
 >(
@@ -304,7 +306,7 @@ type CustomLegendProps = {
   payload?: LegendPayloadItem[]
 }
 
-const ChartLegendContent = React.forwardRef<
+const ChartLegendContent = forwardRef<
   HTMLDivElement,
   CustomLegendProps
 >(

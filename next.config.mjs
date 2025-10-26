@@ -31,6 +31,14 @@ const nextConfig = {
 
   // Bundle analyzer for development
   webpack: (config, { isServer, dev }) => {
+    // Fix React import issues for server-side compilation
+    if (isServer) {
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        'react': 'react',
+        'react-dom': 'react-dom',
+      }
+    }
     // Bundle splitting optimizations
     if (!isServer && !dev) {
       config.optimization = {

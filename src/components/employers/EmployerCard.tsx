@@ -1,13 +1,17 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Building, Phone, Mail, Users, MapPin, Tag } from "lucide-react"
+import { Building, Phone, Mail, Users, MapPin, Tag, MoreVertical, Star, AlertCircle, CheckCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { CfmeuEbaBadge, getProjectEbaStatus } from "@/components/ui/CfmeuEbaBadge"
 import { IncolinkBadge } from "@/components/ui/IncolinkBadge"
+import { MobileCard, MobileCardWithSkeleton } from "@/components/ui/MobileCard"
+import { SwipeActions } from "@/components/ui/SwipeActions"
+import { SkeletonLoader } from "@/components/ui/SkeletonLoader"
+import { mobileTokens, device } from "@/styles/mobile-design-tokens"
 import { FwcSearchModal } from "./FwcSearchModal"
 import { IncolinkActionModal } from "./IncolinkActionModal"
 import { ProjectCardModal } from "./ProjectCardModal"
@@ -52,7 +56,17 @@ export type EmployerCardData = {
 
 type EmployerProject = NonNullable<EmployerCardData["projects"]>[number];
 
-export function EmployerCard({ employer, onClick, onUpdated }: { employer: EmployerCardData, onClick: () => void, onUpdated?: () => void }) {
+export function EmployerCard({
+  employer,
+  onClick,
+  onUpdated,
+  variant = 'default' // 'default' or 'mobile'
+}: {
+  employer: EmployerCardData,
+  onClick: () => void,
+  onUpdated?: () => void
+  variant?: 'default' | 'mobile'
+}) {
   const [fwcSearchOpen, setFwcSearchOpen] = useState(false)
   const [incolinkModalOpen, setIncolinkModalOpen] = useState(false)
   const [selectedProject, setSelectedProject] = useState<EmployerProject | null>(null)
@@ -138,6 +152,11 @@ export function EmployerCard({ employer, onClick, onUpdated }: { employer: Emplo
 
   const roles = (employer.roles && employer.roles.length > 0) ? employer.roles : (fallbackCats?.roles || [])
   const trades = (employer.trades && employer.trades.length > 0) ? employer.trades : (fallbackCats?.trades || [])
+
+  // Mobile-optimized variant
+  if (variant === 'mobile') {
+    return <MobileEmployerCard employer={employer} onClick={onClick} onUpdated={onUpdated} />
+  }
 
   return (
     <>
@@ -373,6 +392,260 @@ export function EmployerCard({ employer, onClick, onUpdated }: { employer: Emplo
           </div>
         </CardContent>
       </Card>
+
+      {/* Modals */}
+      <FwcSearchModal
+        isOpen={fwcSearchOpen}
+        onClose={() => setFwcSearchOpen(false)}
+        employerId={employer.id}
+        employerName={employer.name}
+      />
+
+      <IncolinkActionModal
+        isOpen={incolinkModalOpen}
+        onClose={() => setIncolinkModalOpen(false)}
+        employerId={employer.id}
+        employerName={employer.name}
+        currentIncolinkId={employer.incolink_id}
+        onUpdate={onUpdated}
+      />
+
+      {selectedProject && (
+        <ProjectCardModal
+          isOpen={!!selectedProject}
+          onClose={() => setSelectedProject(null)}
+          project={selectedProject}
+          organisers={employer.organisers}
+        />
+      )}
+    </>
+  )
+}
+
+// Mobile-optimized employer card component
+function MobileEmployerCard({
+  employer,
+  onClick,
+  onUpdated
+}: {
+  employer: EmployerCardData,
+  onClick: () => void,
+  onUpdated?: () => void
+}) {
+  const [fwcSearchOpen, setFwcSearchOpen] = useState(false)
+  const [incolinkModalOpen, setIncolinkModalOpen] = useState(false)
+  const [selectedProject, setSelectedProject] = useState<EmployerProject | null>(null)
+  const router = useRouter()
+
+  // Quick actions for swipe gestures
+  const swipeActions = {
+    left: [
+      {
+        icon: <Phone className="w-5 h-5" />,
+        label: 'Call',
+        color: 'success' as const,
+        onPress: () => {
+          if (employer.phone) {
+            window.location.href = `tel:${employer.phone}`
+          }
+        },
+      },
+    ],
+    right: [
+      {
+        icon: <Mail className="w-5 h-5" />,
+        label: 'Email',
+        color: 'primary' as const,
+        onPress: () => {
+          if (employer.email) {
+            window.location.href = `mailto:${employer.email}`
+          }
+        },
+      },
+    ],
+  }
+
+  const handleProjectClick = (project: EmployerProject, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedProject(project)
+  };
+
+  const formatRoleName = (role: string) => {
+    return role.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+  }
+
+  const formatTradeName = (trade: string) => {
+    return trade.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+  }
+
+  // Fetch employer aliases
+  const { data: aliasesData, isLoading: isLoadingAliases } = useQuery({
+    queryKey: ['employer-aliases', employer.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/employers/${employer.id}/aliases`)
+      if (!res.ok) throw new Error(await res.text())
+      const json = await res.json()
+      return json.data || []
+    },
+    enabled: !!employer.id,
+    retry: (failureCount, error) => {
+      if (failureCount >= 1) return false
+      if (error instanceof Error && error.message.includes('404')) return false
+      if (error instanceof Error && error.message.includes('401')) return false
+      if (error instanceof Error && error.message.includes('403')) return false
+      return true
+    },
+    retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 5000),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+  })
+
+  return (
+    <>
+      <MobileCard
+        clickable
+        onPress={onClick}
+        swipeActions={employer.phone || employer.email ? swipeActions : undefined}
+        className="border-l-4 border-l-blue-500"
+        size="md"
+      >
+        {/* Header with status indicators */}
+        <div className="flex items-start justify-between mb-3">
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold text-gray-900 text-base truncate pr-2">
+              {employer.name}
+            </h3>
+            {employer.abn && (
+              <p className="text-xs text-gray-500 mt-1">ABN: {employer.abn}</p>
+            )}
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {/* EBA Status Indicator */}
+            <div className="w-2 h-2 rounded-full" style={{
+              backgroundColor: employer.enterprise_agreement_status ? '#10b981' : '#6b7280'
+            }} />
+            <Building className="w-5 h-5 text-gray-400" />
+          </div>
+        </div>
+
+        {/* Mobile-optimized badges and ratings */}
+        <div className="flex items-center gap-2 mb-3 overflow-x-auto pb-1">
+          <RatingDisplay
+            employerId={employer.id}
+            employerName={employer.name}
+            variant="compact"
+            className="flex-shrink-0"
+          />
+
+          <CfmeuEbaBadge
+            hasActiveEba={employer.enterprise_agreement_status === true}
+            builderName={employer.name}
+            size="sm"
+            showText={false}
+            className="flex-shrink-0"
+          />
+
+          {employer.worker_placements && employer.worker_placements.length > 0 && (
+            <Badge variant="secondary" className="flex-shrink-0 text-xs">
+              <Users className="h-3 w-3 mr-1" />
+              {employer.worker_placements.length}
+            </Badge>
+          )}
+        </div>
+
+        {/* Aliases (simplified for mobile) */}
+        {isLoadingAliases ? (
+          <div className="flex gap-1 mb-3">
+            <SkeletonLoader variant="rectangular" height="24px" width="60px" className="rounded-full" />
+            <SkeletonLoader variant="rectangular" height="24px" width="80px" className="rounded-full" />
+          </div>
+        ) : aliasesData && aliasesData.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-3">
+            {aliasesData.slice(0, 2).map((alias: any) => (
+              <Badge key={alias.id} variant="outline" className="text-xs">
+                {alias.alias}
+              </Badge>
+            ))}
+            {aliasesData.length > 2 && (
+              <Badge variant="outline" className="text-xs">
+                +{aliasesData.length - 2}
+              </Badge>
+            )}
+          </div>
+        )}
+
+        {/* Projects (mobile-optimized) */}
+        {employer.projects && employer.projects.length > 0 && (
+          <div className="space-y-2">
+            <h4 className="text-xs font-medium text-gray-700">Projects</h4>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {employer.projects.slice(0, 3).map((project) => (
+                <button
+                  key={project.id}
+                  className="flex-shrink-0 px-3 py-2 bg-gray-50 rounded-lg text-xs text-left min-w-[120px] border border-gray-200 hover:bg-gray-100 transition-colors"
+                  onClick={(e) => handleProjectClick(project, e)}
+                >
+                  <div className="font-medium text-gray-900 truncate">
+                    {project.name}
+                  </div>
+                  {project.tier && (
+                    <div className="text-gray-500 mt-1">
+                      {project.tier}
+                    </div>
+                  )}
+                </button>
+              ))}
+              {employer.projects.length > 3 && (
+                <div className="flex-shrink-0 px-3 py-2 bg-gray-50 rounded-lg text-xs text-gray-500 min-w-[60px] border border-gray-200 flex items-center justify-center">
+                  +{employer.projects.length - 3}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Organisers (mobile-optimized) */}
+        {employer.organisers && employer.organisers.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            <div className="flex items-center gap-2 text-xs text-gray-600">
+              <Users className="w-3 h-3" />
+              <span>
+                {employer.organisers.length} {employer.organisers.length === 1 ? 'Organiser' : 'Organisers'}
+              </span>
+              {employer.organisers.length > 0 && (
+                <>
+                  <span>•</span>
+                  <span>{employer.organisers[0].name}</span>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Quick actions footer */}
+        {(employer.phone || employer.email) && (
+          <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-gray-100">
+            {employer.phone && (
+              <Button asChild variant="outline" size="sm" className="h-8 px-3 text-xs">
+                <a href={`tel:${employer.phone}`}>
+                  <Phone className="h-3 w-3 mr-1" />
+                  Call
+                </a>
+              </Button>
+            )}
+            {employer.email && (
+              <Button asChild variant="outline" size="sm" className="h-8 px-3 text-xs">
+                <a href={`mailto:${employer.email}`}>
+                  <Mail className="h-3 w-3 mr-1" />
+                  Email
+                </a>
+              </Button>
+            )}
+          </div>
+        )}
+      </MobileCard>
 
       {/* Modals */}
       <FwcSearchModal

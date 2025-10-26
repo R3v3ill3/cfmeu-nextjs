@@ -3,7 +3,7 @@
  * Ensures backward compatibility and functionality preservation
  */
 
-import React from 'react'
+
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { toast } from 'sonner'
 import BulkUploadDialogRefactored from './BulkUploadDialogRefactored'
@@ -61,7 +61,7 @@ const mockApiResponse = (data: any, ok: boolean = true) => {
 }
 
 // Wrapper component for testing
-const TestWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+const TestWrapper: React.FC<{ children: ReactNode }> = ({ children }) => (
   <BulkUploadProvider>
     {children}
   </BulkUploadProvider>

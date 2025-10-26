@@ -1,4 +1,5 @@
-import * as React from "react"
+import { useState, useEffect, useCallback, useMemo, useRef, forwardRef } from 'react'
+import type { HTMLAttributes } from 'react'
 
 import { cn } from "@/lib/utils"
 
@@ -58,7 +59,7 @@ const patternMap: Record<string, string> = {
   'phone-australia': '^0[2-9]\\d{8}$|\\+61[2-9]\\d{8}$'
 }
 
-const Input = React.forwardRef<HTMLInputElement, InputProps>(
+const Input = forwardRef<HTMLInputElement, InputProps>(
   ({
     className,
     type,

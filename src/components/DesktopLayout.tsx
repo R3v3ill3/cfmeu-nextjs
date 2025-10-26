@@ -125,7 +125,7 @@ function useVisibleNavItems(userRole: string | null, isLoadingRole: boolean): Na
   return items
 }
 
-export default function DesktopLayout({ children }: { children: React.ReactNode }) {
+export default function DesktopLayout({ children }: { children: ReactNode }) {
   const [aiHelpOpen, setAiHelpOpen] = useState(false)
   const pathname = usePathname()
   const { user, signOut } = useAuth()

@@ -46,7 +46,7 @@ const createWrapper = () => {
     },
   })
 
-  const QueryClientWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  const QueryClientWrapper: React.FC<{ children: ReactNode }> = ({ children }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   )
   QueryClientWrapper.displayName = 'QueryClientWrapper'

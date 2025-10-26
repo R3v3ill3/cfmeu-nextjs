@@ -1,7 +1,6 @@
 "use client"
 
-import * as React from "react"
-import { useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 
 interface UseMobileOptimizationsOptions {
   enableIntersectionObserver?: boolean
@@ -26,7 +25,7 @@ interface UseMobileOptimizationsReturn {
   throttle: <T extends (...args: any[]) => any>(func: T, delay?: number) => T
   intersectionRef: React.RefObject<HTMLDivElement>
   isInViewport: boolean
-  virtualizeList: <T>(items: T[], renderItem: (item: T, index: number) => React.ReactNode, options?: VirtualScrollOptions) => React.ReactNode
+  virtualizeList: <T>(items: T[], renderItem: (item: T, index: number) => ReactNode, options?: VirtualScrollOptions) => ReactNode
   lazyLoad: <T>(factory: () => Promise<{ default: T }>) => Promise<T>
 }
 

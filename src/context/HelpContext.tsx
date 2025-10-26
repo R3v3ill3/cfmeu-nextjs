@@ -2,6 +2,7 @@
 
 import { AppRole } from '@/constants/roles'
 import { createContext, useContext, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 
 export type HelpScope = {
   page: string
@@ -34,7 +35,7 @@ export function HelpContextProvider({
 }: {
   initialPathname: string
   initialRole?: AppRole | null
-  children: React.ReactNode
+  children: ReactNode
 }) {
   const [scopeState, setScopeState] = useState<HelpScope>({
     page: getPageKey(initialPathname),

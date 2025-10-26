@@ -1,6 +1,6 @@
 "use client"
 
-import React from "react"
+
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -26,7 +26,7 @@ const ratingColors: Record<TrafficLightRating, { bg: string; text: string; borde
 }
 
 // Confidence level indicators
-const confidenceIcons: Record<ConfidenceLevel, React.ReactNode> = {
+const confidenceIcons: Record<ConfidenceLevel, ReactNode> = {
   very_high: <div className="w-2 h-2 bg-green-500 rounded-full" />,
   high: <div className="w-2 h-2 bg-blue-500 rounded-full" />,
   medium: <div className="w-2 h-2 bg-amber-500 rounded-full" />,

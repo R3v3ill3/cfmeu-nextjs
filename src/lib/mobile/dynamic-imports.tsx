@@ -1,6 +1,7 @@
 "use client"
 
-import * as React from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import type { ReactNode } from 'react'
 import dynamic from "next/dynamic"
 import { Suspense } from "react"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -58,8 +59,8 @@ export function ListSkeleton({ items = 5 }: { items?: number }) {
 // Dynamic import wrapper with suspense and error boundary
 interface DynamicComponentProps {
   loader: () => Promise<{ default: React.ComponentType<any> }>
-  fallback?: React.ReactNode
-  errorFallback?: React.ReactNode
+  fallback?: ReactNode
+  errorFallback?: ReactNode
   [key: string]: any
 }
 
@@ -292,7 +293,7 @@ export function useLazyLoad<T extends React.ComponentType<any>>(
   options: {
     threshold?: number
     rootMargin?: string
-    fallback?: React.ReactNode
+    fallback?: ReactNode
   } = {}
 ) {
   const [Component, setComponent] = React.useState<T | null>(null)

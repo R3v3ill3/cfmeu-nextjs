@@ -1,6 +1,6 @@
 "use client"
 
-import * as React from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNetworkOptimization, useOfflineStorage, useBackgroundSync } from "@/lib/network/network-optimization"
 import { useDeviceCapabilities } from "@/hooks/useMobilePerformance"
 

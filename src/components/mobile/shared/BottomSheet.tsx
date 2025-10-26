@@ -1,6 +1,7 @@
 "use client"
 
-import * as React from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import type { ReactNode } from 'react'
 import { cn } from "@/lib/utils"
 import { Drawer, DrawerContent, DrawerOverlay } from "@/components/ui/drawer"
 import { X } from "lucide-react"
@@ -8,7 +9,7 @@ import { X } from "lucide-react"
 interface BottomSheetProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  children: React.ReactNode
+  children: ReactNode
   className?: string
   showHandle?: boolean
   height?: "auto" | "half" | "full" | number

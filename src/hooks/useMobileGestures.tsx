@@ -1,6 +1,7 @@
 "use client"
 
-import * as React from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import type { ReactNode } from 'react'
 import { useHapticFeedback } from "@/components/mobile/shared/HapticFeedback"
 
 // Gesture types
@@ -573,7 +574,7 @@ export const GestureContext = React.createContext<{
   clearGestures: () => void
 } | null>(null)
 
-export function GestureProvider({ children }: { children: React.ReactNode }) {
+export function GestureProvider({ children }: { children: ReactNode }) {
   const [handlers, setHandlers] = React.useState<GestureHandler[]>([])
 
   const addGesture = React.useCallback((handler: GestureHandler) => {

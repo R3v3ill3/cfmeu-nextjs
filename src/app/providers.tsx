@@ -3,10 +3,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import { GoogleMapsProvider } from '@/providers/GoogleMapsProvider'
 
 type ProvidersProps = {
-  children: React.ReactNode
+  children: ReactNode
 }
 
 export default function Providers({ children }: ProvidersProps) {

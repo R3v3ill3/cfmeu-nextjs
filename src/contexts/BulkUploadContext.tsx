@@ -1,6 +1,7 @@
 'use client'
 
-import React, { createContext, useContext, useReducer, ReactNode, useCallback } from 'react'
+import { createContext, useContext, useReducer, useCallback } from 'react'
+import type { ReactNode } from 'react'
 
 // Types
 export type Step = 'upload' | 'analyze' | 'define' | 'processing' | 'complete'

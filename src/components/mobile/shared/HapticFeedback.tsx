@@ -105,7 +105,7 @@ const HapticFeedbackContext = React.createContext<HapticFeedbackContextValue | n
 export function HapticFeedbackProvider({
   children,
 }: {
-  children: React.ReactNode
+  children: ReactNode
 }) {
   const haptic = useHapticFeedback()
 

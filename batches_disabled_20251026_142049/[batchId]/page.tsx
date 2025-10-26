@@ -17,6 +17,9 @@ export async function generateMetadata({ params }: PageProps) {
   }
 }
 
+// Force dynamic rendering to avoid build-time React import issues
+export const dynamic = 'force-dynamic'
+
 async function BatchDetailContent({ batchId }: { batchId: string }) {
   const supabase = await createServerSupabase()
   const {
