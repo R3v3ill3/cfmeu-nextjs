@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { withRateLimit, RATE_LIMIT_PRESETS } from '@/lib/rateLimit';
-import { deleteEmployerAlias, updateEmployerAlias } from '@/lib/database/employerOperations';
 
 const ALLOWED_ROLES = ['organiser', 'lead_organiser', 'admin'] as const;
 type AllowedRole = typeof ALLOWED_ROLES[number];
@@ -9,10 +8,66 @@ const ROLE_SET = new Set<AllowedRole>(ALLOWED_ROLES);
 
 export const dynamic = 'force-dynamic';
 
-// DELETE /api/employers/[id]/aliases/[aliasId] - Delete specific alias
+// Server-side implementation of deleteEmployerAlias
+async function deleteEmployerAlias(
+  supabase: Awaited<ReturnType<typeof createServerSupabase>>,
+  aliasId: string,
+  userId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('employer_aliases')
+      .delete()
+      .eq('id', aliasId);
+
+    if (error) {
+      console.error('Error deleting employer alias:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Unexpected error deleting employer alias:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
+// Server-side implementation of updateEmployerAlias
+async function updateEmployerAlias(
+  supabase: Awaited<ReturnType<typeof createServerSupabase>>,
+  aliasId: string,
+  updates: any,
+  userId: string
+): Promise<{ success: boolean; data?: any; error?: string }> {
+  try {
+    // If updating the alias itself, also update the normalized version
+    if (updates.alias) {
+      updates.alias_normalized = updates.alias.toLowerCase().trim();
+    }
+
+    const { data, error } = await supabase
+      .from('employer_aliases')
+      .update(updates)
+      .eq('id', aliasId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error updating employer alias:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data };
+  } catch (error) {
+    console.error('Unexpected error updating employer alias:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
+// DELETE /api/employers/[employerId]/aliases/[aliasId] - Delete specific alias
 async function deleteAliasHandler(
   request: NextRequest,
-  { params }: { params: { id: string; aliasId: string } }
+  { params }: { params: { employerId: string; aliasId: string } }
 ) {
   try {
     const supabase = await createServerSupabase();
@@ -39,7 +94,7 @@ async function deleteAliasHandler(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const { id: employerId, aliasId } = params;
+    const { employerId, aliasId } = params;
 
     if (!employerId || !aliasId) {
       return NextResponse.json({ error: 'Employer ID and Alias ID are required' }, { status: 400 });
@@ -58,7 +113,7 @@ async function deleteAliasHandler(
     }
 
     // Delete the alias
-    const { success, error } = await deleteEmployerAlias(aliasId, user.id);
+    const { success, error } = await deleteEmployerAlias(supabase, aliasId, user.id);
 
     if (!success) {
       console.error('Failed to delete employer alias:', error);
@@ -80,10 +135,10 @@ async function deleteAliasHandler(
   }
 }
 
-// PATCH /api/employers/[id]/aliases/[aliasId] - Update specific alias
+// PATCH /api/employers/[employerId]/aliases/[aliasId] - Update specific alias
 async function updateAliasHandler(
   request: NextRequest,
-  { params }: { params: { id: string; aliasId: string } }
+  { params }: { params: { employerId: string; aliasId: string } }
 ) {
   try {
     const supabase = await createServerSupabase();
@@ -110,7 +165,7 @@ async function updateAliasHandler(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const { id: employerId, aliasId } = params;
+    const { employerId, aliasId } = params;
 
     if (!employerId || !aliasId) {
       return NextResponse.json({ error: 'Employer ID and Alias ID are required' }, { status: 400 });
@@ -158,7 +213,7 @@ async function updateAliasHandler(
     }
 
     // Update the alias
-    const { success, data, error } = await updateEmployerAlias(aliasId, updates, user.id);
+    const { success, data, error } = await updateEmployerAlias(supabase, aliasId, updates, user.id);
 
     if (!success) {
       console.error('Failed to update employer alias:', error);

@@ -1,14 +1,120 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { withRateLimit, RATE_LIMIT_PRESETS } from '@/lib/rateLimit';
-import {
-  createEmployerAlias,
-  getEmployerAliases,
-  deleteEmployerAlias,
-  updateEmployerAlias,
-  validateAliasUniqueness
-} from '@/lib/database/employerOperations';
-import type { CreateEmployerAliasRequest } from '@/lib/database/employerOperations';
+
+// Types for employer alias operations
+interface EmployerAlias {
+  id: string;
+  alias: string;
+  alias_normalized: string;
+  employer_id: string;
+  created_at: string;
+  created_by: string | null;
+  source_system: string | null;
+  source_identifier: string | null;
+  collected_at: string | null;
+  collected_by: string | null;
+  is_authoritative: boolean;
+  notes: string | null;
+}
+
+interface CreateEmployerAliasRequest {
+  alias: string;
+  employer_id: string;
+  source_system?: string;
+  source_identifier?: string;
+  is_authoritative?: boolean;
+  notes?: string;
+  created_by?: string;
+}
+
+// Server-side implementation of getEmployerAliases
+async function getEmployerAliases(
+  supabase: Awaited<ReturnType<typeof createServerSupabase>>,
+  employerId: string,
+  includeInactive: boolean = false
+): Promise<{ success: boolean; data?: EmployerAlias[]; error?: string }> {
+  try {
+    let query = supabase
+      .from('employer_aliases')
+      .select('*')
+      .eq('employer_id', employerId)
+      .order('created_at', { ascending: false });
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Error fetching employer aliases:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data: data || [] };
+  } catch (error) {
+    console.error('Unexpected error fetching employer aliases:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
+// Server-side implementation of createEmployerAlias
+async function createEmployerAlias(
+  supabase: Awaited<ReturnType<typeof createServerSupabase>>,
+  request: CreateEmployerAliasRequest
+): Promise<{ success: boolean; data?: EmployerAlias; error?: string }> {
+  try {
+    const { data, error } = await supabase
+      .from('employer_aliases')
+      .insert({
+        alias: request.alias,
+        employer_id: request.employer_id,
+        source_system: request.source_system || 'manual',
+        source_identifier: request.source_identifier || request.alias,
+        is_authoritative: Boolean(request.is_authoritative),
+        notes: request.notes || null,
+        created_by: request.created_by || null,
+        alias_normalized: request.alias.toLowerCase().trim()
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating employer alias:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data };
+  } catch (error) {
+    console.error('Unexpected error creating employer alias:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
+// Server-side implementation of validateAliasUniqueness
+async function validateAliasUniqueness(
+  supabase: Awaited<ReturnType<typeof createServerSupabase>>,
+  alias: string,
+  employerId: string
+): Promise<{ success: boolean; isUnique?: boolean; error?: string }> {
+  try {
+    const normalizedAlias = alias.toLowerCase().trim();
+
+    const { data: existing, error } = await supabase
+      .from('employer_aliases')
+      .select('id')
+      .eq('employer_id', employerId)
+      .eq('alias_normalized', normalizedAlias)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error checking alias uniqueness:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, isUnique: !existing };
+  } catch (error) {
+    console.error('Unexpected error validating alias uniqueness:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
 
 const ALLOWED_ROLES = ['organiser', 'lead_organiser', 'admin'] as const;
 type AllowedRole = typeof ALLOWED_ROLES[number];
@@ -16,8 +122,8 @@ const ROLE_SET = new Set<AllowedRole>(ALLOWED_ROLES);
 
 export const dynamic = 'force-dynamic';
 
-// GET /api/employers/[id]/aliases - List all aliases for an employer
-async function getAliasesHandler(request: NextRequest, { params }: { params: { id: string } }) {
+// GET /api/employers/[employerId]/aliases - List all aliases for an employer
+async function getAliasesHandler(request: NextRequest, { params }: { params: { employerId: string } }) {
   try {
     const supabase = await createServerSupabase();
 
@@ -43,7 +149,7 @@ async function getAliasesHandler(request: NextRequest, { params }: { params: { i
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const employerId = params.id;
+    const employerId = params.employerId;
     if (!employerId) {
       return NextResponse.json({ error: 'Employer ID is required' }, { status: 400 });
     }
@@ -64,7 +170,7 @@ async function getAliasesHandler(request: NextRequest, { params }: { params: { i
     const includeInactive = searchParams.get('includeInactive') === 'true';
 
     // Fetch aliases
-    const { success, data, error } = await getEmployerAliases(employerId, includeInactive);
+    const { success, data, error } = await getEmployerAliases(supabase, employerId, includeInactive);
 
     if (!success) {
       console.error('Failed to fetch employer aliases:', error);
@@ -77,7 +183,8 @@ async function getAliasesHandler(request: NextRequest, { params }: { params: { i
         id: employer.id,
         name: employer.name
       },
-      aliases: data || [],
+      data: data || [],
+      aliases: data || [], // Keep for backward compatibility
       count: (data || []).length
     });
 
@@ -87,8 +194,8 @@ async function getAliasesHandler(request: NextRequest, { params }: { params: { i
   }
 }
 
-// POST /api/employers/[id]/aliases - Create new alias for employer
-async function createAliasHandler(request: NextRequest, { params }: { params: { id: string } }) {
+// POST /api/employers/[employerId]/aliases - Create new alias for employer
+async function createAliasHandler(request: NextRequest, { params }: { params: { employerId: string } }) {
   try {
     const supabase = await createServerSupabase();
 
@@ -114,7 +221,7 @@ async function createAliasHandler(request: NextRequest, { params }: { params: { 
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const employerId = params.id;
+    const employerId = params.employerId;
     if (!employerId) {
       return NextResponse.json({ error: 'Employer ID is required' }, { status: 400 });
     }
@@ -154,6 +261,7 @@ async function createAliasHandler(request: NextRequest, { params }: { params: { 
 
     // Validate alias uniqueness
     const { success: validationSuccess, isUnique, error: validationError } = await validateAliasUniqueness(
+      supabase,
       aliasRequest.alias,
       employerId
     );
@@ -167,7 +275,7 @@ async function createAliasHandler(request: NextRequest, { params }: { params: { 
     }
 
     // Create the alias
-    const { success, data, error } = await createEmployerAlias(aliasRequest);
+    const { success, data, error } = await createEmployerAlias(supabase, aliasRequest);
 
     if (!success) {
       console.error('Failed to create employer alias:', error);
