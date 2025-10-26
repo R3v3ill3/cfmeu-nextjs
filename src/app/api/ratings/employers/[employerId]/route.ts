@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withRateLimit, RATE_LIMIT_PRESETS } from '@/lib/rateLimit';
-import { createServerSupabase } from '@/lib/supabase/server';
+
+// Dynamic import to handle potential module loading errors
+let createServerSupabase: any;
+try {
+  createServerSupabase = require('@/lib/supabase/server').createServerSupabase;
+} catch (importError) {
+  console.error('Failed to import createServerSupabase:', importError);
+  createServerSupabase = null;
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -10,6 +18,28 @@ async function getEmployerRatingHandler(request: NextRequest, { params }: { para
     const { employerId } = params;
 
     console.log('Employer rating adapter called with employerId:', employerId);
+
+    // Check if Supabase module is available
+    if (!createServerSupabase) {
+      console.log('Supabase module not available, returning fallback data');
+
+      // Return fallback data when Supabase module is unavailable
+      const fallbackResponse = {
+        rating_history: [],
+        project_data_rating: null,
+        organiser_expertise_rating: null
+      };
+
+      return NextResponse.json(fallbackResponse, {
+        status: 200,
+        headers: {
+          'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+          'Content-Type': 'application/json',
+          'X-Fallback-Data': 'true',
+          'X-Error': 'supabase-module-unavailable'
+        }
+      });
+    }
 
     // Try to connect to Supabase with proper error handling
     let supabase;
