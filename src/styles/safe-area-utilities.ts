@@ -445,5 +445,5 @@ export const safeAreaValidation = {
   },
 };
 
-// React import (avoiding import statement to keep this file pure)
-declare const React: any;
+// Ensure React namespace is available for hooks
+import * as React from 'react';

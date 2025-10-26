@@ -10,7 +10,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, Component } from 'react'
-import type { ReactNode } from 'react'
+import type { ReactNode, ComponentType } from 'react'
 import dynamic from 'next/dynamic'
 import { isMobile, isSlowConnection } from '@/lib/device'
 

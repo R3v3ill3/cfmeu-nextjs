@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useMemo, useRef, forwardRef } from 'react'
+"use client"
+import React, { useState, useEffect, useCallback, useMemo, useRef, forwardRef } from 'react'
 import type {  } from 'react'
 import { Slot } from "@radix-ui/react-slot"
 import { VariantProps, cva } from "class-variance-authority"

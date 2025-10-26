@@ -619,7 +619,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
           .select('employer_id, employer:employer_id ( id, name )')
           .eq('alias_normalized', normalized)
           .maybeSingle();
-        if (aliasHit && aliasHit.employer) {
+        if (aliasHit && (aliasHit as any).employer) {
           return {
             companyName,
             csvRole,
@@ -812,7 +812,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
         tradeTypeConfirmed: false
       };
     }
-  };
+  }
 
   // Create consolidated matches for improved UX
   const createConsolidatedMatches = (
@@ -1028,11 +1028,10 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
         suburb: csvRow.companyTown,
         state: csvRow.companyState,
         postcode: csvRow.companyPostcode,
-        country: csvRow.companyCountry,
         phone: csvRow.companyPhone,
         email: csvRow.companyEmail,
         bci_company_id: csvRow.companyId
-      })
+      } as any)
       .select('id')
       .single();
 
@@ -1065,9 +1064,6 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
     if (csvRow.companyPostcode && csvRow.companyPostcode.trim() !== '') {
       updateData.postcode = csvRow.companyPostcode.trim();
     }
-    if (csvRow.companyCountry && csvRow.companyCountry.trim() !== '') {
-      updateData.country = csvRow.companyCountry.trim();
-    }
     if (csvRow.companyPhone && csvRow.companyPhone.trim() !== '') {
       updateData.phone = csvRow.companyPhone.trim();
     }
@@ -1085,7 +1081,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
     
     const { error } = await supabase
       .from('employers')
-      .update(updateData)
+      .update(updateData as any)
       .eq('id', employerId);
 
     if (error) {
@@ -1228,7 +1224,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
         primary_contact_name: `${companyData.contactFirstName} ${companyData.contactSurname}`.trim(),
         employer_type: 'large_contractor',
         bci_company_id: companyData.companyId  // ✅ ADD THIS CRITICAL FIELD
-      })
+      } as any)
       .select('id')
       .single();
     
@@ -1380,7 +1376,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
             last_update_date: project.lastUpdateDate,
             stage_class: mapBciStageToStageClass(project.projectStage, project.projectStatus),
             federal_funding: 0 // Not in BCI data
-          })
+          } as any)
           .select('id')
           .single();
         if (projectError) throw projectError;
@@ -1395,11 +1391,11 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
             is_main_site: true,
             latitude: project.latitude,
             longitude: project.longitude
-          })
+          } as any)
           .select('id')
           .single();
         if (siteError) throw siteError;
-        await supabase.from('projects').update({ main_job_site_id: site.id }).eq('id', newProject.id);
+        await supabase.from('projects').update({ main_job_site_id: site.id } as any).eq('id', newProject.id);
         results.success++;
         results.projectsCreated.push(project.projectName);
       } catch (e) {
@@ -1538,7 +1534,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
       // Batch insert to pending_employers
       const { data, error } = await supabase
         .from('pending_employers')
-        .insert(pendingEmployersToInsert)
+        .insert(pendingEmployersToInsert as any)
         .select('id, company_name');
 
       if (error) {
@@ -1626,7 +1622,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
               ),
               funding_type_primary: project.fundingTypePrimary,
               owner_type_level_1: project.ownerTypeLevel1Primary
-            })
+            } as any)
             .eq('id', existingProject.id)
             .select('id');
           
@@ -1652,7 +1648,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
               ),
               funding_type_primary: project.fundingTypePrimary,
               owner_type_level_1: project.ownerTypeLevel1Primary
-            })
+            } as any)
             .select('id')
             .single();
 
@@ -1679,7 +1675,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
               full_address: `${project.projectAddress}, ${project.projectTown}, ${project.projectState} ${project.postCode}`,
               latitude: project.latitude,
               longitude: project.longitude
-            })
+            } as any)
             .eq('id', existingJobSite.id)
             .select('id')
             .single();
@@ -1698,7 +1694,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
               is_main_site: true,
               latitude: project.latitude,
               longitude: project.longitude
-            })
+            } as any)
             .select('id')
             .single();
 
@@ -1709,7 +1705,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
         // Update project with main job site if needed
         await supabase
           .from('projects')
-          .update({ main_job_site_id: jobSiteId })
+          .update({ main_job_site_id: jobSiteId } as any)
           .eq('id', projectId);
 
         // Process companies with user confirmations
@@ -1751,7 +1747,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
                   p_employer_id: employerId,
                   p_source: 'bci_import',
                   p_match_status: 'auto_matched',
-                  p_match_confidence: company.matchConfidence ?? 0.8,
+                  p_match_confidence: company.confidence === 'exact' ? 1.0 : company.confidence === 'fuzzy' ? 0.8 : 0.5,
                   p_match_notes: `Auto-matched from BCI import: ${company.companyName}`
                 });
 
@@ -1912,7 +1908,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
                 p_employer_id: employerId,
                 p_source: 'bci_import',
                 p_match_status: 'auto_matched',
-                p_match_confidence: company.matchConfidence ?? 0.8,
+                p_match_confidence: company.confidence === 'exact' ? 1.0 : company.confidence === 'fuzzy' ? 0.8 : 0.5,
                 p_match_notes: `Auto-matched from BCI import: ${company.companyName}`
               });
               
@@ -2052,7 +2048,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
                 p_employer_id: employerId,
                 p_source: 'bci_import',
                 p_match_status: 'auto_matched',
-                p_match_confidence: company.matchConfidence ?? 0.8,
+                p_match_confidence: company.confidence === 'exact' ? 1.0 : company.confidence === 'fuzzy' ? 0.8 : 0.5,
                 p_match_notes: `Auto-matched from BCI import: ${company.companyName}`
               });
               
@@ -2248,7 +2244,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
       (async () => {
         const supabase = getSupabaseBrowserClient();
         const nowIso = new Date().toISOString();
-        const collectedBy = session?.user?.id ?? null;
+        const collectedBy = user?.id ?? null;
         const insertPayload = {
           alias: companyName,
           alias_normalized: normalized.normalized,
@@ -2263,7 +2259,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
 
         const { error: aliasError } = await supabase
           .from('employer_aliases')
-          .upsert(insertPayload, { onConflict: 'employer_id,alias_normalized' });
+          .upsert(insertPayload as any, { onConflict: 'employer_id,alias_normalized' });
 
         if (aliasError) {
           console.warn('Failed to save employer alias', aliasError);
@@ -2303,7 +2299,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
           sourceIdentifier: projectId,
           projectId,
           csvRole,
-          collectedBy: session?.user?.id ?? null,
+          collectedBy: user?.id ?? null,
           notes: `Matched via BCI import (${csvRole})`,
           error: err instanceof Error ? err : new Error('Unknown alias insert failure'),
         });
@@ -2345,7 +2341,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
                   csv_role: company.csvRole
                 }],
                 raw: csvRow
-              });
+              } as any);
           } catch (e) {
             // Non-fatal; fall back to in-memory list only
             console.warn('Failed to persist pending employer; keeping in-memory only');

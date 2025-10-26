@@ -122,7 +122,7 @@ export function RoleBasedDashboard({ className }: RoleBasedDashboardProps) {
     )
   }
 
-  console.log('User profile:', userProfile)
+  
 
   // Render appropriate dashboard based on user role
   return (
@@ -162,7 +162,7 @@ export function RoleBasedDashboard({ className }: RoleBasedDashboardProps) {
           />
         )}
 
-        {!["organiser", "lead_organiser", "admin"].includes(userProfile.role) && (
+        {!["organiser", "lead_organiser", "admin"].includes(userProfile.role ?? "") && (
           <Alert>
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>

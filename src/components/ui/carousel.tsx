@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useMemo, useRef, forwardRef } from 'react'
+"use client"
+import React, { useState, useEffect, useCallback, useMemo, useRef, forwardRef } from 'react'
 import type { HTMLAttributes } from 'react'
 import useEmblaCarousel, {
   type UseEmblaCarouselType,

@@ -567,7 +567,4 @@ export const useSafeAreaTesting = () => {
     error,
   };
 };
-
-// React import for hook
-declare const React: any;
-declare const useState: any;
+import React, { useState } from 'react';
