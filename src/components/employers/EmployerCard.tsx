@@ -118,7 +118,21 @@ export function EmployerCard({ employer, onClick, onUpdated }: { employer: Emplo
       if (!res.ok) throw new Error(await res.text())
       const json = await res.json()
       return json.data || []
-    }
+    },
+    enabled: !!employer.id,
+    retry: (failureCount, error) => {
+      // Only retry once and not for 4xx errors
+      if (failureCount >= 1) return false
+      if (error instanceof Error && error.message.includes('404')) return false
+      if (error instanceof Error && error.message.includes('401')) return false
+      if (error instanceof Error && error.message.includes('403')) return false
+      return true
+    },
+    retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 5000),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   })
 
   const roles = (employer.roles && employer.roles.length > 0) ? employer.roles : (fallbackCats?.roles || [])

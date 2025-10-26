@@ -125,7 +125,14 @@ export const dynamic = 'force-dynamic';
 // GET /api/employers/[employerId]/aliases - List all aliases for an employer
 async function getAliasesHandler(request: NextRequest, { params }: { params: { employerId: string } }) {
   try {
+    const startTime = Date.now();
     const supabase = await createServerSupabase();
+
+    // Validate employer ID format to prevent database errors
+    const { employerId } = params;
+    if (!employerId || typeof employerId !== 'string' || employerId.length < 10) {
+      return NextResponse.json({ error: 'Invalid employer ID' }, { status: 400 });
+    }
 
     // Authenticate user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -169,15 +176,30 @@ async function getAliasesHandler(request: NextRequest, { params }: { params: { e
     const { searchParams } = new URL(request.url);
     const includeInactive = searchParams.get('includeInactive') === 'true';
 
-    // Fetch aliases
+    // Fetch aliases with timeout to prevent cascading failures
+    const fetchStartTime = Date.now();
     const { success, data, error } = await getEmployerAliases(supabase, employerId, includeInactive);
+    const fetchDuration = Date.now() - fetchStartTime;
 
     if (!success) {
-      console.error('Failed to fetch employer aliases:', error);
+      console.error('Failed to fetch employer aliases:', error, {
+        employerId,
+        duration: fetchDuration,
+        totalDuration: Date.now() - startTime
+      });
       return NextResponse.json({ error: 'Failed to fetch aliases' }, { status: 500 });
     }
 
-    return NextResponse.json({
+    // Log slow queries for monitoring
+    if (fetchDuration > 1000) {
+      console.warn('Slow employer aliases query detected:', {
+        employerId,
+        duration: fetchDuration,
+        aliasCount: (data || []).length
+      });
+    }
+
+    const response = {
       success: true,
       employer: {
         id: employer.id,
@@ -185,8 +207,14 @@ async function getAliasesHandler(request: NextRequest, { params }: { params: { e
       },
       data: data || [],
       aliases: data || [], // Keep for backward compatibility
-      count: (data || []).length
-    });
+      count: (data || []).length,
+      timing: {
+        fetch: fetchDuration,
+        total: Date.now() - startTime
+      }
+    };
+
+    return NextResponse.json(response);
 
   } catch (error) {
     console.error('Unexpected error in GET /api/employers/[id]/aliases:', error);
@@ -197,7 +225,14 @@ async function getAliasesHandler(request: NextRequest, { params }: { params: { e
 // POST /api/employers/[employerId]/aliases - Create new alias for employer
 async function createAliasHandler(request: NextRequest, { params }: { params: { employerId: string } }) {
   try {
+    const startTime = Date.now();
     const supabase = await createServerSupabase();
+
+    // Validate employer ID format to prevent database errors
+    const { employerId } = params;
+    if (!employerId || typeof employerId !== 'string' || employerId.length < 10) {
+      return NextResponse.json({ error: 'Invalid employer ID' }, { status: 400 });
+    }
 
     // Authenticate user
     const { data: { user }, error: authError } = await supabase.auth.getUser();

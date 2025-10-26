@@ -70,7 +70,17 @@ async function deleteAliasHandler(
   { params }: { params: { employerId: string; aliasId: string } }
 ) {
   try {
+    const startTime = Date.now();
     const supabase = await createServerSupabase();
+
+    // Validate employer and alias ID formats to prevent database errors
+    const { employerId, aliasId } = params;
+    if (!employerId || typeof employerId !== 'string' || employerId.length < 10) {
+      return NextResponse.json({ error: 'Invalid employer ID' }, { status: 400 });
+    }
+    if (!aliasId || typeof aliasId !== 'string' || aliasId.length < 10) {
+      return NextResponse.json({ error: 'Invalid alias ID' }, { status: 400 });
+    }
 
     // Authenticate user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -141,7 +151,17 @@ async function updateAliasHandler(
   { params }: { params: { employerId: string; aliasId: string } }
 ) {
   try {
+    const startTime = Date.now();
     const supabase = await createServerSupabase();
+
+    // Validate employer and alias ID formats to prevent database errors
+    const { employerId, aliasId } = params;
+    if (!employerId || typeof employerId !== 'string' || employerId.length < 10) {
+      return NextResponse.json({ error: 'Invalid employer ID' }, { status: 400 });
+    }
+    if (!aliasId || typeof aliasId !== 'string' || aliasId.length < 10) {
+      return NextResponse.json({ error: 'Invalid alias ID' }, { status: 400 });
+    }
 
     // Authenticate user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
