@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useCallback } from "react"
 
 interface UseMobileOptimizationsOptions {
   enableIntersectionObserver?: boolean
