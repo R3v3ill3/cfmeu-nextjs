@@ -168,6 +168,13 @@ async function ratingHealthCheckHandler(request: NextRequest) {
     // Check 3: Feature flags
     const flagsStart = Date.now()
     try {
+      // Set system context for health check (bypass role-based restrictions)
+      featureFlags.setUserContext({
+        userId: 'system-health-check',
+        role: 'admin',
+        environment: process.env.NODE_ENV || 'development'
+      })
+
       const systemStatus = featureFlags.getSystemStatus()
       const flagsTime = Date.now() - flagsStart
 

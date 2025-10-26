@@ -621,12 +621,16 @@ function generateRecommendations(calculationResult: any): string[] {
 
 // Export handlers with rate limiting
 export const GET = withRateLimit(
-  (request, context) => getFinalRatingsHandler(request, context as { params: { employerId: string } }),
+  async (request: NextRequest, context: { params: { employerId: string } }) => {
+    return await getFinalRatingsHandler(request, context);
+  },
   RATE_LIMIT_PRESETS.STANDARD
 );
 
 export const POST = withRateLimit(
-  (request, context) => calculateFinalRatingHandler(request, context as { params: { employerId: string } }),
+  async (request: NextRequest, context: { params: { employerId: string } }) => {
+    return await calculateFinalRatingHandler(request, context);
+  },
   RATE_LIMIT_PRESETS.EXPENSIVE_QUERY
 );
 
