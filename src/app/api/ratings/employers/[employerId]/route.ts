@@ -1,20 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withRateLimit, RATE_LIMIT_PRESETS } from '@/lib/rateLimit';
+import { createServerSupabase } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
-// Test with rate limiting
+// Test with Supabase connection
 async function getEmployerRatingHandler(request: NextRequest, { params }: { params: { employerId: string } }) {
   try {
     const { employerId } = params;
 
-    console.log('Minimal endpoint called with employerId:', employerId);
+    console.log('Testing Supabase connection with employerId:', employerId);
 
-    // Return a simple response
+    // Test Supabase connection
+    const supabase = await createServerSupabase();
+    console.log('Supabase client created successfully');
+
+    // Return a simple response indicating the test worked
     return NextResponse.json({
       success: true,
       employerId: employerId,
-      message: 'Minimal endpoint working',
+      message: 'Supabase connection test working',
       timestamp: new Date().toISOString(),
       data: {
         project_data_rating: {
