@@ -103,11 +103,7 @@ async function deleteAliasHandler(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const { employerId, aliasId } = params;
-
-    if (!employerId || !aliasId) {
-      return NextResponse.json({ error: 'Employer ID and Alias ID are required' }, { status: 400 });
-    }
+    // employerId and aliasId are already validated and declared above
 
     // Verify that the alias belongs to the specified employer
     const { data: alias, error: aliasError } = await supabase
@@ -184,11 +180,7 @@ async function updateAliasHandler(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const { employerId, aliasId } = params;
-
-    if (!employerId || !aliasId) {
-      return NextResponse.json({ error: 'Employer ID and Alias ID are required' }, { status: 400 });
-    }
+    // employerId and aliasId are already validated and declared above
 
     // Verify that the alias belongs to the specified employer
     const { data: alias, error: aliasError } = await supabase
