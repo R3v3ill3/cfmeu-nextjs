@@ -50,17 +50,47 @@ export const metadata: Metadata = {
 };
 
 // Pre-load React to ensure it's available during SSR
-import React from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 
-// Ensure React is globally available for Vercel serverless environment
-if (typeof globalThis !== 'undefined' && !globalThis.React) {
-  globalThis.React = React;
+// Ensure React and hooks are globally available for Vercel serverless environment
+if (typeof globalThis !== 'undefined') {
+  if (!globalThis.React) {
+    globalThis.React = React;
+  }
+  // Ensure hooks are available on global React
+  if (globalThis.React) {
+    globalThis.React.useState = useState;
+    globalThis.React.useEffect = useEffect;
+    globalThis.React.useCallback = useCallback;
+    globalThis.React.useMemo = useMemo;
+    globalThis.React.useRef = useRef;
+  }
 }
-if (typeof global !== 'undefined' && !global.React) {
-  global.React = React;
+if (typeof global !== 'undefined') {
+  if (!global.React) {
+    global.React = React;
+  }
+  // Ensure hooks are available on global React
+  if (global.React) {
+    global.React.useState = useState;
+    global.React.useEffect = useEffect;
+    global.React.useCallback = useCallback;
+    global.React.useMemo = useMemo;
+    global.React.useRef = useRef;
+  }
 }
-if (typeof window !== 'undefined' && !window.React) {
-  window.React = React;
+if (typeof window !== 'undefined') {
+  if (!window.React) {
+    window.React = React;
+  }
+  // Ensure hooks are available on global React
+  if (window.React) {
+    window.React.useState = useState;
+    window.React.useEffect = useEffect;
+    window.React.useCallback = useCallback;
+    window.React.useMemo = useMemo;
+    window.React.useRef = useRef;
+  }
 }
 
 export default function RootLayout({

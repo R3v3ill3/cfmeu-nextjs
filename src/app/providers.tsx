@@ -1,18 +1,37 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
-import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { GoogleMapsProvider } from '@/providers/GoogleMapsProvider'
 
-// Ensure React is globally available for client-side bundles
-if (typeof window !== 'undefined' && !window.React) {
-  window.React = React;
+// Ensure React and hooks are globally available for client-side bundles
+if (typeof window !== 'undefined') {
+  if (!window.React) {
+    window.React = React;
+  }
+  // Ensure hooks are available on global React
+  if (window.React) {
+    window.React.useState = useState;
+    window.React.useEffect = useEffect;
+    window.React.useCallback = useCallback;
+    window.React.useMemo = useMemo;
+    window.React.useRef = useRef;
+  }
 }
-if (typeof globalThis !== 'undefined' && !globalThis.React) {
-  globalThis.React = React;
+if (typeof globalThis !== 'undefined') {
+  if (!globalThis.React) {
+    globalThis.React = React;
+  }
+  // Ensure hooks are available on global React
+  if (globalThis.React) {
+    globalThis.React.useState = useState;
+    globalThis.React.useEffect = useEffect;
+    globalThis.React.useCallback = useCallback;
+    globalThis.React.useMemo = useMemo;
+    globalThis.React.useRef = useRef;
+  }
 }
 
 type ProvidersProps = {
