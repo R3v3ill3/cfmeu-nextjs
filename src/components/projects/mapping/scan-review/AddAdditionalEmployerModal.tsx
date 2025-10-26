@@ -75,16 +75,18 @@ export function AddAdditionalEmployerModal({
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Building2 className="h-5 w-5" />
-            Add Additional Subcontractor for {trade}
+          <DialogTitle className="flex items-center gap-2 max-lg:text-base max-lg:leading-tight">
+            <Building2 className="h-5 w-5 max-lg:h-4 max-lg:w-4" />
+            <span className="max-lg:break-words max-lg:hyphens-auto">
+              Add Additional Subcontractor for {trade}
+            </span>
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="max-lg:text-sm">
             Search and select an employer to add to this trade. This will create an additional assignment (tender stage may have multiple employers).
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 max-lg:space-y-3">
           {/* Search Input */}
           <div>
             <Label htmlFor="employer-search">Search Employers</Label>
@@ -184,13 +186,18 @@ export function AddAdditionalEmployerModal({
           )}
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={handleClose}>
+        <DialogFooter className="max-lg:flex-col max-lg:gap-2 max-lg:sticky max-lg:bottom-0 max-lg:bg-background max-lg:p-2 max-lg:-mx-6 max-lg:px-6 max-lg:border-t-2">
+          <Button
+            variant="outline"
+            onClick={handleClose}
+            className="max-lg:w-full max-lg:h-12 max-lg:text-base"
+          >
             Cancel
           </Button>
           <Button
             onClick={handleConfirm}
             disabled={!selectedEmployer}
+            className="max-lg:w-full max-lg:h-12 max-lg:text-base"
           >
             Add Subcontractor
           </Button>

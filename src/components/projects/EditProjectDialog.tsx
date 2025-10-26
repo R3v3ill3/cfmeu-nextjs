@@ -387,9 +387,9 @@ export function EditProjectDialog({
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">{triggerText}</Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-lg:max-w-[95vw] max-lg:max-h-[90vh] max-lg:overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Edit Project</DialogTitle>
+          <DialogTitle className="max-lg:text-lg max-lg:leading-tight max-lg:break-words max-lg:hyphens-auto">Edit Project</DialogTitle>
         </DialogHeader>
         <div className="max-h-[70vh] overflow-y-auto pr-4 space-y-4">
           <div>

@@ -65,13 +65,15 @@ export function BatchEbaSearchModal({
   return (
     <>
       <Dialog open={open} onOpenChange={onClose}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-lg:max-w-[95vw] max-lg:max-h-[90vh] max-lg:overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileSearch className="h-5 w-5" />
-              Batch EBA Search ({currentEmployerIndex + 1} of {employers.length})
+            <DialogTitle className="flex items-center gap-2 max-lg:text-base max-lg:leading-tight">
+              <FileSearch className="h-5 w-5 max-lg:h-4 max-lg:w-4" />
+              <span className="max-lg:break-words max-lg:hyphens-auto">
+                Batch EBA Search ({currentEmployerIndex + 1} of {employers.length})
+              </span>
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="max-lg:text-sm">
               Search and link Enterprise Bargaining Agreement details from Fair Work Commission database for employers that need EBA status updates
             </DialogDescription>
           </DialogHeader>
@@ -121,11 +123,18 @@ export function BatchEbaSearchModal({
             </div>
           </div>
 
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={handleSkip}>
+          <DialogFooter className="gap-2 max-lg:flex-col max-lg:gap-2 max-lg:sticky max-lg:bottom-0 max-lg:bg-background max-lg:p-2 max-lg:-mx-6 max-lg:px-6 max-lg:border-t-2">
+            <Button
+              variant="outline"
+              onClick={handleSkip}
+              className="max-lg:w-full max-lg:h-12 max-lg:text-base"
+            >
               Skip This Employer
             </Button>
-            <Button onClick={() => setIndividualSearchOpen(true)}>
+            <Button
+              onClick={() => setIndividualSearchOpen(true)}
+              className="max-lg:w-full max-lg:h-12 max-lg:text-base"
+            >
               <FileSearch className="h-4 w-4 mr-2" />
               Search FWC for EBA
             </Button>

@@ -5,7 +5,7 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
-  Menu, LogOut, Users, Building, MapPin, BarChart3, FolderOpen, FileCheck, Shield, AlertTriangle, QrCode, HelpCircle, Crown, Settings
+  Menu, LogOut, Users, Building, MapPin, BarChart3, FolderOpen, FileCheck, Shield, AlertTriangle, QrCode, HelpCircle, Crown, Settings, TrendingUp
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -60,6 +60,11 @@ const Layout = ({ children }: LayoutProps) => {
     // EBA Employers - check visibility
     if (visibility.eba_employers) {
       items.push({ path: "/eba-employers", label: "EBA Employers", icon: FileCheck });
+    }
+
+    // Rating System - show for organiser+ roles
+    if (!isLoadingRole && userRole && (userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin")) {
+      items.push({ path: "/mobile/ratings", label: "Ratings", icon: TrendingUp });
     }
     
     // Workers - check visibility

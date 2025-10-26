@@ -7,6 +7,7 @@ import { headers } from 'next/headers'
 import { isMobileOrTablet } from '@/lib/device'
 import { NavigationLoadingWrapper } from '@/components/NavigationLoadingWrapper'
 import { HelpContextProvider } from '@/context/HelpContext'
+import { RatingProvider } from '@/context/RatingContext'
 import { AppRole } from '@/constants/roles'
 
 async function getUserRole(userId: string): Promise<AppRole | null> {
@@ -38,9 +39,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <AuthProvider>
       <HelpContextProvider initialPathname={currentPath || '/'} initialRole={role}>
-        <NavigationLoadingWrapper>
-          {isMobile ? <Layout>{children}</Layout> : <DesktopLayout>{children}</DesktopLayout>}
-        </NavigationLoadingWrapper>
+        <RatingProvider>
+          <NavigationLoadingWrapper>
+            {isMobile ? <Layout>{children}</Layout> : <DesktopLayout>{children}</DesktopLayout>}
+          </NavigationLoadingWrapper>
+        </RatingProvider>
       </HelpContextProvider>
     </AuthProvider>
   )

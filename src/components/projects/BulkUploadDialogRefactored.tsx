@@ -125,11 +125,11 @@ function BulkUploadDialogContent({ open, onOpenChange }: BulkUploadDialogProps) 
 
       <Dialog open={open} onOpenChange={handleClose}>
         <DialogContent
-          className="max-w-4xl max-h-[90vh] overflow-y-auto"
+          className="max-w-4xl max-h-[90vh] overflow-y-auto max-lg:max-w-[95vw] max-lg:max-h-[90vh]"
           aria-describedby="bulk-upload-description"
         >
           <DialogHeader>
-            <DialogTitle>Bulk Upload Mapping Sheets</DialogTitle>
+            <DialogTitle className="max-lg:text-lg max-lg:leading-tight max-lg:break-words max-lg:hyphens-auto">Bulk Upload Mapping Sheets</DialogTitle>
             <DialogDescription id="bulk-upload-description">
               Upload a PDF containing multiple projects and split them into individual scans
               {state.step !== 'upload' && (
@@ -789,9 +789,9 @@ function RecoveryDialog({
 }) {
   return (
     <Dialog open={true} onOpenChange={() => {}}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-lg:max-w-[95vw] max-lg:max-h-[90vh] max-lg:overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Resume Previous Upload?</DialogTitle>
+          <DialogTitle className="max-lg:text-lg max-lg:leading-tight max-lg:break-words max-lg:hyphens-auto">Resume Previous Upload?</DialogTitle>
           <DialogDescription>
             We found saved progress from a previous bulk upload session. Would you like to restore it?
           </DialogDescription>
@@ -828,9 +828,9 @@ function CancellationDialog({
 }) {
   return (
     <Dialog open={true} onOpenChange={() => {}}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-lg:max-w-[95vw] max-lg:max-h-[90vh] max-lg:overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Cancel Processing?</DialogTitle>
+          <DialogTitle className="max-lg:text-lg max-lg:leading-tight max-lg:break-words max-lg:hyphens-auto">Cancel Processing?</DialogTitle>
           <DialogDescription>
             Are you sure you want to cancel the bulk upload process? This will stop all ongoing operations and you may lose progress.
           </DialogDescription>

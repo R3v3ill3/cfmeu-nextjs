@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { useMobileKeyboard } from "@/hooks/useMobileKeyboard";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRADE_OPTIONS } from "@/constants/trades";
@@ -77,6 +78,12 @@ export type EmployerEditFormProps = {
 
 export default function EmployerEditForm({ employer, onCancel, onSaved }: EmployerEditFormProps) {
   const { toast } = useToast();
+  const { scrollToInput, dismissKeyboard } = useMobileKeyboard({
+    enableAutoScroll: true,
+    scrollOffset: 80,
+    enableDismissOnTapOutside: true,
+    enableDismissOnScroll: false
+  });
   const queryClient = useQueryClient();
   const [isFormReady, setIsFormReady] = useState(false);
   const [isIncolinkModalOpen, setIsIncolinkModalOpen] = useState(false);

@@ -21,6 +21,8 @@ import { useEmployersServerSideCompatible } from "@/hooks/useEmployersServerSide
 import { AddEmployerDialog } from "@/components/employers/AddEmployerDialog"
 import { Plus } from "lucide-react"
 import { useDebounce, useLocalStorage, useInterval } from "react-use"
+import { RatingFiltersComponent, ActiveRatingFilters } from "@/components/ratings/RatingFilters"
+import { RatingFilters } from "@/types/rating"
 
 export function EmployersDesktopView() {
   const queryClient = useQueryClient()
@@ -402,6 +404,21 @@ export function EmployersDesktopView() {
                 <SelectItem value="large_contractor">Large Contractor</SelectItem>
                 <SelectItem value="small_contractor">Small Contractor</SelectItem>
                 <SelectItem value="individual">Individual</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="w-40">
+            <div className="text-xs text-muted-foreground mb-1">Rating</div>
+            <Select value={sp.get("rating") || ""} onValueChange={(v) => setParam("rating", v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="All ratings" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">All ratings</SelectItem>
+                <SelectItem value="green">Green</SelectItem>
+                <SelectItem value="amber">Amber</SelectItem>
+                <SelectItem value="yellow">Yellow</SelectItem>
+                <SelectItem value="red">Red</SelectItem>
               </SelectContent>
             </Select>
           </div>

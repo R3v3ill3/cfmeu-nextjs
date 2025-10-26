@@ -18,6 +18,7 @@ import { ProjectQuickFinder } from "@/components/projects/ProjectQuickFinder"
 import { FileText, Edit, AlertCircle, CheckCircle2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useNavigationLoading } from "@/hooks/useNavigationLoading"
+import { useMobileKeyboard } from "@/hooks/useMobileKeyboard"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 type DialogMode = 'choice' | 'manual' | 'scan'
@@ -37,6 +38,12 @@ type ValidationErrors = {
 export default function CreateProjectDialog() {
   const router = useRouter()
   const { startNavigation } = useNavigationLoading()
+  const { scrollToInput, dismissKeyboard } = useMobileKeyboard({
+    enableAutoScroll: true,
+    scrollOffset: 100,
+    enableDismissOnTapOutside: true,
+    enableDismissOnScroll: false
+  })
   const [open, setOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<DialogMode>('choice');
   const [name, setName] = useState("");
@@ -372,9 +379,9 @@ export default function CreateProjectDialog() {
         <DialogTrigger asChild>
           <Button size="xl" className="font-medium">New Project</Button>
         </DialogTrigger>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-lg:max-w-[95vw] max-lg:max-h-[90vh] max-lg:overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-xl font-semibold text-gray-900">Create Project</DialogTitle>
+            <DialogTitle className="text-xl font-semibold text-gray-900 max-lg:text-lg max-lg:leading-tight max-lg:break-words max-lg:hyphens-auto">Create Project</DialogTitle>
           </DialogHeader>
 
           {/* Choice Screen */}
@@ -446,14 +453,19 @@ export default function CreateProjectDialog() {
             </Label>
             <Input
               id="cp_name"
+              name="project-name"
+              type="text"
               value={name}
               onChange={(e) => {
                 setName(e.target.value);
                 clearFieldError('name');
               }}
-              placeholder="Name"
+              placeholder="Enter project name"
+              autoComplete="organization"
+              mobileOptimization={true}
               className={`h-12 px-4 py-3 text-gray-900 bg-white border-gray-300 focus:border-blue-500 focus:ring-blue-500 ${validationErrors.name ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`}
               disabled={createMutation.isPending}
+              onFocus={(e) => scrollToInput(e.target)}
             />
             {validationErrors.name && (
               <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
@@ -486,18 +498,27 @@ export default function CreateProjectDialog() {
           <div className="space-y-2">
             <Label htmlFor="value">Project Value (AUD)</Label>
             <div className="flex items-center gap-3">
-              <Input
-                id="value"
-                type="number"
-                placeholder="Enter project value"
-                value={value}
-                onChange={(e) => {
-                  setValue(e.target.value);
-                  clearFieldError('value');
-                }}
-                className={validationErrors.value ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}
-                disabled={createMutation.isPending}
-              />
+              <div className="flex-1">
+                <Input
+                  id="value"
+                  name="project-value"
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  value={value}
+                  onChange={(e) => {
+                    setValue(e.target.value);
+                    clearFieldError('value');
+                  }}
+                  autoComplete="off"
+                  mobileOptimization={true}
+                  className={validationErrors.value ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}
+                  disabled={createMutation.isPending}
+                  onFocus={(e) => scrollToInput(e.target)}
+                />
+              </div>
               {calculatedTier && (
                 <ProjectTierBadge tier={calculatedTier} size="sm" />
               )}
@@ -553,15 +574,20 @@ export default function CreateProjectDialog() {
             <Label htmlFor="cp_roe" className="text-sm font-medium text-gray-700">ROE Email</Label>
             <Input
               id="cp_roe"
+              name="email"
               type="email"
+              inputMode="email"
               value={roeEmail}
               onChange={(e) => {
                 setRoeEmail(e.target.value);
                 clearFieldError('roeEmail');
               }}
               placeholder="rightofentry@example.com"
+              autoComplete="email"
+              mobileOptimization={true}
               className={`h-12 px-4 py-3 text-gray-900 bg-white border-gray-300 focus:border-blue-500 focus:ring-blue-500 ${validationErrors.roeEmail ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`}
               disabled={createMutation.isPending}
+              onFocus={(e) => scrollToInput(e.target)}
             />
             {validationErrors.roeEmail && (
               <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
@@ -588,14 +614,22 @@ export default function CreateProjectDialog() {
                 <Label htmlFor="cp_state" className="text-sm font-medium text-gray-700">State funding (AUD)</Label>
                 <Input
                   id="cp_state"
+                  name="state-funding"
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0"
                   value={stateFunding}
                   onChange={(e) => {
                     setStateFunding(e.target.value);
                     clearFieldError('stateFunding');
                   }}
-                  placeholder="0"
+                  placeholder="0.00"
+                  autoComplete="off"
+                  mobileOptimization={true}
                   className={`h-12 px-4 py-3 text-gray-900 bg-white border-gray-300 focus:border-blue-500 focus:ring-blue-500 ${validationErrors.stateFunding ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`}
                   disabled={createMutation.isPending}
+                  onFocus={(e) => scrollToInput(e.target)}
                 />
                 {validationErrors.stateFunding && (
                   <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
@@ -608,14 +642,22 @@ export default function CreateProjectDialog() {
                 <Label htmlFor="cp_fed" className="text-sm font-medium text-gray-700">Federal funding (AUD)</Label>
                 <Input
                   id="cp_fed"
+                  name="federal-funding"
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0"
                   value={federalFunding}
                   onChange={(e) => {
                     setFederalFunding(e.target.value);
                     clearFieldError('federalFunding');
                   }}
-                  placeholder="0"
+                  placeholder="0.00"
+                  autoComplete="off"
+                  mobileOptimization={true}
                   className={`h-12 px-4 py-3 text-gray-900 bg-white border-gray-300 focus:border-blue-500 focus:ring-blue-500 ${validationErrors.federalFunding ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`}
                   disabled={createMutation.isPending}
+                  onFocus={(e) => scrollToInput(e.target)}
                 />
                 {validationErrors.federalFunding && (
                   <p className="mt-1 text-sm text-red-600 flex items-center gap-1">

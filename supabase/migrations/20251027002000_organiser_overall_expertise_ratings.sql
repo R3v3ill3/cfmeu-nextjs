@@ -279,8 +279,8 @@ CREATE TRIGGER update_expertise_rating_overrides_updated_at
     FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 -- Function to calculate wizard assessment summary from individual step responses
-CREATE OR REPLACE FUNCTION public.calculate_wizard_assessment_summary(p_wizard_session_id uuid)
-RETURNS void AS $$
+CREATE OR REPLACE FUNCTION public.calculate_wizard_assessment_summary()
+RETURNS trigger AS $$
 DECLARE
     v_summary_record public.organiser_wizard_assessment_summary%ROWTYPE;
     v_total_score numeric := 0;
@@ -288,6 +288,7 @@ DECLARE
     v_is_complete boolean := false;
     v_step_count integer := 0;
     v_completed_steps integer := 0;
+    v_wizard_session_id uuid := NEW.wizard_session_id;
 BEGIN
     -- Get wizard step count
     SELECT COUNT(*) INTO v_step_count
@@ -387,13 +388,14 @@ BEGIN
         is_complete = EXCLUDED.is_complete,
         updated_at = NOW();
 
+    RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger to recalculate wizard summary when steps are completed
 CREATE TRIGGER trigger_wizard_assessment_summary_update
     AFTER INSERT OR UPDATE ON public.organiser_wizard_assessments
-    FOR EACH ROW EXECUTE FUNCTION public.calculate_wizard_assessment_summary(wizard_session_id);
+    FOR EACH ROW EXECUTE FUNCTION public.calculate_wizard_assessment_summary();
 
 -- Enable Row Level Security
 ALTER TABLE public.organiser_overall_expertise_ratings ENABLE ROW LEVEL SECURITY;

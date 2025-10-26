@@ -9,6 +9,7 @@ import { FolderOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useNavigationLoading } from "@/hooks/useNavigationLoading"
 import { useRouter } from "next/navigation"
+import { RatingDisplay } from "@/components/ratings/RatingDisplay"
 
 export type ProjectCardData = {
   id: string;
@@ -18,7 +19,14 @@ export type ProjectCardData = {
   organising_universe: string | null;
   value: number | null;
   builderName: string | null;
+  builderId?: string | null;
   full_address: string | null;
+  // Enhanced data for ratings
+  employers?: Array<{
+    id: string;
+    name: string;
+    assignment_type: string;
+  }>;
 };
 
 export function ProjectCard({ project }: { project: ProjectCardData }) {
@@ -61,6 +69,41 @@ export function ProjectCard({ project }: { project: ProjectCardData }) {
             </span>
           )}
         </div>
+
+        {/* Builder Rating Section */}
+        {(project.builderId || (project.employers && project.employers.length > 0)) && (
+          <div className="mt-3 pt-3 border-t">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Builder Rating:</span>
+              {project.builderId && project.builderName ? (
+                <RatingDisplay
+                  employerId={project.builderId}
+                  employerName={project.builderName}
+                  variant="compact"
+                  showDetails={false}
+                />
+              ) : project.employers && project.employers.length > 0 ? (
+                <div className="space-y-1">
+                  {project.employers
+                    .filter(emp => emp.assignment_type === 'contractor_role')
+                    .slice(0, 1)
+                    .map(employer => (
+                      <RatingDisplay
+                        key={employer.id}
+                        employerId={employer.id}
+                        employerName={employer.name}
+                        variant="compact"
+                        showDetails={false}
+                      />
+                    ))}
+                </div>
+              ) : (
+                <span className="text-xs text-muted-foreground">No builder</span>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-2 mt-4">
           {project.stage_class && (
             <Badge variant="secondary" className="capitalize">{project.stage_class.replace(/_/g, ' ')}</Badge>

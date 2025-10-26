@@ -93,8 +93,7 @@ SELECT
             'latest_score', pca.score,
             'latest_rating', pca.rating,
             'latest_date', pca.assessment_date,
-            'confidence_level', pca.confidence_level,
-            'assessment_count', COUNT(*) OVER (PARTITION BY pca.employer_id, pca.assessment_type)
+            'confidence_level', pca.confidence_level
         )
         ORDER BY pca.assessment_date DESC
     ) FILTER (WHERE pca.score IS NOT NULL) as latest_assessments,
@@ -151,7 +150,7 @@ SELECT
     jsonb_agg(
         jsonb_build_object(
             'organiser_id', oea.organiser_id,
-            'organiser_name', p.name,
+            'organiser_name', p.full_name,
             'overall_score', oea.overall_score,
             'overall_rating', oea.overall_rating,
             'assessment_date', oea.assessment_date,
@@ -443,18 +442,11 @@ SELECT
 FROM public.employers e
 LEFT JOIN public.employer_ratings_summary_mv ers ON e.id = ers.employer_id;
 
--- Create indexes for the search view
-CREATE INDEX idx_employers_with_ratings_search_text
-    ON public.employers_with_ratings_search USING gin(search_text gin_trgm_ops);
-
-CREATE INDEX idx_employers_with_ratings_search_rating
-    ON public.employers_with_ratings_search(final_rating, review_required);
-
-CREATE INDEX idx_employers_with_ratings_search_state_rating
-    ON public.employers_with_ratings_search(state, final_rating);
-
-CREATE INDEX idx_employers_with_ratings_search_employer_type
-    ON public.employers_with_ratings_search(employer_type, final_rating);
+-- Note: Indexes cannot be created on regular views
+-- If search performance is needed, consider:
+-- 1. Converting to a materialized view with periodic refresh
+-- 2. Creating indexes on the underlying tables
+-- 3. Using the existing materialized views that have proper indexing
 
 -- Create function for fast employer rating lookup
 -- Optimized for mobile performance with minimal database hits

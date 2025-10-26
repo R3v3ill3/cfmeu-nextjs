@@ -4,7 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { useGoogleMaps } from "@/providers/GoogleMapsProvider";
-import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { useMobileKeyboard } from "@/hooks/useMobileKeyboard";
+import { AlertCircle, CheckCircle2, MapPin, Navigation } from "lucide-react";
 
 declare global {
   interface Window {
@@ -128,6 +129,7 @@ export function GoogleAddressInput({
   required = false,
   requireSelection = true,
   onValidationChange,
+  enableGeolocation = true,
 }: {
   value?: string;
   onChange: (addr: GoogleAddress, error?: AddressValidationError | null) => void;
@@ -136,9 +138,16 @@ export function GoogleAddressInput({
   required?: boolean;
   requireSelection?: boolean;
   onValidationChange?: (error: AddressValidationError | null) => void;
+  enableGeolocation?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const { isLoaded, loadError } = useGoogleMaps();
+  const { scrollToInput, dismissKeyboard } = useMobileKeyboard({
+    enableAutoScroll: true,
+    scrollOffset: 80,
+    enableDismissOnTapOutside: true,
+    enableDismissOnScroll: true
+  });
   const [text, setText] = useState<string>(value || "");
   const lastFromAutocomplete = useRef(false);
   const selectingFromList = useRef(false);
@@ -148,6 +157,7 @@ export function GoogleAddressInput({
   const [validationError, setValidationError] = useState<AddressValidationError | null>(null);
   const [isValid, setIsValid] = useState<boolean>(false);
   const [touched, setTouched] = useState<boolean>(false);
+  const [isGettingLocation, setIsGettingLocation] = useState<boolean>(false);
 
   // Validation helper function
   const performValidation = (addr: GoogleAddress) => {
@@ -161,6 +171,129 @@ export function GoogleAddressInput({
 
     return error;
   };
+
+  // Geolocation functionality
+  const getCurrentLocation = useCallback(async () => {
+    if (!enableGeolocation || !navigator.geolocation) {
+      toast.error("Geolocation is not supported on this device");
+      return;
+    }
+
+    setIsGettingLocation(true);
+    dismissKeyboard(); // Hide keyboard when getting location
+
+    try {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+          resolve,
+          reject,
+          {
+            enableHighAccuracy: true,
+            timeout: 15000,
+            maximumAge: 300000 // 5 minutes
+          }
+        );
+      });
+
+      const { latitude, longitude } = position.coords;
+
+      // Reverse geocoding using Google Maps API
+      if (!window.google || !window.google.maps) {
+        throw new Error("Google Maps not loaded");
+      }
+
+      const geocoder = new window.google.maps.Geocoder();
+      const result = await new Promise<window.google.maps.GeocoderResult[]>((resolve, reject) => {
+        geocoder.geocode(
+          { location: { lat: latitude, lng: longitude } },
+          (results, status) => {
+            if (status === 'OK' && results && results.length > 0) {
+              resolve(results);
+            } else {
+              reject(new Error('Unable to get address from location'));
+            }
+          }
+        );
+      });
+
+      // Find the first address that's in Australia
+      const australianAddress = result.find(result =>
+        result.address_components?.some(component =>
+          component.types.includes('country') && component.long_name === 'Australia'
+        )
+      );
+
+      if (australianAddress) {
+        const formatted = australianAddress.formatted_address || "";
+        const components: Record<string, string> = {};
+        australianAddress.address_components?.forEach((c: any) => {
+          components[c.types[0]] = c.long_name;
+        });
+
+        const lat = australianAddress.geometry?.location?.lat?.();
+        const lng = australianAddress.geometry?.location?.lng?.();
+
+        const addr: GoogleAddress = {
+          formatted,
+          components,
+          place_id: australianAddress.place_id,
+          lat,
+          lng
+        };
+
+        setText(formatted);
+        if (inputRef.current) {
+          inputRef.current.value = formatted;
+        }
+
+        lastFromAutocomplete.current = true;
+        setTouched(true);
+
+        const error = performValidation(addr);
+        onChangeRef.current?.(addr, error);
+
+        toast.success("Location detected successfully");
+      } else {
+        toast.error("Unable to find Australian address for your location");
+      }
+
+    } catch (error) {
+      console.error("Geolocation error:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to get your location");
+    } finally {
+      setIsGettingLocation(false);
+    }
+  }, [enableGeolocation, dismissKeyboard]);
+
+  // Handle input focus with mobile keyboard optimization
+  const handleInputFocus = useCallback((event: React.FocusEvent<HTMLInputElement>) => {
+    setTouched(true);
+    scrollToInput(event.target);
+  }, [scrollToInput]);
+
+  // Handle input changes with mobile optimization
+  const handleInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const newText = event.target.value;
+    setText(newText);
+    lastFromAutocomplete.current = false;
+
+    // For immediate feedback on manual entry (when not selecting from autocomplete)
+    if (!selectingFromList.current) {
+      const addr: GoogleAddress = { formatted: newText };
+      const error = performValidation(addr);
+      onChangeRef.current?.(addr, error);
+    }
+  }, []);
+
+  // Handle input blur with mobile optimization
+  const handleInputBlur = useCallback(() => {
+    // Trigger validation on blur if touched
+    if (touched && text) {
+      const addr: GoogleAddress = { formatted: text };
+      const error = performValidation(addr);
+      onChangeRef.current?.(addr, error);
+    }
+  }, [touched, text]);
 
   useEffect(() => {
     setText(value || "");
@@ -277,82 +410,73 @@ export function GoogleAddressInput({
           </Label>
         )}
         <div className="relative">
-          <Input
-            ref={inputRef}
-            defaultValue={text}
-            placeholder={placeholder}
-            autoComplete="off"
-            autoCorrect="off"
-            spellCheck={false}
-            className={`${
-              touched && validationError
-                ? 'border-destructive focus-visible:ring-destructive'
-                : touched && isValid
-                ? 'border-green-600 focus-visible:ring-green-600'
-                : ''
-            }`}
-            onChange={(e) => {
-              const val = e.target.value;
-              setText(val);
-              // Clear validation on typing
-              if (validationError && validationError.type === 'not_selected') {
-                setValidationError(null);
-              }
-              // Emit on every keystroke so parents always have the latest manual text
-              const addr: GoogleAddress = { formatted: val };
-              onChange(addr, validationError);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === "Tab") {
-                const hasMenu = !!document.querySelector(".pac-container .pac-item");
-                if (hasMenu) {
-                  // Prevent form submission and let Google handle selection
-                  e.preventDefault();
-                  e.stopPropagation();
-                  return;
-                }
-                if (e.key === "Enter") e.preventDefault();
-                lastFromAutocomplete.current = false;
-                setTouched(true);
-                const val = (inputRef.current?.value ?? text).trim();
-                if (val) {
-                  const addr: GoogleAddress = { formatted: val };
-                  const error = performValidation(addr);
-                  onChange(addr, error);
-                }
-              }
-            }}
-            onBlur={() => {
-              setTouched(true);
-              // Defer commit to allow place_changed after click selection
-              setTimeout(() => {
-                if (lastFromAutocomplete.current) {
-                  lastFromAutocomplete.current = false;
-                  return;
-                }
-                if (selectingFromList.current) {
-                  // User clicked a prediction; place_changed will handle value
-                  return;
-                }
-                const menuOpen = !!document.querySelector(".pac-container .pac-item");
-                if (menuOpen) {
-                  // Suggestions still open; skip committing manual value
-                  return;
-                }
-                const val = (inputRef.current?.value ?? text).trim();
-                if (val) {
-                  const addr: GoogleAddress = { formatted: val };
-                  const error = performValidation(addr);
-                  onChange(addr, error);
-                }
-              }, 800);
-            }}
-          />
-          {touched && validationError && (
-            <div className="absolute right-3 top-1/2 -translate-y-1/2">
-              <AlertCircle className="h-4 w-4 text-destructive" />
+          <div className="flex gap-2">
+            <div className="flex-1 relative">
+              <Input
+                ref={inputRef}
+                defaultValue={text}
+                placeholder={placeholder}
+                autoComplete="street-address"
+                autoCorrect="off"
+                spellCheck={false}
+                name="street-address"
+                type="text"
+                mobileOptimization={true}
+                className={`${
+                  touched && validationError
+                    ? 'border-destructive focus-visible:ring-destructive'
+                    : touched && isValid
+                    ? 'border-green-600 focus-visible:ring-green-600'
+                    : ''
+                }`}
+                onFocus={handleInputFocus}
+                onChange={handleInputChange}
+                onBlur={handleInputBlur}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === "Tab") {
+                    const hasMenu = !!document.querySelector(".pac-container .pac-item");
+                    if (hasMenu) {
+                      // Prevent form submission and let Google handle selection
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return;
+                    }
+                    if (e.key === "Enter") e.preventDefault();
+                    lastFromAutocomplete.current = false;
+                    setTouched(true);
+                    const val = (inputRef.current?.value ?? text).trim();
+                    if (val) {
+                      const addr: GoogleAddress = { formatted: val };
+                      const error = performValidation(addr);
+                      onChange(addr, error);
+                    }
+                  }
+                }}
+              />
+              {touched && validationError && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <AlertCircle className="h-4 w-4 text-destructive" />
+                </div>
+              )}
             </div>
-          )}
+
+            {/* Geolocation button - only shown on touch devices and when enabled */}
+            {enableGeolocation && 'ontouchstart' in window && (
+              <button
+                type="button"
+                onClick={getCurrentLocation}
+                disabled={isGettingLocation}
+                className="inline-flex items-center justify-center w-10 h-10 rounded-md border border-gray-300 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation min-h-[44px] min-w-[44px]"
+                title="Use current location"
+              >
+                {isGettingLocation ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-gray-300 border-t-blue-600"></div>
+                ) : (
+                  <Navigation className="h-4 w-4 text-gray-600" />
+                )}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Validation Error Message */}

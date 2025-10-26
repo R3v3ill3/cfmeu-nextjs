@@ -12,6 +12,7 @@ import { FwcSearchModal } from "./FwcSearchModal"
 import { IncolinkActionModal } from "./IncolinkActionModal"
 import { ProjectCardModal } from "./ProjectCardModal"
 import { useRouter } from "next/navigation"
+import { RatingDisplay } from "@/components/ratings/RatingDisplay"
 
 export type EmployerCardData = {
   id: string;
@@ -174,6 +175,16 @@ export function EmployerCard({ employer, onClick, onUpdated }: { employer: Emplo
         <CardContent className="space-y-4">
           {/* Badges Section */}
           <div className="flex flex-wrap items-center gap-2">
+            {/* Rating Display */}
+            <div className="flex items-center gap-1">
+              <RatingDisplay
+                employerId={employer.id}
+                employerName={employer.name}
+                variant="compact"
+                className="touch-manipulation"
+              />
+            </div>
+
             {/* Badge 1: Canonical EBA Status - Blue Eureka Flag */}
             <div
               className="cursor-pointer flex items-center gap-1 touch-manipulation min-h-[44px] max-lg:min-h-[44px] max-lg:py-2"

@@ -1,11 +1,11 @@
 {
   "name": "CFMEU Organizer App",
   "short_name": "CFMEU",
-  "description": "Construction, Forestry, Maritime, Mining and Energy Union organizing platform",
-  "start_url": "/",
+  "description": "Construction, Forestry, Maritime, Mining and Energy Union organizing platform with employer rating system",
+  "start_url": "/mobile/ratings",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#000000",
+  "theme_color": "#3b82f6",
   "orientation": "portrait-primary",
   "scope": "/",
   "icons": [
@@ -19,9 +19,78 @@
       "src": "/favicon.ico",
       "sizes": "48x48",
       "type": "image/x-icon"
+    },
+    {
+      "src": "/icons/icon-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-128x128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-144x144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-152x152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-384x384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable any"
     }
   ],
   "shortcuts": [
+    {
+      "name": "Employer Ratings",
+      "short_name": "Ratings",
+      "description": "View employer traffic light ratings",
+      "url": "/mobile/ratings",
+      "icons": [{ "src": "/favicon.svg", "sizes": "96x96" }]
+    },
+    {
+      "name": "Rate Employer",
+      "short_name": "Rate",
+      "description": "Rate an employer using traffic light system",
+      "url": "/mobile/ratings/wizard",
+      "icons": [{ "src": "/favicon.svg", "sizes": "96x96" }]
+    },
+    {
+      "name": "Rating Dashboard",
+      "short_name": "Dashboard",
+      "description": "View rating analytics and trends",
+      "url": "/mobile/ratings/dashboard",
+      "icons": [{ "src": "/favicon.svg", "sizes": "96x96" }]
+    },
     {
       "name": "Record Site Visit",
       "short_name": "New Visit",
@@ -46,7 +115,49 @@
   ],
   "categories": ["productivity", "business"],
   "lang": "en-AU",
-  "dir": "ltr"
+  "dir": "ltr",
+  "screenshots": [
+    {
+      "src": "/screenshots/mobile-ratings.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Employer ratings with traffic light system"
+    },
+    {
+      "src": "/screenshots/mobile-wizard.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Rating wizard interface"
+    }
+  ],
+  "file_handlers": [
+    {
+      "action": "/mobile/import",
+      "accept": {
+        "text/csv": [".csv"],
+        "application/vnd.ms-excel": [".xls"],
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"]
+      }
+    }
+  ],
+  "share_target": {
+    "action": "/mobile/share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "files",
+          "accept": ["text/csv", ".csv"]
+        }
+      ]
+    }
+  }
 }
 
 

@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS public.incolink_compliance_records (
 -- Site visit compliance assessments
 CREATE TABLE IF NOT EXISTS public.site_visit_compliance_assessments (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    site_visit_id uuid NOT NULL REFERENCES public.site_visits(id) ON DELETE CASCADE,
+    site_visit_id uuid NOT NULL REFERENCES public.site_visit(id) ON DELETE CASCADE,
     project_id uuid NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
     employer_id uuid NOT NULL REFERENCES public.employers(id) ON DELETE CASCADE,
     visit_date date NOT NULL,
@@ -409,9 +409,9 @@ CREATE POLICY "Project compliance assessments read access" ON public.project_com
                 WHERE p.id = auth.uid() AND p.role = 'admin'
             ) OR
             EXISTS (
-                SELECT 1 FROM public.project_assignments pa
-                WHERE pa.project_id = project_id
-                AND pa.user_id = auth.uid()
+                SELECT 1 FROM public.profiles p
+                WHERE p.id = auth.uid()
+                AND (p.scoped_employers = '{}'::uuid[] OR employer_id = ANY(p.scoped_employers))
             ) OR
             EXISTS (
                 SELECT 1 FROM public.profiles p
@@ -429,9 +429,25 @@ CREATE POLICY "Project compliance assessments write access" ON public.project_co
                 WHERE p.id = auth.uid() AND p.role = 'admin'
             ) OR
             EXISTS (
-                SELECT 1 FROM public.project_assignments pa
-                WHERE pa.project_id = project_id
-                AND pa.user_id = auth.uid()
+                SELECT 1 FROM public.profiles p
+                WHERE p.id = auth.uid()
+                AND (p.scoped_employers = '{}'::uuid[] OR employer_id = ANY(p.scoped_employers))
+            ) OR
+            EXISTS (
+                -- Check if user has access to this project via patch assignment
+                SELECT 1 FROM public.patch_project_mapping_view ppmv
+                JOIN public.organiser_patch_assignments opa ON ppmv.patch_id = opa.patch_id
+                WHERE ppmv.project_id = project_id
+                AND opa.organiser_id = auth.uid()
+                AND opa.effective_to IS NULL
+            ) OR
+            EXISTS (
+                -- Check if user is lead organiser with access to this project via patch assignment
+                SELECT 1 FROM public.patch_project_mapping_view ppmv
+                JOIN public.lead_organiser_patch_assignments lopa ON ppmv.patch_id = lopa.patch_id
+                WHERE ppmv.project_id = project_id
+                AND lopa.lead_organiser_id = auth.uid()
+                AND lopa.effective_to IS NULL
             )
         )
     );
@@ -445,9 +461,23 @@ CREATE POLICY "Project compliance assessments update access" ON public.project_c
             ) OR
             updated_by = auth.uid() OR
             EXISTS (
-                SELECT 1 FROM public.project_assignments pa
-                WHERE pa.project_id = project_id
-                AND pa.user_id = auth.uid()
+                SELECT 1 FROM public.profiles p
+                WHERE p.id = auth.uid()
+                AND (p.scoped_employers = '{}'::uuid[] OR employer_id = ANY(p.scoped_employers))
+            ) OR
+            EXISTS (
+                SELECT 1 FROM public.patch_project_mapping_view ppmv
+                JOIN public.organiser_patch_assignments opa ON ppmv.patch_id = opa.patch_id
+                WHERE ppmv.project_id = project_id
+                AND opa.organiser_id = auth.uid()
+                AND opa.effective_to IS NULL
+            ) OR
+            EXISTS (
+                SELECT 1 FROM public.patch_project_mapping_view ppmv
+                JOIN public.lead_organiser_patch_assignments lopa ON ppmv.patch_id = lopa.patch_id
+                WHERE ppmv.project_id = project_id
+                AND lopa.lead_organiser_id = auth.uid()
+                AND lopa.effective_to IS NULL
             )
         )
     );
@@ -458,8 +488,23 @@ CREATE POLICY "CBUS compliance records read access" ON public.cbus_compliance_re
         auth.role() = 'authenticated' AND (
             EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin') OR
             EXISTS (
-                SELECT 1 FROM public.project_assignments pa
-                WHERE pa.project_id = project_id AND pa.user_id = auth.uid()
+                SELECT 1 FROM public.profiles p
+                WHERE p.id = auth.uid()
+                AND (p.scoped_employers = '{}'::uuid[] OR employer_id = ANY(p.scoped_employers))
+            ) OR
+            EXISTS (
+                SELECT 1 FROM public.patch_project_mapping_view ppmv
+                JOIN public.organiser_patch_assignments opa ON ppmv.patch_id = opa.patch_id
+                WHERE ppmv.project_id = project_id
+                AND opa.organiser_id = auth.uid()
+                AND opa.effective_to IS NULL
+            ) OR
+            EXISTS (
+                SELECT 1 FROM public.patch_project_mapping_view ppmv
+                JOIN public.lead_organiser_patch_assignments lopa ON ppmv.patch_id = lopa.patch_id
+                WHERE ppmv.project_id = project_id
+                AND lopa.lead_organiser_id = auth.uid()
+                AND lopa.effective_to IS NULL
             )
         )
     );
@@ -469,8 +514,23 @@ CREATE POLICY "CBUS compliance records write access" ON public.cbus_compliance_r
         auth.role() = 'authenticated' AND (
             EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin') OR
             EXISTS (
-                SELECT 1 FROM public.project_assignments pa
-                WHERE pa.project_id = project_id AND pa.user_id = auth.uid()
+                SELECT 1 FROM public.profiles p
+                WHERE p.id = auth.uid()
+                AND (p.scoped_employers = '{}'::uuid[] OR employer_id = ANY(p.scoped_employers))
+            ) OR
+            EXISTS (
+                SELECT 1 FROM public.patch_project_mapping_view ppmv
+                JOIN public.organiser_patch_assignments opa ON ppmv.patch_id = opa.patch_id
+                WHERE ppmv.project_id = project_id
+                AND opa.organiser_id = auth.uid()
+                AND opa.effective_to IS NULL
+            ) OR
+            EXISTS (
+                SELECT 1 FROM public.patch_project_mapping_view ppmv
+                JOIN public.lead_organiser_patch_assignments lopa ON ppmv.patch_id = lopa.patch_id
+                WHERE ppmv.project_id = project_id
+                AND lopa.lead_organiser_id = auth.uid()
+                AND lopa.effective_to IS NULL
             )
         )
     );
@@ -481,8 +541,23 @@ CREATE POLICY "Incolink compliance records access" ON public.incolink_compliance
         auth.role() = 'authenticated' AND (
             EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin') OR
             EXISTS (
-                SELECT 1 FROM public.project_assignments pa
-                WHERE pa.project_id = project_id AND pa.user_id = auth.uid()
+                SELECT 1 FROM public.profiles p
+                WHERE p.id = auth.uid()
+                AND (p.scoped_employers = '{}'::uuid[] OR employer_id = ANY(p.scoped_employers))
+            ) OR
+            EXISTS (
+                SELECT 1 FROM public.patch_project_mapping_view ppmv
+                JOIN public.organiser_patch_assignments opa ON ppmv.patch_id = opa.patch_id
+                WHERE ppmv.project_id = project_id
+                AND opa.organiser_id = auth.uid()
+                AND opa.effective_to IS NULL
+            ) OR
+            EXISTS (
+                SELECT 1 FROM public.patch_project_mapping_view ppmv
+                JOIN public.lead_organiser_patch_assignments lopa ON ppmv.patch_id = lopa.patch_id
+                WHERE ppmv.project_id = project_id
+                AND lopa.lead_organiser_id = auth.uid()
+                AND lopa.effective_to IS NULL
             )
         )
     );
@@ -492,8 +567,23 @@ CREATE POLICY "Site visit compliance assessments access" ON public.site_visit_co
         auth.role() = 'authenticated' AND (
             EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin') OR
             EXISTS (
-                SELECT 1 FROM public.project_assignments pa
-                WHERE pa.project_id = project_id AND pa.user_id = auth.uid()
+                SELECT 1 FROM public.profiles p
+                WHERE p.id = auth.uid()
+                AND (p.scoped_employers = '{}'::uuid[] OR employer_id = ANY(p.scoped_employers))
+            ) OR
+            EXISTS (
+                SELECT 1 FROM public.patch_project_mapping_view ppmv
+                JOIN public.organiser_patch_assignments opa ON ppmv.patch_id = opa.patch_id
+                WHERE ppmv.project_id = project_id
+                AND opa.organiser_id = auth.uid()
+                AND opa.effective_to IS NULL
+            ) OR
+            EXISTS (
+                SELECT 1 FROM public.patch_project_mapping_view ppmv
+                JOIN public.lead_organiser_patch_assignments lopa ON ppmv.patch_id = lopa.patch_id
+                WHERE ppmv.project_id = project_id
+                AND lopa.lead_organiser_id = auth.uid()
+                AND lopa.effective_to IS NULL
             ) OR
             visitor_id = auth.uid()
         )
@@ -504,8 +594,23 @@ CREATE POLICY "Delegate compliance reports access" ON public.delegate_compliance
         auth.role() = 'authenticated' AND (
             EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin') OR
             EXISTS (
-                SELECT 1 FROM public.project_assignments pa
-                WHERE pa.project_id = project_id AND pa.user_id = auth.uid()
+                SELECT 1 FROM public.profiles p
+                WHERE p.id = auth.uid()
+                AND (p.scoped_employers = '{}'::uuid[] OR employer_id = ANY(p.scoped_employers))
+            ) OR
+            EXISTS (
+                SELECT 1 FROM public.patch_project_mapping_view ppmv
+                JOIN public.organiser_patch_assignments opa ON ppmv.patch_id = opa.patch_id
+                WHERE ppmv.project_id = project_id
+                AND opa.organiser_id = auth.uid()
+                AND opa.effective_to IS NULL
+            ) OR
+            EXISTS (
+                SELECT 1 FROM public.patch_project_mapping_view ppmv
+                JOIN public.lead_organiser_patch_assignments lopa ON ppmv.patch_id = lopa.patch_id
+                WHERE ppmv.project_id = project_id
+                AND lopa.lead_organiser_id = auth.uid()
+                AND lopa.effective_to IS NULL
             ) OR
             delegate_id = auth.uid()
         )
@@ -516,8 +621,23 @@ CREATE POLICY "Organiser compliance reports access" ON public.organiser_complian
         auth.role() = 'authenticated' AND (
             EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin') OR
             EXISTS (
-                SELECT 1 FROM public.project_assignments pa
-                WHERE pa.project_id = project_id AND pa.user_id = auth.uid()
+                SELECT 1 FROM public.profiles p
+                WHERE p.id = auth.uid()
+                AND (p.scoped_employers = '{}'::uuid[] OR employer_id = ANY(p.scoped_employers))
+            ) OR
+            EXISTS (
+                SELECT 1 FROM public.patch_project_mapping_view ppmv
+                JOIN public.organiser_patch_assignments opa ON ppmv.patch_id = opa.patch_id
+                WHERE ppmv.project_id = project_id
+                AND opa.organiser_id = auth.uid()
+                AND opa.effective_to IS NULL
+            ) OR
+            EXISTS (
+                SELECT 1 FROM public.patch_project_mapping_view ppmv
+                JOIN public.lead_organiser_patch_assignments lopa ON ppmv.patch_id = lopa.patch_id
+                WHERE ppmv.project_id = project_id
+                AND lopa.lead_organiser_id = auth.uid()
+                AND lopa.effective_to IS NULL
             ) OR
             organiser_id = auth.uid()
         )
@@ -528,8 +648,23 @@ CREATE POLICY "Safety incident compliance access" ON public.safety_incident_comp
         auth.role() = 'authenticated' AND (
             EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin') OR
             EXISTS (
-                SELECT 1 FROM public.project_assignments pa
-                WHERE pa.project_id = project_id AND pa.user_id = auth.uid()
+                SELECT 1 FROM public.profiles p
+                WHERE p.id = auth.uid()
+                AND (p.scoped_employers = '{}'::uuid[] OR employer_id = ANY(p.scoped_employers))
+            ) OR
+            EXISTS (
+                SELECT 1 FROM public.patch_project_mapping_view ppmv
+                JOIN public.organiser_patch_assignments opa ON ppmv.patch_id = opa.patch_id
+                WHERE ppmv.project_id = project_id
+                AND opa.organiser_id = auth.uid()
+                AND opa.effective_to IS NULL
+            ) OR
+            EXISTS (
+                SELECT 1 FROM public.patch_project_mapping_view ppmv
+                JOIN public.lead_organiser_patch_assignments lopa ON ppmv.patch_id = lopa.patch_id
+                WHERE ppmv.project_id = project_id
+                AND lopa.lead_organiser_id = auth.uid()
+                AND lopa.effective_to IS NULL
             )
         )
     );
@@ -539,8 +674,23 @@ CREATE POLICY "Industrial dispute records access" ON public.industrial_dispute_r
         auth.role() = 'authenticated' AND (
             EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin') OR
             EXISTS (
-                SELECT 1 FROM public.project_assignments pa
-                WHERE pa.project_id = project_id AND pa.user_id = auth.uid()
+                SELECT 1 FROM public.profiles p
+                WHERE p.id = auth.uid()
+                AND (p.scoped_employers = '{}'::uuid[] OR employer_id = ANY(p.scoped_employers))
+            ) OR
+            EXISTS (
+                SELECT 1 FROM public.patch_project_mapping_view ppmv
+                JOIN public.organiser_patch_assignments opa ON ppmv.patch_id = opa.patch_id
+                WHERE ppmv.project_id = project_id
+                AND opa.organiser_id = auth.uid()
+                AND opa.effective_to IS NULL
+            ) OR
+            EXISTS (
+                SELECT 1 FROM public.patch_project_mapping_view ppmv
+                JOIN public.lead_organiser_patch_assignments lopa ON ppmv.patch_id = lopa.patch_id
+                WHERE ppmv.project_id = project_id
+                AND lopa.lead_organiser_id = auth.uid()
+                AND lopa.effective_to IS NULL
             )
         )
     );
@@ -550,8 +700,23 @@ CREATE POLICY "Payment compliance records access" ON public.payment_compliance_r
         auth.role() = 'authenticated' AND (
             EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin') OR
             EXISTS (
-                SELECT 1 FROM public.project_assignments pa
-                WHERE pa.project_id = project_id AND pa.user_id = auth.uid()
+                SELECT 1 FROM public.profiles p
+                WHERE p.id = auth.uid()
+                AND (p.scoped_employers = '{}'::uuid[] OR employer_id = ANY(p.scoped_employers))
+            ) OR
+            EXISTS (
+                SELECT 1 FROM public.patch_project_mapping_view ppmv
+                JOIN public.organiser_patch_assignments opa ON ppmv.patch_id = opa.patch_id
+                WHERE ppmv.project_id = project_id
+                AND opa.organiser_id = auth.uid()
+                AND opa.effective_to IS NULL
+            ) OR
+            EXISTS (
+                SELECT 1 FROM public.patch_project_mapping_view ppmv
+                JOIN public.lead_organiser_patch_assignments lopa ON ppmv.patch_id = lopa.patch_id
+                WHERE ppmv.project_id = project_id
+                AND lopa.lead_organiser_id = auth.uid()
+                AND lopa.effective_to IS NULL
             )
         )
     );
@@ -561,8 +726,23 @@ CREATE POLICY "Project compliance summary read access" ON public.project_complia
         auth.role() = 'authenticated' AND (
             EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin') OR
             EXISTS (
-                SELECT 1 FROM public.project_assignments pa
-                WHERE pa.project_id = project_id AND pa.user_id = auth.uid()
+                SELECT 1 FROM public.profiles p
+                WHERE p.id = auth.uid()
+                AND (p.scoped_employers = '{}'::uuid[] OR employer_id = ANY(p.scoped_employers))
+            ) OR
+            EXISTS (
+                SELECT 1 FROM public.patch_project_mapping_view ppmv
+                JOIN public.organiser_patch_assignments opa ON ppmv.patch_id = opa.patch_id
+                WHERE ppmv.project_id = project_id
+                AND opa.organiser_id = auth.uid()
+                AND opa.effective_to IS NULL
+            ) OR
+            EXISTS (
+                SELECT 1 FROM public.patch_project_mapping_view ppmv
+                JOIN public.lead_organiser_patch_assignments lopa ON ppmv.patch_id = lopa.patch_id
+                WHERE ppmv.project_id = project_id
+                AND lopa.lead_organiser_id = auth.uid()
+                AND lopa.effective_to IS NULL
             )
         )
     );

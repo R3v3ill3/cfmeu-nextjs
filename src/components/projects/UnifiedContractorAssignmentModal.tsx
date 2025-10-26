@@ -229,17 +229,17 @@ export function UnifiedContractorAssignmentModal({
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Building2 className="h-5 w-5" />
+          <DialogTitle className="flex items-center gap-2 max-lg:text-base max-lg:leading-tight">
+            <Building2 className="h-5 w-5 max-lg:h-4 max-lg:w-4" />
             Assign Contractor to Project
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="max-lg:text-sm">
             Assign a contractor to {project?.name || "this project"} with specific trade and site details.
             {isMultiSiteProject && " This project has multiple sites - please select the appropriate site."}
           </DialogDescription>
         </DialogHeader>
-        
-        <div className="space-y-6">
+
+        <div className="space-y-6 max-lg:space-y-4">
           {/* Project Info */}
           <div className="p-3 bg-muted rounded-lg">
             <div className="flex items-center gap-2 text-sm font-medium">
@@ -395,13 +395,19 @@ export function UnifiedContractorAssignmentModal({
           )}
 
           {/* Action Buttons */}
-          <div className="flex justify-end gap-3 pt-4 border-t">
-            <Button variant="outline" onClick={handleClose} disabled={isAssigning}>
+          <div className="flex justify-end gap-3 pt-4 border-t max-lg:flex-col max-lg:gap-2 max-lg:sticky max-lg:bottom-0 max-lg:bg-background max-lg:p-2 max-lg:-mx-6 max-lg:px-6 max-lg:border-t-2">
+            <Button
+              variant="outline"
+              onClick={handleClose}
+              disabled={isAssigning}
+              className="max-lg:w-full max-lg:h-12 max-lg:text-base"
+            >
               Cancel
             </Button>
             <Button
               onClick={handleAssign}
               disabled={!selectedEmployerId || !selectedSiteId || !selectedTradeType || isAssigning}
+              className="max-lg:w-full max-lg:h-12 max-lg:text-base"
             >
               {isAssigning ? (
                 <>

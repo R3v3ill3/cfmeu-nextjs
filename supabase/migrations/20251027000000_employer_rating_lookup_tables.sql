@@ -215,7 +215,7 @@ INSERT INTO public.compliance_severity_levels (assessment_type, severity_level, 
 INSERT INTO public.organiser_wizard_config (wizard_step, step_name, step_description, step_type, is_required, display_order) VALUES
 (1, 'EBA Status', 'Does the employer have an active enterprise agreement?', 'question', true, 1),
 (2, 'CBUS Compliance', 'Is the employer compliant with CBUS requirements?', 'question', true, 2),
-(3, 'Safety Record', ''How would you rate the employer''s safety record?', 'question', true, 3),
+(3, 'Safety Record', 'How would you rate the employer''s safety record?', 'question', true, 3),
 (4, 'Payment History', 'Does the employer have a good payment and wage compliance history?', 'question', true, 4),
 (5, 'Union Relationship', 'How would you describe the overall relationship with the union?', 'question', true, 5),
 (6, 'Recent Issues', 'Any recent compliance or relationship issues?', 'question', false, 6),

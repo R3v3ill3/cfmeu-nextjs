@@ -214,7 +214,7 @@ export function EmployerMatchDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className={`
         ${isMobile
-          ? 'w-[95vw] max-w-[95vw] max-h-[85vh] mx-4'
+          ? 'w-[95vw] max-w-[95vw] max-h-[85vh]'
           : 'max-w-2xl max-h-[80vh]'
         } overflow-y-auto
       `}>
@@ -511,12 +511,14 @@ export function EmployerMatchDialog({
         <DialogFooter className={`${isMobile ? 'flex-col space-y-3' : ''}`}>
           <Button
             variant="outline"
+            size={isMobile ? "lg" : "sm"}
             onClick={() => onOpenChange(false)}
             className={isMobile ? 'h-12 text-lg w-full' : ''}
           >
             {isMobile ? 'Cancel' : 'Cancel'}
           </Button>
           <Button
+            size={isMobile ? "lg" : "sm"}
             onClick={handleConfirm}
             disabled={!isValid || isCreating}
             className={isMobile ? 'h-12 text-lg w-full' : ''}

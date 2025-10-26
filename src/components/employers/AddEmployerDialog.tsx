@@ -184,10 +184,10 @@ export function AddEmployerDialog({ isOpen, onClose, onEmployerCreated }: AddEmp
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto max-lg:max-w-[95vw] max-lg:max-h-[90vh]">
         <DialogHeader>
-          <DialogTitle>Add New Employer</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="max-lg:text-lg max-lg:leading-tight max-lg:break-words max-lg:hyphens-auto">Add New Employer</DialogTitle>
+          <DialogDescription className="max-lg:text-sm">
             Create a new employer record in the system. Required fields are marked with *.
           </DialogDescription>
         </DialogHeader>
