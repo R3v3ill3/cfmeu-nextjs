@@ -38,26 +38,32 @@ const nextConfig = {
 
   // Bundle analyzer for development
   webpack: (config, { isServer, dev }) => {
-    // Add React aliasing for both server and client
+    // Force React to be bundled for both server and client
     config.resolve.alias = {
       ...config.resolve.alias,
       'react': 'react',
       'react-dom': 'react-dom',
     }
 
-    // Force React to be bundled, not externalized
+    // Force React to be bundled on server side instead of externalized
     if (isServer) {
-      config.externals = config.externals || [];
-      // Ensure React is bundled for SSR
-      config.externals = config.externals.filter(external => {
-        if (typeof external === 'string') {
-          return !external.includes('react') && !external.includes('react-dom');
+      // Filter out React from externals while keeping other Node.js modules
+      if (config.externals) {
+        if (Array.isArray(config.externals)) {
+          config.externals = config.externals.filter(ext =>
+            typeof ext === 'string' ? !ext.includes('react') : true
+          );
+        } else if (typeof config.externals === 'function') {
+          const originalExternals = config.externals;
+          config.externals = function(context, request, callback) {
+            if (request.includes('react') || request.includes('react-dom')) {
+              // Don't externalize React - let it be bundled
+              return callback();
+            }
+            return originalExternals(context, request, callback);
+          };
         }
-        if (typeof external === 'object' && external !== null) {
-          return !Object.keys(external).includes('react');
-        }
-        return true;
-      });
+      }
     }
     // Bundle splitting optimizations
     if (!isServer && !dev) {
