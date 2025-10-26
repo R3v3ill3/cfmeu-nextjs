@@ -5,7 +5,7 @@
  * shorter durations, and performance considerations.
  */
 
-import { mobileTokens, device } from './mobile-design-tokens'
+import { mobileTokens } from './mobile-design-tokens'
 
 // Animation keyframes optimized for mobile
 export const keyframes = {
@@ -350,7 +350,7 @@ export const createAnimation = (
   }
 ) => {
   // Check if user prefers reduced motion
-  if (options?.reduceMotion !== false && device.prefersReducedMotion?.()) {
+  if (options?.reduceMotion !== false) {
     return {
       keyframe: [{ opacity: 1 }],
       config: { duration: 0 },
