@@ -140,7 +140,7 @@ export function EmployerCard({ employer, onClick, onUpdated }: { employer: Emplo
 
   return (
     <>
-      <Card className="hover:shadow-lg transition-shadow duration-200" onClick={onClick}>
+      <Card className="hover:shadow-lg transition-shadow duration-200 cursor-pointer touch-manipulation max-lg:min-h-[44px] max-lg:p-1" onClick={onClick}>
         <CardHeader>
           <div className="flex items-start justify-between">
             <div className="flex-1">
@@ -176,7 +176,7 @@ export function EmployerCard({ employer, onClick, onUpdated }: { employer: Emplo
           <div className="flex flex-wrap items-center gap-2">
             {/* Badge 1: Canonical EBA Status - Blue Eureka Flag */}
             <div
-              className="cursor-pointer flex items-center gap-1"
+              className="cursor-pointer flex items-center gap-1 touch-manipulation min-h-[44px] max-lg:min-h-[44px] max-lg:py-2"
               onClick={handleEbaBadgeClick}
             >
               <CfmeuEbaBadge
@@ -262,7 +262,7 @@ export function EmployerCard({ employer, onClick, onUpdated }: { employer: Emplo
                 {employer.projects.slice(0, 2).map((project, index) => (
                   <div key={project.id} className="space-y-1">
                     <button
-                      className="text-sm text-blue-600 hover:text-blue-800 hover:underline text-left block"
+                      className="text-sm text-blue-600 hover:text-blue-800 hover:underline text-left block min-h-[44px] max-lg:min-h-[44px] max-lg:py-2 touch-manipulation"
                       onClick={(e) => handleProjectClick(project, e)}
                     >
                       {project.name}

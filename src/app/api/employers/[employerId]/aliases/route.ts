@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
-import { withRateLimit, RATE_LIMIT_PRESETS } from '@/lib/rateLimit';
 
 // Types for employer alias operations
 interface EmployerAlias {
@@ -156,10 +155,7 @@ async function getAliasesHandler(request: NextRequest, { params }: { params: { e
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const employerId = params.employerId;
-    if (!employerId) {
-      return NextResponse.json({ error: 'Employer ID is required' }, { status: 400 });
-    }
+    // employerId is already validated and declared above
 
     // Validate employer exists
     const { data: employer, error: employerError } = await supabase
@@ -256,10 +252,7 @@ async function createAliasHandler(request: NextRequest, { params }: { params: { 
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const employerId = params.employerId;
-    if (!employerId) {
-      return NextResponse.json({ error: 'Employer ID is required' }, { status: 400 });
-    }
+    // employerId is already validated and declared above
 
     // Validate employer exists
     const { data: employer, error: employerError } = await supabase
@@ -329,8 +322,8 @@ async function createAliasHandler(request: NextRequest, { params }: { params: { 
   }
 }
 
-// Export the handlers with rate limiting
-export const GET = withRateLimit(getAliasesHandler, RATE_LIMIT_PRESETS.DEFAULT);
-export const POST = withRateLimit(createAliasHandler, RATE_LIMIT_PRESETS.DEFAULT);
+// Export the handlers directly (rate limiting wrapper incompatible with dynamic params)
+export const GET = getAliasesHandler;
+export const POST = createAliasHandler;
 
 // DELETE handler for individual alias will be in /api/employers/[id]/aliases/[aliasId]/route.ts

@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { Building2, AlertCircle, Plus, Search, X, FileSearch, Tags, Users, Keyboard, HelpCircle, Zap, ChevronDown, Info, ArrowRight, Lightbulb } from 'lucide-react'
+import { Building2, AlertCircle, Plus, Search, X, FileSearch, Tags, Users, Keyboard, HelpCircle, Zap, ChevronDown, Info, ArrowRight, Lightbulb, ChevronUp, ChevronLeft, ChevronRight, CheckCircle2 } from 'lucide-react'
 import { supabase } from '@/integrations/supabase/client'
 import { ConfidenceIndicator } from './ConfidenceIndicator'
 import { EmployerMatchDialog } from './EmployerMatchDialog'
@@ -29,6 +29,7 @@ import { StatusSelectSimple } from '@/components/ui/StatusSelect'
 import { TradeStatus } from '@/components/ui/StatusBadge'
 import { EbaEmployerQuickList } from './EbaEmployerQuickList'
 import { useKeyContractorTradesSet } from '@/hooks/useKeyContractorTrades'
+import { useIsMobile } from '@/hooks/use-mobile'
 
 interface SubcontractorsReviewProps {
   extractedSubcontractors: Array<{
@@ -98,9 +99,16 @@ export function SubcontractorsReview({
   onDecisionsChange,
   allowProjectCreation = false,
 }: SubcontractorsReviewProps) {
+  const isMobile = useIsMobile()
   const [decisions, setDecisions] = useState<any[]>([])
   const [matchDialogOpen, setMatchDialogOpen] = useState(false)
   const [selectedSubcontractor, setSelectedSubcontractor] = useState<any>(null)
+
+  // Mobile-specific state
+  const [expandedCards, setExpandedCards] = useState<Set<number>>(new Set())
+  const [bulkSelectionMode, setBulkSelectionMode] = useState(false)
+  const [bulkSelected, setBulkSelected] = useState<Set<number>>(new Set())
+  const [currentCardIndex, setCurrentCardIndex] = useState(0)
   
   // EBA search state
   const [ebaSearchOpen, setEbaSearchOpen] = useState(false)
@@ -562,6 +570,36 @@ export function SubcontractorsReview({
       const { key, ctrlKey, shiftKey, metaKey } = event
       const isMod = ctrlKey || metaKey
 
+      // Mobile-specific keyboard shortcuts
+      if (isMobile) {
+        // Arrow key navigation for mobile review mode
+        if (key === 'ArrowLeft' && currentCardIndex > 0) {
+          event.preventDefault()
+          navigateToCard('prev')
+          return
+        }
+        if (key === 'ArrowRight' && currentCardIndex < decisions.length - 1) {
+          event.preventDefault()
+          navigateToCard('next')
+          return
+        }
+        // Space to toggle expand/collapse on mobile
+        if (key === ' ') {
+          event.preventDefault()
+          toggleCardExpanded(currentCardIndex)
+          return
+        }
+        // Number keys to jump to specific cards (1-9)
+        if (key >= '1' && key <= '9') {
+          const targetIndex = parseInt(key) - 1
+          if (targetIndex < decisions.length) {
+            event.preventDefault()
+            setCurrentCardIndex(targetIndex)
+            return
+          }
+        }
+      }
+
       if (isMod && key === 'a' && selectedRowIndex !== null) {
         // Ctrl+A: Open alias management for selected employer
         event.preventDefault()
@@ -622,7 +660,7 @@ export function SubcontractorsReview({
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [selectedRowIndex, decisions, showKeyboardShortcuts, showQuickActions])
+  }, [selectedRowIndex, decisions, showKeyboardShortcuts, showQuickActions, isMobile, currentCardIndex, expandedCards, bulkSelected])
 
   // Enhanced UX: Section expansion toggle
   const toggleSection = (sectionId: string) => {
@@ -681,6 +719,65 @@ export function SubcontractorsReview({
     setSelectedRowIndex(index)
   }
 
+  // Mobile-specific helpers
+  const toggleCardExpanded = (index: number) => {
+    const newExpanded = new Set(expandedCards)
+    if (newExpanded.has(index)) {
+      newExpanded.delete(index)
+    } else {
+      newExpanded.add(index)
+    }
+    setExpandedCards(newExpanded)
+  }
+
+  const toggleBulkSelection = (index: number) => {
+    const newSelected = new Set(bulkSelected)
+    if (newSelected.has(index)) {
+      newSelected.delete(index)
+    } else {
+      newSelected.add(index)
+    }
+    setBulkSelected(newSelected)
+  }
+
+  const toggleBulkMode = () => {
+    setBulkSelectionMode(!bulkSelectionMode)
+    if (bulkSelectionMode) {
+      setBulkSelected(new Set())
+    }
+  }
+
+  const navigateToCard = (direction: 'prev' | 'next') => {
+    if (direction === 'prev') {
+      setCurrentCardIndex(prev => Math.max(0, prev - 1))
+    } else {
+      setCurrentCardIndex(prev => Math.min(decisions.length - 1, prev + 1))
+    }
+  }
+
+  const handleSwipeAction = (index: number, action: 'import' | 'skip' | 'review') => {
+    if (action === 'review') {
+      handleOpenMatchDialog(index)
+    } else {
+      handleActionChange(index, action)
+      // Auto-advance to next card on mobile
+      if (isMobile && index < decisions.length - 1) {
+        navigateToCard('next')
+      }
+    }
+  }
+
+  const handleBulkAction = (action: 'import' | 'skip') => {
+    bulkSelected.forEach(index => {
+      handleActionChange(index, action)
+    })
+    setBulkSelected(new Set())
+    setBulkSelectionMode(false)
+    toast.success(`Bulk ${action} completed`, {
+      description: `${bulkSelected.size} entries ${action}ed`
+    })
+  }
+
   // Enhanced UX: Progress indicators
   const getProgressStats = () => {
     const total = decisions.length
@@ -697,9 +794,262 @@ export function SubcontractorsReview({
 
   const progressStats = getProgressStats()
 
+  // Mobile Card Component
+  const MobileSubcontractorCard = ({ decision, index }: { decision: any, index: number }) => {
+    const isExpanded = expandedCards.has(index)
+    const isSelected = bulkSelected.has(index)
+    const isCurrentCard = isMobile && index === currentCardIndex
+
+    return (
+      <Card className={`
+        mb-4 transition-all duration-200
+        ${decision.needsReview ? 'border-yellow-300 bg-yellow-50' : ''}
+        ${isCurrentCard ? 'ring-2 ring-blue-500 shadow-lg' : ''}
+        ${isSelected ? 'ring-2 ring-green-500' : ''}
+      `}>
+        <CardHeader className="pb-3">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              {/* Mobile selection checkbox */}
+              {bulkSelectionMode && (
+                <Checkbox
+                  checked={isSelected}
+                  onCheckedChange={() => toggleBulkSelection(index)}
+                  className="h-5 w-5 flex-shrink-0"
+                />
+              )}
+
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-2">
+                  <Badge variant="outline" className="text-xs">
+                    {STAGE_LABELS[decision.stage] || decision.stage}
+                  </Badge>
+                  <Badge variant={decision.eba ? 'default' : 'secondary'} className="text-xs">
+                    EBA: {decision.eba ? 'Yes' : 'No'}
+                  </Badge>
+                  {decision.isNewEmployer && (
+                    <Badge variant="secondary" className="text-xs">New</Badge>
+                  )}
+                </div>
+
+                <div className="font-semibold text-base truncate">
+                  {decision.trade}
+                </div>
+
+                {decision.company && (
+                  <div className="text-sm text-gray-600 truncate">
+                    {decision.company}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Action buttons - always visible on mobile */}
+            <div className="flex flex-col gap-2 ml-2">
+              <Button
+                variant={decision.needsReview ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => handleOpenMatchDialog(index)}
+                className="h-8 px-3 text-xs"
+              >
+                {decision.needsReview ? 'Review' : 'Match'}
+              </Button>
+
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => toggleCardExpanded(index)}
+                className="h-8 px-2"
+              >
+                {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </Button>
+            </div>
+          </div>
+
+          {/* Quick action buttons for mobile */}
+          <div className="flex gap-2 mt-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleSwipeAction(index, 'import')}
+              className="flex-1 h-10 text-sm border-green-200 hover:bg-green-50"
+              disabled={!decision.matchedEmployer}
+            >
+              <CheckCircle2 className="h-4 w-4 mr-1" />
+              Import
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleSwipeAction(index, 'skip')}
+              className="flex-1 h-10 text-sm border-red-200 hover:bg-red-50"
+            >
+              <X className="h-4 w-4 mr-1" />
+              Skip
+            </Button>
+          </div>
+        </CardHeader>
+
+        {/* Expanded content */}
+        {isExpanded && (
+          <CardContent className="pt-0 border-t">
+            <div className="space-y-4">
+              {/* Current Employers */}
+              {decision.existingEmployers && decision.existingEmployers.length > 0 && (
+                <div>
+                  <div className="text-sm font-medium text-gray-700 mb-2">Current Employers ({decision.existingEmployers.length})</div>
+                  <div className="space-y-2">
+                    {decision.existingEmployers.map((emp: any, empIndex: number) => (
+                      <div key={emp.id} className="flex items-center gap-2 p-2 bg-green-50 rounded border">
+                        <Building2 className="h-4 w-4 text-green-600 flex-shrink-0" />
+                        <span className="text-green-800 font-medium flex-1 text-sm">{emp.name}</span>
+                        <div className="flex items-center space-x-1">
+                          <Checkbox
+                            id={`keep-${index}-${empIndex}`}
+                            checked={emp.keepDecision}
+                            onCheckedChange={(checked) => {
+                              setDecisions(prev => {
+                                const updated = [...prev]
+                                updated[index].existingEmployers[empIndex].keepDecision = checked
+                                return updated
+                              })
+                            }}
+                            className="h-4 w-4"
+                          />
+                          <Label htmlFor={`keep-${index}-${empIndex}`} className="text-xs cursor-pointer">
+                            Keep
+                          </Label>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Matched Employer */}
+              {decision.matchedEmployer && (
+                <div>
+                  <div className="text-sm font-medium text-gray-700 mb-2">Matched Employer</div>
+                  <div className="flex items-center gap-2 p-3 bg-blue-50 rounded border">
+                    <Building2 className="h-5 w-5 text-blue-600" />
+                    <div className="flex-1">
+                      <div className="font-medium text-blue-800">{decision.matchedEmployer.name}</div>
+                      {decision.matchedEmployer.matchedAlias && (
+                        <div className="text-xs text-blue-600 mt-1">
+                          Matched via alias: "{decision.matchedEmployer.matchedAlias}"
+                        </div>
+                      )}
+                    </div>
+                    <Badge variant="default" className="text-xs">
+                      {decision.matchedEmployer.confidence === 'exact' ? 'Exact Match' :
+                       decision.matchedEmployer.confidence === 'high' ? 'High Confidence' :
+                       'Possible Match'}
+                    </Badge>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Selection */}
+              <div>
+                <div className="text-sm font-medium text-gray-700 mb-2">Import Action</div>
+                <RadioGroup
+                  value={decision.action}
+                  onValueChange={(value) => handleActionChange(index, value as any)}
+                  className="space-y-2"
+                >
+                  {decision.matchedEmployer && (
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="import" id={`${index}-import-mobile`} />
+                      <Label htmlFor={`${index}-import-mobile`} className="text-sm cursor-pointer">
+                        Add as new assignment
+                      </Label>
+                    </div>
+                  )}
+                  {decision.existingEmployers && decision.existingEmployers.length > 0 && decision.matchedEmployer && (
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="replace_one" id={`${index}-replace-mobile`} />
+                      <Label htmlFor={`${index}-replace-mobile`} className="text-sm cursor-pointer">
+                        Replace existing employer
+                      </Label>
+                    </div>
+                  )}
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="skip" id={`${index}-skip-mobile`} />
+                    <Label htmlFor={`${index}-skip-mobile`} className="text-sm cursor-pointer">
+                      Skip scanned company
+                    </Label>
+                  </div>
+                </RadioGroup>
+              </div>
+
+              {/* Status Selection */}
+              <div>
+                <div className="text-sm font-medium text-gray-700 mb-2">Status</div>
+                <StatusSelectSimple
+                  value={decision.status || 'active'}
+                  onChange={(status) => handleStatusChange(index, status)}
+                  size="sm"
+                />
+              </div>
+
+              {/* Additional Actions */}
+              <div className="space-y-2">
+                {!decision.company && decision.stage === 'other' && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => handleStartEdit(index)}
+                    className="w-full h-11"
+                  >
+                    <AlertCircle className="h-4 w-4 mr-2" />
+                    Fix Data Entry
+                  </Button>
+                )}
+
+                {decision.company && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleOpenEbaQuickList(index)}
+                    className="w-full h-11 gap-2 border-blue-200 hover:bg-blue-50"
+                  >
+                    <Zap className="h-4 w-4 text-blue-600" />
+                    <span className="text-blue-700">EBA Quick List</span>
+                  </Button>
+                )}
+
+                {decision.shouldUpdateEbaStatus && decision.matchedEmployer && decision.action === 'import' && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => handleIndividualEbaSearch(decision.matchedEmployer.id, decision.matchedEmployer.name)}
+                    className="w-full h-11 gap-2"
+                  >
+                    <FileSearch className="h-4 w-4" />
+                    Search EBA Database
+                  </Button>
+                )}
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleAddAdditional(index)}
+                  className="w-full h-11 gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Subcontractor
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        )}
+      </Card>
+    )
+  }
+
   return (
     <TooltipProvider>
-    <div className="space-y-4">
+    <div className={`space-y-4 ${isMobile ? 'pb-20 px-2' : ''}`}>
       {/* Enhanced Progress Overview */}
       <Card className="border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50">
         <CardHeader className="pb-4">
@@ -750,21 +1100,22 @@ export function SubcontractorsReview({
           </div>
         </CardHeader>
         <CardContent className="pt-0">
-          <div className="grid grid-cols-4 gap-4 mb-4">
+          {/* Mobile-friendly progress grid */}
+          <div className={`${isMobile ? 'grid grid-cols-2' : 'grid grid-cols-4'} gap-4 mb-4`}>
             <div className="text-center p-3 bg-white rounded-lg border">
-              <div className="text-2xl font-bold text-blue-600">{progressStats.total}</div>
+              <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'} text-blue-600`}>{progressStats.total}</div>
               <div className="text-xs text-gray-600">Total Entries</div>
             </div>
             <div className="text-center p-3 bg-white rounded-lg border">
-              <div className="text-2xl font-bold text-green-600">{progressStats.completed}</div>
+              <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'} text-green-600`}>{progressStats.completed}</div>
               <div className="text-xs text-gray-600">Completed</div>
             </div>
             <div className="text-center p-3 bg-white rounded-lg border">
-              <div className="text-2xl font-bold text-yellow-600">{progressStats.inProgress}</div>
+              <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'} text-yellow-600`}>{progressStats.inProgress}</div>
               <div className="text-xs text-gray-600">Needs Review</div>
             </div>
             <div className="text-center p-3 bg-white rounded-lg border">
-              <div className="text-2xl font-bold text-gray-600">{progressStats.pending}</div>
+              <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'} text-gray-600`}>{progressStats.pending}</div>
               <div className="text-xs text-gray-600">Pending</div>
             </div>
           </div>
@@ -1073,9 +1424,108 @@ export function SubcontractorsReview({
         </Alert>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Subcontractors</CardTitle>
+      {/* Mobile Navigation and Bulk Controls */}
+      {isMobile && (
+        <Card className="border-2 border-indigo-200 bg-gradient-to-r from-indigo-50 to-purple-50 sticky top-0 z-40">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg font-bold text-indigo-900">
+                Mobile Review Mode
+              </CardTitle>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={bulkSelectionMode ? "default" : "outline"}
+                  size="sm"
+                  onClick={toggleBulkMode}
+                  className="gap-2 h-11 px-4"
+                >
+                  <Users className="h-4 w-4" />
+                  {bulkSelectionMode ? `Selected (${bulkSelected.size})` : 'Bulk Select'}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            {/* Mobile Navigation Controls */}
+            <div className="flex items-center justify-between mb-4">
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() => navigateToCard('prev')}
+                disabled={currentCardIndex === 0}
+                className="gap-2 h-12 px-4"
+              >
+                <ChevronLeft className="h-5 w-5" />
+                Previous
+              </Button>
+              <div className="text-base font-semibold text-gray-700 px-3">
+                {currentCardIndex + 1} / {decisions.length}
+              </div>
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() => navigateToCard('next')}
+                disabled={currentCardIndex === decisions.length - 1}
+                className="gap-2 h-12 px-4"
+              >
+                Next
+                <ChevronRight className="h-5 w-5" />
+              </Button>
+            </div>
+
+            {/* Bulk Action Buttons */}
+            {bulkSelectionMode && bulkSelected.size > 0 && (
+              <div className="space-y-2 p-3 bg-white rounded-lg border">
+                <div className="text-sm font-medium text-gray-700">
+                  {bulkSelected.size} item{bulkSelected.size > 1 ? 's' : ''} selected
+                </div>
+                <div className="flex gap-3">
+                  <Button
+                    variant="default"
+                    size="lg"
+                    onClick={() => handleBulkAction('import')}
+                    className="flex-1 gap-2 h-12 bg-green-600 hover:bg-green-700"
+                  >
+                    <CheckCircle2 className="h-5 w-5" />
+                    Import All
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    onClick={() => handleBulkAction('skip')}
+                    className="flex-1 gap-2 h-12 border-red-200 hover:bg-red-50"
+                  >
+                    <X className="h-5 w-5" />
+                    Skip All
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Progress indicator */}
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div
+                className="bg-gradient-to-r from-indigo-500 to-purple-500 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${((currentCardIndex + 1) / decisions.length) * 100}%` }}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Main Content - Desktop Table or Mobile Cards */}
+      {isMobile ? (
+        /* Mobile View: Cards */
+        <div className="space-y-4 px-1">
+          {decisions.map((decision, index) => (
+            <MobileSubcontractorCard key={index} decision={decision} index={index} />
+          ))}
+        </div>
+      ) : (
+        /* Desktop View: Table */
+        <Card>
+          <CardHeader>
+            <CardTitle>Subcontractors</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto max-w-full relative">
@@ -1450,6 +1900,7 @@ export function SubcontractorsReview({
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* Employer Match Dialog */}
       {matchDialogOpen && selectedSubcontractor && (

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
-import { withRateLimit, RATE_LIMIT_PRESETS } from '@/lib/rateLimit';
 
 const ALLOWED_ROLES = ['organiser', 'lead_organiser', 'admin'] as const;
 type AllowedRole = typeof ALLOWED_ROLES[number];
@@ -252,6 +251,6 @@ async function updateAliasHandler(
   }
 }
 
-// Export the handlers with rate limiting
-export const DELETE = withRateLimit(deleteAliasHandler, RATE_LIMIT_PRESETS.DEFAULT);
-export const PATCH = withRateLimit(updateAliasHandler, RATE_LIMIT_PRESETS.DEFAULT);
+// Export the handlers directly (rate limiting wrapper incompatible with dynamic params)
+export const DELETE = deleteAliasHandler;
+export const PATCH = updateAliasHandler;

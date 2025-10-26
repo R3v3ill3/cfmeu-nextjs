@@ -40,7 +40,7 @@ export function ProjectCard({ project }: { project: ProjectCardData }) {
   };
 
   return (
-    <Card className="hover:shadow-lg transition-shadow duration-200 cursor-pointer" onClick={handleCardClick}>
+    <Card className="hover:shadow-lg transition-shadow duration-200 cursor-pointer touch-manipulation max-lg:min-h-[44px] max-lg:p-1" onClick={handleCardClick}>
       <CardHeader>
         <div className="flex items-start justify-between">
           <div className="flex-1">
@@ -75,7 +75,7 @@ export function ProjectCard({ project }: { project: ProjectCardData }) {
         </div>
         {project.full_address && (
           <div className="mt-4 pt-4 border-t">
-            <Button variant="outline" size="sm" className="w-full h-11" onClick={handleDirectionsClick}>
+            <Button variant="outline" size="sm" className="w-full min-h-[44px] max-lg:min-h-[44px] max-lg:py-3 max-lg:text-base" onClick={handleDirectionsClick}>
               Get Directions
             </Button>
           </div>

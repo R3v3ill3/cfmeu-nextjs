@@ -13,6 +13,7 @@ import { findBestEmployerMatch } from '@/utils/fuzzyMatching'
 import { supabase } from '@/integrations/supabase/client'
 import { toast } from 'sonner'
 import { EmployerAliasManager } from './EmployerAliasManager'
+import { useIsMobile } from '@/hooks/use-mobile'
 
 interface EmployerMatchDialogProps {
   open: boolean
@@ -35,6 +36,7 @@ export function EmployerMatchDialog({
   allowContractorTypeSelection = false,
   tradeTypeCode,
 }: EmployerMatchDialogProps) {
+  const isMobile = useIsMobile()
   const [selectedOption, setSelectedOption] = useState<'suggested' | 'search' | 'new'>(
     suggestedMatch ? 'suggested' : 'search'
   )
@@ -210,59 +212,76 @@ export function EmployerMatchDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Building2 className="h-5 w-5" />
-            Match Employer for "{companyName}"
+      <DialogContent className={`
+        ${isMobile
+          ? 'w-[95vw] max-w-[95vw] max-h-[85vh] mx-4'
+          : 'max-w-2xl max-h-[80vh]'
+        } overflow-y-auto
+      `}>
+        <DialogHeader className={isMobile ? 'pb-4' : ''}>
+          <DialogTitle className={`flex items-center gap-2 ${isMobile ? 'text-lg' : ''}`}>
+            <Building2 className={`h-5 w-5 ${isMobile ? 'h-4 w-4' : ''}`} />
+            <span className={isMobile ? 'text-lg' : ''}>
+              {isMobile ? 'Match Employer' : `Match Employer for "${companyName}"`}
+            </span>
           </DialogTitle>
-          <DialogDescription>
-            Search and match the scanned company to an existing employer, or create a new employer record
+          <DialogDescription className={isMobile ? 'text-sm' : ''}>
+            {isMobile
+              ? `Find or create an employer for "${companyName}"`
+              : 'Search and match the scanned company to an existing employer, or create a new employer record'
+            }
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <div className={`space-y-${isMobile ? '6' : '4'} py-${isMobile ? '6' : '4'}`}>
           <RadioGroup value={selectedOption} onValueChange={(val: any) => setSelectedOption(val)}>
             {/* Suggested Match */}
             {suggestedMatch && (
-              <div className="space-y-2">
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="suggested" id="suggested" />
-                  <Label htmlFor="suggested" className="font-medium cursor-pointer">
-                    Use suggested match (recommended)
+              <div className={`space-y-${isMobile ? '3' : '2'}`}>
+                <div className={`flex items-center ${isMobile ? 'space-x-4' : 'space-x-2'}`}>
+                  <RadioGroupItem
+                    value="suggested"
+                    id="suggested"
+                    className={isMobile ? 'h-5 w-5' : ''}
+                  />
+                  <Label
+                    htmlFor="suggested"
+                    className={`font-medium cursor-pointer ${isMobile ? 'text-base' : ''}`}
+                  >
+                    {isMobile ? 'Suggested Match' : 'Use suggested match (recommended)'}
                   </Label>
                 </div>
                 {selectedOption === 'suggested' && (
-                  <div className="ml-6 p-3 bg-blue-50 border border-blue-200 rounded">
-                    <div className="flex items-center justify-between">
+                  <div className={`${isMobile ? 'ml-8 p-4' : 'ml-6 p-3'} bg-blue-50 border border-blue-200 rounded`}>
+                    <div className={`flex ${isMobile ? 'flex-col space-y-3' : 'items-center justify-between'}`}>
                       <div className="flex-1">
-                        <div className="font-medium">{suggestedMatch.name}</div>
-                        <div className="text-sm text-gray-600 mt-1">
+                        <div className={`font-medium ${isMobile ? 'text-lg mb-2' : ''}`}>{suggestedMatch.name}</div>
+                        <div className={`${isMobile ? 'text-base' : 'text-sm'} text-gray-600 mt-1`}>
                           Match confidence: {suggestedMatch.confidence}
                         </div>
                         {suggestedMatch.matchedAlias && (
                           <div className="flex items-center gap-1 mt-1">
-                            <Sparkles className="h-3 w-3 text-blue-600" />
-                            <span className="text-xs text-blue-600">
+                            <Sparkles className={`text-blue-600 ${isMobile ? 'h-4 w-4' : 'h-3 w-3'}`} />
+                            <span className={`${isMobile ? 'text-sm' : 'text-xs'} text-blue-600`}>
                               Matched via alias: "{suggestedMatch.matchedAlias}"
                             </span>
                           </div>
                         )}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="default">
+                      <div className={`flex items-center gap-2 ${isMobile ? 'flex-col space-y-2 w-full' : ''}`}>
+                        <Badge variant="default" className={isMobile ? 'text-sm py-1 px-3' : ''}>
                           {suggestedMatch.confidence === 'exact' ? 'Exact Match' :
                            suggestedMatch.confidence === 'high' ? 'High Confidence' :
                            'Possible Match'}
                         </Badge>
                         <Button
                           variant="outline"
-                          size="sm"
+                          size={isMobile ? "default" : "sm"}
                           onClick={() => handleManageAliases(suggestedMatch)}
                           className="gap-1"
                         >
-                          <Tags className="h-3 w-3" />
-                          Aliases
+                          <Tags className={isMobile ? 'h-4 w-4' : 'h-3 w-3'} />
+                          {isMobile ? 'Manage Aliases' : 'Aliases'}
                         </Button>
                       </div>
                     </div>
@@ -272,32 +291,44 @@ export function EmployerMatchDialog({
             )}
 
             {/* Search Existing */}
-            <div className="space-y-2">
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="search" id="search" />
-                <Label htmlFor="search" className="font-medium cursor-pointer">
-                  Search for different employer
+            <div className={`space-y-${isMobile ? '3' : '2'}`}>
+              <div className={`flex items-center ${isMobile ? 'space-x-4' : 'space-x-2'}`}>
+                <RadioGroupItem
+                  value="search"
+                  id="search"
+                  className={isMobile ? 'h-5 w-5' : ''}
+                />
+                <Label
+                  htmlFor="search"
+                  className={`font-medium cursor-pointer ${isMobile ? 'text-base' : ''}`}
+                >
+                  {isMobile ? 'Search' : 'Search for different employer'}
                 </Label>
               </div>
               {selectedOption === 'search' && (
-                <div className="ml-6 space-y-3">
+                <div className={`${isMobile ? 'ml-8' : 'ml-6'} space-y-${isMobile ? '4' : '3'}`}>
                   <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Search className={`absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 ${isMobile ? 'h-5 w-5 left-4' : 'h-4 w-4 left-3'}`} />
                     <Input
-                      placeholder="Search employer name..."
+                      placeholder={isMobile ? "Search employers..." : "Search employer name..."}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-10"
+                      className={`${isMobile ? 'pl-12 h-12 text-lg' : 'pl-10'}`}
+                      inputMode="text"
+                      autoComplete="off"
+                      autoFocus={isMobile}
                     />
                   </div>
                   {searchResults.length > 0 && (
-                    <div className="border rounded max-h-64 overflow-y-auto">
+                    <div className={`border rounded ${isMobile ? 'max-h-96' : 'max-h-64'} overflow-y-auto`}>
                       {searchResults.map((employer) => (
                         <label
                           key={employer.id}
-                          className={`flex items-center gap-3 p-3 cursor-pointer hover:bg-gray-50 ${
-                            selectedEmployerId === employer.id ? 'bg-blue-50' : ''
-                          }`}
+                          className={`
+                            flex items-center gap-3 cursor-pointer hover:bg-gray-50
+                            ${isMobile ? 'p-4' : 'p-3'}
+                            ${selectedEmployerId === employer.id ? 'bg-blue-50' : ''}
+                          `}
                           onClick={() => setSelectedEmployerId(employer.id)}
                         >
                           <input
@@ -306,35 +337,37 @@ export function EmployerMatchDialog({
                             value={employer.id}
                             checked={selectedEmployerId === employer.id}
                             onChange={() => setSelectedEmployerId(employer.id)}
-                            className="h-4 w-4"
+                            className={isMobile ? 'h-5 w-5' : 'h-4 w-4'}
                           />
                           <div className="flex-1">
-                            <div className="font-medium">{employer.name}</div>
+                            <div className={`font-medium ${isMobile ? 'text-base' : ''}`}>{employer.name}</div>
                             {employer.matchedAlias && (
                               <div className="flex items-center gap-1 mt-1">
-                                <Sparkles className="h-3 w-3 text-blue-600" />
-                                <span className="text-xs text-blue-600">
+                                <Sparkles className={`text-blue-600 ${isMobile ? 'h-4 w-4' : 'h-3 w-3'}`} />
+                                <span className={`${isMobile ? 'text-sm' : 'text-xs'} text-blue-600`}>
                                   Matched via alias: "{employer.matchedAlias}"
                                 </span>
                               </div>
                             )}
                             {employer.enterprise_agreement_status !== 'unknown' && (
-                              <div className="text-xs text-gray-500 mt-1">
+                              <div className={`${isMobile ? 'text-sm' : 'text-xs'} text-gray-500 mt-1`}>
                                 EBA Status: {employer.enterprise_agreement_status}
                               </div>
                             )}
                           </div>
                           <Button
                             variant="ghost"
-                            size="sm"
+                            size={isMobile ? "default" : "sm"}
                             onClick={(e) => {
                               e.stopPropagation()
                               handleManageAliases(employer)
                             }}
-                            className="gap-1 h-8 px-2"
+                            className={`gap-1 ${isMobile ? 'h-11 px-3' : 'h-8 px-2'}`}
                           >
-                            <Tags className="h-3 w-3" />
-                            <span className="text-xs">Aliases</span>
+                            <Tags className={isMobile ? 'h-4 w-4' : 'h-3 w-3'} />
+                            <span className={isMobile ? 'text-sm' : 'text-xs'}>
+                              {isMobile ? 'Aliases' : 'Aliases'}
+                            </span>
                           </Button>
                         </label>
                       ))}
@@ -371,21 +404,33 @@ export function EmployerMatchDialog({
             </div>
 
             {/* Create New */}
-            <div className="space-y-2">
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="new" id="new" />
-                <Label htmlFor="new" className="font-medium cursor-pointer">
+            <div className={`space-y-${isMobile ? '3' : '2'}`}>
+              <div className={`flex items-center ${isMobile ? 'space-x-4' : 'space-x-2'}`}>
+                <RadioGroupItem
+                  value="new"
+                  id="new"
+                  className={isMobile ? 'h-5 w-5' : ''}
+                />
+                <Label
+                  htmlFor="new"
+                  className={`font-medium cursor-pointer ${isMobile ? 'text-base' : ''}`}
+                >
                   Create new employer
                 </Label>
               </div>
               {selectedOption === 'new' && (
-                <div className="ml-6 space-y-3">
+                <div className={`${isMobile ? 'ml-8' : 'ml-6'} space-y-${isMobile ? '4' : '3'}`}>
                   <div>
-                    <Label className="text-sm mb-1.5 block">Company Name</Label>
+                    <Label className={`${isMobile ? 'text-base' : 'text-sm'} mb-2 block`}>
+                      Company Name
+                    </Label>
                     <Input
                       placeholder="Company name"
                       value={newEmployerName}
                       onChange={(e) => setNewEmployerName(e.target.value)}
+                      className={isMobile ? 'h-12 text-lg' : ''}
+                      inputMode="text"
+                      autoComplete="organization"
                     />
                   </div>
                   
@@ -416,12 +461,15 @@ export function EmployerMatchDialog({
                     </div>
                   </div>
                   
-                  <div className="space-y-1">
-                    <p className="text-xs text-gray-500">
-                      A new employer record will be created with pending approval status.
+                  <div className={`space-y-${isMobile ? '2' : '1'}`}>
+                    <p className={`${isMobile ? 'text-sm' : 'text-xs'} text-gray-500`}>
+                      {isMobile
+                        ? 'New employer requires approval before activation.'
+                        : 'A new employer record will be created with pending approval status.'
+                      }
                     </p>
                     {tradeTypeCode && (
-                      <p className="text-xs text-blue-600">
+                      <p className={`${isMobile ? 'text-sm' : 'text-xs'} text-blue-600`}>
                         ✓ Will be tagged with trade: <strong>{tradeTypeCode.replace(/_/g, ' ')}</strong>
                       </p>
                     )}
@@ -460,17 +508,25 @@ export function EmployerMatchDialog({
             </div>
           )}
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+        <DialogFooter className={`${isMobile ? 'flex-col space-y-3' : ''}`}>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            className={isMobile ? 'h-12 text-lg w-full' : ''}
+          >
+            {isMobile ? 'Cancel' : 'Cancel'}
           </Button>
-          <Button onClick={handleConfirm} disabled={!isValid || isCreating}>
+          <Button
+            onClick={handleConfirm}
+            disabled={!isValid || isCreating}
+            className={isMobile ? 'h-12 text-lg w-full' : ''}
+          >
             {isCreating ? (
-              'Creating...'
+              isMobile ? 'Creating...' : 'Creating...'
             ) : (
               <>
-                <CheckCircle2 className="h-4 w-4 mr-2" />
-                Confirm Match
+                <CheckCircle2 className={`${isMobile ? 'h-5 w-5' : 'h-4 w-4'} mr-2`} />
+                {isMobile ? 'Confirm' : 'Confirm Match'}
               </>
             )}
           </Button>
