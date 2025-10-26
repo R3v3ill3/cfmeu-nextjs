@@ -1,5 +1,7 @@
 "use client"
 
+import React, { ReactNode, useCallback, useContext, createContext, forwardRef, ComponentType } from 'react'
+
 // Types for haptic feedback
 export type HapticType =
   | "light"
@@ -70,7 +72,7 @@ export function triggerHapticFeedback(type: HapticType = "light"): void {
 
 // React hook for haptic feedback
 export function useHapticFeedback() {
-  const trigger = React.useCallback((type: HapticType = "light") => {
+  const trigger = useCallback((type: HapticType = "light") => {
     triggerHapticFeedback(type)
   }, [])
 
@@ -100,7 +102,7 @@ interface HapticFeedbackContextValue {
   impact: () => void
 }
 
-const HapticFeedbackContext = React.createContext<HapticFeedbackContextValue | null>(null)
+const HapticFeedbackContext = createContext<HapticFeedbackContextValue | null>(null)
 
 export function HapticFeedbackProvider({
   children,
@@ -117,7 +119,7 @@ export function HapticFeedbackProvider({
 }
 
 export function useHapticContext() {
-  const context = React.useContext(HapticFeedbackContext)
+  const context = useContext(HapticFeedbackContext)
   if (!context) {
     throw new Error("useHapticContext must be used within a HapticFeedbackProvider")
   }
@@ -126,13 +128,13 @@ export function useHapticContext() {
 
 // Higher-order component for adding haptic feedback to button presses
 export function withHapticFeedback<P extends object>(
-  Component: React.ComponentType<P>,
+  Component: ComponentType<P>,
   hapticType: HapticType = "light"
 ) {
-  return React.forwardRef<any, P>((props, ref) => {
+  return forwardRef<any, P>((props, ref) => {
     const { trigger } = useHapticFeedback()
 
-    const handleClick = React.useCallback((event: any) => {
+    const handleClick = useCallback((event: any) => {
       trigger(hapticType)
 
       // Call original onClick if it exists

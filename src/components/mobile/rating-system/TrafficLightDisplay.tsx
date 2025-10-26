@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { cn } from "@/lib/utils"
 import { TrafficLightRating, ConfidenceLevel } from "@/types/rating"
 import { useHapticFeedback } from "../shared/HapticFeedback"
@@ -115,25 +115,25 @@ export function TrafficLightDisplay({
   onClick,
 }: TrafficLightDisplayProps) {
   const { trigger, selection } = useHapticFeedback()
-  const [isPressed, setIsPressed] = React.useState(false)
+  const [isPressed, setIsPressed] = useState(false)
 
   const config = ratingConfig[rating]
   const sizeClasses = sizeConfig[size]
   const confidenceClasses = confidenceConfig[confidence]
 
-  const handleClick = React.useCallback(() => {
+  const handleClick = useCallback(() => {
     if (onClick) {
       selection()
       onClick()
     }
   }, [onClick, selection])
 
-  const handleTouchStart = React.useCallback(() => {
+  const handleTouchStart = useCallback(() => {
     setIsPressed(true)
     trigger()
   }, [trigger])
 
-  const handleTouchEnd = React.useCallback(() => {
+  const handleTouchEnd = useCallback(() => {
     setIsPressed(false)
   }, [])
 

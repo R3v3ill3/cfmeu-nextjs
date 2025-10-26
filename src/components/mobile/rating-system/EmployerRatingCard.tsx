@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -77,47 +77,47 @@ export function EmployerRatingCard({
 }: EmployerRatingCardProps) {
   const { selection, onPress } = useHapticFeedback()
 
-  const trend = React.useMemo(() => getRatingTrend(employer.rating_history), [employer.rating_history])
-  const projectDataConfidence = React.useMemo(() => getConfidenceFromRating(employer.project_data_rating), [employer.project_data_rating])
-  const organiserConfidence = React.useMemo(() => getConfidenceFromRating(employer.organiser_expertise_rating), [employer.organiser_expertise_rating])
+  const trend = useMemo(() => getRatingTrend(employer.rating_history), [employer.rating_history])
+  const projectDataConfidence = useMemo(() => getConfidenceFromRating(employer.project_data_rating), [employer.project_data_rating])
+  const organiserConfidence = useMemo(() => getConfidenceFromRating(employer.organiser_expertise_rating), [employer.organiser_expertise_rating])
 
-  const handleCardClick = React.useCallback(() => {
+  const handleCardClick = useCallback(() => {
     selection()
     onClick?.()
   }, [selection, onClick])
 
-  const handleRate = React.useCallback((e: React.MouseEvent) => {
+  const handleRate = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
     onPress()
     onRate?.()
   }, [onPress, onRate])
 
-  const handleEdit = React.useCallback((e: React.MouseEvent) => {
+  const handleEdit = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
     selection()
     onEdit?.()
   }, [selection, onEdit])
 
-  const handleViewDetails = React.useCallback((e: React.MouseEvent) => {
+  const handleViewDetails = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
     selection()
     onViewDetails?.()
   }, [selection, onViewDetails])
 
-  const handleViewTrends = React.useCallback((e: React.MouseEvent) => {
+  const handleViewTrends = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
     selection()
     onViewTrends?.()
   }, [selection, onViewTrends])
 
-  const handleToggleFavorite = React.useCallback((e: React.MouseEvent) => {
+  const handleToggleFavorite = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
     onPress()
     onToggleFavorite?.()
   }, [onPress, onToggleFavorite])
 
   // Card content based on size
-  const cardContent = React.useMemo(() => {
+  const cardContent = useMemo(() => {
     switch (size) {
       case "compact":
         return (

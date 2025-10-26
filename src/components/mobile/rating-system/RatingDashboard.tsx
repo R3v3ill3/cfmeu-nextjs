@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -396,12 +396,12 @@ export function RatingDashboard({
   onSettings,
   className,
 }: RatingDashboardProps) {
-  const [searchQuery, setSearchQuery] = React.useState("")
-  const [activeTab, setActiveTab] = React.useState("overview")
+  const [searchQuery, setSearchQuery] = useState("")
+  const [activeTab, setActiveTab] = useState("overview")
   const { selection, success } = useHapticFeedback()
 
   // Handle search with debouncing
-  React.useEffect(() => {
+  useEffect(() => {
     const timeoutId = setTimeout(() => {
       onSearch?.(searchQuery)
     }, 300)
@@ -409,7 +409,7 @@ export function RatingDashboard({
     return () => clearTimeout(timeoutId)
   }, [searchQuery, onSearch])
 
-  const handleRefresh = React.useCallback(async () => {
+  const handleRefresh = useCallback(async () => {
     try {
       await onRefresh?.()
       success()
@@ -419,7 +419,7 @@ export function RatingDashboard({
   }, [onRefresh, success])
 
   // Filter employers based on search query
-  const filteredEmployers = React.useMemo(() => {
+  const filteredEmployers = useMemo(() => {
     if (!searchQuery) return employers
 
     return employers.filter(employer =>
@@ -430,7 +430,7 @@ export function RatingDashboard({
   }, [employers, searchQuery])
 
   // Get employers needing attention (amber/red ratings)
-  const employersNeedingAttention = React.useMemo(() => {
+  const employersNeedingAttention = useMemo(() => {
     return filteredEmployers.filter(employer => {
       const rating = employer.project_data_rating?.rating
       return rating === 'red' || rating === 'amber'

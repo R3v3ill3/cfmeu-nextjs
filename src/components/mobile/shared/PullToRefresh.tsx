@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { cn } from "@/lib/utils"
 import { Loader2, RefreshCw } from "lucide-react"
@@ -22,15 +22,15 @@ export function PullToRefresh({
   disabled = false,
   refreshing = false,
 }: PullToRefreshProps) {
-  const [pullDistance, setPullDistance] = React.useState(0)
-  const [isPulling, setIsPulling] = React.useState(false)
-  const [shouldRefresh, setShouldRefresh] = React.useState(false)
-  const startY = React.useRef(0)
-  const currentY = React.useRef(0)
-  const containerRef = React.useRef<HTMLDivElement>(null)
-  const contentRef = React.useRef<HTMLDivElement>(null)
+  const [pullDistance, setPullDistance] = useState(0)
+  const [isPulling, setIsPulling] = useState(false)
+  const [shouldRefresh, setShouldRefresh] = useState(false)
+  const startY = useRef(0)
+  const currentY = useRef(0)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
 
-  const handleTouchStart = (e: React.TouchEvent) => {
+  const handleTouchStart = (e: TouchEvent) => {
     if (disabled || refreshing) return
 
     const touch = e.touches[0]
@@ -45,7 +45,7 @@ export function PullToRefresh({
     setIsPulling(true)
   }
 
-  const handleTouchMove = (e: React.TouchEvent) => {
+  const handleTouchMove = (e: TouchEvent) => {
     if (!isPulling || disabled || refreshing) return
 
     const touch = e.touches[0]
