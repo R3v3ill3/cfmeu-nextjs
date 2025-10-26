@@ -44,9 +44,25 @@ export interface OrganizingUniverseFilters {
 export function useOrganizingUniverseMetrics(filters: OrganizingUniverseFilters = {}) {
   return useQuery({
     queryKey: ["organizing-universe-metrics", filters],
-    staleTime: 30000,
+    staleTime: 5 * 60 * 1000, // 5 minutes - increased from 30s to reduce server load
+    gcTime: 30 * 60 * 1000, // 30 minutes garbage collection
     refetchOnWindowFocus: false,
-    queryFn: () => fetchOrganizingUniverseMetrics(filters)
+    refetchOnMount: false, // Prevent unnecessary refetches
+    refetchOnReconnect: true, // Only refetch on network reconnect
+    retry: (failureCount, error) => {
+      // Retry network errors but not 4xx errors
+      if (error instanceof Error && error.message.includes('4')) {
+        return false;
+      }
+      return failureCount < 2; // Max 2 retries
+    },
+    retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
+    queryFn: () => fetchOrganizingUniverseMetrics(filters),
+    meta: {
+      // Add performance tracking metadata
+      persistent: true, // Persist cache across page reloads
+      priority: 'high' // Higher priority for background refetching
+    }
   })
 }
 

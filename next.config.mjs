@@ -18,6 +18,9 @@ const nextConfig = {
     optimizePackageImports: [
       '@radix-ui/react-avatar',
       '@radix-ui/react-dialog',
+      '@tanstack/react-query',
+      'lucide-react',
+      'date-fns',
       '@radix-ui/react-dropdown-menu',
       '@radix-ui/react-select',
       '@radix-ui/react-tabs',

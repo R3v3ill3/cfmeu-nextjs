@@ -143,16 +143,39 @@ export function useRatingStats(options?: Partial<UseQueryOptions<{
 }>>) {
   return useQuery({
     queryKey: ["rating-stats"],
-    queryFn: () => fetchApi<{
-      total_employers: number
-      rating_distribution: Record<TrafficLightRating, number>
-      confidence_distribution: Record<string, number>
-      recent_updates: number
-      discrepancies_count: number
-    }>(`${RATING_API_BASE}/stats`),
+    queryFn: async () => {
+      try {
+        const response = await fetchApi<{
+          total_employers: number
+          rating_distribution: Record<TrafficLightRating, number>
+          confidence_distribution: Record<string, number>
+          recent_updates: number
+          discrepancies_count: number
+        }>(`${RATING_API_BASE}/stats`)
+        return response
+      } catch (error) {
+        console.error('Error fetching rating stats:', error)
+        // Return fallback data to prevent crashes
+        return {
+          total_employers: 0,
+          rating_distribution: { green: 0, amber: 0, yellow: 0, red: 0 },
+          confidence_distribution: { very_high: 0, high: 0, medium: 0, low: 0 },
+          recent_updates: 0,
+          discrepancies_count: 0,
+        }
+      }
+    },
     staleTime: 10 * 60 * 1000, // 10 minutes for stats
     gcTime: 30 * 60 * 1000, // 30 minutes
     refetchInterval: 5 * 60 * 1000, // Auto-refresh every 5 minutes
+    retry: (failureCount, error) => {
+      // Only retry for network errors, not for 4xx errors
+      if (error instanceof Error && error.message.includes('404')) {
+        return false
+      }
+      return failureCount < 3
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
     ...options,
   })
 }
@@ -170,19 +193,36 @@ export function useRatingAlerts(options?: Partial<UseQueryOptions<Array<{
 }>>>) {
   return useQuery({
     queryKey: ["rating-alerts"],
-    queryFn: () => fetchApi<Array<{
-      id: string
-      type: "info" | "warning" | "error"
-      title: string
-      message: string
-      employer_id: string
-      employer_name: string
-      timestamp: string
-      acknowledged: boolean
-    }>>(`${RATING_API_BASE}/alerts`),
+    queryFn: async () => {
+      try {
+        const response = await fetchApi<Array<{
+          id: string
+          type: "info" | "warning" | "error"
+          title: string
+          message: string
+          employer_id: string
+          employer_name: string
+          timestamp: string
+          acknowledged: boolean
+        }>>(`${RATING_API_BASE}/alerts`)
+        return response
+      } catch (error) {
+        console.error('Error fetching rating alerts:', error)
+        // Return empty array to prevent crashes
+        return []
+      }
+    },
     staleTime: 1 * 60 * 1000, // 1 minute for alerts
     gcTime: 5 * 60 * 1000,
     refetchInterval: 2 * 60 * 1000, // Auto-refresh every 2 minutes
+    retry: (failureCount, error) => {
+      // Only retry for network errors, not for 4xx errors
+      if (error instanceof Error && error.message.includes('404')) {
+        return false
+      }
+      return failureCount < 2 // Fewer retries for alerts
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 15000),
     ...options,
   })
 }

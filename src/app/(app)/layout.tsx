@@ -7,8 +7,9 @@ import { headers } from 'next/headers'
 import { isMobileOrTablet } from '@/lib/device'
 import { NavigationLoadingWrapper } from '@/components/NavigationLoadingWrapper'
 import { HelpContextProvider } from '@/context/HelpContext'
-import { RatingProvider } from '@/context/RatingContext'
+import { SafeRatingProvider } from '@/components/ratings/SafeRatingProvider'
 import { AppRole } from '@/constants/roles'
+import { ReactNode } from 'react'
 
 async function getUserRole(userId: string): Promise<AppRole | null> {
   const supabase = await createServerSupabase()
@@ -39,11 +40,11 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   return (
     <AuthProvider>
       <HelpContextProvider initialPathname={currentPath || '/'} initialRole={role}>
-        <RatingProvider>
+        <SafeRatingProvider>
           <NavigationLoadingWrapper>
             {isMobile ? <Layout>{children}</Layout> : <DesktopLayout>{children}</DesktopLayout>}
           </NavigationLoadingWrapper>
-        </RatingProvider>
+        </SafeRatingProvider>
       </HelpContextProvider>
     </AuthProvider>
   )

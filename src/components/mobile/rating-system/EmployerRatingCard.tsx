@@ -1,6 +1,5 @@
 "use client"
 
-import React from 'react'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"

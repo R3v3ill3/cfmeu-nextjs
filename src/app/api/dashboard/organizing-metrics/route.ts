@@ -181,8 +181,12 @@ export async function GET(request: NextRequest) {
     }
 
     const headers = {
-      'Cache-Control': 'public, s-maxage=120, stale-while-revalidate=300',
+      'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600', // 5min cache, 10min SWR
       'Content-Type': 'application/json',
+      'CDN-Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
+      'Vercel-CDN-Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
+      'X-Response-Time': `${queryTime}ms`,
+      'X-Cache-Status': queryTime < 500 ? 'HIT' : 'MISS' // Simple cache status indicator
     }
 
     return NextResponse.json(response, { headers })

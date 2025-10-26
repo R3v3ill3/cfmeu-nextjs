@@ -1,6 +1,5 @@
 "use client"
 
-import React from 'react'
 import { useState, useRef, useEffect, useMemo } from 'react'
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'

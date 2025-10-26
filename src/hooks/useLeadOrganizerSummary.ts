@@ -13,7 +13,14 @@ const getDashboardApiBaseUrl = () => {
   if (process.env.NEXT_PUBLIC_VERCEL_URL) {
     return `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
   }
-  return 'http://localhost:3000'
+  if (process.env.NEXT_PUBLIC_APP_URL) {
+    return process.env.NEXT_PUBLIC_APP_URL
+  }
+  // Production fallback - should never reach here in production
+  console.warn('NEXT_PUBLIC_APP_URL not configured, using default')
+  return process.env.NODE_ENV === 'production'
+    ? 'https://app.cfmeu.org'
+    : 'http://localhost:3000'
 }
 
 const mapServerPatchToSummary = (summary: PatchSummaryDataServerSide): PatchSummaryData => ({

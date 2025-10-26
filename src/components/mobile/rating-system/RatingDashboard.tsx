@@ -35,6 +35,8 @@ import { TrafficLightDisplay, TrafficLightIndicator } from "./TrafficLightDispla
 import { EmployerRatingList } from "./EmployerRatingCard"
 import { PullToRefresh } from "../shared/PullToRefresh"
 import { useHapticFeedback } from "../shared/HapticFeedback"
+import { SafeRatingComponent } from "@/components/ratings/SafeRatingProvider"
+import { DefaultRatingError } from "@/components/ratings/RatingErrorBoundary"
 
 interface RatingDashboardProps {
   employers: EmployerRatingData[]
@@ -379,6 +381,51 @@ function SearchAndFilter({
 }
 
 export function RatingDashboard({
+  employers,
+  userRole,
+  loading = false,
+  refreshing = false,
+  stats,
+  alerts,
+  onRefresh,
+  onSearch,
+  onFilter,
+  onRateEmployer,
+  onViewEmployer,
+  onEditEmployer,
+  onViewAllEmployers,
+  onViewAlerts,
+  onSettings,
+  className,
+}: RatingDashboardProps) {
+  return (
+    <SafeRatingComponent
+      fallback={<DefaultRatingError />}
+      componentName="RatingDashboard"
+    >
+      <RatingDashboardContent
+        employers={employers}
+        userRole={userRole}
+        loading={loading}
+        refreshing={refreshing}
+        stats={stats}
+        alerts={alerts}
+        onRefresh={onRefresh}
+        onSearch={onSearch}
+        onFilter={onFilter}
+        onRateEmployer={onRateEmployer}
+        onViewEmployer={onViewEmployer}
+        onEditEmployer={onEditEmployer}
+        onViewAllEmployers={onViewAllEmployers}
+        onViewAlerts={onViewAlerts}
+        onSettings={onSettings}
+        className={className}
+      />
+    </SafeRatingComponent>
+  )
+}
+
+function RatingDashboardContent({
   employers,
   userRole,
   loading = false,

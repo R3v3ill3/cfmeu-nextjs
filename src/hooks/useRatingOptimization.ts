@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useCallback, useRef, useEffect } from "react"
+import { useState, useMemo, useCallback, useRef, useEffect } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { debounce, throttle } from "lodash"
 import { EmployerRatingData, RatingFilters } from "@/types/rating"
