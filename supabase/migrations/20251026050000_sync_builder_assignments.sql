@@ -4,6 +4,16 @@
 BEGIN;
 
 -- ============================================================================
+-- Expand project_assignments.source allowed values to include legacy_sync
+-- ============================================================================
+ALTER TABLE project_assignments
+  DROP CONSTRAINT IF EXISTS project_assignments_source_check;
+
+ALTER TABLE project_assignments
+  ADD CONSTRAINT project_assignments_source_check
+  CHECK (source = ANY (ARRAY['manual'::text, 'bci_import'::text, 'other_import'::text, 'scanned_mapping_sheet'::text, 'legacy_sync'::text]));
+
+-- ============================================================================
 -- Helper function: derive the canonical builder_id from contractor assignments
 -- ============================================================================
 CREATE OR REPLACE FUNCTION sync_project_builder_from_assignments(p_project_id uuid)

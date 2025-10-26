@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getSupabaseBrowserClient, resetSupabaseBrowserClient } from "@/lib/supabase/client";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,6 +22,9 @@ import {
   Search,
   Plus,
   AlertCircle,
+  Tag,
+  Edit,
+  Trash2,
 } from "lucide-react";
 import { getEbaStatusInfo } from "./ebaHelpers";
 import { EmployerWorkersList } from "../workers/EmployerWorkersList";
@@ -35,6 +38,8 @@ import { IncolinkActionModal } from "./IncolinkActionModal";
 import { useToast } from "@/hooks/use-toast";
 import { EmployerCategoriesEditor } from "./EmployerCategoriesEditor";
 import { withTimeout } from "@/lib/withTimeout";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 type EmployerSite = {
   id: string;
@@ -85,7 +90,7 @@ interface EmployerDetailModalProps {
   employerId: string | null;
   isOpen: boolean;
   onClose: () => void;
-  initialTab?: "overview" | "eba" | "sites" | "workers" | "categories";
+  initialTab?: "overview" | "eba" | "sites" | "workers" | "categories" | "aliases";
   onEmployerUpdated?: () => void;
   mode?: 'active' | 'pending_review'; // NEW: Support pending review mode
   onPendingReviewClose?: () => void; // NEW: Called when closing from pending review
@@ -106,6 +111,9 @@ export const EmployerDetailModal = ({
   const [isImportingIncolink, setIsImportingIncolink] = useState(false);
   const [isFwcSearchOpen, setIsFwcSearchOpen] = useState(false);
   const [isIncolinkModalOpen, setIsIncolinkModalOpen] = useState(false);
+  const [isAliasDialogOpen, setIsAliasDialogOpen] = useState(false);
+  const [newAlias, setNewAlias] = useState("");
+  const [editingAlias, setEditingAlias] = useState<{id: string, alias: string} | null>(null);
   const queryClient = useQueryClient();
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
@@ -272,12 +280,106 @@ export const EmployerDetailModal = ({
       queryClient.invalidateQueries({ queryKey: ["employer-detail", employerId] }),
       queryClient.invalidateQueries({ queryKey: ["employer-worker-count", employerId] }),
       queryClient.invalidateQueries({ queryKey: ["employer-workers", employerId] }),
+      queryClient.invalidateQueries({ queryKey: ["employer-aliases", employerId] }),
       queryClient.invalidateQueries({ queryKey: ["employers-server-side"] }),
       queryClient.invalidateQueries({ queryKey: ["employers-list"] }),
       queryClient.invalidateQueries({ queryKey: ["employers"] }),
     ]);
     onEmployerUpdated?.();
   }, [queryClient, employerId, onEmployerUpdated]);
+
+  // Alias management functions
+  const handleAddAlias = async () => {
+    if (!newAlias.trim() || !employerId) return;
+
+    try {
+      const res = await fetch(`/api/employers/${employerId}/aliases`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alias: newAlias.trim() }),
+      });
+
+      if (!res.ok) throw new Error(await res.text());
+
+      setNewAlias("");
+      setIsAliasDialogOpen(false);
+      await refetchAliases();
+      toast({
+        title: "Alias added",
+        description: `"${newAlias.trim()}" has been added as an alias.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to add alias",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleEditAlias = async () => {
+    if (!editingAlias || !employerId) return;
+
+    try {
+      const res = await fetch(`/api/employers/${employerId}/aliases/${editingAlias.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alias: editingAlias.alias.trim() }),
+      });
+
+      if (!res.ok) throw new Error(await res.text());
+
+      setEditingAlias(null);
+      setIsAliasDialogOpen(false);
+      await refetchAliases();
+      toast({
+        title: "Alias updated",
+        description: "The alias has been successfully updated.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to update alias",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteAlias = async (aliasId: string, aliasValue: string) => {
+    if (!employerId) return;
+
+    try {
+      const res = await fetch(`/api/employers/${employerId}/aliases/${aliasId}`, {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) throw new Error(await res.text());
+
+      await refetchAliases();
+      toast({
+        title: "Alias deleted",
+        description: `"${aliasValue}" has been removed from the aliases.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete alias",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const openAddAliasDialog = () => {
+    setNewAlias("");
+    setEditingAlias(null);
+    setIsAliasDialogOpen(true);
+  };
+
+  const openEditAliasDialog = (alias: {id: string, alias: string}) => {
+    setEditingAlias(alias);
+    setNewAlias("");
+    setIsAliasDialogOpen(true);
+  };
 
   // Worksites for this employer, across all projects
   const { data: employerSites = [], isFetching: isFetchingSites } = useQuery({
@@ -302,6 +404,25 @@ export const EmployerDetailModal = ({
           resetSupabaseBrowserClient();
         }
         throw err;
+      }
+    },
+    retry: 1,
+  });
+
+  // Fetch employer aliases
+  const { data: aliasesData = [], refetch: refetchAliases } = useQuery({
+    queryKey: ["employer-aliases", employerId],
+    enabled: !!employerId && isOpen && !authLoading,
+    queryFn: async () => {
+      if (!employerId) return [];
+      try {
+        const res = await fetch(`/api/employers/${employerId}/aliases`);
+        if (!res.ok) throw new Error(await res.text());
+        const json = await res.json();
+        return json.data || [];
+      } catch (err: any) {
+        console.error("Error fetching employer aliases:", err);
+        return [];
       }
     },
     retry: 1,
@@ -409,13 +530,14 @@ export const EmployerDetailModal = ({
             </div>
           ) : (
             <>
-            <Tabs value={activeTab} onValueChange={(v: string) => setActiveTab(v as "overview" | "eba" | "sites" | "workers")} className="space-y-6">
-              <TabsList className="grid w-full grid-cols-5">
+            <Tabs value={activeTab} onValueChange={(v: string) => setActiveTab(v as "overview" | "eba" | "sites" | "workers" | "categories" | "aliases")} className="space-y-6">
+              <TabsList className="grid w-full grid-cols-6">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="eba">EBA Details</TabsTrigger>
                 <TabsTrigger value="categories">Categories</TabsTrigger>
                 <TabsTrigger value="sites">Worksites</TabsTrigger>
                 <TabsTrigger value="workers">Workers</TabsTrigger>
+                <TabsTrigger value="aliases">Aliases</TabsTrigger>
               </TabsList>
 
               <TabsContent value="overview" className="space-y-4">
@@ -913,6 +1035,82 @@ export const EmployerDetailModal = ({
     </DialogContent>
   </Dialog>
  </TabsContent>
+
+              <TabsContent value="aliases" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Tag className="h-5 w-5" />
+                        <CardTitle>Employer Aliases</CardTitle>
+                      </div>
+                      {canEdit && (
+                        <Button size="sm" onClick={openAddAliasDialog}>
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Alias
+                        </Button>
+                      )}
+                    </div>
+                    <CardDescription>
+                      Alternative names or abbreviations used to identify this employer (e.g., "ESS" for "Erect Safe Scaffolding").
+                      These aliases help with employer matching and search functionality.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {aliasesData.length > 0 ? (
+                      <div className="space-y-3">
+                        {aliasesData.map((alias: any) => (
+                          <div key={alias.id} className="flex items-center justify-between p-3 border rounded-lg">
+                            <div className="flex items-center gap-3">
+                              <Badge variant="secondary" className="text-sm">
+                                {alias.alias}
+                              </Badge>
+                              {alias.created_at && (
+                                <span className="text-xs text-muted-foreground">
+                                  Added {new Date(alias.created_at).toLocaleDateString()}
+                                </span>
+                              )}
+                            </div>
+                            {canEdit && (
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => openEditAliasDialog(alias)}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleDeleteAlias(alias.id, alias.alias)}
+                                  className="text-red-600 hover:text-red-700"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8">
+                        <Tag className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                        <h3 className="text-lg font-semibold mb-2">No Aliases</h3>
+                        <p className="text-muted-foreground mb-4">
+                          This employer doesn't have any aliases yet. Aliases help with matching employer names in different formats.
+                        </p>
+                        {canEdit && (
+                          <Button size="sm" onClick={openAddAliasDialog}>
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add First Alias
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
               </Tabs>
               {isFwcSearchOpen && employer && (
               <FwcEbaSearchModal
@@ -937,6 +1135,49 @@ export const EmployerDetailModal = ({
                   onUpdate={invalidateEmployerData}
                 />
               )}
+
+              {/* Alias Management Dialog */}
+              <Dialog open={isAliasDialogOpen} onOpenChange={setIsAliasDialogOpen}>
+                <DialogContent className="max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>
+                      {editingAlias ? "Edit Alias" : "Add New Alias"}
+                    </DialogTitle>
+                    <DialogDescription>
+                      {editingAlias
+                        ? "Update the employer alias name."
+                        : "Add an alternative name or abbreviation for this employer."
+                      }
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="alias">Alias Name</Label>
+                      <Input
+                        id="alias"
+                        value={editingAlias ? editingAlias.alias : newAlias}
+                        onChange={(e) => editingAlias
+                          ? setEditingAlias({...editingAlias, alias: e.target.value})
+                          : setNewAlias(e.target.value)
+                        }
+                        placeholder="e.g., ESS, Erect Safe Scaffolding"
+                        maxLength={100}
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsAliasDialogOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={editingAlias ? handleEditAlias : handleAddAlias}
+                      disabled={!editingAlias ? !newAlias.trim() : !editingAlias.alias.trim()}
+                    >
+                      {editingAlias ? "Update Alias" : "Add Alias"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </>
           )
         ) : (

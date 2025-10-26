@@ -120,6 +120,8 @@ export function EmployersMobileView() {
     dir: 'asc',
     q: q || undefined,
     enhanced: true, // Enable enhanced data for projects, organisers, incolink
+    includeAliases: true, // Enable alias search for better employer matching
+    aliasMatchMode: 'any', // Match any type of alias
   })
 
   const { data, totalCount, totalPages, currentPage, isFetching, refetch, error } = serverSideResult as any

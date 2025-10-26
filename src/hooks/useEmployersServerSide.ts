@@ -15,6 +15,9 @@ export interface EmployersParams {
   categoryCode?: string;
   projectTier?: 'all' | 'tier_1' | 'tier_2' | 'tier_3';
   enhanced?: boolean;
+  // Alias search parameters
+  includeAliases?: boolean;
+  aliasMatchMode?: 'any' | 'authoritative' | 'canonical';
 }
 
 export interface EmployerRecord {
@@ -119,6 +122,15 @@ export function useEmployersServerSide(params: EmployersParams) {
       // Kept for backward compatibility with Next.js API fallback
       if (params.enhanced) {
         searchParams.set('enhanced', 'true');
+      }
+
+      // Alias search parameters
+      if (params.includeAliases) {
+        searchParams.set('includeAliases', 'true');
+      }
+
+      if (params.aliasMatchMode && params.aliasMatchMode !== 'any') {
+        searchParams.set('aliasMatchMode', params.aliasMatchMode);
       }
 
       const urlPath = `?${searchParams.toString()}`;

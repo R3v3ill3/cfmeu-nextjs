@@ -134,6 +134,8 @@ export function EmployersDesktopView() {
     eba: eba as any,
     type: type as any,
     enhanced: true, // Enable enhanced data for projects, organisers, incolink
+    includeAliases: true, // Enable alias search for better employer matching
+    aliasMatchMode: 'any', // Match any type of alias
   })
 
   const { refetch: refetchEmployers } = serverSideResult

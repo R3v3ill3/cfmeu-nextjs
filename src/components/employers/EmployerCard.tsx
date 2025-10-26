@@ -4,7 +4,7 @@ import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Building, Phone, Mail, Users, MapPin } from "lucide-react"
+import { Building, Phone, Mail, Users, MapPin, Tag } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { CfmeuEbaBadge, getProjectEbaStatus } from "@/components/ui/CfmeuEbaBadge"
 import { IncolinkBadge } from "@/components/ui/IncolinkBadge"
@@ -110,6 +110,17 @@ export function EmployerCard({ employer, onClick, onUpdated }: { employer: Emplo
     }
   })
 
+  // Fetch employer aliases
+  const { data: aliasesData } = useQuery({
+    queryKey: ['employer-aliases', employer.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/employers/${employer.id}/aliases`)
+      if (!res.ok) throw new Error(await res.text())
+      const json = await res.json()
+      return json.data || []
+    }
+  })
+
   const roles = (employer.roles && employer.roles.length > 0) ? employer.roles : (fallbackCats?.roles || [])
   const trades = (employer.trades && employer.trades.length > 0) ? employer.trades : (fallbackCats?.trades || [])
 
@@ -122,6 +133,25 @@ export function EmployerCard({ employer, onClick, onUpdated }: { employer: Emplo
               <CardTitle className="text-lg mb-2">{employer.name}</CardTitle>
               {employer.abn && (
                 <p className="text-sm text-muted-foreground">ABN: {employer.abn}</p>
+              )}
+              {/* Aliases Section */}
+              {aliasesData && aliasesData.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Tag className="h-3 w-3" />
+                    <span>Aliases:</span>
+                  </div>
+                  {aliasesData.slice(0, 3).map((alias: any) => (
+                    <Badge key={alias.id} variant="outline" className="text-xs">
+                      {alias.alias}
+                    </Badge>
+                  ))}
+                  {aliasesData.length > 3 && (
+                    <Badge variant="outline" className="text-xs">
+                      +{aliasesData.length - 3}
+                    </Badge>
+                  )}
+                </div>
               )}
             </div>
             <Building className="h-5 w-5 text-gray-400" />
