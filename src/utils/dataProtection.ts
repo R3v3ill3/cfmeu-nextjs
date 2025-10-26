@@ -217,7 +217,7 @@ export function withDataProtection<P extends object>(
   Component: React.ComponentType<P>
 ): React.ComponentType<P> {
   const ProtectedComponent = (props: P) => {
-    React.useEffect(() => {
+    useEffect(() => {
       // Override console.error to catch any data modification attempts
       const originalError = console.error
       console.error = (...args: any[]) => {
@@ -248,7 +248,7 @@ export function withDataProtection<P extends object>(
  * Hook to ensure component is operating in read-only mode
  */
 export function useReadOnlyMode() {
-  React.useEffect(() => {
+  useEffect(() => {
     // Set a flag that can be checked by other components (avoiding eval-like patterns)
     try {
       if (typeof window !== 'undefined' && window.sessionStorage) {

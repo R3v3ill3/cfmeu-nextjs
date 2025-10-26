@@ -1,12 +1,8 @@
 import { NextResponse } from "next/server"
 
-// Temporary alerts endpoint returning an empty collection. Replace with
-// a real data source when the ratings alerts workflow is implemented.
+// TODO: Replace this stub with real rating alerts once the backend data is available.
 export async function GET() {
-  return NextResponse.json({
-    generatedAt: new Date().toISOString(),
-    alerts: [],
-  })
+  return NextResponse.json({ alerts: [] })
 }
 
 

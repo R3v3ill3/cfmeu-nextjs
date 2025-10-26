@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, forwardRef } from 'react'
-import type {  } from 'react'
 import * as ToggleGroupPrimitive from "@radix-ui/react-toggle-group"
 import { type VariantProps } from "class-variance-authority"
 
