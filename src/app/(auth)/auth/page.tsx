@@ -1,10 +1,19 @@
 'use client'
 
+import React from 'react'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 
 export const dynamic = 'force-dynamic'
+
+// Ensure React is globally available for client-side bundles
+if (typeof window !== 'undefined' && !window.React) {
+  window.React = React;
+}
+if (typeof globalThis !== 'undefined' && !globalThis.React) {
+  globalThis.React = React;
+}
 
 export default function AuthPage() {
   const [email, setEmail] = useState('')

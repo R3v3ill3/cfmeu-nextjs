@@ -1,10 +1,19 @@
 'use client'
 
+import React from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { GoogleMapsProvider } from '@/providers/GoogleMapsProvider'
+
+// Ensure React is globally available for client-side bundles
+if (typeof window !== 'undefined' && !window.React) {
+  window.React = React;
+}
+if (typeof globalThis !== 'undefined' && !globalThis.React) {
+  globalThis.React = React;
+}
 
 type ProvidersProps = {
   children: ReactNode
