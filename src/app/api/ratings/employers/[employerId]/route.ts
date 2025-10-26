@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withRateLimit, RATE_LIMIT_PRESETS } from '@/lib/rateLimit';
 
 export const dynamic = 'force-dynamic';
 
-// Completely minimal endpoint with no custom types or dependencies
-export async function GET(request: NextRequest, { params }: { params: { employerId: string } }) {
+// Test with rate limiting
+async function getEmployerRatingHandler(request: NextRequest, { params }: { params: { employerId: string } }) {
   try {
     const { employerId } = params;
 
@@ -40,6 +41,12 @@ export async function GET(request: NextRequest, { params }: { params: { employer
     }, { status: 500 });
   }
 }
+
+// Export handler with rate limiting
+export const GET = withRateLimit(
+  (request, context) => getEmployerRatingHandler(request, context as { params: { employerId: string } }),
+  RATE_LIMIT_PRESETS.STANDARD
+);
 
 export async function HEAD(request: NextRequest, { params }: { params: { employerId: string } }) {
   try {
