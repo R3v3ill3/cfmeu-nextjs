@@ -49,10 +49,8 @@ export const metadata: Metadata = {
   },
 };
 
-// Ensure React is globally available for SSR
-if (typeof global !== 'undefined' && !global.React) {
-  global.React = require('react');
-}
+// Pre-load React to ensure it's available during SSR
+import React from 'react';
 
 export default function RootLayout({
   children,
