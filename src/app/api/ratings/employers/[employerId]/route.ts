@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabase } from '@/lib/supabase/server';
-import { withRateLimit, RATE_LIMIT_PRESETS } from '@/lib/rateLimit';
+// Temporarily remove all dependencies to isolate the issue
+// import { createServerSupabase } from '@/lib/supabase/server';
+// import { withRateLimit, RATE_LIMIT_PRESETS } from '@/lib/rateLimit';
 
 // Role-based access control
 const ALLOWED_ROLES = ['organiser', 'lead_organiser', 'admin'] as const;
@@ -138,203 +139,64 @@ function mapDataQualityToConfidence(dataQuality: string): 'low' | 'medium' | 'hi
   }
 }
 
-// GET handler - Adapter endpoint for frontend compatibility
+// GET handler - Minimal version for debugging
 async function getEmployerRatingHandler(request: NextRequest, { params }: { params: { employerId: string } }) {
   try {
     const { employerId } = params;
-    const supabase = await createServerSupabase();
 
-    // For now, skip authentication to allow the endpoint to work without a session
-    // TODO: Re-enable authentication once the database query issues are resolved
-    /*
-    // Authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    console.log('Simplified adapter endpoint called with employerId:', employerId);
 
-    // Authorization
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('id, role')
-      .eq('id', user.id)
-      .maybeSingle();
-
-    if (profileError || !profile) {
-      return NextResponse.json({ error: 'Unable to load user profile' }, { status: 500 });
-    }
-
-    const role = profile.role as AllowedRole;
-    if (!role || !ROLE_SET.has(role)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-    */
-
-    // Validate employer exists
-    const { data: employer, error: employerError } = await supabase
-      .from('employers')
-      .select('id, name')
-      .eq('id', employerId)
-      .single();
-
-    if (employerError || !employer) {
-      console.log('Employer not found or error:', employerError);
-      // Return empty structure instead of 404 to prevent frontend crashes
-      const emptyResponse: SimpleEmployerRatingData = {
-        rating_history: []
-      };
-      return NextResponse.json(emptyResponse, {
-        status: 200,
-        headers: {
-          'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
-          'Content-Type': 'application/json',
-          'X-Fallback-Data': 'true',
-          'X-Reason': 'employer-not-found',
-        }
-      });
-    }
-
-    console.log('Employer found:', employer);
-
-    // Try to query ratings directly instead of calling internal endpoint
-    try {
-      const { data: ratings, error: ratingsError } = await supabase
-        .from('employer_final_ratings')
-        .select('*')
-        .eq('employer_id', employerId)
-        .eq('is_active', true)
-        .order('rating_date', { ascending: false })
-        .limit(10);
-
-      if (ratingsError) {
-        console.error('Direct ratings query error:', ratingsError);
-        // Return empty structure on database error
-        const emptyResponse: SimpleEmployerRatingData = {
-          rating_history: []
-        };
-        return NextResponse.json(emptyResponse, {
-          status: 200,
-          headers: {
-            'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
-            'Content-Type': 'application/json',
-            'X-Fallback-Data': 'true',
-            'X-Error': 'database-query-error',
-          }
-        });
+    // Return a hardcoded response that matches the expected format
+    const mockResponse: SimpleEmployerRatingData = {
+      rating_history: [],
+      // Optionally add some mock data for testing
+      project_data_rating: {
+        rating: 'green',
+        confidence: 'medium',
+        calculated_at: new Date().toISOString()
+      },
+      organiser_expertise_rating: {
+        rating: 'amber',
+        confidence: 'high',
+        calculated_at: new Date().toISOString()
       }
-
-      console.log('Ratings found:', ratings?.length || 0);
-
-      // Transform the data to match expected format
-      const simpleData: SimpleEmployerRatingData = {
-        rating_history: []
-      };
-
-      if (ratings && ratings.length > 0) {
-        const currentRating = ratings[0];
-
-        if (currentRating.project_based_rating && currentRating.project_based_rating !== 'unknown') {
-          simpleData.project_data_rating = {
-            rating: currentRating.project_based_rating as 'green' | 'amber' | 'yellow' | 'red',
-            confidence: mapDataQualityToConfidence(currentRating.project_data_quality || 'medium'),
-            calculated_at: currentRating.latest_project_date || currentRating.updated_at
-          };
-        }
-
-        if (currentRating.expertise_based_rating && currentRating.expertise_based_rating !== 'unknown') {
-          simpleData.organiser_expertise_rating = {
-            rating: currentRating.expertise_based_rating as 'green' | 'amber' | 'yellow' | 'red',
-            confidence: currentRating.expertise_confidence || 'medium',
-            calculated_at: currentRating.latest_expertise_date || currentRating.updated_at
-          };
-        }
-
-        // Add rating history
-        simpleData.rating_history = ratings
-          .filter(rating => rating.final_rating && rating.final_rating !== 'unknown')
-          .map(rating => ({
-            rating: rating.final_rating as 'green' | 'amber' | 'yellow' | 'red',
-            confidence: rating.overall_confidence || 'medium',
-            calculated_at: rating.rating_date
-          }));
-      }
-
-      return NextResponse.json(simpleData, {
-        status: 200,
-        headers: {
-          'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
-          'Content-Type': 'application/json',
-          'X-Data-Source': 'direct-query',
-        }
-      });
-
-    } catch (queryError) {
-      console.error('Error in direct ratings query:', queryError);
-
-      // Return empty structure to prevent frontend crashes
-      const emptyResponse: SimpleEmployerRatingData = {
-        rating_history: []
-      };
-
-      return NextResponse.json(emptyResponse, {
-        status: 200,
-        headers: {
-          'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
-          'Content-Type': 'application/json',
-          'X-Fallback-Data': 'true',
-          'X-Error': 'query-exception',
-        }
-      });
-    }
-
-  } catch (error) {
-    console.error('Employer rating adapter API unexpected error:', error);
-
-    // Always return a valid structure to prevent frontend crashes
-    const fallbackResponse: SimpleEmployerRatingData = {
-      rating_history: []
     };
 
-    return NextResponse.json(fallbackResponse, {
+    return NextResponse.json(mockResponse, {
       status: 200,
       headers: {
-        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
         'Content-Type': 'application/json',
-        'X-Fallback-Data': 'true',
-        'X-Error': 'internal-server-error',
+        'X-Data-Source': 'mock-data',
+        'X-Debug': 'simplified-adapter',
       }
     });
+
+  } catch (error) {
+    console.error('Simplified adapter endpoint error:', error);
+
+    return NextResponse.json({
+      error: 'Simplified adapter failed',
+      details: error instanceof Error ? error.message : 'Unknown error',
+      employerId: params.employerId
+    }, { status: 500 });
   }
 }
 
-// Export handler with rate limiting
-export const GET = withRateLimit(
-  (request, context) => getEmployerRatingHandler(request, context as { params: { employerId: string } }),
-  RATE_LIMIT_PRESETS.STANDARD
-);
+// Export handler directly (no rate limiting for debugging)
+export const GET = getEmployerRatingHandler;
 
-// Health check endpoint
+// Simplified health check endpoint
 export async function HEAD(request: NextRequest, { params }: { params: { employerId: string } }) {
   try {
     const { employerId } = params;
-    const supabase = await createServerSupabase();
-
-    const { data: employer, error } = await supabase
-      .from('employers')
-      .select('id')
-      .eq('id', employerId)
-      .single();
-
-    if (error || !employer) {
-      return new NextResponse(null, { status: 404 });
-    }
 
     return new NextResponse(null, {
       status: 200,
       headers: {
         'X-Adapter-Status': 'healthy',
         'X-Endpoint-Path': '/api/ratings/employers/[employerId]',
-        'X-Target-Endpoint': '/api/employers/[employerId]/ratings',
+        'X-Debug': 'simplified-head',
         'X-Last-Checked': new Date().toISOString()
       }
     });
