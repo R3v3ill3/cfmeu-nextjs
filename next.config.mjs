@@ -38,14 +38,26 @@ const nextConfig = {
 
   // Bundle analyzer for development
   webpack: (config, { isServer, dev }) => {
-    // Simplified React aliasing - let Next.js handle JSX transform
+    // Add React aliasing for both server and client
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      'react': 'react',
+      'react-dom': 'react-dom',
+    }
+
+    // Force React to be bundled, not externalized
     if (isServer) {
-      // Only add React aliasing for server-side compilation
-      config.resolve.alias = {
-        ...config.resolve.alias,
-        'react': 'react',
-        'react-dom': 'react-dom',
-      }
+      config.externals = config.externals || [];
+      // Ensure React is bundled for SSR
+      config.externals = config.externals.filter(external => {
+        if (typeof external === 'string') {
+          return !external.includes('react') && !external.includes('react-dom');
+        }
+        if (typeof external === 'object' && external !== null) {
+          return !Object.keys(external).includes('react');
+        }
+        return true;
+      });
     }
     // Bundle splitting optimizations
     if (!isServer && !dev) {
