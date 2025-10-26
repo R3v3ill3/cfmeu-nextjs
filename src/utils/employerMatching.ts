@@ -110,6 +110,7 @@ function getConfidenceLevel(score: number): EmployerMatch['confidence'] {
 
 /**
  * Advanced employer matching with multiple algorithms and confidence scoring
+ * Enhanced to include alias matching with appropriate weighting
  */
 export async function matchEmployerAdvanced(
   companyName: string,
@@ -117,7 +118,9 @@ export async function matchEmployerAdvanced(
     confidenceThreshold: 0.75,
     allowFuzzyMatching: true,
     requireUserConfirmation: false
-  }
+  },
+  includeAliases: boolean = true,
+  aliasMatchMode: 'any' | 'authoritative' | 'canonical' = 'any'
 ): Promise<EmployerMatchResult> {
   if (!companyName || companyName.trim().length === 0) {
     return {
@@ -129,69 +132,148 @@ export async function matchEmployerAdvanced(
   }
 
   const normalizedQuery = normalizeCompanyName(companyName);
-  
+
   try {
-    // Use a dedicated RPC call for the exact match to handle special characters safely.
-    const { data: exactMatches, error: exactError } = await supabase
+    let exactMatches: any[] = [];
+    let aliasMatches: any[] = [];
+    let fuzzyMatches: any[] = [];
+
+    // Step 1: Search for exact employer name matches
+    const { data: exactEmployerMatches, error: exactError } = await supabase
       .rpc('search_employers_by_exact_name', { name_query: companyName.trim() });
 
     if (exactError) {
       console.error('Exact match query failed:', exactError);
+    } else {
+      exactMatches = exactEmployerMatches || [];
+      // Mark these as canonical name matches
+      exactMatches = exactMatches.map(match => ({
+        ...match,
+        match_type: 'canonical_name' as const,
+        match_details: {
+          canonical_name: match.name,
+          matched_alias: null,
+          query: companyName,
+          external_id_match: null
+        }
+      }));
     }
 
-    // Then do fuzzy search using token-based approach
-    const tokens = normalizedQuery.split(/\s+/).filter(t => t.length >= 2);
-    let fuzzyMatches: any[] = [];
+    // Step 2: Search for alias matches if enabled
+    if (includeAliases) {
+      const { data: employerAliasMatches, error: aliasError } = await supabase
+        .rpc('search_employers_by_alias', {
+          alias_query: companyName.trim(),
+          p_match_mode: aliasMatchMode
+        });
 
-    if (options.allowFuzzyMatching && tokens.length > 0) {
-      // Build OR query for fuzzy matching
-      const orParts: string[] = [];
-      tokens.forEach(token => {
-        if (token.length >= 2) {
-          orParts.push(`name.ilike.*${token}*`);
-        }
-      });
+      if (aliasError) {
+        console.error('Alias search failed:', aliasError);
+      } else {
+        aliasMatches = employerAliasMatches || [];
+        // Mark these as alias matches
+        aliasMatches = aliasMatches.map(match => ({
+          ...match,
+          match_type: 'alias' as const,
+          match_details: {
+            canonical_name: match.name,
+            matched_alias: match.matched_alias,
+            query: companyName,
+            external_id_match: null
+          }
+        }));
+      }
+    }
 
-      if (orParts.length > 0) {
-        const orQuery = orParts.join(',');
-        const { data: fuzzyData, error: fuzzyError } = await supabase
-          .from('employers')
-          .select('id, name, address_line_1, suburb, state')
-          .or(orQuery)
-          .limit(50); // Reasonable limit for performance
+    // Step 3: Fuzzy search using token-based approach for employer names
+    if (options.allowFuzzyMatching) {
+      const tokens = normalizedQuery.split(/\s+/).filter(t => t.length >= 2);
 
-        if (fuzzyError) {
-          console.warn('Fuzzy search failed:', fuzzyError);
-        } else {
-          fuzzyMatches = fuzzyData || [];
+      if (tokens.length > 0) {
+        // Build OR query for fuzzy matching
+        const orParts: string[] = [];
+        tokens.forEach(token => {
+          if (token.length >= 2) {
+            orParts.push(`name.ilike.*${token}*`);
+          }
+        });
+
+        if (orParts.length > 0) {
+          const orQuery = orParts.join(',');
+          const { data: fuzzyData, error: fuzzyError } = await supabase
+            .from('employers')
+            .select('id, name, address_line_1, suburb, state')
+            .or(orQuery)
+            .limit(50); // Reasonable limit for performance
+
+          if (fuzzyError) {
+            console.warn('Fuzzy search failed:', fuzzyError);
+          } else {
+            fuzzyMatches = fuzzyData || [];
+            // Mark these as fuzzy matches
+            fuzzyMatches = fuzzyMatches.map(match => ({
+              ...match,
+              match_type: 'canonical_name' as const,
+              match_details: {
+                canonical_name: match.name,
+                matched_alias: null,
+                query: companyName,
+                external_id_match: null
+              }
+            }));
+          }
         }
       }
     }
 
-    // Combine and deduplicate results
-    const allMatches = [...(exactMatches || []), ...fuzzyMatches];
-    const uniqueMatches = allMatches.filter((match, index, arr) => 
+    // Step 4: Combine and deduplicate results, prioritizing exact > alias > fuzzy
+    const allMatches = [...exactMatches, ...aliasMatches, ...fuzzyMatches];
+    const uniqueMatches = allMatches.filter((match, index, arr) =>
       index === arr.findIndex(m => m.id === match.id)
     );
 
-    // Score all matches
+    // Step 5: Score all matches with enhanced algorithm
     const scoredMatches: EmployerMatch[] = uniqueMatches.map(employer => {
-      const score = calculateMatchScore(companyName, employer.name);
+      let baseScore = calculateMatchScore(companyName, employer.name);
+
+      // Apply scoring bonuses based on match type
+      if (employer.match_type === 'canonical_name') {
+        // Exact or fuzzy name match - no bonus, base score stands
+      } else if (employer.match_type === 'alias') {
+        // Alias match - boost confidence but cap at high
+        baseScore = Math.min(baseScore * 1.1, 0.94); // Cap just below 'exact'
+      }
+
       return {
         id: employer.id,
         name: employer.name,
-        confidence: getConfidenceLevel(score),
-        distance: 1 - score,
-        score: score
+        confidence: getConfidenceLevel(baseScore),
+        distance: 1 - baseScore,
+        score: baseScore
       };
     });
 
-    // Sort by score descending
-    scoredMatches.sort((a, b) => b.score - a.score);
+    // Sort by score descending, then by match type priority
+    scoredMatches.sort((a, b) => {
+      const scoreDiff = b.score - a.score;
+      if (Math.abs(scoreDiff) > 0.01) {
+        return scoreDiff;
+      }
+
+      // If scores are very close, prioritize exact matches over aliases
+      const aMatch = uniqueMatches.find(m => m.id === a.id);
+      const bMatch = uniqueMatches.find(m => m.id === b.id);
+
+      const priority = { canonical_name: 3, alias: 2, external_id: 1 };
+      const aPriority = priority[aMatch?.match_type as keyof typeof priority] || 0;
+      const bPriority = priority[bMatch?.match_type as keyof typeof priority] || 0;
+
+      return bPriority - aPriority;
+    });
 
     // Find the best match that meets threshold
     const bestMatch = scoredMatches.find(match => match.score >= options.confidenceThreshold);
-    
+
     // Return candidates for user review (top 5, excluding the selected match)
     const candidates = scoredMatches
       .filter(match => match.id !== bestMatch?.id)
@@ -216,36 +298,60 @@ export async function matchEmployerAdvanced(
 }
 
 /**
- * Batch match multiple employers efficiently
+ * Find the best employer match with alias support
+ * Optimized for quick lookup with high confidence matching
+ */
+export async function findBestEmployerMatch(
+  companyName: string,
+  includeAliases: boolean = true,
+  confidenceThreshold: number = 0.85
+): Promise<EmployerMatch | null> {
+  if (!companyName || companyName.trim().length === 0) {
+    return null;
+  }
+
+  const options: EmployerMatchingOptions = {
+    confidenceThreshold,
+    allowFuzzyMatching: true,
+    requireUserConfirmation: false
+  };
+
+  const result = await matchEmployerAdvanced(companyName, options, includeAliases, 'any');
+  return result.match;
+}
+
+/**
+ * Batch match multiple employers efficiently with alias support
  */
 export async function batchMatchEmployers(
   companyNames: string[],
-  options: EmployerMatchingOptions
+  options: EmployerMatchingOptions,
+  includeAliases: boolean = true
 ): Promise<Record<string, EmployerMatchResult>> {
   const results: Record<string, EmployerMatchResult> = {};
-  
+
   // Process in batches to avoid overwhelming the database
   const batchSize = 10;
   for (let i = 0; i < companyNames.length; i += batchSize) {
     const batch = companyNames.slice(i, i + batchSize);
-    
+
     const batchResults = await Promise.all(
       batch.map(async (companyName) => {
-        const result = await matchEmployerAdvanced(companyName, options);
+        const result = await matchEmployerAdvanced(companyName, options, includeAliases, 'any');
         return { companyName, result };
       })
     );
-    
+
     batchResults.forEach(({ companyName, result }) => {
       results[companyName] = result;
     });
-    
+
     // Small delay between batches to be respectful of database
     if (i + batchSize < companyNames.length) {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
   }
-  
+
   return results;
 }
 

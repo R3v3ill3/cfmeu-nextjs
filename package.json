@@ -22,7 +22,20 @@
     "refresh-views": "node scripts/daily-refresh.js",
     "probe:incolink": "tsx scripts/incolink_probe.ts 7125150",
     "check-view-staleness": "curl -s ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}/api/admin/refresh-views | jq '.views'",
-    "embed-docs": "tsx scripts/embed-docs.ts"
+    "embed-docs": "tsx scripts/embed-docs.ts",
+    "test:mobile": "node scripts/mobile-test-runner.js run",
+    "test:mobile:headed": "node scripts/mobile-test-runner.js run --headed",
+    "test:mobile:debug": "node scripts/mobile-test-runner.js run --debug",
+    "test:mobile:iphone": "node scripts/mobile-test-runner.js run --device iphone-15-pro",
+    "test:mobile:check": "node scripts/mobile-test-runner.js check",
+    "test:mobile:setup": "node scripts/mobile-test-runner.js setup",
+    "test:mobile:audit": "node scripts/mobile-test-runner.js run --test tests/mobile/audit/",
+    "test:mobile:navigation": "node scripts/mobile-test-runner.js run --test tests/mobile/audit/navigation.spec.ts",
+    "test:mobile:employers": "node scripts/mobile-test-runner.js run --test tests/mobile/audit/employer-views.spec.ts",
+    "test:mobile:scan-review": "node scripts/mobile-test-runner.js run --test tests/mobile/audit/scan-review-workflow.spec.ts",
+    "test:mobile:report": "node scripts/mobile-test-runner.js report",
+    "test:mobile:status": "node scripts/mobile-test-runner.js status",
+    "test:mobile:clean": "node scripts/mobile-test-runner.js clean"
   },
   "engines": {
     "node": ">=18.18"

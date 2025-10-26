@@ -253,58 +253,96 @@ export function EditProjectDialog({
       if (headContractorId && builderIds.includes(headContractorId)) {
         // If builder and head contractor are the same (common when no JV), only assign as builder
         // The builder will also serve as head contractor logically
-        const { error: builderErr } = await supabase.rpc('assign_contractor_role', {
+        const { data: employers } = await supabase
+          .from("employers")
+          .select("id, name")
+          .eq("id", headContractorId);
+        if (employers.length === 0) {
+          throw new Error(`Head contractor employer with ID ${headContractorId} not found.`);
+        }
+        const builderName = employers.find((e) => e.id === headContractorId)?.name || 'Builder'
+        const { data: builderResult, error: builderErr } = await supabase.rpc('set_project_builder', {
           p_project_id: project.id,
           p_employer_id: headContractorId,
-          p_role_code: 'builder',
-          p_company_name: 'Builder',
-          p_is_primary: true,
           p_source: 'manual',
-          p_match_confidence: 1.0,
-          p_match_notes: null
+          p_match_status: 'confirmed',
+          p_match_confidence: 1,
+          p_match_notes: `Assigned via project edit dialog (${builderName})`
         });
         if (builderErr) throw builderErr;
+        const builderRes = builderResult?.[0];
+        if (builderRes && !builderRes.success) {
+          throw new Error(builderRes.message || 'Failed to assign builder');
+        }
 
         // Assign other builders (if any)
         for (const builderId of builderIds) {
           if (builderId !== headContractorId) {
-            const { error: otherBuilderErr } = await supabase.rpc('assign_contractor_role', {
+            const { data: employers } = await supabase
+              .from("employers")
+              .select("id, name")
+              .eq("id", builderId);
+            if (employers.length === 0) {
+              throw new Error(`Builder employer with ID ${builderId} not found.`);
+            }
+            const builderName = employers.find((e) => e.id === builderId)?.name || 'Builder'
+            const { data: builderResult, error: otherBuilderErr } = await supabase.rpc('set_project_builder', {
               p_project_id: project.id,
               p_employer_id: builderId,
-              p_role_code: 'builder',
-              p_company_name: 'Builder',
-              p_is_primary: false,
               p_source: 'manual',
-              p_match_confidence: 1.0,
-              p_match_notes: null
+              p_match_status: 'confirmed',
+              p_match_confidence: 1,
+              p_match_notes: `Assigned via project edit dialog (${builderName})`
             });
             if (otherBuilderErr) console.warn('Failed to assign builder:', otherBuilderErr);
+            const otherRes = builderResult?.[0];
+            if (otherRes && !otherRes.success) {
+              console.warn('set_project_builder returned issue:', otherRes.message);
+            }
           }
         }
       } else {
         // Normal case: separate builder(s) and head contractor
         // Add builders using the RPC function
         for (const builderId of builderIds) {
-          const { error: builderErr } = await supabase.rpc('assign_contractor_role', {
+          const { data: employers } = await supabase
+            .from("employers")
+            .select("id, name")
+            .eq("id", builderId);
+          if (employers.length === 0) {
+            throw new Error(`Builder employer with ID ${builderId} not found.`);
+          }
+          const builderName = employers.find((e) => e.id === builderId)?.name || 'Builder'
+          const { data: builderResult, error: builderErr } = await supabase.rpc('set_project_builder', {
             p_project_id: project.id,
             p_employer_id: builderId,
-            p_role_code: 'builder',
-            p_company_name: 'Builder',
-            p_is_primary: true,
             p_source: 'manual',
-            p_match_confidence: 1.0,
-            p_match_notes: null
+            p_match_status: 'confirmed',
+            p_match_confidence: 1,
+            p_match_notes: `Assigned via project edit dialog (${builderName})`
           });
           if (builderErr) console.warn('Failed to assign builder:', builderErr);
+          const builderRes = builderResult?.[0];
+          if (builderRes && !builderRes.success) {
+            console.warn('set_project_builder returned issue:', builderRes.message);
+          }
         }
 
         // Add head contractor using the RPC function
         if (headContractorId) {
+          const { data: employers } = await supabase
+            .from("employers")
+            .select("id, name")
+            .eq("id", headContractorId);
+          if (employers.length === 0) {
+            throw new Error(`Head contractor employer with ID ${headContractorId} not found.`);
+          }
+          const headContractorName = employers.find((e) => e.id === headContractorId)?.name || 'Head Contractor'
           const { error: headErr } = await supabase.rpc('assign_contractor_role', {
             p_project_id: project.id,
             p_employer_id: headContractorId,
             p_role_code: 'head_contractor',
-            p_company_name: 'Head Contractor',
+            p_company_name: headContractorName,
             p_is_primary: true,
             p_source: 'manual',
             p_match_confidence: 1.0,

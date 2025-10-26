@@ -71,8 +71,8 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
   // Status filtering state
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed'>('all');
 
-  // EBA filtering state
-  const [ebaFilter, setEbaFilter] = useState<'all' | 'known_only' | 'unknown_only'>('all');
+  // Assignment filtering state
+  const [assignmentFilter, setAssignmentFilter] = useState<'all' | 'assigned_only' | 'unassigned_only'>('all');
   
   // Get unified mapping data which includes trade contractors
   const { data: mappingData, isLoading } = useMappingSheetData(projectId);
@@ -524,14 +524,15 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
       });
     }
 
-    // Apply EBA filter
-    if (ebaFilter !== 'all') {
+    // Apply assignment filter
+    if (assignmentFilter !== 'all') {
       filteredRows = filteredRows.filter(r => {
-        if (r.isSkeleton || !r.employer_id) return false; // Hide skeleton rows for EBA filtering
-        if (ebaFilter === 'known_only') {
-          return r.eba !== null; // Show only rows with known EBA status (true or false)
-        } else if (ebaFilter === 'unknown_only') {
-          return r.eba === null; // Show only rows with unknown EBA status
+        if (assignmentFilter === 'assigned_only') {
+          // Show only rows with assigned employers
+          return !r.isSkeleton && r.employer_id !== null;
+        } else if (assignmentFilter === 'unassigned_only') {
+          // Show only rows without assigned employers (skeleton rows)
+          return r.isSkeleton && r.employer_id === null;
         }
         return true;
       });
@@ -574,25 +575,25 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
             </Button>
           </div>
 
-          {/* EBA Filter */}
+          {/* Assignment Filter */}
           <div className="flex items-center gap-2">
-            <Label className="text-sm font-medium">EBA Status:</Label>
+            <Label className="text-sm font-medium">Assignment:</Label>
             <RadioGroup
-              value={ebaFilter}
-              onValueChange={(value) => setEbaFilter(value as 'all' | 'known_only' | 'unknown_only')}
+              value={assignmentFilter}
+              onValueChange={(value) => setAssignmentFilter(value as 'all' | 'assigned_only' | 'unassigned_only')}
               className="flex flex-row gap-3"
             >
               <div className="flex items-center space-x-1">
-                <RadioGroupItem value="all" id="eba-all" className="w-3 h-3" />
-                <Label htmlFor="eba-all" className="text-sm cursor-pointer">All</Label>
+                <RadioGroupItem value="all" id="assignment-all" className="w-3 h-3" />
+                <Label htmlFor="assignment-all" className="text-sm cursor-pointer">All</Label>
               </div>
               <div className="flex items-center space-x-1">
-                <RadioGroupItem value="known_only" id="eba-known" className="w-3 h-3" />
-                <Label htmlFor="eba-known" className="text-sm cursor-pointer">Known</Label>
+                <RadioGroupItem value="assigned_only" id="assignment-assigned" className="w-3 h-3" />
+                <Label htmlFor="assignment-assigned" className="text-sm cursor-pointer">Assigned</Label>
               </div>
               <div className="flex items-center space-x-1">
-                <RadioGroupItem value="unknown_only" id="eba-unknown" className="w-3 h-3" />
-                <Label htmlFor="eba-unknown" className="text-sm cursor-pointer">Unknown</Label>
+                <RadioGroupItem value="unassigned_only" id="assignment-unassigned" className="w-3 h-3" />
+                <Label htmlFor="assignment-unassigned" className="text-sm cursor-pointer">Unassigned</Label>
               </div>
             </RadioGroup>
           </div>

@@ -1746,12 +1746,15 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
             if (company.ourRole === 'builder') {
               // Use the new assign_bci_builder function to handle multiple builders intelligently
               try {
-                const { data: builderResult, error: builderError } = await supabase.rpc('assign_bci_builder', {
+                const { data: builderResult, error: builderError } = await supabase.rpc('set_project_builder', {
                   p_project_id: projectId,
                   p_employer_id: employerId,
-                  p_company_name: company.companyName
+                  p_source: 'bci_import',
+                  p_match_status: 'auto_matched',
+                  p_match_confidence: company.matchConfidence ?? 0.8,
+                  p_match_notes: `Auto-matched from BCI import: ${company.companyName}`
                 });
-                
+
                 if (builderError) {
                   console.error(`Error assigning builder ${company.companyName}:`, builderError);
                 } else {
@@ -1764,22 +1767,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
                 }
               } catch (error) {
                 console.error(`Error in BCI builder assignment:`, error);
-                // Fallback to original logic
-                const { data: currentProject } = await supabase
-                  .from('projects')
-                  .select('id, builder_id')
-                  .eq('id', projectId)
-                  .maybeSingle();
-                
-                if (!currentProject?.builder_id) {
-                  await supabase
-                    .from('projects')
-                    .update({ builder_id: employerId })
-                    .eq('id', projectId);
-                  console.log(`✓ Assigned builder to ${project.projectName} (fallback)`);
-                }
               }
-              
             } else if (company.ourRole === 'head_contractor') {
               // Assign as head contractor via new RPC
               try {
@@ -1919,10 +1907,13 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
           // Enhanced relationship creation with multiple builder support
           if (company.ourRole === 'builder') {
             try {
-              const { data: builderResult, error: builderError } = await supabase.rpc('assign_bci_builder', {
+              const { data: builderResult, error: builderError } = await supabase.rpc('set_project_builder', {
                 p_project_id: existingProject.id,
                 p_employer_id: employerId,
-                p_company_name: company.companyName
+                p_source: 'bci_import',
+                p_match_status: 'auto_matched',
+                p_match_confidence: company.matchConfidence ?? 0.8,
+                p_match_notes: `Auto-matched from BCI import: ${company.companyName}`
               });
               
               if (builderError) {
@@ -2056,10 +2047,13 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
           // Enhanced relationship creation with multiple builder support
           if (company.ourRole === 'builder') {
             try {
-              const { data: builderResult, error: builderError } = await supabase.rpc('assign_bci_builder', {
+              const { data: builderResult, error: builderError } = await supabase.rpc('set_project_builder', {
                 p_project_id: existingProject.id,
                 p_employer_id: employerId,
-                p_company_name: company.companyName
+                p_source: 'bci_import',
+                p_match_status: 'auto_matched',
+                p_match_confidence: company.matchConfidence ?? 0.8,
+                p_match_notes: `Auto-matched from BCI import: ${company.companyName}`
               });
               
               if (builderError) {

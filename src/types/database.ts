@@ -9158,6 +9158,21 @@ export type Database = {
           success: boolean
         }[]
       }
+      set_project_builder: {
+        Args: {
+          p_project_id: string
+          p_employer_id?: string | null
+          p_source?: string
+          p_match_status?: string
+          p_match_confidence?: number
+          p_match_notes?: string
+          p_confirmed_by?: string | null
+        }
+        Returns: {
+          message: string
+          success: boolean
+        }[]
+      }
       assign_bci_trade_contractor: {
         Args: {
           p_company_name?: string
@@ -9179,31 +9194,32 @@ export type Database = {
           | {
               p_company_name: string
               p_employer_id: string
-              p_estimated_workers?: number
               p_is_primary?: boolean
-              p_match_confidence?: number
-              p_match_notes?: string
               p_project_id: string
               p_role_code: string
               p_source?: string
-            }
-          | {
-              p_company_name: string
-              p_employer_id: string
-              p_estimated_workers?: number
-              p_is_primary?: boolean
-              p_project_id: string
-              p_role_code: string
+              p_match_confidence?: number
+              p_match_notes?: string
             }
           | {
               p_company_name: string
               p_employer_id: string
               p_is_primary?: boolean
-              p_match_confidence?: number
-              p_match_notes?: string
               p_project_id: string
               p_role_code: string
               p_source?: string
+              p_match_confidence?: number
+              p_match_notes?: string
+            }
+          | {
+              p_company_name: string
+              p_employer_id: string
+              p_is_primary?: boolean
+              p_project_id: string
+              p_role_code: string
+              p_source?: string
+              p_match_confidence?: number
+              p_match_notes?: string
             }
         Returns: {
           message: string

@@ -8,10 +8,11 @@ import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Building2, Plus, Search, CheckCircle2 } from 'lucide-react'
+import { Building2, Plus, Search, CheckCircle2, Tags, Sparkles } from 'lucide-react'
 import { findBestEmployerMatch } from '@/utils/fuzzyMatching'
 import { supabase } from '@/integrations/supabase/client'
 import { toast } from 'sonner'
+import { EmployerAliasManager } from './EmployerAliasManager'
 
 interface EmployerMatchDialogProps {
   open: boolean
@@ -43,6 +44,8 @@ export function EmployerMatchDialog({
   const [isCreating, setIsCreating] = useState(false)
   const [contractorType, setContractorType] = useState<string>('builder')
   const [employerType, setEmployerType] = useState<string>('small_contractor')
+  const [showAliasManager, setShowAliasManager] = useState(false)
+  const [selectedEmployerForAliases, setSelectedEmployerForAliases] = useState<any>(null)
 
   // Search results
   const searchResults = useMemo(() => {
@@ -171,6 +174,35 @@ export function EmployerMatchDialog({
     }
   }
 
+  const handleManageAliases = (employer: any) => {
+    setSelectedEmployerForAliases(employer)
+    setShowAliasManager(true)
+  }
+
+  const handleAliasUpdate = () => {
+    // Refresh search results to show any new aliases
+    // This will trigger a re-evaluation of matches
+    toast.success('Aliases updated', { description: 'Matching will use the new aliases' })
+  }
+
+  const handleSuggestAlias = () => {
+    if (!selectedEmployerId) return
+
+    const selectedEmployer = allEmployers.find(e => e.id === selectedEmployerId)
+    if (!selectedEmployer) return
+
+    setSelectedEmployerForAliases(selectedEmployer)
+    setShowAliasManager(true)
+
+    // Suggest creating an alias from the scanned company name
+    setTimeout(() => {
+      // This will be handled by the alias manager component
+      toast.info('Suggesting alias', {
+        description: `Consider adding "${companyName}" as an alias for ${selectedEmployer.name}`
+      })
+    }, 100)
+  }
+
   const isValid = 
     (selectedOption === 'suggested' && suggestedMatch) ||
     (selectedOption === 'search' && selectedEmployerId) ||
@@ -203,17 +235,36 @@ export function EmployerMatchDialog({
                 {selectedOption === 'suggested' && (
                   <div className="ml-6 p-3 bg-blue-50 border border-blue-200 rounded">
                     <div className="flex items-center justify-between">
-                      <div>
+                      <div className="flex-1">
                         <div className="font-medium">{suggestedMatch.name}</div>
                         <div className="text-sm text-gray-600 mt-1">
                           Match confidence: {suggestedMatch.confidence}
                         </div>
+                        {suggestedMatch.matchedAlias && (
+                          <div className="flex items-center gap-1 mt-1">
+                            <Sparkles className="h-3 w-3 text-blue-600" />
+                            <span className="text-xs text-blue-600">
+                              Matched via alias: "{suggestedMatch.matchedAlias}"
+                            </span>
+                          </div>
+                        )}
                       </div>
-                      <Badge variant="default">
-                        {suggestedMatch.confidence === 'exact' ? 'Exact Match' : 
-                         suggestedMatch.confidence === 'high' ? 'High Confidence' : 
-                         'Possible Match'}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="default">
+                          {suggestedMatch.confidence === 'exact' ? 'Exact Match' :
+                           suggestedMatch.confidence === 'high' ? 'High Confidence' :
+                           'Possible Match'}
+                        </Badge>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleManageAliases(suggestedMatch)}
+                          className="gap-1"
+                        >
+                          <Tags className="h-3 w-3" />
+                          Aliases
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -259,12 +310,32 @@ export function EmployerMatchDialog({
                           />
                           <div className="flex-1">
                             <div className="font-medium">{employer.name}</div>
+                            {employer.matchedAlias && (
+                              <div className="flex items-center gap-1 mt-1">
+                                <Sparkles className="h-3 w-3 text-blue-600" />
+                                <span className="text-xs text-blue-600">
+                                  Matched via alias: "{employer.matchedAlias}"
+                                </span>
+                              </div>
+                            )}
                             {employer.enterprise_agreement_status !== 'unknown' && (
                               <div className="text-xs text-gray-500 mt-1">
                                 EBA Status: {employer.enterprise_agreement_status}
                               </div>
                             )}
                           </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleManageAliases(employer)
+                            }}
+                            className="gap-1 h-8 px-2"
+                          >
+                            <Tags className="h-3 w-3" />
+                            <span className="text-xs">Aliases</span>
+                          </Button>
                         </label>
                       ))}
                     </div>
@@ -275,6 +346,25 @@ export function EmployerMatchDialog({
                         No employers found matching "{searchQuery}"
                       </AlertDescription>
                     </Alert>
+                  )}
+                  {searchQuery && searchResults.length > 0 && selectedEmployerId && (
+                    <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded">
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm text-amber-800">
+                          <Sparkles className="h-3 w-3 inline mr-1" />
+                          The scanned name "{companyName}" doesn't exactly match "{allEmployers.find(e => e.id === selectedEmployerId)?.name}"
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleSuggestAlias}
+                          className="gap-1 h-7 text-xs"
+                        >
+                          <Plus className="h-3 w-3" />
+                          Suggest Alias
+                        </Button>
+                      </div>
+                    </div>
                   )}
                 </div>
               )}
@@ -385,6 +475,17 @@ export function EmployerMatchDialog({
             )}
           </Button>
         </DialogFooter>
+
+        {/* Alias Manager Dialog */}
+        {showAliasManager && selectedEmployerForAliases && (
+          <EmployerAliasManager
+            employerId={selectedEmployerForAliases.id}
+            employerName={selectedEmployerForAliases.name}
+            isOpen={showAliasManager}
+            onOpenChange={setShowAliasManager}
+            onAliasUpdate={handleAliasUpdate}
+          />
+        )}
       </DialogContent>
     </Dialog>
   )

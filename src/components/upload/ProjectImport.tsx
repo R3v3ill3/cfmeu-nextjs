@@ -175,7 +175,6 @@ export default function ProjectImport({ csvData, onImportComplete, onBack }: Pro
               project_type: row.project_type ? String(row.project_type).toLowerCase() as any : null,
               state_funding: row.state_funding ?? 0,
               federal_funding: row.federal_funding ?? 0,
-              builder_id: employerId || null,
               // organising_universe is set to Active via manual override after import completes
             })
             .select("id")
@@ -214,9 +213,43 @@ export default function ProjectImport({ csvData, onImportComplete, onBack }: Pro
 
           // 3) Add roles (builder/head as applicable)
           if (employerId) {
-            await (supabase as any)
-              .from("project_employer_roles")
-              .insert({ project_id: projectId, employer_id: employerId, role: "builder", start_date: new Date().toISOString().split('T')[0] });
+            try {
+              const { data: builderResult, error: builderError } = await supabase.rpc('set_project_builder', {
+                p_project_id: projectId,
+                p_employer_id: employerId,
+                p_source: 'legacy_project_import',
+                p_match_status: 'confirmed',
+                p_match_confidence: 1,
+                p_match_notes: `Imported builder from CSV: ${row.employerName}`
+              });
+              if (builderError) {
+                console.error('Failed to assign builder via set_project_builder', builderError);
+              } else {
+                const result = builderResult?.[0];
+                if (!result?.success) {
+                  console.warn('Builder RPC reported issue:', result?.message);
+                }
+              }
+            } catch (builderAssignErr) {
+              console.error('set_project_builder RPC failed', builderAssignErr);
+            }
+          }
+
+          if (row.head_contractor_id) {
+            try {
+              const { error: headErr } = await supabase.rpc('assign_contractor_role', {
+                p_project_id: projectId,
+                p_employer_id: row.head_contractor_id,
+                p_role_code: 'head_contractor',
+                p_company_name: 'Head Contractor',
+                p_source: 'legacy_project_import'
+              });
+              if (headErr) {
+                console.error('Failed to assign head contractor via RPC', headErr);
+              }
+            } catch (headAssignErr) {
+              console.error('assign_contractor_role RPC failed', headAssignErr);
+            }
           }
 
           // 4) JV

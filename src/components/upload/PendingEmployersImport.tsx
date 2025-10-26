@@ -1274,12 +1274,15 @@ export default function PendingEmployersImport() {
                 if (pendingEmployer.our_role === 'builder') {
                   // Use enhanced builder assignment that handles multiple builders
                   try {
-                    const { data: builderResult, error: builderError } = await supabase.rpc('assign_bci_builder', {
+                    const { data: builderResult, error: builderError } = await supabase.rpc('set_project_builder', {
                       p_project_id: project.id,
                       p_employer_id: employerId,
-                      p_company_name: pendingEmployer.company_name
+                      p_source: 'pending_employer_import',
+                      p_match_status: 'confirmed',
+                      p_match_confidence: 1,
+                      p_match_notes: `Assigned via pending employer import for ${pendingEmployer.company_name}`
                     });
-                    
+
                     if (builderError) {
                       console.error(`Error assigning builder ${pendingEmployer.company_name}:`, builderError);
                     } else {
@@ -1293,15 +1296,6 @@ export default function PendingEmployersImport() {
                     }
                   } catch (error) {
                     console.error(`Error in builder assignment:`, error);
-                    // Fallback to original logic
-                    if (!project.builder_id) {
-                      await supabase
-                        .from('projects')
-                        .update({ builder_id: employerId })
-                        .eq('id', project.id);
-                      console.log(`✓ Assigned builder to ${project.name} (fallback)`);
-                      relationshipCreated = true;
-                    }
                   }
                   
                 } else if (pendingEmployer.our_role === 'head_contractor') {

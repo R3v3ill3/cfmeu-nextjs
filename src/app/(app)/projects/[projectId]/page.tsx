@@ -233,18 +233,8 @@ export default function ProjectDetailPage() {
         builderName = employer?.name || builderAssignment.employer_id
         const status = employer?.enterprise_agreement_status as string | null
         builderHasEba = status ? status !== "no_eba" : null
-      } else if (project?.builder_id) {
-        // Fallback to legacy projects.builder_id field
-        const { data: b } = await supabase
-          .from("employers")
-          .select("name, enterprise_agreement_status")
-          .eq("id", project.builder_id)
-          .maybeSingle()
-        builderName = (b as any)?.name as string || project.builder_id
-        const status = (b as any)?.enterprise_agreement_status as string | null
-        builderHasEba = status ? status !== "no_eba" : null
       }
-
+ 
       return { builderName, builderHasEba, address }
     }
   })

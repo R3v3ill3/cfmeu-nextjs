@@ -274,17 +274,21 @@ export default function CreateProjectDialog() {
         // Assign builder role if specified
         if (builderId) {
           try {
-            const { error: builderErr } = await supabase.rpc('assign_contractor_role', {
+            const { data: builderResult, error: assignErr } = await supabase.rpc('set_project_builder', {
               p_project_id: projectId,
               p_employer_id: builderId,
-              p_role_code: 'builder',
-              p_company_name: 'Builder',
-              p_is_primary: true
-            });
-
-            if (builderErr) {
-              console.warn('Failed to assign builder role:', builderErr);
-              // Don't throw - builder assignment is optional and can be done later
+              p_source: 'manual',
+              p_match_status: 'confirmed',
+              p_match_confidence: 1,
+              p_match_notes: 'Assigned via create project dialog'
+            })
+            if (assignErr) {
+              console.error('Failed to assign builder role', assignErr)
+            } else {
+              const result = builderResult?.[0]
+              if (result && !result.success) {
+                console.warn('Builder assignment reported issue:', result.message)
+              }
             }
           } catch (err) {
             console.warn('Error assigning builder:', err);

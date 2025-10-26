@@ -11,18 +11,24 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
-import { Building2, AlertCircle, Plus, Search, X, FileSearch } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Building2, AlertCircle, Plus, Search, X, FileSearch, Tags, Users, Keyboard, HelpCircle, Zap, ChevronDown, Info, ArrowRight, Lightbulb } from 'lucide-react'
 import { supabase } from '@/integrations/supabase/client'
 import { ConfidenceIndicator } from './ConfidenceIndicator'
 import { EmployerMatchDialog } from './EmployerMatchDialog'
 import { FwcEbaSearchModal } from '@/components/employers/FwcEbaSearchModal'
 import { BatchEbaSearchModal } from './BatchEbaSearchModal'
 import { AddAdditionalEmployerModal } from './AddAdditionalEmployerModal'
+import { BulkAliasOperations } from './BulkAliasOperations'
 import { findBestEmployerMatch } from '@/utils/fuzzyMatching'
 import { useMappingSheetData } from '@/hooks/useMappingSheetData'
 import { toast } from 'sonner'
 import { StatusSelectSimple } from '@/components/ui/StatusSelect'
 import { TradeStatus } from '@/components/ui/StatusBadge'
+import { EbaEmployerQuickList } from './EbaEmployerQuickList'
+import { useKeyContractorTradesSet } from '@/hooks/useKeyContractorTrades'
 
 interface SubcontractorsReviewProps {
   extractedSubcontractors: Array<{
@@ -101,6 +107,14 @@ export function SubcontractorsReview({
   const [batchEbaSearchOpen, setBatchEbaSearchOpen] = useState(false)
   const [selectedEbaEmployer, setSelectedEbaEmployer] = useState<{employerId: string, employerName: string} | null>(null)
 
+  // EBA quick list state
+  const [ebaQuickListOpen, setEbaQuickListOpen] = useState(false)
+  const [selectedTradeForQuickList, setSelectedTradeForQuickList] = useState<string | null>(null)
+  const [selectedIndexForQuickList, setSelectedIndexForQuickList] = useState<number | null>(null)
+
+  // Fetch key contractor trades set for EBA filtering
+  const { tradeSet: KEY_CONTRACTOR_TRADES } = useKeyContractorTradesSet()
+
   // Inline editing state for "other" trades with missing company names
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editingCompanyName, setEditingCompanyName] = useState('')
@@ -109,6 +123,19 @@ export function SubcontractorsReview({
   // Add additional employer state
   const [addAdditionalOpen, setAddAdditionalOpen] = useState(false)
   const [addAdditionalIndex, setAddAdditionalIndex] = useState<number | null>(null)
+
+  // Bulk alias operations state
+  const [bulkAliasOpen, setBulkAliasOpen] = useState(false)
+
+  // Enhanced UX state
+  const [showGuidance, setShowGuidance] = useState(true)
+  const [selectedFeatureTab, setSelectedFeatureTab] = useState<'overview' | 'aliases' | 'eba'>('overview')
+  const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['basics']))
+  const [showQuickActions, setShowQuickActions] = useState(true)
+  const [processingAction, setProcessingAction] = useState<string | null>(null)
+  const [actionResults, setActionResults] = useState<{[key: string]: {success: number, failed: number}}>({})
+  const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null)
 
   // Fetch all employers for matching
   // NOTE: Removed the Supabase default row limit to ensure we get ALL employers
@@ -418,6 +445,74 @@ export function SubcontractorsReview({
     })
   }
 
+  // Handle EBA quick list for specific trade
+  const handleOpenEbaQuickList = (index: number) => {
+    const decision = decisions[index]
+    const tradeTypeCode = mapTradeNameToCode(decision.trade)
+    setSelectedTradeForQuickList(tradeTypeCode)
+    setSelectedIndexForQuickList(index)
+    setEbaQuickListOpen(true)
+  }
+
+  // Handle EBA employer selection from quick list
+  const handleEbaEmployerSelect = (employer: any) => {
+    if (selectedIndexForQuickList === null) return
+
+    // Fetch current EBA status of selected employer
+    const fetchEbaStatusAndUpdate = async () => {
+      let currentEbaStatus = false
+      try {
+        const { data: ebaData } = await supabase
+          .from('employers')
+          .select('enterprise_agreement_status')
+          .eq('id', employer.id)
+          .single()
+
+        currentEbaStatus = ebaData?.enterprise_agreement_status === true
+      } catch (error) {
+        console.error('Failed to fetch employer EBA status:', error)
+      }
+
+      setDecisions(prev => {
+        const updated = [...prev]
+        updated[selectedIndexForQuickList] = {
+          ...updated[selectedIndexForQuickList],
+          action: 'import',
+          matchedEmployer: {
+            id: employer.id,
+            name: employer.name,
+            confidence: 'exact',
+          },
+          matchConfidence: 1.0,
+          isNewEmployer: false,
+          needsReview: false,
+          currentEmployerEbaStatus: currentEbaStatus,
+          shouldUpdateEbaStatus: updated[selectedIndexForQuickList].eba === true && !currentEbaStatus,
+        }
+        return updated
+      })
+    }
+
+    fetchEbaStatusAndUpdate()
+    setEbaQuickListOpen(false)
+    setSelectedTradeForQuickList(null)
+    setSelectedIndexForQuickList(null)
+
+    toast.success('EBA employer selected', {
+      description: `${employer.name} has been selected for ${decisions[selectedIndexForQuickList].trade}`
+    })
+  }
+
+  // Handle batch EBA employer selection from quick list
+  const handleBatchEbaEmployerSelect = (employers: any[]) => {
+    // This could be used to replace multiple subcontractors at once
+    // For now, we'll show a message and not implement full batch replacement
+    toast.info('Batch selection feature', {
+      description: `${employers.length} EBA employers selected. Individual selection is currently supported.`
+    })
+    setEbaQuickListOpen(false)
+  }
+
   // Handle removing additional employer
   const handleRemoveAdditional = (decisionIndex: number, additionalIndex: number) => {
     const employerName = decisions[decisionIndex].additionalEmployers[additionalIndex].name
@@ -433,6 +528,16 @@ export function SubcontractorsReview({
     })
   }
 
+  // Handle bulk alias operations
+  const handleBulkAliasOperations = () => {
+    setBulkAliasOpen(true)
+  }
+
+  const handleBulkAliasComplete = () => {
+    // Refresh the employers list to include new aliases
+    window.location.reload() // Simple refresh for now - could be optimized
+  }
+
   // Get list of employers that need EBA status updated to Active
   const employersNeedingEbaUpdate = decisions
     .filter(d => d.action === 'import' && d.shouldUpdateEbaStatus && d.matchedEmployer)
@@ -446,50 +551,523 @@ export function SubcontractorsReview({
   const needsEbaUpdateCount = employersNeedingEbaUpdate.length
   const needsEditingCount = decisions.filter(d => !d.company && d.stage === 'other').length
 
+  // Enhanced UX: Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Don't handle shortcuts when typing in input fields
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+        return
+      }
+
+      const { key, ctrlKey, shiftKey, metaKey } = event
+      const isMod = ctrlKey || metaKey
+
+      if (isMod && key === 'a' && selectedRowIndex !== null) {
+        // Ctrl+A: Open alias management for selected employer
+        event.preventDefault()
+        const selectedDecision = decisions[selectedRowIndex]
+        if (selectedDecision && selectedDecision.company) {
+          setBulkAliasOpen(true)
+        }
+      } else if (isMod && key === 'e' && selectedRowIndex !== null) {
+        // Ctrl+E: Open EBA search for current trade
+        event.preventDefault()
+        const selectedDecision = decisions[selectedRowIndex]
+        if (selectedDecision?.matchedEmployer) {
+          handleIndividualEbaSearch(selectedDecision.matchedEmployer.id, selectedDecision.matchedEmployer.name)
+        }
+      } else if (isMod && shiftKey && key === 's' && selectedRowIndex !== null) {
+        // Ctrl+Shift+S: Suggest alias for selected entry
+        event.preventDefault()
+        const selectedDecision = decisions[selectedRowIndex]
+        if (selectedDecision?.company && selectedDecision?.matchedEmployer) {
+          setBulkAliasOpen(true)
+          toast.info('Opening alias suggestions...', {
+            description: `Analyzing "${selectedDecision.company}" for potential aliases`
+          })
+        }
+      } else if (key === 'Escape') {
+        // Escape: Close modals and return to review
+        setMatchDialogOpen(false)
+        setEbaSearchOpen(false)
+        setBatchEbaSearchOpen(false)
+        setAddAdditionalOpen(false)
+        setBulkAliasOpen(false)
+        setShowKeyboardShortcuts(false)
+        setSelectedRowIndex(null)
+      } else if (key === 'ArrowDown') {
+        // Arrow Down: Select next row
+        event.preventDefault()
+        setSelectedRowIndex(prev => {
+          if (prev === null || prev >= decisions.length - 1) return 0
+          return prev + 1
+        })
+      } else if (key === 'ArrowUp') {
+        // Arrow Up: Select previous row
+        event.preventDefault()
+        setSelectedRowIndex(prev => {
+          if (prev === null || prev <= 0) return decisions.length - 1
+          return prev - 1
+        })
+      } else if (key === '?') {
+        // ?: Show keyboard shortcuts
+        event.preventDefault()
+        setShowKeyboardShortcuts(!showKeyboardShortcuts)
+      } else if (isMod && key === 'k') {
+        // Ctrl+K: Toggle quick actions
+        event.preventDefault()
+        setShowQuickActions(!showQuickActions)
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [selectedRowIndex, decisions, showKeyboardShortcuts, showQuickActions])
+
+  // Enhanced UX: Section expansion toggle
+  const toggleSection = (sectionId: string) => {
+    const newExpanded = new Set(expandedSections)
+    if (newExpanded.has(sectionId)) {
+      newExpanded.delete(sectionId)
+    } else {
+      newExpanded.add(sectionId)
+    }
+    setExpandedSections(newExpanded)
+  }
+
+  // Enhanced UX: Quick action handlers with feedback
+  const handleQuickAliasCreation = async () => {
+    setProcessingAction('alias-creation')
+    try {
+      // Auto-select high-confidence alias suggestions
+      const highConfidenceSuggestions = decisions
+        .filter(d => d.company && d.matchedEmployer && d.matchConfidence > 0.7 && d.matchConfidence < 1.0)
+
+      if (highConfidenceSuggestions.length > 0) {
+        setBulkAliasOpen(true)
+        toast.success('Opening alias creation', {
+          description: `Found ${highConfidenceSuggestions.length} high-confidence alias suggestions`
+        })
+      } else {
+        toast.info('No alias suggestions', {
+          description: 'No high-confidence alias matches found in current data'
+        })
+      }
+    } finally {
+      setProcessingAction(null)
+    }
+  }
+
+  const handleQuickEbaSearch = async () => {
+    setProcessingAction('eba-search')
+    try {
+      if (employersNeedingEbaUpdate.length > 0) {
+        setBatchEbaSearchOpen(true)
+        toast.success('Opening batch EBA search', {
+          description: `Found ${employersNeedingEbaUpdate.length} employers needing EBA updates`
+        })
+      } else {
+        toast.info('No EBA updates needed', {
+          description: 'All employers have current EBA status'
+        })
+      }
+    } finally {
+      setProcessingAction(null)
+    }
+  }
+
+  // Enhanced UX: Row selection handler
+  const handleRowSelect = (index: number) => {
+    setSelectedRowIndex(index)
+  }
+
+  // Enhanced UX: Progress indicators
+  const getProgressStats = () => {
+    const total = decisions.length
+    const completed = decisions.filter(d =>
+      !d.needsReview &&
+      (d.action !== 'skip' || d.company === '') &&
+      !d.shouldUpdateEbaStatus
+    ).length
+    const inProgress = decisions.filter(d => d.needsReview).length
+    const pending = total - completed - inProgress
+
+    return { total, completed, inProgress, pending }
+  }
+
+  const progressStats = getProgressStats()
+
   return (
+    <TooltipProvider>
     <div className="space-y-4">
+      {/* Enhanced Progress Overview */}
+      <Card className="border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+        <CardHeader className="pb-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-xl font-bold text-blue-900 flex items-center gap-2">
+                <Zap className="h-5 w-5" />
+                Subcontractor Review Dashboard
+              </CardTitle>
+              <p className="text-sm text-blue-700 mt-1">
+                Review and process subcontractor data with enhanced matching and EBA management
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowKeyboardShortcuts(!showKeyboardShortcuts)}
+                    className="gap-2"
+                  >
+                    <Keyboard className="h-4 w-4" />
+                    Shortcuts
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Press ? for keyboard shortcuts</p>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowGuidance(!showGuidance)}
+                    className="gap-2"
+                  >
+                    <HelpCircle className="h-4 w-4" />
+                    {showGuidance ? 'Hide' : 'Show'} Help
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Toggle guided assistance</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <div className="grid grid-cols-4 gap-4 mb-4">
+            <div className="text-center p-3 bg-white rounded-lg border">
+              <div className="text-2xl font-bold text-blue-600">{progressStats.total}</div>
+              <div className="text-xs text-gray-600">Total Entries</div>
+            </div>
+            <div className="text-center p-3 bg-white rounded-lg border">
+              <div className="text-2xl font-bold text-green-600">{progressStats.completed}</div>
+              <div className="text-xs text-gray-600">Completed</div>
+            </div>
+            <div className="text-center p-3 bg-white rounded-lg border">
+              <div className="text-2xl font-bold text-yellow-600">{progressStats.inProgress}</div>
+              <div className="text-xs text-gray-600">Needs Review</div>
+            </div>
+            <div className="text-center p-3 bg-white rounded-lg border">
+              <div className="text-2xl font-bold text-gray-600">{progressStats.pending}</div>
+              <div className="text-xs text-gray-600">Pending</div>
+            </div>
+          </div>
+
+          {/* Progress Bar */}
+          <div className="w-full bg-gray-200 rounded-full h-2">
+            <div
+              className="bg-gradient-to-r from-blue-500 to-green-500 h-2 rounded-full transition-all duration-500"
+              style={{ width: `${(progressStats.completed / progressStats.total) * 100}%` }}
+            />
+          </div>
+          <div className="text-xs text-gray-600 mt-1">
+            {Math.round((progressStats.completed / progressStats.total) * 100)}% Complete
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Enhanced Guidance Section */}
+      {showGuidance && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardHeader className="pb-3">
+            <Collapsible open={expandedSections.has('guidance')} onOpenChange={() => toggleSection('guidance')}>
+              <CollapsibleTrigger className="flex items-center justify-between w-full">
+                <CardTitle className="text-lg font-semibold text-amber-900 flex items-center gap-2">
+                  <Lightbulb className="h-5 w-5" />
+                  Quick Start Guide
+                </CardTitle>
+                <ChevronDown className={`h-4 w-4 transition-transform ${expandedSections.has('guidance') ? 'rotate-180' : ''}`} />
+              </CollapsibleTrigger>
+            </Collapsible>
+          </CardHeader>
+          <CollapsibleContent open={expandedSections.has('guidance')}>
+            <CardContent className="pt-0">
+              <Tabs value={selectedFeatureTab} onValueChange={(value) => setSelectedFeatureTab(value as any)}>
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="overview">Overview</TabsTrigger>
+                  <TabsTrigger value="aliases">Employer Aliases</TabsTrigger>
+                  <TabsTrigger value="eba">EBA Management</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="overview" className="mt-4">
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-3 p-3 bg-white rounded-lg border border-amber-200">
+                      <ArrowRight className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <div className="font-medium text-amber-900">Start with Data Entry Fixes</div>
+                        <div className="text-sm text-amber-700">
+                          Look for "Other" trades with missing company names - click "Fix Entry" to correct data entry errors.
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 p-3 bg-white rounded-lg border border-amber-200">
+                      <ArrowRight className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <div className="font-medium text-amber-900">Review Employer Matches</div>
+                        <div className="text-sm text-amber-700">
+                          Highlighted entries need manual review - click "Review Match" to confirm or change employer assignments.
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 p-3 bg-white rounded-lg border border-amber-200">
+                      <ArrowRight className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <div className="font-medium text-amber-900">Use Keyboard Shortcuts</div>
+                        <div className="text-sm text-amber-700">
+                          Navigate with arrow keys, press ? for shortcuts, Ctrl+A for aliases, Ctrl+E for EBA search.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="aliases" className="mt-4">
+                  <div className="space-y-3">
+                    <div className="p-3 bg-white rounded-lg border border-blue-200">
+                      <div className="font-medium text-blue-900 mb-2">What are Employer Aliases?</div>
+                      <div className="text-sm text-blue-700 mb-2">
+                        Aliases connect scanned company names to your existing employer database, improving future matching accuracy.
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          onClick={handleQuickAliasCreation}
+                          disabled={processingAction === 'alias-creation'}
+                          className="gap-2"
+                        >
+                          <Tags className="h-4 w-4" />
+                          {processingAction === 'alias-creation' ? 'Analyzing...' : 'Quick Alias Creation'}
+                        </Button>
+                        <span className="text-xs text-gray-600">
+                          Automatically find high-confidence suggestions
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="eba" className="mt-4">
+                  <div className="space-y-3">
+                    <div className="p-3 bg-white rounded-lg border border-green-200">
+                      <div className="font-medium text-green-900 mb-2">EBA Status Management</div>
+                      <div className="text-sm text-green-700 mb-2">
+                        Update employer EBA status from scanned documents and search the Fair Work Commission database.
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          onClick={handleQuickEbaSearch}
+                          disabled={processingAction === 'eba-search'}
+                          className="gap-2"
+                        >
+                          <FileSearch className="h-4 w-4" />
+                          {processingAction === 'eba-search' ? 'Loading...' : 'Batch EBA Search'}
+                        </Button>
+                        <span className="text-xs text-gray-600">
+                          {employersNeedingEbaUpdate.length} employers need updates
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </CardContent>
+          </CollapsibleContent>
+        </Card>
+      )}
+
+      {/* Keyboard Shortcuts Modal */}
+      {showKeyboardShortcuts && (
+        <Card className="border-purple-200 bg-purple-50">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg font-semibold text-purple-900 flex items-center gap-2">
+                <Keyboard className="h-5 w-5" />
+                Keyboard Shortcuts
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowKeyboardShortcuts(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between p-2 bg-white rounded border">
+                  <span className="text-sm font-medium">Select Row</span>
+                  <kbd className="px-2 py-1 text-xs bg-gray-100 border rounded">↑↓</kbd>
+                </div>
+                <div className="flex items-center justify-between p-2 bg-white rounded border">
+                  <span className="text-sm font-medium">Manage Aliases</span>
+                  <kbd className="px-2 py-1 text-xs bg-gray-100 border rounded">Ctrl+A</kbd>
+                </div>
+                <div className="flex items-center justify-between p-2 bg-white rounded border">
+                  <span className="text-sm font-medium">EBA Search</span>
+                  <kbd className="px-2 py-1 text-xs bg-gray-100 border rounded">Ctrl+E</kbd>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between p-2 bg-white rounded border">
+                  <span className="text-sm font-medium">Suggest Alias</span>
+                  <kbd className="px-2 py-1 text-xs bg-gray-100 border rounded">Ctrl+Shift+S</kbd>
+                </div>
+                <div className="flex items-center justify-between p-2 bg-white rounded border">
+                  <span className="text-sm font-medium">Quick Actions</span>
+                  <kbd className="px-2 py-1 text-xs bg-gray-100 border rounded">Ctrl+K</kbd>
+                </div>
+                <div className="flex items-center justify-between p-2 bg-white rounded border">
+                  <span className="text-sm font-medium">Close Modals</span>
+                  <kbd className="px-2 py-1 text-xs bg-gray-100 border rounded">Esc</kbd>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Enhanced Quick Actions Bar */}
+      {showQuickActions && (
+        <Card className="border-green-200 bg-gradient-to-r from-green-50 to-emerald-50">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold text-green-900 flex items-center gap-2">
+              <Zap className="h-4 w-4" />
+              Quick Actions
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="flex items-center gap-3 flex-wrap">
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleQuickAliasCreation}
+                disabled={processingAction === 'alias-creation'}
+                className="gap-2"
+              >
+                <Tags className="h-4 w-4" />
+                {processingAction === 'alias-creation' ? 'Processing...' : 'Create Aliases'}
+              </Button>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleQuickEbaSearch}
+                disabled={processingAction === 'eba-search' || needsEbaUpdateCount === 0}
+                className="gap-2"
+              >
+                <FileSearch className="h-4 w-4" />
+                {processingAction === 'eba-search' ? 'Processing...' : `EBA Search (${needsEbaUpdateCount})`}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleBulkAliasOperations}
+                className="gap-2"
+              >
+                <Users className="h-4 w-4" />
+                Advanced Aliases
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Enhanced Alert Messages */}
       {needsEditingCount > 0 && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="border-red-300">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            {needsEditingCount} "Other" trade{needsEditingCount > 1 ? 's have' : ' has'} missing company names.
-            This usually means the company name was entered in the wrong column.
-            Click "Fix Entry" to correct the data.
+            <div className="flex items-center justify-between">
+              <div>
+                <strong className="text-red-900">Data Entry Issues Found</strong>
+                <br />
+                {needsEditingCount} "Other" trade{needsEditingCount > 1 ? 's have' : ' has'} missing company names.
+                This usually means the company name was entered in the wrong column.
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const firstErrorIndex = decisions.findIndex(d => !d.company && d.stage === 'other')
+                  if (firstErrorIndex !== -1) {
+                    setSelectedRowIndex(firstErrorIndex)
+                    handleStartEdit(firstErrorIndex)
+                  }
+                }}
+                className="ml-4 gap-2"
+              >
+                Fix First Issue
+              </Button>
+            </div>
           </AlertDescription>
         </Alert>
       )}
-      
+
       {needsReviewCount > 0 && (
-        <Alert>
+        <Alert className="border-yellow-300 bg-yellow-50">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            {needsReviewCount} subcontractor{needsReviewCount > 1 ? 's' : ''} need manual employer matching review.
-            Click "Review Match" to confirm or change the suggested employer.
+            <div className="flex items-center justify-between">
+              <div>
+                <strong className="text-yellow-900">Manual Review Required</strong>
+                <br />
+                {needsReviewCount} subcontractor{needsReviewCount > 1 ? 's' : ''} need manual employer matching review.
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const firstReviewIndex = decisions.findIndex(d => d.needsReview)
+                  if (firstReviewIndex !== -1) {
+                    setSelectedRowIndex(firstReviewIndex)
+                  }
+                }}
+                className="ml-4 gap-2"
+              >
+                Go to First Review
+              </Button>
+            </div>
           </AlertDescription>
         </Alert>
       )}
 
       {needsEbaUpdateCount > 0 && (
-        <Alert className="border-orange-200 bg-orange-50">
+        <Alert className="border-orange-300 bg-orange-50">
           <FileSearch className="h-4 w-4" />
           <AlertDescription>
             <div className="flex items-center justify-between">
               <div>
-                <strong>{needsEbaUpdateCount} employer{needsEbaUpdateCount > 1 ? 's' : ''} will have EBA status set to Active</strong>
+                <strong className="text-orange-900">EBA Status Updates Available</strong>
                 <br />
-                <span className="text-sm">Search FWC database to find and link EBA details for these employers.</span>
+                <span className="text-sm">{needsEbaUpdateCount} employer{needsEbaUpdateCount > 1 ? 's' : ''} can have EBA status updated to Active</span>
               </div>
-              {needsEbaUpdateCount > 1 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleBatchEbaSearch}
-                  className="ml-4 gap-2"
-                >
-                  <FileSearch className="h-4 w-4" />
-                  Batch Search All ({needsEbaUpdateCount})
-                </Button>
-              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleBatchEbaSearch}
+                className="ml-4 gap-2"
+              >
+                <FileSearch className="h-4 w-4" />
+                Batch Search All ({needsEbaUpdateCount})
+              </Button>
             </div>
           </AlertDescription>
         </Alert>
@@ -519,11 +1097,24 @@ export function SubcontractorsReview({
               </TableHeader>
               <TableBody>
                 {decisions.map((decision, index) => (
-                  <TableRow key={index} className={decision.needsReview ? 'bg-yellow-50' : ''}>
+                  <TableRow
+                    key={index}
+                    className={`
+                      cursor-pointer transition-all duration-200
+                      ${decision.needsReview ? 'bg-yellow-50' : ''}
+                      ${selectedRowIndex === index ? 'bg-blue-100 border-l-4 border-l-blue-500' : 'hover:bg-gray-50'}
+                    `}
+                    onClick={() => handleRowSelect(index)}
+                  >
                     <TableCell>
-                      <Badge variant="outline">
-                        {STAGE_LABELS[decision.stage] || decision.stage}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        {selectedRowIndex === index && (
+                          <div className="w-1 h-6 bg-blue-500 rounded-full animate-pulse" />
+                        )}
+                        <Badge variant="outline">
+                          {STAGE_LABELS[decision.stage] || decision.stage}
+                        </Badge>
+                      </div>
                     </TableCell>
                     <TableCell className="font-medium">
                       {editingIndex === index ? (
@@ -621,11 +1212,24 @@ export function SubcontractorsReview({
                     {/* Matched Employer */}
                     <TableCell>
                       {decision.matchedEmployer ? (
-                        <div className="flex items-center gap-2">
-                          <Building2 className="h-4 w-4 text-blue-600" />
-                          <span className="text-blue-800">{decision.matchedEmployer.name}</span>
-                          {decision.isNewEmployer && (
-                            <Badge variant="secondary" className="text-xs">New</Badge>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <Building2 className="h-4 w-4 text-blue-600" />
+                            <span className="text-blue-800">{decision.matchedEmployer.name}</span>
+                            {decision.isNewEmployer && (
+                              <Badge variant="secondary" className="text-xs">New</Badge>
+                            )}
+                            {decision.matchedEmployer.matchedAlias && (
+                              <Badge variant="outline" className="text-xs gap-1">
+                                <Tags className="h-3 w-3" />
+                                Alias Match
+                              </Badge>
+                            )}
+                          </div>
+                          {decision.matchedEmployer.matchedAlias && (
+                            <div className="text-xs text-blue-600 ml-6">
+                              Matched via alias: "{decision.matchedEmployer.matchedAlias}"
+                            </div>
                           )}
                         </div>
                       ) : decision.company ? (
@@ -776,19 +1380,52 @@ export function SubcontractorsReview({
                                 )}
                               </Button>
                             )}
-                            
+
+                            {/* EBA Quick List - Show alternative to manual search/match */}
+                            {decision.company && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleOpenEbaQuickList(index)
+                                    }}
+                                    className="gap-1 w-full text-xs border-blue-200 hover:bg-blue-50"
+                                  >
+                                    <Zap className="h-3 w-3 text-blue-600" />
+                                    <span className="truncate text-blue-700">EBA Quick List</span>
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Quickly select from EBA employers who work on {decision.trade}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+
                             {/* Individual EBA Search - Show when employer matched and EBA status needs update */}
                             {decision.shouldUpdateEbaStatus && decision.matchedEmployer && decision.action === 'import' && (
-                              <Button
-                                variant="secondary"
-                                size="sm"
-                                onClick={() => handleIndividualEbaSearch(decision.matchedEmployer.id, decision.matchedEmployer.name)}
-                                className="gap-1 w-full text-xs"
-                                title={`Search Fair Work Commission EBA database for ${decision.matchedEmployer.name}`}
-                              >
-                                <FileSearch className="h-3 w-3" />
-                                <span className="truncate">Search EBA</span>
-                              </Button>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleIndividualEbaSearch(decision.matchedEmployer.id, decision.matchedEmployer.name)
+                                    }}
+                                    className="gap-1 w-full text-xs"
+                                  >
+                                    <FileSearch className="h-3 w-3" />
+                                    <span className="truncate">Search EBA</span>
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Search FWC EBA database</p>
+                                  <p className="text-xs text-gray-500">Press Ctrl+E when selected</p>
+                                </TooltipContent>
+                              </Tooltip>
                             )}
 
                             {/* Add Additional Subcontractor button */}
@@ -871,6 +1508,40 @@ export function SubcontractorsReview({
           onConfirm={handleConfirmAdditional}
         />
       )}
+
+      {/* Bulk Alias Operations Modal */}
+      {bulkAliasOpen && (
+        <BulkAliasOperations
+          isOpen={bulkAliasOpen}
+          onOpenChange={setBulkAliasOpen}
+          subcontractors={decisions.map((decision, index) => ({
+            index,
+            trade: decision.trade,
+            stage: decision.stage,
+            company: decision.company || '',
+            matchedEmployer: decision.matchedEmployer,
+            existingEmployers: decision.existingEmployers,
+            additionalEmployers: decision.additionalEmployers
+          }))}
+          allEmployers={allEmployers}
+          onComplete={handleBulkAliasComplete}
+        />
+      )}
+
+      {/* EBA Quick List Modal */}
+      <EbaEmployerQuickList
+        open={ebaQuickListOpen}
+        onOpenChange={setEbaQuickListOpen}
+        tradeType={selectedTradeForQuickList || undefined}
+        projectId={projectId}
+        onEmployerSelect={handleEbaEmployerSelect}
+        onBatchSelect={handleBatchEbaEmployerSelect}
+        excludeEmployerIds={decisions
+          .filter(d => d.matchedEmployer && d.action === 'import')
+          .map(d => d.matchedEmployer.id)
+        }
+      />
     </div>
+    </TooltipProvider>
   )
 }

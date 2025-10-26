@@ -1,0 +1,21 @@
+{
+  "scripts": {
+    "test:mobile": "playwright test --config=playwright.mobile.config.ts",
+    "test:mobile:headed": "playwright test --config=playwright.mobile.config.ts --headed",
+    "test:mobile:debug": "playwright test --config=playwright.mobile.config.ts --debug",
+    "test:mobile:iphone": "playwright test --config=playwright.mobile.config.ts --project=iphone-15-pro",
+    "test:mobile:all-iphones": "playwright test --config=playwright.mobile.config.ts --grep=\"iPhone\"",
+    "test:mobile:audit": "playwright test --config=playwright.mobile.config.ts tests/mobile/audit/",
+    "test:mobile:navigation": "playwright test --config=playwright.mobile.config.ts tests/mobile/audit/navigation.spec.ts",
+    "test:mobile:employers": "playwright test --config=playwright.mobile.config.ts tests/mobile/audit/employer-views.spec.ts",
+    "test:mobile:scan-review": "playwright test --config=playwright.mobile.config.ts tests/mobile/audit/scan-review-workflow.spec.ts",
+    "test:mobile:report": "playwright show-report test-results/playwright-report",
+    "test:mobile:trace": "playwright show-trace test-results/trace",
+    "test:mobile:generate-report": "node -e \"const { ReportingHelpers } = require('./tests/mobile/helpers/reporting-helpers'); const reporter = new ReportingHelpers(); reporter.generateReport();\"",
+    "test:mobile:screenshots": "ls -la test-results/screenshots/",
+    "test:mobile:clean": "rm -rf test-results/* && rm -rf test-results/**/*",
+    "test:mobile:install-deps": "playwright install",
+    "test:mobile:install-deps:iphone": "playwright install --with-deps",
+    "test:mobile:check-setup": "node -e \"console.log('🔧 Checking mobile testing setup...'); try { require('playwright'); console.log('✅ Playwright installed'); } catch(e) { console.log('❌ Playwright not installed - run npm install @playwright/test'); }\""
+  }
+}
