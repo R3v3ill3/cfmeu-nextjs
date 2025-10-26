@@ -1,6 +1,7 @@
 "use client"
 
 
+import React, { useState, useMemo, useCallback } from 'react'
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -64,7 +65,7 @@ export function RatingFiltersComponent({
   compact = false
 }: RatingFiltersProps) {
   const { filters, setFilters, clearFilters, hasActiveFilters } = useRatingFilters()
-  const [isOpen, setIsOpen] = React.useState(false)
+  const [isOpen, setIsOpen] = useState(false)
 
   // Handle rating selection
   const handleRatingChange = (rating: TrafficLightRating, checked: boolean) => {

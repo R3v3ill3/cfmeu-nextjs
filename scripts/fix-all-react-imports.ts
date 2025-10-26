@@ -1,7 +1,6 @@
 #!/usr/bin/env tsx
 
-// Comprehensive script to fix React imports in ALL files
-// Changes "import * as React" to specific React imports
+// Comprehensive script to normalize React imports in ALL files
 
 import { readFileSync, writeFileSync } from 'fs'
 import { execSync } from 'child_process'

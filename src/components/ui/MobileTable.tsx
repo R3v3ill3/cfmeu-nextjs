@@ -1,6 +1,6 @@
 "use client"
 
-import {  useState, useRef, useEffect  } from 'react'
+import React, {  useState, useRef, useEffect  } from 'react'
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { mobileTokens, device } from '@/styles/mobile-design-tokens'

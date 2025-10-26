@@ -1,5 +1,6 @@
 
 ;
+import React, { useState, useEffect } from 'react';
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -33,13 +34,13 @@ const fieldControl = "flex-1";
 
 export default function EditUserDialog({ user, open, onOpenChange, onSaved }: EditUserDialogProps) {
   const { toast } = useToast();
-  const [fullName, setFullName] = React.useState(user.full_name ?? "");
-  const [phone, setPhone] = React.useState(user.phone ?? "");
-  const [role, setRole] = React.useState<AppRole | string>((user.role as AppRole) ?? "viewer");
-  const [active, setActive] = React.useState<boolean>(user.is_active ?? true);
-  const [saving, setSaving] = React.useState(false);
+  const [fullName, setFullName] = useState(user.full_name ?? "");
+  const [phone, setPhone] = useState(user.phone ?? "");
+  const [role, setRole] = useState<AppRole | string>((user.role as AppRole) ?? "viewer");
+  const [active, setActive] = useState<boolean>(user.is_active ?? true);
+  const [saving, setSaving] = useState(false);
 
-  React.useEffect(() => {
+  useEffect(() => {
     // Refresh form when a different user is provided
     setFullName(user.full_name ?? "");
     setPhone(user.phone ?? "");

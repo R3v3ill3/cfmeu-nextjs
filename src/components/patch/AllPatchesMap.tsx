@@ -1,6 +1,7 @@
 'use client';
 
 ;
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -42,7 +43,7 @@ export function AllPatchesMap({
   selectedPatchIds = [],
   onPatchClick 
 }: AllPatchesMapProps) {
-  const [projectColorBy, setProjectColorBy] = React.useState<'tier' | 'organising_universe' | 'stage' | 'builder_eba' | 'default'>('builder_eba')
+  const [projectColorBy, setProjectColorBy] = useState<'tier' | 'organising_universe' | 'stage' | 'builder_eba' | 'default'>('builder_eba')
   // Fetch all active geo patches
   const { data: patches = [], isLoading: patchesLoading } = useQuery({
     queryKey: ['all-patches-map-data'],

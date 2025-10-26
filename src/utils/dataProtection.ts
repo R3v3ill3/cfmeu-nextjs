@@ -5,7 +5,7 @@
  * during dashboard operations. All dashboard functions should be read-only.
  */
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 
 /**
  * Read-only database operation wrapper

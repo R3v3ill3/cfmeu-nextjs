@@ -1,7 +1,6 @@
 #!/usr/bin/env tsx
 
-// Script to fix React imports in mobile components
-// Changes "import * as React" to specific React imports
+// Script to ensure React imports in mobile components
 
 import { readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { PerformanceMetrics } from "@/lib/performance/performance-monitoring"
 
 // Hook for monitoring mobile performance

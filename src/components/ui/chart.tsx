@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef, forwardRef } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef, forwardRef } from 'react'
 import type { ReactNode } from 'react'
 import type { ReactNode } from 'react'
 import * as RechartsPrimitive from "recharts"

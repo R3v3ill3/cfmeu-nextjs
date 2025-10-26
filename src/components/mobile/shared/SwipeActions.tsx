@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { cn } from "@/lib/utils"
 import { ChevronLeft, ChevronRight, Trash2, Edit, Archive, Star } from "lucide-react"

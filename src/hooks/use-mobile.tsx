@@ -1,13 +1,13 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 
 const MOBILE_BREAKPOINT = 768
 
 export function useIsMobile() {
   // Start with false to prevent hydration mismatch
-  const [isMobile, setIsMobile] = React.useState(false)
-  const [hasMounted, setHasMounted] = React.useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+  const [hasMounted, setHasMounted] = useState(false)
 
-  React.useEffect(() => {
+  useEffect(() => {
     setHasMounted(true)
     const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
     const onChange = () => {

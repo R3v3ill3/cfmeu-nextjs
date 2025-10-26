@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { PerformanceMonitor, PerformanceMetricsDisplay } from "@/lib/performance/performance-monitoring"
 import { PWAProvider, PWAStatus } from "@/lib/pwa/pwa-utils"

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef, forwardRef } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef, forwardRef } from 'react'
 import type { HTMLAttributes } from 'react'
 import * as LabelPrimitive from "@radix-ui/react-label"
 import { Slot } from "@radix-ui/react-slot"
