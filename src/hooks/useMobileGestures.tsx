@@ -1,7 +1,7 @@
 "use client"
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import type { ReactNode } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, useContext, forwardRef, createContext } from 'react'
+import type { ReactNode, ComponentType } from 'react'
 import { useHapticFeedback } from "@/components/mobile/shared/HapticFeedback"
 
 // Gesture types
@@ -79,12 +79,12 @@ export function useMobileGestures(
   handlers: GestureHandler[],
   options: GestureOptions = {}
 ) {
-  const elementRef = React.useRef<Element>(null)
+  const elementRef = useRef<Element>(null)
   const { selection, impact, onPress, onSuccess, onError, onWarning } = useHapticFeedback()
   const mergedOptions = { ...DEFAULT_OPTIONS, ...options }
 
   // Gesture state
-  const gestureState = React.useRef({
+  const gestureState = useRef({
     isTracking: false,
     startTime: 0,
     lastTapTime: 0,
@@ -99,7 +99,7 @@ export function useMobileGestures(
   })
 
   // Trigger haptic feedback
-  const triggerHaptic = React.useCallback((type: GestureType) => {
+  const triggerHaptic = useCallback((type: GestureType) => {
     if (!mergedOptions.enableHaptics) return
 
     switch (type) {
@@ -126,17 +126,17 @@ export function useMobileGestures(
   }, [mergedOptions.enableHaptics, selection, impact, onPress])
 
   // Calculate distance between two points
-  const calculateDistance = React.useCallback((x1: number, y1: number, x2: number, y2: number) => {
+  const calculateDistance = useCallback((x1: number, y1: number, x2: number, y2: number) => {
     return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2))
   }, [])
 
   // Calculate angle between two points
-  const calculateAngle = React.useCallback((x1: number, y1: number, x2: number, y2: number) => {
+  const calculateAngle = useCallback((x1: number, y1: number, x2: number, y2: number) => {
     return Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI
   }, [])
 
   // Create gesture event data
-  const createGestureEvent = React.useCallback((
+  const createGestureEvent = useCallback((
     type: GestureType,
     startTime: number,
     endTime: number,
@@ -195,7 +195,7 @@ export function useMobileGestures(
   }, [calculateDistance, calculateAngle])
 
   // Execute gesture handlers
-  const executeHandlers = React.useCallback((type: GestureType, eventData: GestureEventData) => {
+  const executeHandlers = useCallback((type: GestureType, eventData: GestureEventData) => {
     const matchingHandlers = handlers.filter(handler =>
       handler.type === type && handler.enabled !== false
     )
@@ -213,7 +213,7 @@ export function useMobileGestures(
   }, [handlers, triggerHaptic])
 
   // Touch start handler
-  const handleTouchStart = React.useCallback((event: TouchEvent) => {
+  const handleTouchStart = useCallback((event: TouchEvent) => {
     const touch = event.touches[0]
     const now = Date.now()
 
@@ -289,7 +289,7 @@ export function useMobileGestures(
   }, [mergedOptions, createGestureEvent, executeHandlers, calculateDistance, calculateAngle])
 
   // Touch move handler
-  const handleTouchMove = React.useCallback((event: TouchEvent) => {
+  const handleTouchMove = useCallback((event: TouchEvent) => {
     if (!gestureState.current.isTracking) return
 
     const touch = event.touches[0]
@@ -355,7 +355,7 @@ export function useMobileGestures(
   }, [mergedOptions, createGestureEvent, executeHandlers, calculateDistance, calculateAngle])
 
   // Touch end handler
-  const handleTouchEnd = React.useCallback((event: TouchEvent) => {
+  const handleTouchEnd = useCallback((event: TouchEvent) => {
     if (!gestureState.current.isTracking) return
 
     const endTime = Date.now()
@@ -435,7 +435,7 @@ export function useMobileGestures(
   }, [mergedOptions, createGestureEvent, executeHandlers, calculateDistance])
 
   // Set up event listeners
-  React.useEffect(() => {
+  useEffect(() => {
     const element = elementRef.current
     if (!element) return
 
@@ -479,7 +479,7 @@ export function useSwipeActions(
   onSwipeDown?: () => void,
   options: GestureOptions = {}
 ) {
-  const handlers: GestureHandler[] = React.useMemo(() => {
+  const handlers: GestureHandler[] = useMemo(() => {
     const result: GestureHandler[] = []
 
     if (onSwipeLeft) {
@@ -507,7 +507,7 @@ export function useTapAndLongPress(
   onLongPress?: () => void,
   options: GestureOptions = {}
 ) {
-  const handlers: GestureHandler[] = React.useMemo(() => {
+  const handlers: GestureHandler[] = useMemo(() => {
     const result: GestureHandler[] = []
 
     if (onTap) {
@@ -528,7 +528,7 @@ export function usePinchToZoom(
   onPinch?: (scale: number) => void,
   options: GestureOptions = {}
 ) {
-  const handlers: GestureHandler[] = React.useMemo(() => {
+  const handlers: GestureHandler[] = useMemo(() => {
     if (!onPinch) return []
 
     return [{
@@ -546,13 +546,13 @@ export function usePinchToZoom(
 
 // Higher-order component for adding gestures
 export function withGestures<P extends object>(
-  Component: React.ComponentType<P>,
+  Component: ComponentType<P>,
   handlers: GestureHandler[],
   options: GestureOptions = {}
 ) {
-  return React.forwardRef<any, P>((props, ref) => {
+  return forwardRef<any, P>((props, ref) => {
     const { elementRef } = useMobileGestures(handlers, options)
-    const combinedRef = React.useCallback((node: Element) => {
+    const combinedRef = useCallback((node: Element) => {
       if (typeof ref === 'function') {
         ref(node)
       } else if (ref) {
@@ -568,28 +568,28 @@ export function withGestures<P extends object>(
 }
 
 // Gesture context for complex interactions
-export const GestureContext = React.createContext<{
+export const GestureContext = createContext<{
   addGesture: (handler: GestureHandler) => void
   removeGesture: (handler: GestureHandler) => void
   clearGestures: () => void
 } | null>(null)
 
 export function GestureProvider({ children }: { children: ReactNode }) {
-  const [handlers, setHandlers] = React.useState<GestureHandler[]>([])
+  const [handlers, setHandlers] = useState<GestureHandler[]>([])
 
-  const addGesture = React.useCallback((handler: GestureHandler) => {
+  const addGesture = useCallback((handler: GestureHandler) => {
     setHandlers(prev => [...prev, handler])
   }, [])
 
-  const removeGesture = React.useCallback((handler: GestureHandler) => {
+  const removeGesture = useCallback((handler: GestureHandler) => {
     setHandlers(prev => prev.filter(h => h !== handler))
   }, [])
 
-  const clearGestures = React.useCallback(() => {
+  const clearGestures = useCallback(() => {
     setHandlers([])
   }, [])
 
-  const value = React.useMemo(() => ({
+  const value = useMemo(() => ({
     addGesture,
     removeGesture,
     clearGestures
@@ -603,7 +603,7 @@ export function GestureProvider({ children }: { children: ReactNode }) {
 }
 
 export function useGestureContext() {
-  const context = React.useContext(GestureContext)
+  const context = useContext(GestureContext)
   if (!context) {
     throw new Error('useGestureContext must be used within a GestureProvider')
   }

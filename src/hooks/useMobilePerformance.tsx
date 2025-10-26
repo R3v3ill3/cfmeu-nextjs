@@ -1,17 +1,17 @@
 "use client"
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { PerformanceMetrics } from "@/lib/performance/performance-monitoring"
 
 // Hook for monitoring mobile performance
 export function useMobilePerformance() {
-  const [metrics, setMetrics] = React.useState<PerformanceMetrics | null>(null)
-  const [isMonitoring, setIsMonitoring] = React.useState(false)
-  const [fps, setFps] = React.useState(60)
-  const [memoryUsage, setMemoryUsage] = React.useState(0)
+  const [metrics, setMetrics] = useState<PerformanceMetrics | null>(null)
+  const [isMonitoring, setIsMonitoring] = useState(false)
+  const [fps, setFps] = useState(60)
+  const [memoryUsage, setMemoryUsage] = useState(0)
 
   // FPS monitoring
-  const fpsMonitorRef = React.useRef<{
+  const fpsMonitorRef = useRef<{
     frameCount: number
     lastTime: number
     animationId: number | null
@@ -22,7 +22,7 @@ export function useMobilePerformance() {
   })
 
   // Performance observer refs
-  const performanceObserversRef = React.useRef<{
+  const performanceObserversRef = useRef<{
     fcp?: PerformanceObserver
     lcp?: PerformanceObserver
     fid?: PerformanceObserver
@@ -31,7 +31,7 @@ export function useMobilePerformance() {
   }>({})
 
   // Monitor FPS
-  const monitorFPS = React.useCallback(() => {
+  const monitorFPS = useCallback(() => {
     const now = performance.now()
     const { frameCount, lastTime } = fpsMonitorRef.current
 
@@ -48,7 +48,7 @@ export function useMobilePerformance() {
   }, [])
 
   // Monitor memory usage
-  const monitorMemory = React.useCallback(() => {
+  const monitorMemory = useCallback(() => {
     if ('memory' in performance) {
       const memory = (performance as any).memory
       const usedMemory = memory.usedJSHeapSize
@@ -57,7 +57,7 @@ export function useMobilePerformance() {
   }, [])
 
   // Observe web vitals
-  const observeWebVitals = React.useCallback(() => {
+  const observeWebVitals = useCallback(() => {
     if (typeof window === 'undefined' || !window.PerformanceObserver) return
 
     // First Contentful Paint
@@ -139,7 +139,7 @@ export function useMobilePerformance() {
   }, [])
 
   // Calculate Time to Interactive
-  const calculateTTI = React.useCallback(() => {
+  const calculateTTI = useCallback(() => {
     if (typeof window === 'undefined') return
 
     const observer = new PerformanceObserver((list) => {
@@ -165,7 +165,7 @@ export function useMobilePerformance() {
   }, [])
 
   // Get device and network information
-  const getDeviceInfo = React.useCallback(() => {
+  const getDeviceInfo = useCallback(() => {
     if (typeof window === 'undefined') return {}
 
     const deviceInfo: any = {
@@ -200,7 +200,7 @@ export function useMobilePerformance() {
   }, [])
 
   // Start monitoring
-  const startMonitoring = React.useCallback(() => {
+  const startMonitoring = useCallback(() => {
     if (typeof window === 'undefined') return
 
     setIsMonitoring(true)
@@ -239,7 +239,7 @@ export function useMobilePerformance() {
   }, [monitorFPS, monitorMemory, observeWebVitals, calculateTTI, getDeviceInfo])
 
   // Stop monitoring
-  const stopMonitoring = React.useCallback(() => {
+  const stopMonitoring = useCallback(() => {
     setIsMonitoring(false)
 
     if (fpsMonitorRef.current.animationId) {
@@ -253,7 +253,7 @@ export function useMobilePerformance() {
   }, [])
 
   // Update metrics when FPS or memory changes
-  React.useEffect(() => {
+  useEffect(() => {
     if (isMonitoring) {
       setMetrics(prev => ({
         ...prev,
@@ -265,7 +265,7 @@ export function useMobilePerformance() {
   }, [fps, memoryUsage, isMonitoring])
 
   // Auto-cleanup on unmount
-  React.useEffect(() => {
+  useEffect(() => {
     return stopMonitoring
   }, [stopMonitoring])
 
@@ -281,10 +281,10 @@ export function useMobilePerformance() {
 
 // Hook for bundle size monitoring
 export function useBundleSizeMonitoring() {
-  const [bundleSize, setBundleSize] = React.useState(0)
-  const [components, setComponents] = React.useState<string[]>([])
+  const [bundleSize, setBundleSize] = useState(0)
+  const [components, setComponents] = useState<string[]>([])
 
-  const measureBundleSize = React.useCallback(async () => {
+  const measureBundleSize = useCallback(async () => {
     if (typeof window === 'undefined') return
 
     try {
@@ -315,7 +315,7 @@ export function useBundleSizeMonitoring() {
     }
   }, [])
 
-  React.useEffect(() => {
+  useEffect(() => {
     // Initial measurement
     setTimeout(measureBundleSize, 2000)
 
@@ -334,7 +334,7 @@ export function useBundleSizeMonitoring() {
 
 // Hook for network performance optimization
 export function useNetworkOptimization() {
-  const [networkInfo, setNetworkInfo] = React.useState<{
+  const [networkInfo, setNetworkInfo] = useState<{
     type: string
     downlink: number
     rtt: number
@@ -342,9 +342,9 @@ export function useNetworkOptimization() {
     saveData: boolean
   } | null>(null)
 
-  const [isOnline, setIsOnline] = React.useState(true)
+  const [isOnline, setIsOnline] = useState(true)
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (typeof window === 'undefined') return
 
     const updateNetworkInfo = () => {
@@ -384,7 +384,7 @@ export function useNetworkOptimization() {
     }
   }, [])
 
-  const isSlowNetwork = React.useMemo(() => {
+  const isSlowNetwork = useMemo(() => {
     if (!networkInfo) return false
     return (
       networkInfo.effectiveType === 'slow-2g' ||
@@ -394,7 +394,7 @@ export function useNetworkOptimization() {
     )
   }, [networkInfo])
 
-  const isFastNetwork = React.useMemo(() => {
+  const isFastNetwork = useMemo(() => {
     if (!networkInfo) return true
     return (
       networkInfo.effectiveType === '4g' &&
@@ -413,7 +413,7 @@ export function useNetworkOptimization() {
 
 // Hook for device capability detection
 export function useDeviceCapabilities() {
-  const [capabilities, setCapabilities] = React.useState<{
+  const [capabilities, setCapabilities] = useState<{
     isLowEnd: boolean
     prefersReducedMotion: boolean
     touchSupport: boolean
@@ -431,7 +431,7 @@ export function useDeviceCapabilities() {
     cores: 0
   })
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (typeof window === 'undefined') return
 
     const updateCapabilities = () => {

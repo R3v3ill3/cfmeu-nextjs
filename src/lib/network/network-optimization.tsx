@@ -1,6 +1,7 @@
 "use client"
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import type { DependencyList } from 'react'
 
 // Network optimization utilities for mobile
 
@@ -194,11 +195,11 @@ export class NetworkOptimizer {
 
 // React hook for network optimization
 export function useNetworkOptimization(config: Partial<NetworkConfig> = {}) {
-  const optimizerRef = React.useRef<NetworkOptimizer>()
-  const [isOnline, setIsOnline] = React.useState(true)
-  const [networkInfo, setNetworkInfo] = React.useState<any>(null)
+  const optimizerRef = useRef<NetworkOptimizer>()
+  const [isOnline, setIsOnline] = useState(true)
+  const [networkInfo, setNetworkInfo] = useState<any>(null)
 
-  React.useEffect(() => {
+  useEffect(() => {
     optimizerRef.current = new NetworkOptimizer(config)
 
     // Monitor network status
@@ -238,7 +239,7 @@ export function useNetworkOptimization(config: Partial<NetworkConfig> = {}) {
     }
   }, [config])
 
-  const optimizedFetch = React.useCallback(async (url: string, options?: RequestInit) => {
+  const optimizedFetch = useCallback(async (url: string, options?: RequestInit) => {
     if (!optimizerRef.current) {
       throw new Error('Network optimizer not initialized')
     }
@@ -375,33 +376,33 @@ export class OfflineStorage {
 
 // React hook for offline storage
 export function useOfflineStorage() {
-  const storageRef = React.useRef<OfflineStorage>()
+  const storageRef = useRef<OfflineStorage>()
 
-  React.useEffect(() => {
+  useEffect(() => {
     storageRef.current = new OfflineStorage()
   }, [])
 
-  const store = React.useCallback(async (storeName: string, data: any) => {
+  const store = useCallback(async (storeName: string, data: any) => {
     if (!storageRef.current) throw new Error('Storage not initialized')
     return storageRef.current.store(storeName, data)
   }, [])
 
-  const get = React.useCallback(async (storeName: string, key: string) => {
+  const get = useCallback(async (storeName: string, key: string) => {
     if (!storageRef.current) throw new Error('Storage not initialized')
     return storageRef.current.get(storeName, key)
   }, [])
 
-  const getAll = React.useCallback(async (storeName: string) => {
+  const getAll = useCallback(async (storeName: string) => {
     if (!storageRef.current) throw new Error('Storage not initialized')
     return storageRef.current.getAll(storeName)
   }, [])
 
-  const remove = React.useCallback(async (storeName: string, key: string) => {
+  const remove = useCallback(async (storeName: string, key: string) => {
     if (!storageRef.current) throw new Error('Storage not initialized')
     return storageRef.current.remove(storeName, key)
   }, [])
 
-  const clear = React.useCallback(async (storeName: string) => {
+  const clear = useCallback(async (storeName: string) => {
     if (!storageRef.current) throw new Error('Storage not initialized')
     return storageRef.current.clear(storeName)
   }, [])
@@ -468,9 +469,9 @@ export class BackgroundSyncManager {
 export function useBackgroundSync() {
   const { fetch } = useNetworkOptimization()
   const storage = useOfflineStorage()
-  const syncManagerRef = React.useRef<BackgroundSyncManager>()
+  const syncManagerRef = useRef<BackgroundSyncManager>()
 
-  React.useEffect(() => {
+  useEffect(() => {
     const storageInstance = new OfflineStorage()
     const networkOptimizer = new NetworkOptimizer()
     syncManagerRef.current = new BackgroundSyncManager(storageInstance, networkOptimizer)
@@ -489,7 +490,7 @@ export function useBackgroundSync() {
     }
   }, [])
 
-  const queueAction = React.useCallback(async (action: {
+  const queueAction = useCallback(async (action: {
     type: string
     url: string
     method: string
@@ -506,7 +507,7 @@ export function useBackgroundSync() {
     await syncManagerRef.current.queueAction(actionWithId)
   }, [])
 
-  const getPendingCount = React.useCallback(async () => {
+  const getPendingCount = useCallback(async () => {
     if (!syncManagerRef.current) return 0
     return syncManagerRef.current.getPendingActionsCount()
   }, [])
@@ -521,15 +522,15 @@ export function useBackgroundSync() {
 export function useNetworkAwareFetch<T = any>(
   url: string,
   options: RequestInit = {},
-  deps: React.DependencyList = []
+  deps: DependencyList = []
 ) {
   const { fetch, isOnline, networkInfo } = useNetworkOptimization()
   const { get, store } = useOfflineStorage()
-  const [data, setData] = React.useState<T | null>(null)
-  const [loading, setLoading] = React.useState(false)
-  const [error, setError] = React.useState<Error | null>(null)
+  const [data, setData] = useState<T | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
 
-  const executeFetch = React.useCallback(async () => {
+  const executeFetch = useCallback(async () => {
     setLoading(true)
     setError(null)
 
@@ -563,7 +564,7 @@ export function useNetworkAwareFetch<T = any>(
     }
   }, [url, options, isOnline, fetch, store, get])
 
-  React.useEffect(() => {
+  useEffect(() => {
     executeFetch()
   }, deps)
 
@@ -581,7 +582,7 @@ export function useNetworkAwareFetch<T = any>(
 export function usePrefetching() {
   const { fetch } = useNetworkOptimization()
 
-  const prefetch = React.useCallback(async (urls: string[]) => {
+  const prefetch = useCallback(async (urls: string[]) => {
     if ('requestIdleCallback' in window) {
       requestIdleCallback(async () => {
         for (const url of urls) {

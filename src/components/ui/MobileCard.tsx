@@ -1,14 +1,14 @@
 "use client"
 
-import {  useRef, useEffect, useState  } from 'react'
-import type { ReactNode } from 'react'
+import { useRef, useEffect, useState, forwardRef, type CSSProperties, type FC } from 'react'
+import type { ReactNode, HTMLAttributes } from 'react'
 import { cn } from '@/lib/utils'
 import { mobileSpacing, mobileTokens, device } from '@/styles/mobile-design-tokens'
 import { cssAnimation } from '@/styles/mobile-animations'
 import { SwipeActions } from './SwipeActions'
 import { SkeletonLoader } from './SkeletonLoader'
 
-export interface MobileCardProps extends React.HTMLAttributes<HTMLDivElement> {
+export interface MobileCardProps extends HTMLAttributes<HTMLDivElement> {
   // Content props
   title?: string
   subtitle?: string
@@ -51,7 +51,7 @@ export interface MobileCardProps extends React.HTMLAttributes<HTMLDivElement> {
   status?: 'default' | 'active' | 'selected' | 'disabled'
 }
 
-export const MobileCard = React.forwardRef<HTMLDivElement, MobileCardProps>(
+export const MobileCard = forwardRef<HTMLDivElement, MobileCardProps>(
   ({
     className,
     title,
@@ -141,7 +141,7 @@ export const MobileCard = React.forwardRef<HTMLDivElement, MobileCardProps>(
     }
 
     // Touch interaction styles
-    const touchStyles: React.CSSProperties = {
+    const touchStyles: CSSProperties = {
       ...cssAnimation.accelerate({}),
       transition: `transform ${mobileTokens.animation.duration.fast} ${mobileTokens.animation.easing.easeOut},
                   opacity ${mobileTokens.animation.duration.fast} ${mobileTokens.animation.easing.easeOut}`,
@@ -287,7 +287,7 @@ export const MobileCard = React.forwardRef<HTMLDivElement, MobileCardProps>(
 MobileCard.displayName = 'MobileCard'
 
 // Mobile Card with Skeleton Loader
-export const MobileCardWithSkeleton: React.FC<
+export const MobileCardWithSkeleton: FC<
   MobileCardProps & {
     showSkeleton?: boolean
     skeletonLines?: number
@@ -315,7 +315,7 @@ export interface MobileCardListItemProps extends Omit<MobileCardProps, 'size'> {
   inset?: boolean
 }
 
-export const MobileCardListItem: React.FC<MobileCardListItemProps> = ({
+export const MobileCardListItem: FC<MobileCardListItemProps> = ({
   index,
   totalItems,
   inset = false,
@@ -352,7 +352,7 @@ export interface MobileCardGridItemProps extends Omit<MobileCardProps, 'size'> {
   aspectRatio?: 'square' | 'portrait' | 'landscape'
 }
 
-export const MobileCardGridItem: React.FC<MobileCardGridItemProps> = ({
+export const MobileCardGridItem: FC<MobileCardGridItemProps> = ({
   aspectRatio = 'portrait',
   className,
   children,

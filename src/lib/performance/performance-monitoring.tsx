@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { usePerformanceMonitoring } from "@/hooks/useMobilePerformance"
 
@@ -241,7 +241,7 @@ export function PerformanceMonitor({
 }: PerformanceMonitorProps) {
   const { metrics, startMonitoring, stopMonitoring } = usePerformanceMonitoring()
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!enabled) return
 
     startMonitoring()

@@ -5,6 +5,7 @@
  * shorter durations, and performance considerations.
  */
 
+import type { CSSProperties } from 'react'
 import { mobileTokens } from './mobile-design-tokens'
 
 // Animation keyframes optimized for mobile
@@ -394,7 +395,7 @@ export const cssAnimation = {
   },
 
   // Hardware acceleration utilities
-  accelerate: (styles: React.CSSProperties) => ({
+  accelerate: (styles: CSSProperties) => ({
     ...styles,
     transform: styles.transform ? `${styles.transform} translateZ(0)` : 'translateZ(0)',
     willChange: 'transform, opacity',

@@ -1,6 +1,7 @@
 "use client"
 
-import React, {  useState, useRef, useEffect  } from 'react'
+import React from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { mobileTokens } from '@/styles/mobile-design-tokens'
@@ -170,7 +171,7 @@ export function MobileList<T = any>({
   }
 
   // Group items if needed
-  const groupedItems = React.useMemo(() => {
+  const groupedItems = useMemo(() => {
     if (!grouped || !groupBy) return { '': items }
 
     return items.reduce((groups, item) => {

@@ -11,7 +11,7 @@
 
 'use client'
 
-import {  useState, useEffect, useRef, useCallback  } from 'react'
+import { useState, useEffect, useRef, useCallback, type FC, type SyntheticEvent } from 'react'
 import Image, { ImageProps } from 'next/image'
 import { cn } from '@/lib/utils'
 import { isMobile, isSlowConnection } from '@/lib/device'
@@ -50,8 +50,8 @@ interface OptimizedImageProps extends Omit<ImageProps, 'onLoad' | 'onError'> {
   showSkeleton?: boolean // Show skeleton loader
 
   // Event handlers
-  onLoad?: (event: React.SyntheticEvent<HTMLImageElement>) => void
-  onError?: (error: React.SyntheticEvent<HTMLImageElement>) => void
+  onLoad?: (event: SyntheticEvent<HTMLImageElement>) => void
+  onError?: (error: SyntheticEvent<HTMLImageElement>) => void
   onProgress?: (progress: number) => void
 }
 
@@ -62,7 +62,7 @@ interface LoadingState {
   progress: number
 }
 
-const OptimizedImage: React.FC<OptimizedImageProps> = ({
+const OptimizedImage: FC<OptimizedImageProps> = ({
   src,
   alt,
   width,
@@ -214,7 +214,7 @@ const OptimizedImage: React.FC<OptimizedImageProps> = ({
   }, [lazy, priority, trackProgress])
 
   // Handle image load
-  const handleLoad = useCallback((event: React.SyntheticEvent<HTMLImageElement>) => {
+  const handleLoad = useCallback((event: SyntheticEvent<HTMLImageElement>) => {
     setLoadingState(prev => ({
       ...prev,
       isLoading: false,
@@ -225,7 +225,7 @@ const OptimizedImage: React.FC<OptimizedImageProps> = ({
   }, [onLoad])
 
   // Handle image error with retry logic
-  const handleError = useCallback((event: React.SyntheticEvent<HTMLImageElement>) => {
+  const handleError = useCallback((event: SyntheticEvent<HTMLImageElement>) => {
     if (retryCount < 3) {
       // Retry with lower quality
       setRetryCount(prev => prev + 1)
@@ -392,15 +392,15 @@ const OptimizedImage: React.FC<OptimizedImageProps> = ({
 }
 
 // Export convenience functions for common use cases
-export const MobileOptimizedImage: React.FC<Omit<OptimizedImageProps, 'compressForMobile' | 'enableProgressive'>> = (props) => (
+export const MobileOptimizedImage: FC<Omit<OptimizedImageProps, 'compressForMobile' | 'enableProgressive'>> = (props) => (
   <OptimizedImage {...props} compressForMobile={true} enableProgressive={true} />
 )
 
-export const CriticalImage: React.FC<Omit<OptimizedImageProps, 'priority' | 'lazy'>> = (props) => (
+export const CriticalImage: FC<Omit<OptimizedImageProps, 'priority' | 'lazy'>> = (props) => (
   <OptimizedImage {...props} priority={true} lazy={false} showSkeleton={false} />
 )
 
-export const LazyImage: React.FC<Omit<OptimizedImageProps, 'lazy'>> = (props) => (
+export const LazyImage: FC<Omit<OptimizedImageProps, 'lazy'>> = (props) => (
   <OptimizedImage {...props} lazy={true} showPlaceholder={true} />
 )
 

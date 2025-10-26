@@ -1,6 +1,7 @@
 "use client"
 
-import React, {  useState, useEffect, useCallback, useMemo, useRef  } from 'react'
+import React from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -112,7 +113,7 @@ function TrendStatistics({ data }: { data: TrendDataPoint[] }) {
     return values[rating]
   }
 
-  const trend = React.useMemo(() => {
+  const trend = useMemo(() => {
     if (data.length < 2) return { direction: 'stable', change: 0 }
     const current = getRatingValue(data[data.length - 1].rating)
     const previous = getRatingValue(data[data.length - 2].rating)
@@ -125,12 +126,12 @@ function TrendStatistics({ data }: { data: TrendDataPoint[] }) {
     return { direction, change }
   }, [data])
 
-  const averageScore = React.useMemo(() => {
+  const averageScore = useMemo(() => {
     if (data.length === 0) return 0
     return data.reduce((sum, point) => sum + point.score, 0) / data.length
   }, [data])
 
-  const ratingDistribution = React.useMemo(() => {
+  const ratingDistribution = useMemo(() => {
     const distribution = { red: 0, amber: 0, yellow: 0, green: 0 }
     data.forEach(point => {
       distribution[point.rating as TrafficLightRating]++
@@ -209,7 +210,7 @@ function TrendStatistics({ data }: { data: TrendDataPoint[] }) {
 
 // Rating distribution pie chart
 function RatingDistribution({ data }: { data: TrendDataPoint[] }) {
-  const distribution = React.useMemo(() => {
+  const distribution = useMemo(() => {
     const counts = { red: 0, amber: 0, yellow: 0, green: 0 }
     data.forEach(point => {
       counts[point.rating as TrafficLightRating]++
@@ -283,7 +284,7 @@ function TimelineView({ data, onViewDetails }: {
 }) {
   const { selection } = useHapticFeedback()
 
-  const handleClick = React.useCallback((dataPoint: TrendDataPoint) => {
+  const handleClick = useCallback((dataPoint: TrendDataPoint) => {
     selection()
     onViewDetails?.(dataPoint)
   }, [selection, onViewDetails])
@@ -342,13 +343,13 @@ export function RatingHistory({
   onExportData,
   onViewDetails,
 }: RatingHistoryProps) {
-  const [selectedPeriod, setSelectedPeriod] = React.useState<string>('all')
-  const [selectedTrack, setSelectedTrack] = React.useState<string>('all')
-  const [activeView, setActiveView] = React.useState<'overview' | 'timeline' | 'distribution'>('overview')
+  const [selectedPeriod, setSelectedPeriod] = useState<string>('all')
+  const [selectedTrack, setSelectedTrack] = useState<string>('all')
+  const [activeView, setActiveView] = useState<'overview' | 'timeline' | 'distribution'>('overview')
   const { trigger, success } = useHapticFeedback()
 
   // Filter and process data
-  const processedData = React.useMemo(() => {
+  const processedData = useMemo(() => {
     if (!trendData.length) return []
 
     let filtered = trendData
@@ -390,7 +391,7 @@ export function RatingHistory({
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
   }, [trendData, selectedPeriod, selectedTrack])
 
-  const handleExport = React.useCallback(() => {
+  const handleExport = useCallback(() => {
     trigger()
     onExportData?.()
     success()

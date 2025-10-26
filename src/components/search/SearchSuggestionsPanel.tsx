@@ -1,6 +1,7 @@
 "use client";
 
-import React, {  useState, useEffect, useCallback  } from 'react';
+import React from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -189,7 +190,7 @@ export const SearchSuggestionsPanel: React.FC<SearchSuggestionsPanelProps> = ({
   const filteredSuggestions = getFilteredSuggestions();
 
   // Group suggestions by category
-  const groupedSuggestions = React.useMemo(() => {
+  const groupedSuggestions = useMemo(() => {
     if (!groupByCategory) return {};
 
     const groups: Record<string, SearchSuggestion[]> = {};

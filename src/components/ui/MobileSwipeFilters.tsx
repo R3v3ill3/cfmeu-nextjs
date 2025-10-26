@@ -1,6 +1,6 @@
 "use client";
 
-import React, {  useState, useRef, useCallback, useEffect  } from 'react'
+import React, {  useState, useRef, useCallback, useEffect, useMemo  } from 'react'
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -132,7 +132,7 @@ export const MobileSwipeFilters: React.FC<MobileSwipeFiltersProps> = ({
   const lastTouchRef = useRef({ x: 0, y: 0, time: 0 });
 
   // Group filters by category
-  const groupedFilters = React.useMemo(() => {
+  const groupedFilters = useMemo(() => {
     if (!groupByCategory) return { general: quickFilters };
 
     const groups: Record<string, QuickFilter[]> = {};

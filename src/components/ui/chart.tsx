@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef, forwardRef } from 'react'
-import type { ReactNode } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef, forwardRef, createContext, useContext, useId, type ComponentType, type ComponentProps, type CSSProperties } from 'react'
 import type { ReactNode } from 'react'
 import * as RechartsPrimitive from "recharts"
 
@@ -11,7 +10,7 @@ const THEMES = { light: "", dark: ".dark" } as const
 export type ChartConfig = {
   [k in string]: {
     label?: ReactNode
-    icon?: React.ComponentType
+    icon?: ComponentType
   } & (
     | { color?: string; theme?: never }
     | { color?: never; theme: Record<keyof typeof THEMES, string> }
@@ -22,10 +21,10 @@ type ChartContextProps = {
   config: ChartConfig
 }
 
-const ChartContext = React.createContext<ChartContextProps | null>(null)
+const ChartContext = createContext<ChartContextProps | null>(null)
 
 function useChart() {
-  const context = React.useContext(ChartContext)
+  const context = useContext(ChartContext)
 
   if (!context) {
     throw new Error("useChart must be used within a <ChartContainer />")
@@ -36,14 +35,14 @@ function useChart() {
 
 const ChartContainer = forwardRef<
   HTMLDivElement,
-  React.ComponentProps<"div"> & {
+  ComponentProps<"div"> & {
     config: ChartConfig
-    children: React.ComponentProps<
+    children: ComponentProps<
       typeof RechartsPrimitive.ResponsiveContainer
     >["children"]
   }
 >(({ id, className, children, config, ...props }, ref) => {
-  const uniqueId = React.useId()
+  const uniqueId = useId()
   const chartId = `chart-${id || uniqueId.replace(/:/g, "")}`
 
   return (
@@ -166,7 +165,7 @@ const ChartTooltipContent = forwardRef<
     } = rawProps
     const { config } = useChart()
 
-    const tooltipLabel = React.useMemo(() => {
+    const tooltipLabel = useMemo(() => {
       if (hideLabel || !payload?.length) {
         return null
       }
@@ -254,7 +253,7 @@ const ChartTooltipContent = forwardRef<
                             {
                               "--color-bg": indicatorColor,
                               "--color-border": indicatorColor,
-                            } as React.CSSProperties
+                            } as CSSProperties
                           }
                         />
                       )

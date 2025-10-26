@@ -5,6 +5,7 @@
  * optimized for mobile-first development with touch interactions.
  */
 
+import type { CSSProperties } from 'react'
 import { mobileBreakpoints, mobileSpacing, mobileTokens } from './mobile-design-tokens'
 
 // Media query helpers for mobile-first development
@@ -180,11 +181,11 @@ export const touch = {
 
 // Helper function to generate responsive CSS
 export const responsive = (styles: {
-  mobile?: React.CSSProperties
-  tablet?: React.CSSProperties
-  desktop?: React.CSSProperties
+  mobile?: CSSProperties
+  tablet?: CSSProperties
+  desktop?: CSSProperties
 }) => {
-  const css: Record<string, React.CSSProperties> = {
+  const css: Record<string, CSSProperties> = {
     base: styles.mobile || {},
   }
 
@@ -383,9 +384,9 @@ export const generateCSSVariables = () => {
 
 // Type definitions
 export type ResponsiveStyles = {
-  mobile?: React.CSSProperties
-  tablet?: React.CSSProperties
-  desktop?: React.CSSProperties
+  mobile?: CSSProperties
+  tablet?: CSSProperties
+  desktop?: CSSProperties
 }
 
 export type ResponsiveStringStyles = {

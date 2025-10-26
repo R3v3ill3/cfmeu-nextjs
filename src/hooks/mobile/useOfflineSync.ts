@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { useToast } from "@/hooks/use-toast"
 
 interface OfflineSyncOptions {
@@ -48,18 +48,18 @@ export function useOfflineSync<T extends { id: string }>(
   } = options
 
   const { toast } = useToast()
-  const [data, setData] = React.useState<T[]>(initialData)
-  const [loading, setLoading] = React.useState(false)
-  const [error, setError] = React.useState<string | null>(null)
-  const [isOnline, setIsOnline] = React.useState(
+  const [data, setData] = useState<T[]>(initialData)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [isOnline, setIsOnline] = useState(
     typeof navigator !== "undefined" ? navigator.onLine : true
   )
-  const [pendingOperations, setPendingOperations] = React.useState<SyncOperation[]>([])
-  const [syncInProgress, setSyncInProgress] = React.useState(false)
-  const [lastSync, setLastSync] = React.useState<Date | null>(null)
+  const [pendingOperations, setPendingOperations] = useState<SyncOperation[]>([])
+  const [syncInProgress, setSyncInProgress] = useState(false)
+  const [lastSync, setLastSync] = useState<Date | null>(null)
 
   // Load data from localStorage on mount
-  React.useEffect(() => {
+  useEffect(() => {
     if (typeof window === "undefined") return
 
     try {
@@ -82,7 +82,7 @@ export function useOfflineSync<T extends { id: string }>(
   }, [storageKey])
 
   // Save data to localStorage whenever it changes
-  React.useEffect(() => {
+  useEffect(() => {
     if (typeof window === "undefined") return
 
     try {
@@ -100,7 +100,7 @@ export function useOfflineSync<T extends { id: string }>(
   }, [data, pendingOperations, lastSync, storageKey])
 
   // Monitor online status
-  React.useEffect(() => {
+  useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true)
       if (autoSync && pendingOperations.length > 0) {
@@ -122,7 +122,7 @@ export function useOfflineSync<T extends { id: string }>(
   }, [autoSync, pendingOperations.length])
 
   // Auto-sync when online
-  React.useEffect(() => {
+  useEffect(() => {
     if (!autoSync || !isOnline || !syncEndpoint) return
 
     const interval = setInterval(() => {
@@ -135,7 +135,7 @@ export function useOfflineSync<T extends { id: string }>(
   }, [autoSync, isOnline, syncEndpoint, syncInterval, pendingOperations.length])
 
   // Sync pending operations
-  const syncPendingOperations = React.useCallback(async () => {
+  const syncPendingOperations = useCallback(async () => {
     if (!isOnline || !syncEndpoint || pendingOperations.length === 0) return
 
     setSyncInProgress(true)
@@ -206,7 +206,7 @@ export function useOfflineSync<T extends { id: string }>(
   }, [isOnline, syncEndpoint, pendingOperations, maxRetries, toast])
 
   // Add item (creates locally and queues for sync)
-  const addItem = React.useCallback(async (item: T) => {
+  const addItem = useCallback(async (item: T) => {
     const newId = `local-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
     const newItem = { ...item, id: newId } as T
 
@@ -239,7 +239,7 @@ export function useOfflineSync<T extends { id: string }>(
   }, [syncEndpoint, isOnline, syncPendingOperations, toast])
 
   // Update item (updates locally and queues for sync)
-  const updateItem = React.useCallback(async (id: string, updates: Partial<T>) => {
+  const updateItem = useCallback(async (id: string, updates: Partial<T>) => {
     // Update local data immediately
     setData(prev =>
       prev.map(item => item.id === id ? { ...item, ...updates } : item)
@@ -271,7 +271,7 @@ export function useOfflineSync<T extends { id: string }>(
   }, [syncEndpoint, isOnline, syncPendingOperations, toast])
 
   // Delete item (deletes locally and queues for sync)
-  const deleteItem = React.useCallback(async (id: string) => {
+  const deleteItem = useCallback(async (id: string) => {
     // Remove from local data immediately
     setData(prev => prev.filter(item => item.id !== id))
 
@@ -301,12 +301,12 @@ export function useOfflineSync<T extends { id: string }>(
   }, [syncEndpoint, isOnline, syncPendingOperations, toast])
 
   // Force sync
-  const forceSync = React.useCallback(async () => {
+  const forceSync = useCallback(async () => {
     await syncPendingOperations()
   }, [syncPendingOperations])
 
   // Clear pending sync operations
-  const clearPendingSync = React.useCallback(() => {
+  const clearPendingSync = useCallback(() => {
     setPendingOperations([])
     if (typeof window !== "undefined") {
       localStorage.removeItem(`${storageKey}-operations`)

@@ -1,6 +1,7 @@
 "use client"
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useCallback, useRef } from 'react'
+import type { TouchEvent, CSSProperties } from 'react'
 
 interface TouchGestureOptions {
   threshold?: number
@@ -20,9 +21,9 @@ interface TouchGestureState {
 
 interface UseTouchGesturesReturn {
   touchProps: {
-    onTouchStart: (e: React.TouchEvent) => void
-    onTouchEnd: (e: React.TouchEvent) => void
-    onTouchMove?: (e: React.TouchEvent) => void
+    onTouchStart: (e: TouchEvent) => void
+    onTouchEnd: (e: TouchEvent) => void
+    onTouchMove?: (e: TouchEvent) => void
   }
   swipeDirection: 'left' | 'right' | 'up' | 'down' | null
   isSwiping: boolean
@@ -47,7 +48,7 @@ export function useTouchGestures(
     preventDefault = true,
   } = options
 
-  const [touchState, setTouchState] = React.useState<TouchGestureState>({
+  const [touchState, setTouchState] = useState<TouchGestureState>({
     startX: 0,
     startY: 0,
     startTime: 0,
@@ -56,14 +57,14 @@ export function useTouchGestures(
     elapsedTime: 0,
   })
 
-  const [swipeDirection, setSwipeDirection] = React.useState<'left' | 'right' | 'up' | 'down' | null>(null)
-  const [isSwiping, setIsSwiping] = React.useState(false)
-  const [tapCount, setTapCount] = React.useState(0)
-  const [lastTapTime, setLastTapTime] = React.useState(0)
-  const [longPressTriggered, setLongPressTriggered] = React.useState(false)
-  const longPressTimerRef = React.useRef<NodeJS.Timeout | null>(null)
+  const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | 'up' | 'down' | null>(null)
+  const [isSwiping, setIsSwiping] = useState(false)
+  const [tapCount, setTapCount] = useState(0)
+  const [lastTapTime, setLastTapTime] = useState(0)
+  const [longPressTriggered, setLongPressTriggered] = useState(false)
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null)
 
-  const handleTouchStart = React.useCallback((e: React.TouchEvent) => {
+  const handleTouchStart = useCallback((e: TouchEvent) => {
     if (preventDefault) {
       e.preventDefault()
     }
@@ -107,7 +108,7 @@ export function useTouchGestures(
     setLastTapTime(currentTime)
   }, [preventDefault, onLongPress, onDoubleTap, lastTapTime, tapCount])
 
-  const handleTouchMove = React.useCallback((e: React.TouchEvent) => {
+  const handleTouchMove = useCallback((e: TouchEvent) => {
     if (preventDefault) {
       e.preventDefault()
     }
@@ -134,7 +135,7 @@ export function useTouchGestures(
     setIsSwiping(true)
   }, [preventDefault, touchState.startTime, touchState.startX, touchState.startY])
 
-  const handleTouchEnd = React.useCallback((e: React.TouchEvent) => {
+  const handleTouchEnd = useCallback((e: TouchEvent) => {
     if (preventDefault) {
       e.preventDefault()
     }
@@ -221,11 +222,11 @@ interface UsePinchZoomReturn {
   scale: number
   reset: () => void
   touchProps: {
-    onTouchStart: (e: React.TouchEvent) => void
-    onTouchMove: (e: React.TouchEvent) => void
-    onTouchEnd: (e: React.TouchEvent) => void
+    onTouchStart: (e: TouchEvent) => void
+    onTouchMove: (e: TouchEvent) => void
+    onTouchEnd: (e: TouchEvent) => void
   }
-  style: React.CSSProperties
+  style: CSSProperties
 }
 
 export function usePinchZoom(
@@ -238,17 +239,17 @@ export function usePinchZoom(
     onScaleChange,
   } = options
 
-  const [scale, setScale] = React.useState(initialScale)
-  const [lastDistance, setLastDistance] = React.useState(0)
-  const [isPinching, setIsPinching] = React.useState(false)
+  const [scale, setScale] = useState(initialScale)
+  const [lastDistance, setLastDistance] = useState(0)
+  const [isPinching, setIsPinching] = useState(false)
 
-  const getDistance = (touch1: React.Touch, touch2: React.Touch): number => {
+  const getDistance = (touch1: Touch, touch2: Touch): number => {
     const dx = touch1.clientX - touch2.clientX
     const dy = touch1.clientY - touch2.clientY
     return Math.sqrt(dx * dx + dy * dy)
   }
 
-  const handleTouchStart = React.useCallback((e: React.TouchEvent) => {
+  const handleTouchStart = useCallback((e: TouchEvent) => {
     if (e.touches.length === 2) {
       const distance = getDistance(e.touches[0], e.touches[1])
       setLastDistance(distance)
@@ -256,7 +257,7 @@ export function usePinchZoom(
     }
   }, [])
 
-  const handleTouchMove = React.useCallback((e: React.TouchEvent) => {
+  const handleTouchMove = useCallback((e: TouchEvent) => {
     if (e.touches.length === 2 && isPinching) {
       e.preventDefault()
       const distance = getDistance(e.touches[0], e.touches[1])
@@ -269,14 +270,14 @@ export function usePinchZoom(
     }
   }, [isPinching, lastDistance, scale, minScale, maxScale, onScaleChange])
 
-  const handleTouchEnd = React.useCallback((e: React.TouchEvent) => {
+  const handleTouchEnd = useCallback((e: TouchEvent) => {
     if (e.touches.length < 2) {
       setIsPinching(false)
       setLastDistance(0)
     }
   }, [])
 
-  const reset = React.useCallback(() => {
+  const reset = useCallback(() => {
     setScale(initialScale)
     onScaleChange?.(initialScale)
   }, [initialScale, onScaleChange])
@@ -287,7 +288,7 @@ export function usePinchZoom(
     onTouchEnd: handleTouchEnd,
   }
 
-  const style: React.CSSProperties = {
+  const style: CSSProperties = {
     transform: `scale(${scale})`,
     transformOrigin: 'center',
     transition: isPinching ? 'none' : 'transform 0.3s ease-out',
@@ -314,11 +315,11 @@ interface UsePullToRefreshReturn {
   isPulling: boolean
   isRefreshing: boolean
   touchProps: {
-    onTouchStart: (e: React.TouchEvent) => void
-    onTouchMove: (e: React.TouchEvent) => void
-    onTouchEnd: (e: React.TouchEvent) => void
+    onTouchStart: (e: TouchEvent) => void
+    onTouchMove: (e: TouchEvent) => void
+    onTouchEnd: (e: TouchEvent) => void
   }
-  style: React.CSSProperties
+  style: CSSProperties
 }
 
 export function usePullToRefresh(
@@ -330,12 +331,12 @@ export function usePullToRefresh(
     disabled = false,
   } = options
 
-  const [pullDistance, setPullDistance] = React.useState(0)
-  const [isPulling, setIsPulling] = React.useState(false)
-  const [isRefreshing, setIsRefreshing] = React.useState(false)
-  const [startY, setStartY] = React.useState(0)
+  const [pullDistance, setPullDistance] = useState(0)
+  const [isPulling, setIsPulling] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [startY, setStartY] = useState(0)
 
-  const handleTouchStart = React.useCallback((e: React.TouchEvent) => {
+  const handleTouchStart = useCallback((e: TouchEvent) => {
     if (disabled) return
 
     const touch = e.touches[0]
@@ -344,7 +345,7 @@ export function usePullToRefresh(
     setPullDistance(0)
   }, [disabled])
 
-  const handleTouchMove = React.useCallback((e: React.TouchEvent) => {
+  const handleTouchMove = useCallback((e: TouchEvent) => {
     if (!isPulling || disabled) return
 
     const touch = e.touches[0]
@@ -358,7 +359,7 @@ export function usePullToRefresh(
     }
   }, [isPulling, disabled, startY])
 
-  const handleTouchEnd = React.useCallback(async () => {
+  const handleTouchEnd = useCallback(async () => {
     if (!isPulling || disabled) return
 
     setIsPulling(false)
@@ -381,7 +382,7 @@ export function usePullToRefresh(
     onTouchEnd: handleTouchEnd,
   }
 
-  const style: React.CSSProperties = {
+  const style: CSSProperties = {
     transform: pullDistance > 0 ? `translateY(${pullDistance}px)` : 'translateY(0)',
     transition: isPulling ? 'none' : 'transform 0.3s ease-out',
   }

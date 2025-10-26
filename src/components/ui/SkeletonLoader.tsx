@@ -1,6 +1,6 @@
 "use client"
 
-
+import { type FC, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { mobileTokens } from '@/styles/mobile-design-tokens'
 
@@ -16,7 +16,7 @@ export interface SkeletonLoaderProps {
   subtitle?: boolean
 }
 
-export const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({
+export const SkeletonLoader: FC<SkeletonLoaderProps> = ({
   lines = 3,
   height = '1rem',
   width = '100%',
@@ -117,7 +117,7 @@ export interface SkeletonCardProps {
   className?: string
 }
 
-export const SkeletonCard: React.FC<SkeletonCardProps> = ({
+export const SkeletonCard: FC<SkeletonCardProps> = ({
   showAvatar = false,
   showActions = false,
   lines = 3,
@@ -165,7 +165,7 @@ export interface SkeletonListProps {
   className?: string
 }
 
-export const SkeletonList: React.FC<SkeletonListProps> = ({
+export const SkeletonList: FC<SkeletonListProps> = ({
   items = 5,
   className,
 }) => {
@@ -185,7 +185,7 @@ export interface SkeletonTableProps {
   className?: string
 }
 
-export const SkeletonTable: React.FC<SkeletonTableProps> = ({
+export const SkeletonTable: FC<SkeletonTableProps> = ({
   rows = 5,
   columns = 4,
   showHeader = true,
@@ -233,7 +233,7 @@ export interface SkeletonGridProps {
   className?: string
 }
 
-export const SkeletonGrid: React.FC<SkeletonGridProps> = ({
+export const SkeletonGrid: FC<SkeletonGridProps> = ({
   items = 6,
   columns = 3,
   aspectRatio = 'portrait',
@@ -272,7 +272,7 @@ export interface MobileSkeletonCardProps {
   className?: string
 }
 
-export const MobileSkeletonCard: React.FC<MobileSkeletonCardProps> = ({
+export const MobileSkeletonCard: FC<MobileSkeletonCardProps> = ({
   variant = 'compact',
   className,
 }) => {
@@ -340,7 +340,7 @@ export interface ProgressiveSkeletonProps {
   className?: string
 }
 
-export const ProgressiveSkeleton: React.FC<ProgressiveSkeletonProps> = ({
+export const ProgressiveSkeleton: FC<ProgressiveSkeletonProps> = ({
   items,
   className,
 }) => {

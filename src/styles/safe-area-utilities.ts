@@ -5,6 +5,9 @@
  * for modern iPhone displays with Dynamic Island and home indicator support.
  */
 
+// Ensure React namespace is available for hooks
+import { useState, useEffect, type CSSProperties } from 'react';
+
 // Device detection interfaces
 interface DeviceInfo {
   isIOS: boolean;
@@ -272,7 +275,7 @@ export function getDeviceInfo(): DeviceInfo {
 /**
  * Calculate safe area-aware CSS styles
  */
-export function getSafeAreaStyles(additionalPadding = 0): React.CSSProperties {
+export function getSafeAreaStyles(additionalPadding = 0): CSSProperties {
   const insets = getEnhancedSafeAreaInsets();
 
   return {
@@ -286,7 +289,7 @@ export function getSafeAreaStyles(additionalPadding = 0): React.CSSProperties {
 /**
  * Calculate safe area-aware margin for avoiding overlays
  */
-export function getSafeAreaMargins(): React.CSSProperties {
+export function getSafeAreaMargins(): CSSProperties {
   const insets = getEnhancedSafeAreaInsets();
   const orientation = getOrientation();
 
@@ -367,9 +370,9 @@ export function getSafeAreaClasses(): string {
  * Hook for reactive safe area updates
  */
 export function useSafeArea() {
-  const [deviceInfo, setDeviceInfo] = React.useState<DeviceInfo>(getDeviceInfo());
+  const [deviceInfo, setDeviceInfo] = useState<DeviceInfo>(getDeviceInfo());
 
-  React.useEffect(() => {
+  useEffect(() => {
     const handleResize = () => {
       setDeviceInfo(getDeviceInfo());
     };
@@ -444,6 +447,3 @@ export const safeAreaValidation = {
     return Math.min(score, 100);
   },
 };
-
-// Ensure React namespace is available for hooks
-import * as React from 'react';

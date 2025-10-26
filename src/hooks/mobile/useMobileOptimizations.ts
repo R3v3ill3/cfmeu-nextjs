@@ -1,6 +1,7 @@
 "use client"
 
-import React, { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
+import type { ReactNode, RefObject } from "react"
 
 interface UseMobileOptimizationsOptions {
   enableIntersectionObserver?: boolean
@@ -23,7 +24,7 @@ interface UseMobileOptimizationsReturn {
   supportsTouch: boolean
   debounce: <T extends (...args: any[]) => any>(func: T, delay?: number) => T
   throttle: <T extends (...args: any[]) => any>(func: T, delay?: number) => T
-  intersectionRef: React.RefObject<HTMLDivElement>
+  intersectionRef: RefObject<HTMLDivElement>
   isInViewport: boolean
   virtualizeList: <T>(items: T[], renderItem: (item: T, index: number) => ReactNode, options?: VirtualScrollOptions) => ReactNode
   lazyLoad: <T>(factory: () => Promise<{ default: T }>) => Promise<T>
@@ -47,24 +48,24 @@ export function useMobileOptimizations(
     throttleDelay = 100,
   } = options
 
-  const [screenSize, setScreenSize] = React.useState({ width: 0, height: 0 })
-  const [orientation, setOrientation] = React.useState<'portrait' | 'landscape'>('portrait')
-  const [isOnline, setIsOnline] = React.useState(true)
-  const [isLowEndDevice, setIsLowEndDevice] = React.useState(false)
-  const [prefersReducedMotion, setPrefersReducedMotion] = React.useState(false)
-  const [isInViewport, setIsInViewport] = React.useState(false)
-  const intersectionRef = React.useRef<HTMLDivElement>(null)
+  const [screenSize, setScreenSize] = useState({ width: 0, height: 0 })
+  const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait')
+  const [isOnline, setIsOnline] = useState(true)
+  const [isLowEndDevice, setIsLowEndDevice] = useState(false)
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
+  const [isInViewport, setIsInViewport] = useState(false)
+  const intersectionRef = useRef<HTMLDivElement>(null)
 
   // Detect screen size and device type
-  const isMobile = React.useMemo(() => screenSize.width < 768, [screenSize.width])
-  const isTablet = React.useMemo(() => screenSize.width >= 768 && screenSize.width < 1024, [screenSize.width])
-  const isDesktop = React.useMemo(() => screenSize.width >= 1024, [screenSize.width])
-  const supportsTouch = React.useMemo(() => {
+  const isMobile = useMemo(() => screenSize.width < 768, [screenSize.width])
+  const isTablet = useMemo(() => screenSize.width >= 768 && screenSize.width < 1024, [screenSize.width])
+  const isDesktop = useMemo(() => screenSize.width >= 1024, [screenSize.width])
+  const supportsTouch = useMemo(() => {
     return typeof window !== "undefined" && ('ontouchstart' in window || navigator.maxTouchPoints > 0)
   }, [])
 
   // Update screen size
-  React.useEffect(() => {
+  useEffect(() => {
     if (typeof window === "undefined") return
 
     const updateScreenSize = () => {
@@ -86,7 +87,7 @@ export function useMobileOptimizations(
   }, [])
 
   // Detect online status
-  React.useEffect(() => {
+  useEffect(() => {
     if (typeof window === "undefined") return
 
     const handleOnline = () => setIsOnline(true)
@@ -104,7 +105,7 @@ export function useMobileOptimizations(
   }, [])
 
   // Detect low-end device
-  React.useEffect(() => {
+  useEffect(() => {
     if (typeof window === "undefined") return
 
     // Simple heuristics for low-end device detection
@@ -125,7 +126,7 @@ export function useMobileOptimizations(
   }, [screenSize.width])
 
   // Detect reduced motion preference
-  React.useEffect(() => {
+  useEffect(() => {
     if (typeof window === "undefined") return
 
     const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -140,7 +141,7 @@ export function useMobileOptimizations(
   }, [])
 
   // Intersection Observer for viewport detection
-  React.useEffect(() => {
+  useEffect(() => {
     if (!enableIntersectionObserver || typeof window === "undefined") return
 
     const observer = new IntersectionObserver(
@@ -161,7 +162,7 @@ export function useMobileOptimizations(
   }, [enableIntersectionObserver])
 
   // Debounce utility
-  const debounce = React.useCallback(<T extends (...args: any[]) => any>(
+  const debounce = useCallback(<T extends (...args: any[]) => any>(
     func: T,
     delay: number = debounceDelay
   ): T => {
@@ -175,7 +176,7 @@ export function useMobileOptimizations(
   }, [enableDebouncing, debounceDelay])
 
   // Throttle utility
-  const throttle = React.useCallback(<T extends (...args: any[]) => any>(
+  const throttle = useCallback(<T extends (...args: any[]) => any>(
     func: T,
     delay: number = throttleDelay
   ): T => {
@@ -190,7 +191,7 @@ export function useMobileOptimizations(
   }, [throttleDelay])
 
   // Lazy loading utility
-  const lazyLoad = React.useCallback(async <T>(
+  const lazyLoad = useCallback(async <T>(
     factory: () => Promise<{ default: T }>
   ): Promise<T> => {
     if (!enableLazyLoading) {
@@ -265,18 +266,18 @@ export function usePerformanceMonitor(
     sampleInterval = 1000,
   } = options
 
-  const [metrics, setMetrics] = React.useState<PerformanceMetrics>({
+  const [metrics, setMetrics] = useState<PerformanceMetrics>({
     fps: 60,
     renderTime: 0,
     interactionTime: 0,
   })
 
-  const frameCountRef = React.useRef(0)
-  const lastTimeRef = React.useRef(performance.now())
-  const renderStartRef = React.useRef(0)
+  const frameCountRef = useRef(0)
+  const lastTimeRef = useRef(performance.now())
+  const renderStartRef = useRef(0)
 
   // FPS monitoring
-  React.useEffect(() => {
+  useEffect(() => {
     if (!enableFpsMonitoring) return
 
     let animationId: number
@@ -303,7 +304,7 @@ export function usePerformanceMonitor(
   }, [enableFpsMonitoring, sampleInterval])
 
   // Memory monitoring (Chrome only)
-  React.useEffect(() => {
+  useEffect(() => {
     if (!enableMemoryMonitoring || typeof window === "undefined") return
 
     const interval = setInterval(() => {
@@ -320,7 +321,7 @@ export function usePerformanceMonitor(
   }, [enableMemoryMonitoring, sampleInterval])
 
   // Render time monitoring
-  const measureRenderTime = React.useCallback(() => {
+  const measureRenderTime = useCallback(() => {
     if (!enableRenderTimeMonitoring) return
 
     renderStartRef.current = performance.now()
@@ -332,7 +333,7 @@ export function usePerformanceMonitor(
   }, [enableRenderTimeMonitoring])
 
   // Interaction time measurement
-  const measureInteraction = React.useCallback((callback: () => void) => {
+  const measureInteraction = useCallback((callback: () => void) => {
     const startTime = performance.now()
     callback()
     const endTime = performance.now()
@@ -349,10 +350,10 @@ export function usePerformanceMonitor(
 
 // Hook for battery monitoring (Chrome only)
 export function useBatteryLevel() {
-  const [batteryLevel, setBatteryLevel] = React.useState<number | null>(null)
-  const [isCharging, setIsCharging] = React.useState<boolean | null>(null)
+  const [batteryLevel, setBatteryLevel] = useState<number | null>(null)
+  const [isCharging, setIsCharging] = useState<boolean | null>(null)
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (typeof window === "undefined" || !('getBattery' in navigator)) return
 
     let battery: any

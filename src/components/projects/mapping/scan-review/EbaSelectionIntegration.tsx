@@ -1,6 +1,6 @@
 'use client';
 
-import React, {  useState, useCallback, useEffect  } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -89,7 +89,7 @@ export function EbaSelectionIntegration({
   const [showConfirmation, setShowConfirmation] = useState(false);
 
   // Create replacement plan when component mounts
-  React.useEffect(() => {
+  useEffect(() => {
     const plan = createReplacementPlan(subcontractors, ebaEmployers);
     setReplacementPlan(plan);
   }, [subcontractors, ebaEmployers]);

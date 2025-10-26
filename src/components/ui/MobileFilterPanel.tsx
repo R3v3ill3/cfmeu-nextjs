@@ -1,6 +1,7 @@
 "use client";
 
-import React, {  useState, useCallback, useRef, useEffect  } from 'react';
+import React from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -273,7 +274,7 @@ export const MobileFilterPanel: React.FC<MobileFilterPanelProps> = ({
   }, [initialFilters]);
 
   // Filter sections based on search
-  const filteredSections = React.useMemo(() => {
+  const filteredSections = useMemo(() => {
     if (!searchTerm.trim()) return sections;
 
     return sections.filter(section => {

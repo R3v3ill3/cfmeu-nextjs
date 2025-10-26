@@ -5,7 +5,7 @@
  * This component provides comprehensive safe area management for React components.
  */
 
-import {  forwardRef, ReactNode, useMemo  } from 'react';
+import { forwardRef, ReactNode, useMemo, CSSProperties } from 'react';
 import { cn } from '@/lib/utils';
 import {
   useSafeArea,
@@ -68,8 +68,8 @@ function calculateSafeAreaStyles(
   edges: string,
   additionalPadding: number,
   minPadding: number
-): React.CSSProperties {
-  const styles: React.CSSProperties = {};
+): CSSProperties {
+  const styles: CSSProperties = {};
 
   const addPadding = (edge: 'top' | 'right' | 'bottom' | 'left') => {
     const inset = insets[edge];

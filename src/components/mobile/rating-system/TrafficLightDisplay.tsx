@@ -1,6 +1,6 @@
 "use client"
 
-import {  useState, useEffect, useCallback, useMemo, useRef  } from 'react'
+import React, {  useState, useEffect, useCallback, useMemo, useRef  } from 'react'
 import { cn } from "@/lib/utils"
 import { TrafficLightRating, ConfidenceLevel } from "@/types/rating"
 import { useHapticFeedback } from "../shared/HapticFeedback"

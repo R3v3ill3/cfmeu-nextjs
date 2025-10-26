@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, type TouchEvent } from 'react'
 import type { ReactNode } from 'react'
 import { cn } from "@/lib/utils"
 import { ChevronLeft, ChevronRight, Trash2, Edit, Archive, Star } from "lucide-react"
@@ -31,17 +31,17 @@ export function SwipeActions({
   threshold = 100,
   disabled = false,
 }: SwipeActionsProps) {
-  const [translateX, setTranslateX] = React.useState(0)
-  const [isDragging, setIsDragging] = React.useState(false)
-  const [showLeftActions, setShowLeftActions] = React.useState(false)
-  const [showRightActions, setShowRightActions] = React.useState(false)
+  const [translateX, setTranslateX] = useState(0)
+  const [isDragging, setIsDragging] = useState(false)
+  const [showLeftActions, setShowLeftActions] = useState(false)
+  const [showRightActions, setShowRightActions] = useState(false)
 
-  const startX = React.useRef(0)
-  const currentX = React.useRef(0)
-  const containerRef = React.useRef<HTMLDivElement>(null)
-  const contentRef = React.useRef<HTMLDivElement>(null)
+  const startX = useRef(0)
+  const currentX = useRef(0)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
 
-  const handleTouchStart = (e: React.TouchEvent) => {
+  const handleTouchStart = (e: TouchEvent) => {
     if (disabled) return
 
     const touch = e.touches[0]
@@ -50,7 +50,7 @@ export function SwipeActions({
     setIsDragging(true)
   }
 
-  const handleTouchMove = (e: React.TouchEvent) => {
+  const handleTouchMove = (e: TouchEvent) => {
     if (!isDragging || disabled) return
 
     const touch = e.touches[0]

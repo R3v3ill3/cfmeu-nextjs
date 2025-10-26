@@ -1,6 +1,7 @@
 "use client"
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import type { MouseEvent } from 'react'
 import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -114,21 +115,21 @@ function FactorEditor({
 }) {
   const { trigger } = useHapticFeedback()
 
-  const handleWeightChange = React.useCallback((weights: number[]) => {
+  const handleWeightChange = useCallback((weights: number[]) => {
     onChange({ ...factor, weight: weights[0] })
     trigger()
   }, [factor, onChange, trigger])
 
-  const handleNameChange = React.useCallback((name: string) => {
+  const handleNameChange = useCallback((name: string) => {
     onChange({ ...factor, name })
   }, [factor, onChange])
 
-  const handleRequiredChange = React.useCallback((required: boolean) => {
+  const handleRequiredChange = useCallback((required: boolean) => {
     onChange({ ...factor, required })
     trigger()
   }, [factor, onChange, trigger])
 
-  const handleValueRangeChange = React.useCallback((field: 'min_value' | 'max_value', value: number) => {
+  const handleValueRangeChange = useCallback((field: 'min_value' | 'max_value', value: number) => {
     onChange({ ...factor, [field]: value })
     trigger()
   }, [factor, onChange, trigger])
@@ -236,18 +237,18 @@ function TemplateCard({
 }) {
   const { selection, onPress } = useHapticFeedback()
 
-  const handleSelect = React.useCallback(() => {
+  const handleSelect = useCallback(() => {
     selection()
     onSelect()
   }, [selection, onSelect])
 
-  const handleDuplicate = React.useCallback((e: React.MouseEvent) => {
+  const handleDuplicate = useCallback((e: MouseEvent) => {
     e.stopPropagation()
     onPress()
     onDuplicate()
   }, [onPress, onDuplicate])
 
-  const handleEdit = React.useCallback((e: React.MouseEvent) => {
+  const handleEdit = useCallback((e: MouseEvent) => {
     e.stopPropagation()
     selection()
     onEdit()
@@ -356,16 +357,16 @@ export function WeightingManagerMobile({
   onDuplicateTemplate,
   className,
 }: WeightingManagerMobileProps) {
-  const [activeTab, setActiveTab] = React.useState("templates")
-  const [editingConfig, setEditingConfig] = React.useState<WeightingConfig | null>(null)
-  const [selectedTemplate, setSelectedTemplate] = React.useState<WeightingConfig | null>(null)
-  const [showPreview, setShowPreview] = React.useState(false)
-  const [hasChanges, setHasChanges] = React.useState(false)
+  const [activeTab, setActiveTab] = useState("templates")
+  const [editingConfig, setEditingConfig] = useState<WeightingConfig | null>(null)
+  const [selectedTemplate, setSelectedTemplate] = useState<WeightingConfig | null>(null)
+  const [showPreview, setShowPreview] = useState(false)
+  const [hasChanges, setHasChanges] = useState(false)
 
   const { trigger, success, error } = useHapticFeedback()
 
   // Initialize editing config from current weighting or template
-  React.useEffect(() => {
+  useEffect(() => {
     if (editingConfig) return
 
     if (currentWeighting) {
@@ -393,14 +394,14 @@ export function WeightingManagerMobile({
     }
   }, [track, roleContext, currentWeighting, editingConfig])
 
-  const handleSelectTemplate = React.useCallback((template: WeightingConfig) => {
+  const handleSelectTemplate = useCallback((template: WeightingConfig) => {
     setSelectedTemplate(template)
     setEditingConfig({ ...template })
     setHasChanges(false)
     success()
   }, [success])
 
-  const handleAddFactor = React.useCallback(() => {
+  const handleAddFactor = useCallback(() => {
     if (!editingConfig) return
 
     const newFactor: RatingFactor = {
@@ -420,7 +421,7 @@ export function WeightingManagerMobile({
     trigger()
   }, [editingConfig, trigger])
 
-  const handleUpdateFactor = React.useCallback((factorId: string, updatedFactor: RatingFactor) => {
+  const handleUpdateFactor = useCallback((factorId: string, updatedFactor: RatingFactor) => {
     if (!editingConfig) return
 
     setEditingConfig({
@@ -430,7 +431,7 @@ export function WeightingManagerMobile({
     setHasChanges(true)
   }, [editingConfig])
 
-  const handleRemoveFactor = React.useCallback((factorId: string) => {
+  const handleRemoveFactor = useCallback((factorId: string) => {
     if (!editingConfig) return
 
     setEditingConfig({
@@ -441,7 +442,7 @@ export function WeightingManagerMobile({
     trigger()
   }, [editingConfig, trigger])
 
-  const handleSaveWeighting = React.useCallback(async () => {
+  const handleSaveWeighting = useCallback(async () => {
     if (!editingConfig) return
 
     try {
@@ -454,7 +455,7 @@ export function WeightingManagerMobile({
     }
   }, [editingConfig, onSaveWeighting, success, error])
 
-  const handleResetWeighting = React.useCallback(() => {
+  const handleResetWeighting = useCallback(() => {
     if (selectedTemplate) {
       setEditingConfig({ ...selectedTemplate })
       setHasChanges(false)

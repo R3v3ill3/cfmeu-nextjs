@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef, forwardRef } from 'react'
-import type { ReactNode } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, forwardRef, type ComponentPropsWithoutRef, type ComponentProps } from 'react'
 import type { ReactNode } from 'react'
 import { Slot } from "@radix-ui/react-slot"
 import { ChevronRight, MoreHorizontal } from "lucide-react"
@@ -8,7 +7,7 @@ import { cn } from "@/lib/utils"
 
 const Breadcrumb = forwardRef<
   HTMLElement,
-  React.ComponentPropsWithoutRef<"nav"> & {
+  ComponentPropsWithoutRef<"nav"> & {
     separator?: ReactNode
   }
 >(({ ...props }, ref) => <nav ref={ref} aria-label="breadcrumb" {...props} />)
@@ -16,7 +15,7 @@ Breadcrumb.displayName = "Breadcrumb"
 
 const BreadcrumbList = forwardRef<
   HTMLOListElement,
-  React.ComponentPropsWithoutRef<"ol">
+  ComponentPropsWithoutRef<"ol">
 >(({ className, ...props }, ref) => (
   <ol
     ref={ref}
@@ -31,7 +30,7 @@ BreadcrumbList.displayName = "BreadcrumbList"
 
 const BreadcrumbItem = forwardRef<
   HTMLLIElement,
-  React.ComponentPropsWithoutRef<"li">
+  ComponentPropsWithoutRef<"li">
 >(({ className, ...props }, ref) => (
   <li
     ref={ref}
@@ -43,7 +42,7 @@ BreadcrumbItem.displayName = "BreadcrumbItem"
 
 const BreadcrumbLink = forwardRef<
   HTMLAnchorElement,
-  React.ComponentPropsWithoutRef<"a"> & {
+  ComponentPropsWithoutRef<"a"> & {
     asChild?: boolean
   }
 >(({ asChild, className, ...props }, ref) => {
@@ -61,7 +60,7 @@ BreadcrumbLink.displayName = "BreadcrumbLink"
 
 const BreadcrumbPage = forwardRef<
   HTMLSpanElement,
-  React.ComponentPropsWithoutRef<"span">
+  ComponentPropsWithoutRef<"span">
 >(({ className, ...props }, ref) => (
   <span
     ref={ref}
@@ -78,7 +77,7 @@ const BreadcrumbSeparator = ({
   children,
   className,
   ...props
-}: React.ComponentProps<"li">) => (
+}: ComponentProps<"li">) => (
   <li
     role="presentation"
     aria-hidden="true"
@@ -93,7 +92,7 @@ BreadcrumbSeparator.displayName = "BreadcrumbSeparator"
 const BreadcrumbEllipsis = ({
   className,
   ...props
-}: React.ComponentProps<"span">) => (
+}: ComponentProps<"span">) => (
   <span
     role="presentation"
     aria-hidden="true"

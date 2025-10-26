@@ -5,7 +5,7 @@
  * This component provides visual overlays showing safe area boundaries for modern iPhone displays.
  */
 
-import {  useState, useRef, useEffect, useMemo  } from 'react';
+import { useState, useRef, useEffect, useMemo, CSSProperties } from 'react';
 import { cn } from '@/lib/utils';
 import {
   useSafeArea,
@@ -176,8 +176,8 @@ export const SafeAreaView: React.FC<SafeAreaViewProps> = ({
   };
 
   // Generate info panel position styles
-  const getInfoPanelStyles = (): React.CSSProperties => {
-    const baseStyles: React.CSSProperties = {
+  const getInfoPanelStyles = (): CSSProperties => {
+    const baseStyles: CSSProperties = {
       position: 'absolute',
       padding: '12px 16px',
       borderRadius: '8px',

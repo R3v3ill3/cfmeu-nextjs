@@ -5,7 +5,7 @@
  * during dashboard operations. All dashboard functions should be read-only.
  */
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, type ComponentType, createElement } from 'react'
 
 /**
  * Read-only database operation wrapper
@@ -214,8 +214,8 @@ export async function executeSafeQuery<T>(
  * Component wrapper that ensures read-only data access
  */
 export function withDataProtection<P extends object>(
-  Component: React.ComponentType<P>
-): React.ComponentType<P> {
+  Component: ComponentType<P>
+): ComponentType<P> {
   const ProtectedComponent = (props: P) => {
     useEffect(() => {
       // Override console.error to catch any data modification attempts
@@ -236,7 +236,7 @@ export function withDataProtection<P extends object>(
       }
     }, [])
     
-    return React.createElement(Component, props)
+    return createElement(Component, props)
   }
   
   ProtectedComponent.displayName = `withDataProtection(${Component.displayName || Component.name})`

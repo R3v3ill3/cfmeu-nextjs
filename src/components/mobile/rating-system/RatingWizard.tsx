@@ -1,6 +1,6 @@
 "use client"
 
-import React, {  useState, useEffect, useCallback, useMemo, useRef  } from 'react'
+import { useState, useEffect, useCallback, useMemo, type ComponentType } from 'react'
 import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -421,15 +421,15 @@ export function RatingWizard({
   className,
 }: RatingWizardProps) {
   const { trigger, success, error } = useHapticFeedback()
-  const [savedDraft, setSavedDraft] = React.useState(false)
+  const [savedDraft, setSavedDraft] = useState(false)
 
-  const ratingFactors = React.useMemo(
+  const ratingFactors = useMemo(
     () => getRatingFactors(track, roleContext),
     [track, roleContext]
   )
 
   // Step 1: Introduction
-  const IntroStep: React.ComponentType<any> = React.useCallback(({ data, onChange }) => {
+  const IntroStep: ComponentType<any> = useCallback(({ data, onChange }) => {
     return (
       <div className="space-y-4">
         <div className="text-center py-6">
@@ -486,7 +486,7 @@ export function RatingWizard({
   }, [employerName, track, roleContext, ratingFactors])
 
   // Step 2: Rating factors
-  const RatingStep: React.ComponentType<any> = React.useCallback(({ data, onChange, error }) => {
+  const RatingStep: ComponentType<any> = useCallback(({ data, onChange, error }) => {
     return (
       <div className="space-y-6">
         <div className="space-y-2">
@@ -522,7 +522,7 @@ export function RatingWizard({
   }, [ratingFactors])
 
   // Step 3: Confidence factors
-  const ConfidenceStep: React.ComponentType<any> = React.useCallback(({ data, onChange }) => {
+  const ConfidenceStep: ComponentType<any> = useCallback(({ data, onChange }) => {
     return (
       <div className="space-y-6">
         <div className="space-y-2">
@@ -557,7 +557,7 @@ export function RatingWizard({
   }, [])
 
   // Step 4: Additional notes
-  const NotesStep: React.ComponentType<any> = React.useCallback(({ data, onChange }) => {
+  const NotesStep: ComponentType<any> = useCallback(({ data, onChange }) => {
     return (
       <div className="space-y-6">
         <div className="space-y-2">
@@ -630,7 +630,7 @@ export function RatingWizard({
   }, [])
 
   // Step 5: Preview and submit
-  const PreviewStep: React.ComponentType<any> = React.useCallback(({ data, onChange }) => {
+  const PreviewStep: ComponentType<any> = useCallback(({ data, onChange }) => {
     // This would typically calculate the rating based on the responses
     const mockRating: TrafficLightRating = 'green' // This would be calculated
     const mockConfidence: ConfidenceLevel = 'high' // This would be calculated

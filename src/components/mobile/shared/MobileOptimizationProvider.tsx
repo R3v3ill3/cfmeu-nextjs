@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import React, { Component, useState, useEffect, useCallback, useMemo, useRef, type ComponentType, type PropsWithChildren, type ErrorInfo } from 'react'
 import type { ReactNode } from 'react'
 import { PerformanceMonitor, PerformanceMetricsDisplay } from "@/lib/performance/performance-monitoring"
 import { PWAProvider, PWAStatus } from "@/lib/pwa/pwa-utils"
@@ -33,7 +33,7 @@ export function MobileOptimizationProvider({
   const { metrics } = useMobilePerformance()
 
   // Apply performance optimizations based on device capabilities
-  React.useEffect(() => {
+  useEffect(() => {
     const root = document.documentElement
 
     // Set device capability classes
@@ -63,7 +63,7 @@ export function MobileOptimizationProvider({
   }, [isLowEnd, prefersReducedMotion, isOnline, networkInfo])
 
   // Handle online/offline events
-  React.useEffect(() => {
+  useEffect(() => {
     const handleOnline = () => {
       document.documentElement.classList.remove('offline')
       // Show notification if needed
@@ -88,7 +88,7 @@ export function MobileOptimizationProvider({
   }, [])
 
   // Performance reporting handler
-  const handlePerformanceReport = React.useCallback((report: any) => {
+  const handlePerformanceReport = useCallback((report: any) => {
     if (performanceReporting) {
       console.log('Performance Report:', report)
 
@@ -110,7 +110,7 @@ export function MobileOptimizationProvider({
   }, [performanceReporting])
 
   // Preload critical resources
-  React.useEffect(() => {
+  useEffect(() => {
     if (typeof window !== 'undefined') {
       // Preload critical mobile components
       const criticalResources = [
@@ -200,9 +200,9 @@ export function MobileOptimizationProvider({
 
 // Hook for mobile optimization context
 export function useMobileOptimization() {
-  const [isMobileOptimized, setIsMobileOptimized] = React.useState(false)
+  const [isMobileOptimized, setIsMobileOptimized] = useState(false)
 
-  React.useEffect(() => {
+  useEffect(() => {
     // Check if we're on a mobile device
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
                      window.innerWidth <= 768
@@ -244,7 +244,7 @@ export function useMobileOptimization() {
 
 // Higher-order component for mobile optimization
 export function withMobileOptimization<P extends object>(
-  Component: React.ComponentType<P>,
+  Component: ComponentType<P>,
   options: MobileOptimizationProviderProps = {}
 ) {
   return function MobileOptimizedComponent(props: P) {
@@ -260,14 +260,14 @@ export function withMobileOptimization<P extends object>(
 interface MobileErrorBoundaryState {
   hasError: boolean
   error: Error | null
-  errorInfo: React.ErrorInfo | null
+  errorInfo: ErrorInfo | null
 }
 
-export class MobileErrorBoundary extends React.Component<
-  React.PropsWithChildren<{}>,
+export class MobileErrorBoundary extends Component<
+  PropsWithChildren<{}>,
   MobileErrorBoundaryState
 > {
-  constructor(props: React.PropsWithChildren<{}>) {
+  constructor(props: PropsWithChildren<{}>) {
     super(props)
     this.state = {
       hasError: false,
@@ -284,7 +284,7 @@ export class MobileErrorBoundary extends React.Component<
     }
   }
 
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     this.setState({
       error,
       errorInfo

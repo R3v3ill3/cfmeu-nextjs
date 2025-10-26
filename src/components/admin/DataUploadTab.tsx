@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import React, { useState, useEffect, type ComponentType } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft, Users, Building, FileText, FolderOpen, FileSpreadsheet } from "lucide-react"
@@ -26,7 +26,7 @@ interface ImportOption {
   type: ImportType
   title: string
   description: string
-  icon: React.ComponentType<any>
+  icon: ComponentType<any>
   category: "data"
 }
 

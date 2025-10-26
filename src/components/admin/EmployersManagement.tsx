@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import React, { useState, type ComponentType } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -20,7 +20,7 @@ interface EmployerOption {
   mode: EmployerImportMode
   title: string
   description: string
-  icon: React.ComponentType<any>
+  icon: ComponentType<any>
   requiresUpload?: boolean
 }
 

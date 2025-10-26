@@ -1,6 +1,6 @@
 'use client';
 
-import {  useState, useEffect, useCallback  } from 'react';
+import React, { useState, useEffect, useCallback, Fragment } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -2991,14 +2991,14 @@ export default function PendingEmployersImport() {
                                </div>
                                <div className="flex items-center">
                                  {[1, 2, 3].map((step, idx) => (
-                                   <React.Fragment key={idx}>
+                                   <Fragment key={idx}>
                                      <div className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center ${
                                        step === 1 ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
                                      }`}>
                                        {step}
                                      </div>
                                      {idx < 2 && <div className="flex-1 h-0.5 mx-2 bg-gray-200" />}
-                                   </React.Fragment>
+                                   </Fragment>
                                  ))}
                                </div>
                              </div>

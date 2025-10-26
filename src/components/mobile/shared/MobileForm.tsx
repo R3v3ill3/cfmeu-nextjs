@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, type ComponentType } from 'react'
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,7 +12,7 @@ interface MobileFormStep {
   id: string
   title: string
   description?: string
-  component: React.ComponentType<any>
+  component: ComponentType<any>
   validation?: (data: any) => boolean | string
   skip?: boolean
 }
@@ -38,18 +38,18 @@ export function MobileForm({
   saveOnStepChange = false,
   onDataChange,
 }: MobileFormProps) {
-  const [currentStep, setCurrentStep] = React.useState(initialStep)
-  const [formData, setFormData] = React.useState<Record<string, any>>({})
-  const [errors, setErrors] = React.useState<Record<string, string>>({})
-  const [isSubmitting, setIsSubmitting] = React.useState(false)
-  const [visitedSteps, setVisitedSteps] = React.useState<Set<string>>(new Set())
+  const [currentStep, setCurrentStep] = useState(initialStep)
+  const [formData, setFormData] = useState<Record<string, any>>({})
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [visitedSteps, setVisitedSteps] = useState<Set<string>>(new Set())
   const { trigger, success, error, selection } = useHapticFeedback()
 
   const currentStepData = steps[currentStep]
   const progress = ((currentStep + 1) / steps.length) * 100
 
   // Validate current step
-  const validateStep = React.useCallback(() => {
+  const validateStep = useCallback(() => {
     if (!currentStepData.validation) return true
 
     const stepData = formData[currentStepData.id] || {}
@@ -65,7 +65,7 @@ export function MobileForm({
   }, [currentStepData, formData])
 
   // Handle step data change
-  const handleStepDataChange = React.useCallback((data: any) => {
+  const handleStepDataChange = useCallback((data: any) => {
     const newFormData = { ...formData, [currentStepData.id]: data }
     setFormData(newFormData)
 
@@ -84,7 +84,7 @@ export function MobileForm({
   }, [formData, currentStepData.id, errors, onDataChange, selection])
 
   // Navigate to next step
-  const handleNext = React.useCallback(async () => {
+  const handleNext = useCallback(async () => {
     if (!validateStep()) {
       error()
       return
@@ -112,7 +112,7 @@ export function MobileForm({
   }, [validateStep, currentStep, steps.length, onSubmit, formData, trigger, success, error])
 
   // Navigate to previous step
-  const handlePrevious = React.useCallback(() => {
+  const handlePrevious = useCallback(() => {
     if (currentStep > 0) {
       setCurrentStep(prev => prev - 1)
       trigger()
@@ -120,7 +120,7 @@ export function MobileForm({
   }, [currentStep, trigger])
 
   // Skip current step
-  const handleSkip = React.useCallback(() => {
+  const handleSkip = useCallback(() => {
     if (currentStep < steps.length - 1) {
       setCurrentStep(prev => prev + 1)
       setVisitedSteps(prev => new Set(prev).add(steps[currentStep + 1].id))
@@ -129,7 +129,7 @@ export function MobileForm({
   }, [currentStep, steps.length, trigger])
 
   // Go to specific step
-  const goToStep = React.useCallback((stepIndex: number) => {
+  const goToStep = useCallback((stepIndex: number) => {
     if (stepIndex >= 0 && stepIndex < steps.length) {
       setCurrentStep(stepIndex)
       setVisitedSteps(prev => new Set(prev).add(steps[stepIndex].id))

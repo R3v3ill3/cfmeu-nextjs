@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useCallback, useRef } from 'react'
+import React, { useEffect, useCallback, useRef, ComponentType } from 'react'
 import { toast } from 'sonner'
 
 interface KeyboardShortcut {
@@ -383,8 +383,8 @@ export function useSubcontractorKeyboardShortcuts(options: UseSubcontractorKeybo
 }
 
 // Higher-order component for adding keyboard shortcuts to components
-export function withKeyboard shortcuts<P extends object>(
-  Component: React.ComponentType<P>,
+export function withKeyboardShortcuts<P extends object>(
+  Component: ComponentType<P>,
   shortcuts: Array<{ id: string; shortcut: KeyboardShortcut }>
 ) {
   return function WithKeyboardShortcuts(props: P) {

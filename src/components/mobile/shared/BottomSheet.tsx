@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, forwardRef, type ComponentPropsWithoutRef, type HTMLAttributes } from 'react'
 import type { ReactNode } from 'react'
 import { cn } from "@/lib/utils"
 import { Drawer, DrawerContent, DrawerOverlay } from "@/components/ui/drawer"
@@ -16,7 +16,7 @@ interface BottomSheetProps {
   disableDrag?: boolean
 }
 
-const BottomSheet = React.forwardRef<HTMLDivElement, BottomSheetProps>(
+const BottomSheet = forwardRef<HTMLDivElement, BottomSheetProps>(
   ({ open, onOpenChange, children, className, showHandle = true, height = "auto", disableDrag = false, ...props }, ref) => {
     const getHeightClass = () => {
       if (typeof height === "number") {
@@ -58,9 +58,9 @@ const BottomSheet = React.forwardRef<HTMLDivElement, BottomSheetProps>(
 )
 BottomSheet.displayName = "BottomSheet"
 
-const BottomSheetHeader = React.forwardRef<
+const BottomSheetHeader = forwardRef<
   HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement> & {
+  HTMLAttributes<HTMLDivElement> & {
     title?: string
     showCloseButton?: boolean
     onClose?: () => void
@@ -93,9 +93,9 @@ const BottomSheetHeader = React.forwardRef<
 })
 BottomSheetHeader.displayName = "BottomSheetHeader"
 
-const BottomSheetContent = React.forwardRef<
+const BottomSheetContent = forwardRef<
   HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
+  HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => {
   return (
     <div
@@ -110,9 +110,9 @@ const BottomSheetContent = React.forwardRef<
 })
 BottomSheetContent.displayName = "BottomSheetContent"
 
-const BottomSheetFooter = React.forwardRef<
+const BottomSheetFooter = forwardRef<
   HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
+  HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => {
   return (
     <div

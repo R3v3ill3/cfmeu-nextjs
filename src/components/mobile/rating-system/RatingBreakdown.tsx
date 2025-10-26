@@ -1,6 +1,7 @@
 "use client"
 
-import React, {  useState, useEffect, useCallback, useMemo, useRef  } from 'react'
+import React from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
@@ -75,18 +76,18 @@ const factorStatusConfig = {
 }
 
 function FactorItem({ factor, isExpanded = false, onToggle, onClick }: FactorItemProps) {
-  const [expanded, setExpanded] = React.useState(isExpanded)
+  const [expanded, setExpanded] = useState(isExpanded)
   const { selection } = useHapticFeedback()
   const statusConfig = factorStatusConfig[factor.status]
   const StatusIcon = statusConfig.icon
 
-  const handleToggle = React.useCallback(() => {
+  const handleToggle = useCallback(() => {
     setExpanded(prev => !prev)
     selection()
     onToggle?.()
   }, [selection, onToggle])
 
-  const handleClick = React.useCallback(() => {
+  const handleClick = useCallback(() => {
     selection()
     onClick?.()
   }, [selection, onClick])
@@ -188,23 +189,23 @@ export function RatingBreakdown({
   className,
   onFactorClick,
 }: RatingBreakdownProps) {
-  const [allExpanded, setAllExpanded] = React.useState(false)
+  const [allExpanded, setAllExpanded] = useState(false)
   const { trigger, success } = useHapticFeedback()
 
-  const sortedFactors = React.useMemo(() => {
+  const sortedFactors = useMemo(() => {
     return [...result.breakdown].sort((a, b) => b.contribution - a.contribution)
   }, [result.breakdown])
 
-  const criticalFactors = React.useMemo(() => {
+  const criticalFactors = useMemo(() => {
     return sortedFactors.filter(f => f.status === 'critical' || f.status === 'poor')
   }, [sortedFactors])
 
-  const handleToggleAll = React.useCallback(() => {
+  const handleToggleAll = useCallback(() => {
     setAllExpanded(prev => !prev)
     trigger()
   }, [trigger])
 
-  const handleExportBreakdown = React.useCallback(() => {
+  const handleExportBreakdown = useCallback(() => {
     // Export functionality could be implemented here
     const breakdownText = sortedFactors.map(factor =>
       `${factor.factor_name}: ${factor.value.toFixed(1)} (${factor.status})`

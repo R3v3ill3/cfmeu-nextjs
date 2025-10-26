@@ -1,6 +1,7 @@
 "use client"
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import type { DependencyList } from 'react'
 import { useNetworkOptimization, useOfflineStorage, useBackgroundSync } from "@/lib/network/network-optimization"
 import { useDeviceCapabilities } from "@/hooks/useMobilePerformance"
 
@@ -29,7 +30,7 @@ interface OptimizedFetchResult<T> {
 export function useOptimizedFetch<T = any>(
   url: string,
   options: RequestInit & OptimizedFetchOptions = {},
-  deps: React.DependencyList = []
+  deps: DependencyList = []
 ): OptimizedFetchResult<T> {
   const { fetch, isOnline, networkInfo } = useNetworkOptimization()
   const { get, store, remove } = useOfflineStorage()
@@ -45,12 +46,12 @@ export function useOptimizedFetch<T = any>(
     staleWhileRevalidate = true
   } = options
 
-  const [data, setData] = React.useState<T | null>(null)
-  const [loading, setLoading] = React.useState(false)
-  const [error, setError] = React.useState<Error | null>(null)
-  const [lastUpdated, setLastUpdated] = React.useState<number | null>(null)
+  const [data, setData] = useState<T | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null)
 
-  const executeFetch = React.useCallback(async (forceRefresh = false) => {
+  const executeFetch = useCallback(async (forceRefresh = false) => {
     const cacheData = staleWhileRevalidate && !forceRefresh ? await get('fetch-cache', cacheKey) : null
 
     // Return cached data immediately if available (stale-while-revalidate)
@@ -117,7 +118,7 @@ export function useOptimizedFetch<T = any>(
     }
   }, [url, options, cacheKey, cacheTTL, staleWhileRevalidate, fetch, isOnline, get, store, queueAction, backgroundSync])
 
-  const mutate = React.useCallback((newData: T) => {
+  const mutate = useCallback((newData: T) => {
     setData(newData)
     setLastUpdated(Date.now())
 
@@ -129,7 +130,7 @@ export function useOptimizedFetch<T = any>(
     })
   }, [cacheKey, store])
 
-  React.useEffect(() => {
+  useEffect(() => {
     // Skip initial fetch on low-end devices if we have recent cache
     if (isLowEnd) {
       get('fetch-cache', cacheKey).then(cached => {
@@ -171,8 +172,8 @@ export function useOptimizedMutation<T = any, V = any>(
   const { fetch, isOnline } = useNetworkOptimization()
   const { store, remove } = useOfflineStorage()
   const { queueAction } = useBackgroundSync()
-  const [loading, setLoading] = React.useState(false)
-  const [error, setError] = React.useState<Error | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
 
   const {
     method = 'POST',
@@ -183,7 +184,7 @@ export function useOptimizedMutation<T = any, V = any>(
     invalidateCache = []
   } = options
 
-  const mutate = React.useCallback(async (variables: V) => {
+  const mutate = useCallback(async (variables: V) => {
     setLoading(true)
     setError(null)
 
@@ -295,13 +296,13 @@ export function useInfiniteScroll<T = any>(
     staleTime = 5 * 60 * 1000
   } = options
 
-  const [data, setData] = React.useState<T[]>([])
-  const [loading, setLoading] = React.useState(false)
-  const [error, setError] = React.useState<Error | null>(null)
-  const [hasMore, setHasMore] = React.useState(true)
-  const [page, setPage] = React.useState(initialPage)
+  const [data, setData] = useState<T[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+  const [hasMore, setHasMore] = useState(true)
+  const [page, setPage] = useState(initialPage)
 
-  const loadMore = React.useCallback(async () => {
+  const loadMore = useCallback(async () => {
     if (!enabled || loading || !hasMore) return
 
     setLoading(true)
@@ -342,14 +343,14 @@ export function useInfiniteScroll<T = any>(
     }
   }, [url, page, pageSize, enabled, loading, hasMore, isOnline, staleTime, fetch, get, store])
 
-  const reset = React.useCallback(() => {
+  const reset = useCallback(() => {
     setData([])
     setPage(initialPage)
     setHasMore(true)
     setError(null)
   }, [initialPage])
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (enabled) {
       loadMore()
     }
@@ -385,9 +386,9 @@ export function useRealtimeData<T = any>(
 
   const { data, loading, error, refetch } = useOptimizedFetch<T>(url, {}, [enabled])
 
-  const intervalRef = React.useRef<NodeJS.Timeout>()
+  const intervalRef = useRef<NodeJS.Timeout>()
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (enabled && refreshInterval > 0) {
       intervalRef.current = setInterval(() => {
         refetch().catch(onError)
@@ -401,7 +402,7 @@ export function useRealtimeData<T = any>(
     }
   }, [enabled, refreshInterval, refetch, onError])
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (data) {
       onSuccess?.(data)
     }
@@ -433,11 +434,11 @@ export function useBatchFetch<T = any>(
     cacheKey = urls.join(',')
   } = options
 
-  const [data, setData] = React.useState<Record<string, T>>({})
-  const [loading, setLoading] = React.useState(false)
-  const [errors, setErrors] = React.useState<Record<string, Error>>({})
+  const [data, setData] = useState<Record<string, T>>({})
+  const [loading, setLoading] = useState(false)
+  const [errors, setErrors] = useState<Record<string, Error>>({})
 
-  const executeBatchFetch = React.useCallback(async () => {
+  const executeBatchFetch = useCallback(async () => {
     if (!enabled) return
 
     setLoading(true)
@@ -490,7 +491,7 @@ export function useBatchFetch<T = any>(
     }
   }, [urls, enabled, maxConcurrent, cacheKey, fetch, get, store])
 
-  React.useEffect(() => {
+  useEffect(() => {
     executeBatchFetch()
   }, [executeBatchFetch])
 
@@ -512,7 +513,7 @@ export function usePrefetch(urls: string[], options: {
 
   const { priority = 'low', delay = 1000 } = options
 
-  React.useEffect(() => {
+  useEffect(() => {
     // Don't prefetch on low-end devices or slow connections
     if (isLowEnd) return
 

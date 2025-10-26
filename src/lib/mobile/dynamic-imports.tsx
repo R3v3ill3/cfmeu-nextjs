@@ -1,9 +1,8 @@
 "use client"
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import type { ReactNode } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, memo, Suspense } from 'react'
+import type { ReactNode, ComponentType, RefObject } from 'react'
 import dynamic from "next/dynamic"
-import { Suspense } from "react"
 import { Skeleton } from "@/components/ui/skeleton"
 
 // Loading component for dynamic imports
@@ -58,7 +57,7 @@ export function ListSkeleton({ items = 5 }: { items?: number }) {
 
 // Dynamic import wrapper with suspense and error boundary
 interface DynamicComponentProps {
-  loader: () => Promise<{ default: React.ComponentType<any> }>
+  loader: () => Promise<{ default: ComponentType<any> }>
   fallback?: ReactNode
   errorFallback?: ReactNode
   [key: string]: any
@@ -70,7 +69,7 @@ function DynamicComponentWrapper({
   errorFallback = <div className="p-4 text-center text-muted-foreground">Failed to load component</div>,
   ...props
 }: DynamicComponentProps) {
-  const LazyComponent = React.useMemo(() => dynamic(loader, {
+  const LazyComponent = useMemo(() => dynamic(loader, {
     loading: () => fallback,
     ssr: false // Disable SSR for mobile components for better performance
   }), [loader, fallback])
@@ -94,7 +93,7 @@ export function preloadComponent(componentName: string, loader: () => Promise<an
 }
 
 // Mobile rating system components
-export const DynamicTrafficLightDisplay = React.memo((props: any) => (
+export const DynamicTrafficLightDisplay = memo((props: any) => (
   <DynamicComponentWrapper
     loader={() => import("@/components/mobile/rating-system/TrafficLightDisplay")}
     fallback={<LoadingFallback height="60px" />}
@@ -102,7 +101,7 @@ export const DynamicTrafficLightDisplay = React.memo((props: any) => (
   />
 ))
 
-export const DynamicEmployerRatingCard = React.memo((props: any) => (
+export const DynamicEmployerRatingCard = memo((props: any) => (
   <DynamicComponentWrapper
     loader={() => import("@/components/mobile/rating-system/EmployerRatingCard")}
     fallback={<CardSkeleton />}
@@ -110,7 +109,7 @@ export const DynamicEmployerRatingCard = React.memo((props: any) => (
   />
 ))
 
-export const DynamicRatingWizard = React.memo((props: any) => (
+export const DynamicRatingWizard = memo((props: any) => (
   <DynamicComponentWrapper
     loader={() => import("@/components/mobile/rating-system/RatingWizard")}
     fallback={<LoadingFallback height="400px" />}
@@ -118,7 +117,7 @@ export const DynamicRatingWizard = React.memo((props: any) => (
   />
 ))
 
-export const DynamicRatingDashboard = React.memo((props: any) => (
+export const DynamicRatingDashboard = memo((props: any) => (
   <DynamicComponentWrapper
     loader={() => import("@/components/mobile/rating-system/RatingDashboard")}
     fallback={<LoadingFallback height="500px" />}
@@ -126,7 +125,7 @@ export const DynamicRatingDashboard = React.memo((props: any) => (
   />
 ))
 
-export const DynamicRatingBreakdown = React.memo((props: any) => (
+export const DynamicRatingBreakdown = memo((props: any) => (
   <DynamicComponentWrapper
     loader={() => import("@/components/mobile/rating-system/RatingBreakdown")}
     fallback={<LoadingFallback height="300px" />}
@@ -134,7 +133,7 @@ export const DynamicRatingBreakdown = React.memo((props: any) => (
   />
 ))
 
-export const DynamicRatingComparison = React.memo((props: any) => (
+export const DynamicRatingComparison = memo((props: any) => (
   <DynamicComponentWrapper
     loader={() => import("@/components/mobile/rating-system/RatingComparison")}
     fallback={<LoadingFallback height="350px" />}
@@ -142,7 +141,7 @@ export const DynamicRatingComparison = React.memo((props: any) => (
   />
 ))
 
-export const DynamicWeightingManagerMobile = React.memo((props: any) => (
+export const DynamicWeightingManagerMobile = memo((props: any) => (
   <DynamicComponentWrapper
     loader={() => import("@/components/mobile/rating-system/WeightingManagerMobile")}
     fallback={<LoadingFallback height="400px" />}
@@ -150,7 +149,7 @@ export const DynamicWeightingManagerMobile = React.memo((props: any) => (
   />
 ))
 
-export const DynamicRatingHistory = React.memo((props: any) => (
+export const DynamicRatingHistory = memo((props: any) => (
   <DynamicComponentWrapper
     loader={() => import("@/components/mobile/rating-system/RatingHistory")}
     fallback={<LoadingFallback height="300px" />}
@@ -159,7 +158,7 @@ export const DynamicRatingHistory = React.memo((props: any) => (
 ))
 
 // Mobile shared components
-export const DynamicBottomSheet = React.memo((props: any) => (
+export const DynamicBottomSheet = memo((props: any) => (
   <DynamicComponentWrapper
     loader={() => import("@/components/mobile/shared/BottomSheet")}
     fallback={<div className="fixed inset-x-0 bottom-0 bg-white border-t animate-pulse" style={{ height: '200px' }} />}
@@ -167,7 +166,7 @@ export const DynamicBottomSheet = React.memo((props: any) => (
   />
 ))
 
-export const DynamicPullToRefresh = React.memo((props: any) => (
+export const DynamicPullToRefresh = memo((props: any) => (
   <DynamicComponentWrapper
     loader={() => import("@/components/mobile/shared/PullToRefresh")}
     fallback={props.children}
@@ -175,7 +174,7 @@ export const DynamicPullToRefresh = React.memo((props: any) => (
   />
 ))
 
-export const DynamicSwipeActions = React.memo((props: any) => (
+export const DynamicSwipeActions = memo((props: any) => (
   <DynamicComponentWrapper
     loader={() => import("@/components/mobile/shared/SwipeActions")}
     fallback={props.children}
@@ -183,7 +182,7 @@ export const DynamicSwipeActions = React.memo((props: any) => (
   />
 ))
 
-export const DynamicHapticFeedback = React.memo((props: any) => (
+export const DynamicHapticFeedback = memo((props: any) => (
   <DynamicComponentWrapper
     loader={() => import("@/components/mobile/shared/HapticFeedback")}
     fallback={props.children}
@@ -191,7 +190,7 @@ export const DynamicHapticFeedback = React.memo((props: any) => (
   />
 ))
 
-export const DynamicMobileForm = React.memo((props: any) => (
+export const DynamicMobileForm = memo((props: any) => (
   <DynamicComponentWrapper
     loader={() => import("@/components/mobile/shared/MobileForm")}
     fallback={<LoadingFallback height="300px" />}
@@ -260,11 +259,11 @@ export class BundleOptimizer {
 
 // Intersection Observer for lazy loading
 export function useIntersectionObserver(
-  ref: React.RefObject<Element>,
+  ref: RefObject<Element>,
   callback: () => void,
   options: IntersectionObserverInit = {}
 ) {
-  React.useEffect(() => {
+  useEffect(() => {
     if (!ref.current) return
 
     const observer = new IntersectionObserver(
@@ -288,7 +287,7 @@ export function useIntersectionObserver(
 }
 
 // Hook for lazy loading components
-export function useLazyLoad<T extends React.ComponentType<any>>(
+export function useLazyLoad<T extends ComponentType<any>>(
   loader: () => Promise<{ default: T }>,
   options: {
     threshold?: number
@@ -296,12 +295,12 @@ export function useLazyLoad<T extends React.ComponentType<any>>(
     fallback?: ReactNode
   } = {}
 ) {
-  const [Component, setComponent] = React.useState<T | null>(null)
-  const [loading, setLoading] = React.useState(true)
-  const [error, setError] = React.useState<Error | null>(null)
-  const elementRef = React.useRef<HTMLDivElement>(null)
+  const [Component, setComponent] = useState<T | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<Error | null>(null)
+  const elementRef = useRef<HTMLDivElement>(null)
 
-  const loadComponent = React.useCallback(async () => {
+  const loadComponent = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -323,7 +322,7 @@ export function useLazyLoad<T extends React.ComponentType<any>>(
     }
   )
 
-  const LazyComponent = React.useMemo(() => {
+  const LazyComponent = useMemo(() => {
     if (Component) {
       return Component
     }

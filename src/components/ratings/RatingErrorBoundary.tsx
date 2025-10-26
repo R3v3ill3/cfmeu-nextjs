@@ -1,6 +1,6 @@
 "use client"
 
-import {  Component, ErrorInfo, ReactNode  } from 'react'
+import React, { Component, ErrorInfo, ReactNode, ComponentType } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { AlertTriangle, RefreshCw, Bug } from "lucide-react"
@@ -186,7 +186,7 @@ export class RatingErrorBoundary extends Component<Props, State> {
 
 // Simplified functional wrapper for easier usage
 export function withRatingErrorBoundary<P extends object>(
-  Component: React.ComponentType<P>,
+  Component: ComponentType<P>,
   fallback?: ReactNode,
   onError?: (error: Error, errorInfo: ErrorInfo) => void
 ) {

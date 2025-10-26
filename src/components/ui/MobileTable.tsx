@@ -1,6 +1,7 @@
 "use client"
 
-import React, {  useState, useRef, useEffect  } from 'react'
+import React, { Fragment } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { mobileTokens, device } from '@/styles/mobile-design-tokens'
@@ -108,7 +109,7 @@ export function MobileTable<T extends Record<string, any>>({
   }
 
   // Filter columns based on mobile priority
-  const visibleColumns = React.useMemo(() => {
+  const visibleColumns = useMemo(() => {
     if (effectiveVariant === 'table') {
       return columns
     }
@@ -117,7 +118,7 @@ export function MobileTable<T extends Record<string, any>>({
   }, [columns, effectiveVariant])
 
   // Get mobile card layout columns
-  const mobileCardColumns = React.useMemo(() => {
+  const mobileCardColumns = useMemo(() => {
     const highPriority = columns.filter(col => col.mobile?.priority === 'high' && !col.mobile?.hidden)
     const mediumPriority = columns.filter(col => col.mobile?.priority === 'medium' && !col.mobile?.hidden)
     const lowPriority = columns.filter(col => col.mobile?.priority === 'low' && !col.mobile?.hidden)
@@ -217,7 +218,7 @@ export function MobileTable<T extends Record<string, any>>({
               </tr>
             ) : (
               data.map((item, index) => (
-                <React.Fragment key={index}>
+                <Fragment key={index}>
                   <tr
                     className={cn(
                       'border-b transition-colors',
@@ -260,7 +261,7 @@ export function MobileTable<T extends Record<string, any>>({
                       </td>
                     </tr>
                   )}
-                </React.Fragment>
+                </Fragment>
               ))
             )}
           </tbody>

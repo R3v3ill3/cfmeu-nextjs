@@ -1,15 +1,15 @@
 "use client"
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import type { ReactNode } from 'react'
 
 // PWA Installation hook
 export function usePWAInstall() {
-  const [deferredPrompt, setDeferredPrompt] = React.useState<any>(null)
-  const [isInstallable, setIsInstallable] = React.useState(false)
-  const [isInstalled, setIsInstalled] = React.useState(false)
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null)
+  const [isInstallable, setIsInstallable] = useState(false)
+  const [isInstalled, setIsInstalled] = useState(false)
 
-  React.useEffect(() => {
+  useEffect(() => {
     // Check if app is already installed
     const checkInstalled = () => {
       const isStandalone = window.matchMedia('(display-mode: standalone)').matches
@@ -41,7 +41,7 @@ export function usePWAInstall() {
     }
   }, [])
 
-  const install = React.useCallback(async () => {
+  const install = useCallback(async () => {
     if (!deferredPrompt) {
       console.warn('Install prompt not available')
       return false
@@ -76,11 +76,11 @@ export function usePWAInstall() {
 
 // Service Worker registration hook
 export function useServiceWorker() {
-  const [registration, setRegistration] = React.useState<ServiceWorkerRegistration | null>(null)
-  const [isSupported, setIsSupported] = React.useState(false)
-  const [isRegistered, setIsRegistered] = React.useState(false)
+  const [registration, setRegistration] = useState<ServiceWorkerRegistration | null>(null)
+  const [isSupported, setIsSupported] = useState(false)
+  const [isRegistered, setIsRegistered] = useState(false)
 
-  React.useEffect(() => {
+  useEffect(() => {
     setIsSupported('serviceWorker' in navigator)
 
     if ('serviceWorker' in navigator) {
@@ -103,7 +103,7 @@ export function useServiceWorker() {
     }
   }, [])
 
-  const update = React.useCallback(async () => {
+  const update = useCallback(async () => {
     if (!registration) return false
 
     try {
@@ -115,7 +115,7 @@ export function useServiceWorker() {
     }
   }, [registration])
 
-  const unregister = React.useCallback(async () => {
+  const unregister = useCallback(async () => {
     if (!registration) return false
 
     try {
@@ -140,11 +140,11 @@ export function useServiceWorker() {
 
 // Push notification hook
 export function usePushNotifications() {
-  const [subscription, setSubscription] = React.useState<PushSubscription | null>(null)
-  const [permission, setPermission] = React.useState<NotificationPermission>('default')
-  const [isSupported, setIsSupported] = React.useState(false)
+  const [subscription, setSubscription] = useState<PushSubscription | null>(null)
+  const [permission, setPermission] = useState<NotificationPermission>('default')
+  const [isSupported, setIsSupported] = useState(false)
 
-  React.useEffect(() => {
+  useEffect(() => {
     setIsSupported('PushManager' in window && 'Notification' in window)
 
     if ('Notification' in window) {
@@ -152,7 +152,7 @@ export function usePushNotifications() {
     }
   }, [])
 
-  const requestPermission = React.useCallback(async () => {
+  const requestPermission = useCallback(async () => {
     if (!isSupported) {
       console.warn('Push notifications not supported')
       return false
@@ -184,7 +184,7 @@ export function usePushNotifications() {
     }
   }, [isSupported])
 
-  const unsubscribe = React.useCallback(async () => {
+  const unsubscribe = useCallback(async () => {
     if (!subscription) return false
 
     try {
@@ -208,10 +208,10 @@ export function usePushNotifications() {
 
 // Background sync hook
 export function useBackgroundSync() {
-  const [isSupported, setIsSupported] = React.useState(false)
-  const [registration, setRegistration] = React.useState<ServiceWorkerRegistration | null>(null)
+  const [isSupported, setIsSupported] = useState(false)
+  const [registration, setRegistration] = useState<ServiceWorkerRegistration | null>(null)
 
-  React.useEffect(() => {
+  useEffect(() => {
     const checkSupport = async () => {
       if ('serviceWorker' in navigator && 'sync' in window.ServiceWorkerRegistration.prototype) {
         const reg = await navigator.serviceWorker.ready
@@ -223,7 +223,7 @@ export function useBackgroundSync() {
     checkSupport()
   }, [])
 
-  const registerSync = React.useCallback(async (tag: string) => {
+  const registerSync = useCallback(async (tag: string) => {
     if (!isSupported || !registration) {
       console.warn('Background sync not supported')
       return false
@@ -247,11 +247,11 @@ export function useBackgroundSync() {
 
 // Network status hook
 export function useNetworkStatus() {
-  const [isOnline, setIsOnline] = React.useState(true)
-  const [connectionType, setConnectionType] = React.useState<string>('unknown')
-  const [effectiveType, setEffectiveType] = React.useState<string>('unknown')
+  const [isOnline, setIsOnline] = useState(true)
+  const [connectionType, setConnectionType] = useState<string>('unknown')
+  const [effectiveType, setEffectiveType] = useState<string>('unknown')
 
-  React.useEffect(() => {
+  useEffect(() => {
     const updateNetworkStatus = () => {
       setIsOnline(navigator.onLine)
 
@@ -306,13 +306,13 @@ export function useNetworkStatus() {
 
 // App badge hook
 export function useAppBadge() {
-  const [isSupported, setIsSupported] = React.useState(false)
+  const [isSupported, setIsSupported] = useState(false)
 
-  React.useEffect(() => {
+  useEffect(() => {
     setIsSupported('setAppBadge' in navigator && 'clearAppBadge' in navigator)
   }, [])
 
-  const setBadge = React.useCallback(async (count: number) => {
+  const setBadge = useCallback(async (count: number) => {
     if (!isSupported) return false
 
     try {
@@ -328,7 +328,7 @@ export function useAppBadge() {
     }
   }, [isSupported])
 
-  const clearBadge = React.useCallback(async () => {
+  const clearBadge = useCallback(async () => {
     if (!isSupported) return false
 
     try {
@@ -349,14 +349,14 @@ export function useAppBadge() {
 
 // Screen wake lock hook
 export function useWakeLock() {
-  const [isSupported, setIsSupported] = React.useState(false)
-  const [wakeLock, setWakeLock] = React.useState<any>(null)
+  const [isSupported, setIsSupported] = useState(false)
+  const [wakeLock, setWakeLock] = useState<any>(null)
 
-  React.useEffect(() => {
+  useEffect(() => {
     setIsSupported('wakeLock' in navigator)
   }, [])
 
-  const requestWakeLock = React.useCallback(async () => {
+  const requestWakeLock = useCallback(async () => {
     if (!isSupported) return false
 
     try {
@@ -374,7 +374,7 @@ export function useWakeLock() {
     }
   }, [isSupported])
 
-  const releaseWakeLock = React.useCallback(async () => {
+  const releaseWakeLock = useCallback(async () => {
     if (!wakeLock) return false
 
     try {
@@ -397,13 +397,13 @@ export function useWakeLock() {
 
 // Share API hook
 export function useShareAPI() {
-  const [isSupported, setIsSupported] = React.useState(false)
+  const [isSupported, setIsSupported] = useState(false)
 
-  React.useEffect(() => {
+  useEffect(() => {
     setIsSupported('share' in navigator)
   }, [])
 
-  const share = React.useCallback(async (data: ShareData) => {
+  const share = useCallback(async (data: ShareData) => {
     if (!isSupported) return false
 
     try {
@@ -423,13 +423,13 @@ export function useShareAPI() {
 
 // File handling hook
 export function useFileHandling() {
-  const [isSupported, setIsSupported] = React.useState(false)
+  const [isSupported, setIsSupported] = useState(false)
 
-  React.useEffect(() => {
+  useEffect(() => {
     setIsSupported('launchQueue' in navigator && 'launchParams' in navigator)
   }, [])
 
-  const handleFiles = React.useCallback((callback: (files: File[]) => void) => {
+  const handleFiles = useCallback((callback: (files: File[]) => void) => {
     if (!isSupported) return
 
     const launchQueue = (navigator as any).launchQueue

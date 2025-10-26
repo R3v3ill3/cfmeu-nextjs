@@ -1,6 +1,7 @@
 "use client"
 
-import React, {  useState, useEffect, useCallback, useMemo, useRef  } from 'react'
+import React from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -99,12 +100,12 @@ function RatingComparisonCard({
 }) {
   const { selection } = useHapticFeedback()
 
-  const handleClick = React.useCallback(() => {
+  const handleClick = useCallback(() => {
     selection()
     onClick?.()
   }, [selection, onClick])
 
-  const handleViewDetails = React.useCallback((e: React.MouseEvent) => {
+  const handleViewDetails = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
     selection()
     onViewDetails?.()
@@ -197,12 +198,12 @@ function DiscrepancyExplanation({
   const Icon = config.icon
   const { trigger } = useHapticFeedback()
 
-  const handleResolve = React.useCallback(() => {
+  const handleResolve = useCallback(() => {
     trigger()
     onResolve?.()
   }, [trigger, onResolve])
 
-  const handleAddComment = React.useCallback(() => {
+  const handleAddComment = useCallback(() => {
     trigger()
     onAddComment?.()
   }, [trigger, onAddComment])
@@ -291,7 +292,7 @@ function HistoricalTrend({
   const latestTrend = trendData[trendData.length - 1]
   const previousTrend = trendData[trendData.length - 2]
 
-  const trend = React.useMemo(() => {
+  const trend = useMemo(() => {
     if (!latestTrend || !previousTrend) return 'stable'
     const diff = getRatingValue(latestTrend.rating) - getRatingValue(previousTrend.rating)
     if (diff > 0) return 'improving'
@@ -361,20 +362,20 @@ export function RatingComparison({
   onViewDetails,
   onSwitchRole,
 }: RatingComparisonProps) {
-  const [selectedTrack, setSelectedTrack] = React.useState<RatingTrack | null>(null)
+  const [selectedTrack, setSelectedTrack] = useState<RatingTrack | null>(null)
   const { selection } = useHapticFeedback()
 
-  const discrepancyConfig = React.useMemo(
+  const discrepancyConfig = useMemo(
     () => discrepancyConfig[comparison.discrepancy.severity],
     [comparison.discrepancy.severity]
   )
 
-  const handleTrackSelect = React.useCallback((track: RatingTrack) => {
+  const handleTrackSelect = useCallback((track: RatingTrack) => {
     setSelectedTrack(track === selectedTrack ? null : track)
     selection()
   }, [selectedTrack, selection])
 
-  const mockTrendData = React.useMemo(() => [
+  const mockTrendData = useMemo(() => [
     { date: '2024-01-01', rating: 'green' as TrafficLightRating, confidence: 'high' },
     { date: '2024-02-01', rating: 'yellow' as TrafficLightRating, confidence: 'medium' },
     { date: '2024-03-01', rating: 'green' as TrafficLightRating, confidence: 'high' },

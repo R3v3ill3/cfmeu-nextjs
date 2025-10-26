@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import React, { useState, type ComponentType } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Users, Link } from 'lucide-react'
@@ -16,7 +16,7 @@ interface WorkerOption {
   mode: WorkerImportMode
   title: string
   description: string
-  icon: React.ComponentType<any>
+  icon: ComponentType<any>
 }
 
 const workerOptions: WorkerOption[] = [
