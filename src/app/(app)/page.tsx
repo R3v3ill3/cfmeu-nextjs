@@ -1,15 +1,18 @@
-"use client"
-
 import React from "react"
-import { useIsMobile } from "@/hooks/use-mobile"
 import { DesktopDashboardView } from "@/components/dashboard/DesktopDashboardView"
-import { MobileDashboardView } from "@/components/dashboard/MobileDashboardView"
 
 export const dynamic = 'force-dynamic'
 
-export default function DashboardPage() {
-  const isMobile = useIsMobile()
+// Ensure React is globally available for Vercel serverless environment
+if (typeof globalThis !== 'undefined' && !globalThis.React) {
+  globalThis.React = React;
+}
+if (typeof global !== 'undefined' && !global.React) {
+  global.React = React;
+}
 
-  return isMobile ? <MobileDashboardView /> : <DesktopDashboardView />
+export default function DashboardPage() {
+  // Temporarily always show desktop view to eliminate mobile detection issues
+  return <DesktopDashboardView />
 }
 

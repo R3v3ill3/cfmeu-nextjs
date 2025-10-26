@@ -52,6 +52,17 @@ export const metadata: Metadata = {
 // Pre-load React to ensure it's available during SSR
 import React from 'react';
 
+// Ensure React is globally available for Vercel serverless environment
+if (typeof globalThis !== 'undefined' && !globalThis.React) {
+  globalThis.React = React;
+}
+if (typeof global !== 'undefined' && !global.React) {
+  global.React = React;
+}
+if (typeof window !== 'undefined' && !window.React) {
+  window.React = React;
+}
+
 export default function RootLayout({
   children,
 }: Readonly<{
