@@ -67,29 +67,29 @@ export default function ComparePage({ params, searchParams }: ComparePageProps) 
   const employerId = params.employerId
   const role = searchParams.role || 'organiser'
 
-  const handleBack = React.useCallback(() => {
+  const handleBack = useCallback(() => {
     router.back()
   }, [router])
 
-  const handleResolveDiscrepancy = React.useCallback(() => {
+  const handleResolveDiscrepancy = useCallback(() => {
     toast({
       title: "Investigation started",
       description: "A task has been created to investigate this rating discrepancy.",
     })
   }, [toast])
 
-  const handleAddComment = React.useCallback(() => {
+  const handleAddComment = useCallback(() => {
     toast({
       title: "Comment added",
       description: "Your comment has been saved to the rating record.",
     })
   }, [toast])
 
-  const handleViewDetails = React.useCallback((track: string) => {
+  const handleViewDetails = useCallback((track: string) => {
     router.push(`/mobile/ratings/breakdown/${employerId}?track=${track}`)
   }, [router, employerId])
 
-  const handleSwitchRole = React.useCallback((currentRole: RoleType) => {
+  const handleSwitchRole = useCallback((currentRole: RoleType) => {
     const newRole = currentRole === 'organiser' ? 'trade' : 'organiser'
     router.push(`/mobile/ratings/compare/${employerId}?role=${newRole}`)
   }, [router, employerId])

@@ -51,11 +51,11 @@ export default function MobileDashboardPage() {
 
   const userRole: RoleType = "organiser"
 
-  const handleBack = React.useCallback(() => {
+  const handleBack = useCallback(() => {
     router.back()
   }, [router])
 
-  const handleRefresh = React.useCallback(async () => {
+  const handleRefresh = useCallback(async () => {
     try {
       await new Promise(resolve => setTimeout(resolve, 1000))
       toast({
@@ -71,7 +71,7 @@ export default function MobileDashboardPage() {
     }
   }, [toast])
 
-  const handleSearch = React.useCallback(
+  const handleSearch = useCallback(
     debounce((query: string) => {
       // Handle search
     }),

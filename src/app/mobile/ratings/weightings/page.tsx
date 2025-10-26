@@ -80,11 +80,11 @@ export default function WeightingsPage({ searchParams }: WeightingsPageProps) {
   const track = searchParams.track || 'organiser_expertise'
   const role = searchParams.role || 'organiser'
 
-  const handleBack = React.useCallback(() => {
+  const handleBack = useCallback(() => {
     router.back()
   }, [router])
 
-  const handleSaveWeighting = React.useCallback(async (config: WeightingConfig) => {
+  const handleSaveWeighting = useCallback(async (config: WeightingConfig) => {
     try {
       // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 1000))
@@ -103,14 +103,14 @@ export default function WeightingsPage({ searchParams }: WeightingsPageProps) {
     }
   }, [toast])
 
-  const handlePreviewWeighting = React.useCallback((config: WeightingConfig) => {
+  const handlePreviewWeighting = useCallback((config: WeightingConfig) => {
     toast({
       title: "Preview mode",
       description: "This would show how the weighting affects ratings.",
     })
   }, [toast])
 
-  const handleDuplicateTemplate = React.useCallback((template: WeightingConfig) => {
+  const handleDuplicateTemplate = useCallback((template: WeightingConfig) => {
     toast({
       title: "Template duplicated",
       description: `A copy of "${template.name}" has been created.`,

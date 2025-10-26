@@ -170,14 +170,14 @@ export default function MobileRatingsPage() {
     syncInterval: 30000,
   })
 
-  const [refreshing, setRefreshing] = React.useState(false)
-  const [searchQuery, setSearchQuery] = React.useState("")
+  const [refreshing, setRefreshing] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
 
   // Mock user role - in a real app, this would come from auth context
   const userRole: RoleType = "organiser"
 
   // Handle search with debouncing
-  const handleSearch = React.useCallback(
+  const handleSearch = useCallback(
     debounce((query: string) => {
       setSearchQuery(query)
     }),
@@ -185,7 +185,7 @@ export default function MobileRatingsPage() {
   )
 
   // Handle refresh
-  const handleRefresh = React.useCallback(async () => {
+  const handleRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
       await new Promise(resolve => setTimeout(resolve, 1000)) // Simulate API call
@@ -205,36 +205,36 @@ export default function MobileRatingsPage() {
   }, [toast])
 
   // Handle employer interactions
-  const handleRateEmployer = React.useCallback((employer: EmployerRatingData) => {
+  const handleRateEmployer = useCallback((employer: EmployerRatingData) => {
     router.push(`/mobile/ratings/wizard/${employer.id}`)
   }, [router])
 
-  const handleViewEmployer = React.useCallback((employer: EmployerRatingData) => {
+  const handleViewEmployer = useCallback((employer: EmployerRatingData) => {
     router.push(`/mobile/ratings/compare/${employer.id}`)
   }, [router])
 
-  const handleEditEmployer = React.useCallback((employer: EmployerRatingData) => {
+  const handleEditEmployer = useCallback((employer: EmployerRatingData) => {
     router.push(`/mobile/ratings/edit/${employer.id}`)
   }, [router])
 
-  const handleViewAllEmployers = React.useCallback(() => {
+  const handleViewAllEmployers = useCallback(() => {
     router.push("/mobile/ratings/list")
   }, [router])
 
-  const handleViewAlerts = React.useCallback(() => {
+  const handleViewAlerts = useCallback(() => {
     router.push("/mobile/ratings/alerts")
   }, [router])
 
-  const handleSettings = React.useCallback(() => {
+  const handleSettings = useCallback(() => {
     router.push("/mobile/ratings/settings")
   }, [router])
 
-  const handleFilter = React.useCallback(() => {
+  const handleFilter = useCallback(() => {
     router.push("/mobile/ratings/filters")
   }, [router])
 
   // Filter employers based on search query
-  const filteredEmployers = React.useMemo(() => {
+  const filteredEmployers = useMemo(() => {
     if (!searchQuery || !employers) return employers
 
     return employers.filter(employer =>

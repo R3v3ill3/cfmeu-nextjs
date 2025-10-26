@@ -74,15 +74,15 @@ export default function WizardPage({ params, searchParams }: WizardPageProps) {
     autoSync: true,
   })
 
-  const handleBack = React.useCallback(() => {
+  const handleBack = useCallback(() => {
     router.back()
   }, [router])
 
-  const handleCancel = React.useCallback(() => {
+  const handleCancel = useCallback(() => {
     router.push("/mobile/ratings")
   }, [router])
 
-  const handleSubmit = React.useCallback(async (data: RatingWizardFormData) => {
+  const handleSubmit = useCallback(async (data: RatingWizardFormData) => {
     try {
       // Save the rating submission
       await addItem({
