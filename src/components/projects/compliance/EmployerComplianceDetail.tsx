@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
+import { useState, useCallback } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -10,11 +10,38 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { format } from "date-fns";
-import { CalendarIcon, History, Save } from "lucide-react";
+import {
+  CalendarIcon,
+  History,
+  Save,
+  Users,
+  Shield,
+  TrendingUp,
+  FileText,
+  CheckCircle,
+  AlertTriangle,
+  Star,
+  Clock,
+  BarChart3
+} from "lucide-react";
 import { useEmployerCompliance, useUpsertEmployerCompliance } from "./hooks/useEmployerCompliance";
 import { ComplianceChecker, PaymentStatus, PaymentTiming, WorkerCountStatus } from "@/types/compliance";
+import { FourPointRatingDisplay, FourPointTrendIndicator } from "@/components/ui/FourPointRatingDisplay";
+import { UnionRespectAssessment } from "@/components/assessments/UnionRespectAssessment";
+import { SafetyAssessment4Point } from "@/components/assessments/SafetyAssessment4Point";
 import { toast } from "sonner";
+import {
+  FourPointRating,
+  Assessment,
+  UnionRespectAssessment as UnionRespectType,
+  Safety4PointAssessment as SafetyAssessmentType,
+  CreateUnionRespectAssessmentPayload,
+  CreateSafety4PointAssessmentPayload
+} from "@/types/assessments";
 
 interface EmployerComplianceDetailProps {
   projectId: string;
@@ -22,15 +49,18 @@ interface EmployerComplianceDetailProps {
   employerName: string;
 }
 
-export function EmployerComplianceDetail({ 
-  projectId, 
-  employerId, 
-  employerName 
+export function EmployerComplianceDetail({
+  projectId,
+  employerId,
+  employerName
 }: EmployerComplianceDetailProps) {
   const { data: compliance = [] } = useEmployerCompliance(projectId, employerId);
   const upsertCompliance = useUpsertEmployerCompliance(projectId);
   const [showHistory, setShowHistory] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [activeTab, setActiveTab] = useState('compliance');
+  const [assessments, setAssessments] = useState<Assessment[]>([]);
+  const [overallRating, setOverallRating] = useState<FourPointRating | null>(null);
 
   // Current compliance record (most recent)
   const currentCompliance = compliance[0] || {
