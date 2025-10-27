@@ -38,23 +38,6 @@ import { useHapticFeedback } from "../shared/HapticFeedback"
 import { SafeRatingComponent } from "@/components/ratings/SafeRatingProvider"
 import { DefaultRatingError } from "@/components/ratings/RatingErrorBoundary"
 
-if (process.env.NODE_ENV === "production" && typeof window !== "undefined") {
-  const globalAny = globalThis as Record<string, unknown>
-  const probeKey = "__cnProbeLogged_RatingDashboard"
-  if (!globalAny[probeKey]) {
-    globalAny[probeKey] = true
-    try {
-      console.info("[cn-probe] RatingDashboard cn typeof:", typeof cn)
-      console.info(
-        "[cn-probe] RatingDashboard module id:",
-        typeof import.meta !== "undefined" ? (import.meta as unknown as { url?: string }).url ?? "<no-url>" : "<no-import-meta>"
-      )
-    } catch (error) {
-      console.error("[cn-probe] RatingDashboard probe failed", error)
-    }
-  }
-}
-
 interface RatingDashboardProps {
   employers: EmployerRatingData[]
   userRole: RoleType

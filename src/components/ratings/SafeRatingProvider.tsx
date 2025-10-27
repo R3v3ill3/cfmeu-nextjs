@@ -40,18 +40,6 @@ export function SafeRatingProvider({
   fallback = <RatingProviderError />,
   loadingFallback = <RatingLoadingFallback />
 }: SafeRatingProviderProps) {
-  if (process.env.NODE_ENV === "production" && typeof window !== "undefined") {
-    const globalAny = globalThis as Record<string, unknown>
-    if (!globalAny.__cnProbeLogged_SafeRatingProvider) {
-      globalAny.__cnProbeLogged_SafeRatingProvider = true
-      try {
-        console.info("[cn-probe] SafeRatingProvider cn typeof:", typeof cn)
-      } catch (error) {
-        console.error("[cn-probe] SafeRatingProvider probe failed", error)
-      }
-    }
-  }
-
   return (
     <RatingErrorBoundary fallback={fallback}>
       <Suspense fallback={loadingFallback}>
