@@ -18,6 +18,14 @@ CREATE TYPE public.assessment_context AS ENUM (
     'mixed_project'
 );
 
+-- Create rating confidence level enum
+CREATE TYPE public.rating_confidence_level AS ENUM (
+    'very_high',
+    'high',
+    'medium',
+    'low'
+);
+
 -- Create union respect assessments table
 -- This supports the comprehensive union respect assessment framework
 CREATE TABLE IF NOT EXISTS public.union_respect_assessments (

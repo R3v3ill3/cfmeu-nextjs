@@ -243,7 +243,7 @@ BEGIN
     FROM public.projects p
     JOIN public.site_employers se ON p.id = se.employer_id
     WHERE se.employer_id = p_employer_id
-    AND p.project_type IN ('commercial', 'residential', 'infrastructure');
+    AND p.project_type IN ('private', 'government', 'mixed');
 
     -- Check for trade-specific indicators
     SELECT COUNT(*) INTO v_has_trade_projects
