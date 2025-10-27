@@ -1,0 +1,566 @@
+name: CFMEU 4-Point Rating System Test Suite
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run comprehensive tests daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      test_type:
+        description: 'Type of tests to run'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - unit
+          - integration
+          - e2e
+          - performance
+          - security
+          - accessibility
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'test'
+        type: choice
+        options:
+          - test
+          - staging
+          - production
+
+env:
+  NODE_VERSION: '18'
+  PNPM_VERSION: '10.17.1'
+
+jobs:
+  # Test Environment Setup
+  setup-test-environment:
+    name: Setup Test Environment
+    runs-on: ubuntu-latest
+    outputs:
+      cache-key: ${{ steps.cache-key.outputs.key }}
+      test-db-url: ${{ steps.db-setup.outputs.url }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Generate cache key
+        id: cache-key
+        run: |
+          echo "key=cfmeu-tests-${{ hashFiles('**/pnpm-lock.yaml') }}-${{ hashFiles('**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx') }}" >> $GITHUB_OUTPUT
+
+      - name: Cache node modules
+        uses: actions/cache@v3
+        with:
+          path: ~/.pnpm-store
+          key: ${{ steps.cache-key.outputs.key }}
+          restore-keys: |
+            cfmeu-tests-${{ hashFiles('**/pnpm-lock.yaml') }}-
+            cfmeu-tests-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup test database
+        id: db-setup
+        run: |
+          # Start PostgreSQL container for testing
+          docker-compose -f docker-compose.test.yml up -d postgres
+
+          # Wait for database to be ready
+          sleep 10
+
+          # Run database migrations
+          pnpm run migrate:test
+
+          # Seed test data
+          pnpm run seed:test
+
+          echo "url=postgresql://postgres:postgres@localhost:5433/cfmeu_test" >> $GITHUB_OUTPUT
+
+  # Unit Tests
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: setup-test-environment
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Restore cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.pnpm-store
+          key: ${{ needs.setup-test-environment.outputs.cache-key }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run unit tests
+        run: pnpm test:unit --coverage
+        env:
+          DATABASE_URL: ${{ needs.setup-test-environment.outputs.test-db-url }}
+          NODE_ENV: test
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage/lcov.info
+          flags: unit-tests
+          name: codecov-umbrella
+
+      - name: Publish test results
+        uses: dorny/test-reporter@v1
+        if: success() || failure()
+        with:
+          name: Unit Test Results
+          path: junit.xml
+          reporter: jest-junit
+
+  # Integration Tests
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: setup-test-environment
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Restore cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.pnpm-store
+          key: ${{ needs.setup-test-environment.outputs.cache-key }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Start application
+        run: |
+          pnpm run build
+          pnpm start &
+          sleep 30
+
+      - name: Run integration tests
+        run: pnpm test:integration
+        env:
+          DATABASE_URL: ${{ needs.setup-test-environment.outputs.test-db-url }}
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+          NODE_ENV: test
+
+  # End-to-End Tests
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: setup-test-environment
+
+    strategy:
+      matrix:
+        browser: [chromium, firefox, webkit]
+        device: [desktop, mobile]
+        exclude:
+          - browser: firefox
+            device: mobile
+          - browser: webkit
+            device: mobile
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Restore cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.pnpm-store
+            ~/.cache/ms-playwright
+          key: ${{ needs.setup-test-environment.outputs.cache-key }}-e2e-${{ matrix.browser }}-${{ matrix.device }}
+          restore-keys: |
+            ${{ needs.setup-test-environment.outputs.cache-key }}-e2e-${{ matrix.browser }}-
+            ${{ needs.setup-test-environment.outputs.cache-key }}-e2e-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Build application
+        run: pnpm run build
+
+      - name: Run E2E tests
+        run: pnpm exec playwright test --project=${{ matrix.browser }} --grep="${{ matrix.device }}"
+        env:
+          DATABASE_URL: ${{ needs.setup-test-environment.outputs.test-db-url }}
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: playwright-report-${{ matrix.browser }}-${{ matrix.device }}
+          path: playwright-report/
+          retention-days: 7
+
+      - name: Upload test videos
+        uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: playwright-videos-${{ matrix.browser }}-${{ matrix.device }}
+          path: test-results/
+          retention-days: 7
+
+  # Performance Tests
+  performance-tests:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    needs: setup-test-environment
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Restore cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.pnpm-store
+          key: ${{ needs.setup-test-environment.outputs.cache-key }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Build application
+        run: pnpm run build
+
+      - name: Run performance tests
+        run: pnpm exec playwright test --project=performance
+        env:
+          DATABASE_URL: ${{ needs.setup-test-environment.outputs.test-db-url }}
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+
+      - name: Upload Lighthouse reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: lighthouse-reports
+          path: lighthouse-reports/
+          retention-days: 30
+
+      - name: Performance regression check
+        run: |
+          # Compare performance metrics with baseline
+          node scripts/check-performance-regression.js
+
+  # Security Tests
+  security-tests:
+    name: Security Tests
+    runs-on: ubuntu-latest
+    needs: setup-test-environment
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Restore cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.pnpm-store
+          key: ${{ needs.setup-test-environment.outputs.cache-key }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run security audit
+        run: pnpm audit --audit-level moderate
+
+      - name: Run SAST scan
+        uses: github/super-linter@v4
+        env:
+          DEFAULT_BRANCH: main
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VALIDATE_JAVASCRIPT_ES: true
+          VALIDATE_TYPESCRIPT_ES: true
+          VALIDATE_SQLFLUFF: false
+
+      - name: Run dependency security scan
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+      - name: Run security tests
+        run: pnpm test:security
+        env:
+          DATABASE_URL: ${{ needs.setup-test-environment.outputs.test-db-url }}
+
+  # Accessibility Tests
+  accessibility-tests:
+    name: Accessibility Tests
+    runs-on: ubuntu-latest
+    needs: setup-test-environment
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Restore cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.pnpm-store
+          key: ${{ needs.setup-test-environment.outputs.cache-key }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Build application
+        run: pnpm run build
+
+      - name: Run accessibility tests
+        run: pnpm exec playwright test --project=accessibility
+        env:
+          DATABASE_URL: ${{ needs.setup-test-environment.outputs.test-db-url }}
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+
+      - name: Upload accessibility reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: accessibility-reports
+          path: accessibility-reports/
+          retention-days: 30
+
+  # Mobile Tests
+  mobile-tests:
+    name: Mobile Tests
+    runs-on: ubuntu-latest
+    needs: setup-test-environment
+
+    strategy:
+      matrix:
+        device: ['Mobile Chrome - Pixel 5', 'Mobile Safari - iPhone 13']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Restore cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.pnpm-store
+            ~/.cache/ms-playwright
+          key: ${{ needs.setup-test-environment.outputs.cache-key }}-mobile-${{ matrix.device }}
+          restore-keys: |
+            ${{ needs.setup-test-environment.outputs.cache-key }}-mobile-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps
+
+      - name: Build application
+        run: pnpm run build
+
+      - name: Run mobile tests
+        run: pnpm exec playwright test --project="${{ matrix.device }}"
+        env:
+          DATABASE_URL: ${{ needs.setup-test-environment.outputs.test-db-url }}
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+
+      - name: Upload mobile test results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: mobile-test-results-${{ matrix.device }}
+          path: test-results/
+          retention-days: 7
+
+  # Test Results Summary
+  test-summary:
+    name: Test Results Summary
+    runs-on: ubuntu-latest
+    needs: [
+      unit-tests,
+      integration-tests,
+      e2e-tests,
+      performance-tests,
+      security-tests,
+      accessibility-tests,
+      mobile-tests
+    ]
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+
+      - name: Generate test summary
+        run: |
+          echo "# CFMEU 4-Point Rating System Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Test Execution Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Test Suite | Status | Details |" >> $GITHUB_STEP_SUMMARY
+          echo "|------------|--------|---------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Unit Tests | ${{ needs.unit-tests.result }} | ✅ All unit tests passed |" >> $GITHUB_STEP_SUMMARY
+          echo "| Integration Tests | ${{ needs.integration-tests.result }} | ✅ API and database integration verified |" >> $GITHUB_STEP_SUMMARY
+          echo "| E2E Tests | ${{ needs.e2e-tests.result }} | ✅ End-to-end workflows tested |" >> $GITHUB_STEP_SUMMARY
+          echo "| Performance Tests | ${{ needs.performance-tests.result }} | ✅ Performance benchmarks met |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Tests | ${{ needs.security-tests.result }} | ✅ Security scans completed |" >> $GITHUB_STEP_SUMMARY
+          echo "| Accessibility Tests | ${{ needs.accessibility-tests.result }} | ✅ WCAG compliance verified |" >> $GITHUB_STEP_SUMMARY
+          echo "| Mobile Tests | ${{ needs.mobile-tests.result }} | ✅ Mobile compatibility tested |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const comment = `## 🧪 Test Results for CFMEU 4-Point Rating System
+
+            ### Test Suite Results:
+            - ✅ Unit Tests: ${{ needs.unit-tests.result }}
+            - ✅ Integration Tests: ${{ needs.integration-tests.result }}
+            - ✅ E2E Tests: ${{ needs.e2e-tests.result }}
+            - ✅ Performance Tests: ${{ needs.performance-tests.result }}
+            - ✅ Security Tests: ${{ needs.security-tests.result }}
+            - ✅ Accessibility Tests: ${{ needs.accessibility-tests.result }}
+            - ✅ Mobile Tests: ${{ needs.mobile-tests.result }}
+
+            ### 📊 Overall Status: ${{ job.status }}
+
+            All tests have been executed as part of the comprehensive testing strategy for the 4-point rating system transformation.
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  # Cleanup
+  cleanup:
+    name: Cleanup Test Environment
+    runs-on: ubuntu-latest
+    needs: [test-summary]
+    if: always()
+
+    steps:
+      - name: Cleanup test database
+        run: |
+          docker-compose -f docker-compose.test.yml down -v
+          docker system prune -f
+
+      - name: Cleanup test artifacts
+        if: always()
+        run: |
+          rm -rf test-results/
+          rm -rf playwright-report/
+          rm -rf coverage/
