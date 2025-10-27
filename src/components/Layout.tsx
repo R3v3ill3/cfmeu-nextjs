@@ -15,6 +15,7 @@ import { useNavigationVisibility } from "@/hooks/useNavigationVisibility";
 import { useNavigationLoading } from "@/hooks/useNavigationLoading";
 import { JoinQrDialog } from "@/components/JoinQrDialog";
 import { HelpLauncher } from "@/components/help/HelpLauncher";
+import { cn } from "@/lib/utils";
 
 // Simple mobile detection
 const isMobile = () => {
