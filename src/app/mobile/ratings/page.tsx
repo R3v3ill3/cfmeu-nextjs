@@ -11,6 +11,9 @@ import { useOfflineSync } from "@/hooks/mobile/useOfflineSync"
 import { useToast } from "@/hooks/use-toast"
 
 // Mock data for demonstration
+// Use fixed dates to avoid hydration mismatches
+const MOCK_DATE = "2024-10-27T00:00:00.000Z"
+
 const mockEmployers: EmployerRatingData[] = [
   {
     id: "1",
@@ -26,7 +29,7 @@ const mockEmployers: EmployerRatingData[] = [
       confidence: "high",
       track: "project_data",
       role_context: "organiser",
-      calculated_at: new Date().toISOString(),
+      calculated_at: MOCK_DATE,
       calculated_by: "system",
       compliance_score: 85,
       participation_rate: 78,
@@ -41,7 +44,7 @@ const mockEmployers: EmployerRatingData[] = [
       confidence: "very_high",
       track: "organiser_expertise",
       role_context: "organiser",
-      calculated_at: new Date().toISOString(),
+      calculated_at: MOCK_DATE,
       calculated_by: "john.doe",
       relationship_quality: 9,
       communication_effectiveness: 8,

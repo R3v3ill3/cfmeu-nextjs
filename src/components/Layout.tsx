@@ -55,6 +55,13 @@ const Layout = ({ children, onRefresh }: LayoutProps) => {
   const [touchEndX, setTouchEndX] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
   const headerRef = useRef<HTMLDivElement>(null);
+  
+  // Pull-to-refresh state
+  const [isPulling, setIsPulling] = useState(false);
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [touchStartY, setTouchStartY] = useState(0);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Check if we can go back in history
   useEffect(() => {
