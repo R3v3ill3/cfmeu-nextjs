@@ -53,7 +53,7 @@ const mockEmployers: EmployerRatingData[] = [
       historical_performance: 9,
     },
     rating_history: [],
-    last_updated: new Date().toISOString(),
+    last_updated: MOCK_DATE,
   },
   {
     id: "2",
@@ -68,7 +68,7 @@ const mockEmployers: EmployerRatingData[] = [
       confidence: "medium",
       track: "project_data",
       role_context: "organiser",
-      calculated_at: new Date().toISOString(),
+      calculated_at: MOCK_DATE,
       calculated_by: "system",
       compliance_score: 65,
       participation_rate: 45,
@@ -83,7 +83,7 @@ const mockEmployers: EmployerRatingData[] = [
       confidence: "high",
       track: "organiser_expertise",
       role_context: "organiser",
-      calculated_at: new Date().toISOString(),
+      calculated_at: MOCK_DATE,
       calculated_by: "jane.smith",
       relationship_quality: 3,
       communication_effectiveness: 4,
@@ -92,7 +92,7 @@ const mockEmployers: EmployerRatingData[] = [
       historical_performance: 3,
     },
     rating_history: [],
-    last_updated: new Date().toISOString(),
+    last_updated: MOCK_DATE,
   },
   {
     id: "3",
@@ -107,7 +107,7 @@ const mockEmployers: EmployerRatingData[] = [
       confidence: "high",
       track: "project_data",
       role_context: "organiser",
-      calculated_at: new Date().toISOString(),
+      calculated_at: MOCK_DATE,
       calculated_by: "system",
       compliance_score: 92,
       participation_rate: 88,
@@ -116,7 +116,7 @@ const mockEmployers: EmployerRatingData[] = [
       eba_compliance: 95,
     },
     rating_history: [],
-    last_updated: new Date().toISOString(),
+    last_updated: MOCK_DATE,
   },
 ]
 
@@ -135,7 +135,7 @@ const mockAlerts = [
     title: "TradeMaster Services",
     message: "Significant rating discrepancy between project data and organiser expertise",
     employerId: "2",
-    timestamp: new Date().toISOString(),
+    timestamp: MOCK_DATE,
   },
   {
     id: "2",
@@ -143,7 +143,7 @@ const mockAlerts = [
     title: "Critical Safety Issue",
     message: "Multiple safety incidents reported for ABC Construction",
     employerId: "4",
-    timestamp: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
+    timestamp: "2024-10-26T00:00:00.000Z", // 1 day before MOCK_DATE
   },
 ]
 
