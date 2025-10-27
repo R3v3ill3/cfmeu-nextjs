@@ -117,16 +117,60 @@ export function EnhancedEmployerComplianceDetail({
   }, [upsertCompliance, employerId, formData])
 
   const handleSaveUnionRespectAssessment = useCallback(async (data: CreateUnionRespectAssessmentPayload) => {
-    // This would integrate with the assessment API
-    toast.success("Union Respect Assessment saved successfully")
-    // Refresh assessments data
-  }, [])
+    try {
+      const response = await fetch('/api/assessments/union-respect', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to save union respect assessment')
+      }
+
+      toast.success("Union Respect Assessment saved successfully")
+      // Refresh assessments data
+      if (onRefresh) {
+        onRefresh()
+      }
+    } catch (error) {
+      console.error('Error saving union respect assessment:', error)
+      toast.error(error instanceof Error ? error.message : "Failed to save union respect assessment")
+      throw error
+    }
+  }, [onRefresh])
 
   const handleSaveSafetyAssessment = useCallback(async (data: CreateSafety4PointAssessmentPayload) => {
-    // This would integrate with the assessment API
-    toast.success("Safety Assessment saved successfully")
-    // Refresh assessments data
-  }, [])
+    try {
+      const response = await fetch('/api/assessments/safety-4-point', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to save safety assessment')
+      }
+
+      toast.success("Safety Assessment saved successfully")
+      // Refresh assessments data
+      if (onRefresh) {
+        onRefresh()
+      }
+    } catch (error) {
+      console.error('Error saving safety assessment:', error)
+      toast.error(error instanceof Error ? error.message : "Failed to save safety assessment")
+      throw error
+    }
+  }, [onRefresh])
 
   // Calculate compliance summary
   useEffect(() => {

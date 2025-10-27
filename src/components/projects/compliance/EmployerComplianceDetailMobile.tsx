@@ -119,21 +119,64 @@ export function EmployerComplianceDetailMobile({
                 </Select>
               </div>
 
-              <div>
-                <Label className="text-sm">Payment Status</Label>
-                <Select
-                  value={formData.cbus_payment_status || ''}
-                  onValueChange={(value) => handleFieldChange('cbus_payment_status', value as PaymentStatus)}
-                >
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Select" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="correct">Correct</SelectItem>
-                    <SelectItem value="incorrect">Incorrect</SelectItem>
-                    <SelectItem value="uncertain">Uncertain</SelectItem>
-                  </SelectContent>
-                </Select>
+              {/* CBUS 3-Point Superannuation Audit */}
+              <div className="space-y-3 border-t pt-3">
+                <Label className="text-sm font-medium">📊 CBUS 3-Point Audit</Label>
+
+                <div className="space-y-3">
+                  <div>
+                    <Label className="text-sm font-medium">1. Paying to CBUS</Label>
+                    <p className="text-xs text-muted-foreground">Superannuation paid to correct entity</p>
+                    <Select
+                      value={formData.cbus_payment_status || ''}
+                      onValueChange={(value) => handleFieldChange('cbus_payment_status', value as PaymentStatus)}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="correct">✅ Correct</SelectItem>
+                        <SelectItem value="incorrect">❌ Incorrect</SelectItem>
+                        <SelectItem value="uncertain">❓ Uncertain</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label className="text-sm font-medium">2. Paying On Time</Label>
+                    <p className="text-xs text-muted-foreground">Timely superannuation payments</p>
+                    <Select
+                      value={formData.cbus_payment_timing || ''}
+                      onValueChange={(value) => handleFieldChange('cbus_payment_timing', value as PaymentTiming)}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Select timing" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="on_time">✅ On Time</SelectItem>
+                        <SelectItem value="late">⏰ Late</SelectItem>
+                        <SelectItem value="uncertain">❓ Uncertain</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label className="text-sm font-medium">3. All Workers Covered</Label>
+                    <p className="text-xs text-muted-foreground">All employees have superannuation</p>
+                    <Select
+                      value={formData.cbus_worker_count_status || ''}
+                      onValueChange={(value) => handleFieldChange('cbus_worker_count_status', value as WorkerCountStatus)}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Select coverage" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="correct">✅ All Workers</SelectItem>
+                        <SelectItem value="incorrect">❌ Missing Workers</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -215,21 +258,64 @@ export function EmployerComplianceDetailMobile({
                 </Select>
               </div>
 
-              <div>
-                <Label className="text-sm">Payment Status</Label>
-                <Select
-                  value={formData.incolink_payment_status || ''}
-                  onValueChange={(value) => handleFieldChange('incolink_payment_status', value as PaymentStatus)}
-                >
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Select" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="correct">Correct</SelectItem>
-                    <SelectItem value="incorrect">Incorrect</SelectItem>
-                    <SelectItem value="uncertain">Uncertain</SelectItem>
-                  </SelectContent>
-                </Select>
+              {/* INCOLINK 3-Point Entitlements Audit */}
+              <div className="space-y-3 border-t pt-3">
+                <Label className="text-sm font-medium">📊 INCOLINK 3-Point Audit</Label>
+
+                <div className="space-y-3">
+                  <div>
+                    <Label className="text-sm font-medium">1. Paying All Entitlements</Label>
+                    <p className="text-xs text-muted-foreground">Training and safety fund payments</p>
+                    <Select
+                      value={formData.incolink_payment_status || ''}
+                      onValueChange={(value) => handleFieldChange('incolink_payment_status', value as PaymentStatus)}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="correct">✅ Correct</SelectItem>
+                        <SelectItem value="incorrect">❌ Incorrect</SelectItem>
+                        <SelectItem value="uncertain">❓ Uncertain</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label className="text-sm font-medium">2. Paying On Time</Label>
+                    <p className="text-xs text-muted-foreground">Timely INCOLINK payments</p>
+                    <Select
+                      value={formData.incolink_payment_timing || ''}
+                      onValueChange={(value) => handleFieldChange('incolink_payment_timing', value as PaymentTiming)}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Select timing" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="on_time">✅ On Time</SelectItem>
+                        <SelectItem value="late">⏰ Late</SelectItem>
+                        <SelectItem value="uncertain">❓ Uncertain</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label className="text-sm font-medium">3. All Workers Covered</Label>
+                    <p className="text-xs text-muted-foreground">All employees covered by entitlements</p>
+                    <Select
+                      value={formData.incolink_worker_count_status || ''}
+                      onValueChange={(value) => handleFieldChange('incolink_worker_count_status', value as WorkerCountStatus)}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Select coverage" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="correct">✅ All Workers</SelectItem>
+                        <SelectItem value="incorrect">❌ Missing Workers</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-2">

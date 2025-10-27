@@ -143,7 +143,7 @@ export function SafetyAssessment4Point({
   const [hasChanges, setHasChanges] = useState(false)
 
   // Safety criteria state
-  const [safetyCriteria, setSafetyCriteria] = useState<Safety4PointAssessment['safety_criteria']>({
+  const [safetyCriteriaRatings, setSafetyCriteriaRatings] = useState<Safety4PointAssessment['safety_criteria']>({
     safety_management_systems: initialData?.safety_criteria?.safety_management_systems || undefined,
     incident_reporting: initialData?.safety_criteria?.incident_reporting || undefined,
     site_safety_culture: initialData?.safety_criteria?.site_safety_culture || undefined,
@@ -172,7 +172,7 @@ export function SafetyAssessment4Point({
   const [notes, setNotes] = useState(initialData?.notes || '')
 
   const handleCriteriaChange = useCallback((field: keyof Safety4PointAssessment['safety_criteria'], value: FourPointRating) => {
-    setSafetyCriteria(prev => ({ ...prev, [field]: value }))
+    setSafetyCriteriaRatings(prev => ({ ...prev, [field]: value }))
     setHasChanges(true)
     trigger('selection')
   }, [trigger])
@@ -188,16 +188,16 @@ export function SafetyAssessment4Point({
   }, [])
 
   // Calculate overall safety score
-  const overallScore = Object.values(safetyCriteria).filter(Boolean).length > 0
-    ? Math.round(Object.values(safetyCriteria).filter(Boolean).reduce((sum, rating) => sum + rating, 0) /
-                Object.values(safetyCriteria).filter(Boolean).length) as FourPointRating
+  const overallScore = Object.values(safetyCriteriaRatings).filter(Boolean).length > 0
+    ? Math.round(Object.values(safetyCriteriaRatings).filter(Boolean).reduce((sum, rating) => sum + rating, 0) /
+                Object.values(safetyCriteriaRatings).filter(Boolean).length) as FourPointRating
     : undefined
 
   // Calculate completion percentage
-  const completionPercentage = (Object.values(safetyCriteria).filter(Boolean).length / safetyCriteria.length) * 100
+  const completionPercentage = (Object.values(safetyCriteriaRatings).filter(Boolean).length / safetyCriteria.length) * 100
 
   const handleSave = async () => {
-    const incompleteCriteria = Object.entries(safetyCriteria).filter(([_, value]) => !value)
+    const incompleteCriteria = Object.entries(safetyCriteriaRatings).filter(([_, value]) => !value)
 
     if (incompleteCriteria.length > 0) {
       toast.error(`Please complete all criteria before saving. Missing: ${incompleteCriteria.map(([key]) =>
@@ -210,7 +210,7 @@ export function SafetyAssessment4Point({
     try {
       const payload: CreateSafety4PointAssessmentPayload = {
         employer_id: employerId,
-        safety_criteria: safetyCriteria as Safety4PointAssessment['safety_criteria'],
+        safety_criteria: safetyCriteriaRatings as Safety4PointAssessment['safety_criteria'],
         safety_metrics: safetyMetrics,
         audit_compliance: auditCompliance,
         notes: notes.trim() || undefined
@@ -261,7 +261,7 @@ export function SafetyAssessment4Point({
               <div className="space-y-3">
                 {safetyCriteria.map((criterion) => {
                   const Icon = criterion.icon
-                  const rating = safetyCriteria[criterion.id]
+                  const rating = safetyCriteriaRatings[criterion.id]
 
                   return (
                     <div key={criterion.id} className="flex items-center gap-3 p-3 rounded-lg border">
@@ -392,7 +392,7 @@ export function SafetyAssessment4Point({
           <div className="space-y-6">
             {safetyCriteria.map((criterion) => {
               const Icon = criterion.icon
-              const rating = safetyCriteria[criterion.id]
+              const rating = safetyCriteriaRatings[criterion.id]
 
               return (
                 <Card key={criterion.id} className="border-l-4 border-l-green-200">
@@ -586,7 +586,7 @@ export function SafetyAssessment4Point({
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
                 Please complete all criteria before saving the assessment.
-                Currently {safetyCriteria.length - Object.values(safetyCriteria).filter(Boolean).length} criteria remaining.
+                Currently {safetyCriteria.length - Object.values(safetyCriteriaRatings).filter(Boolean).length} criteria remaining.
               </AlertDescription>
             </Alert>
           )}

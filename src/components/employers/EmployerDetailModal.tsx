@@ -40,6 +40,7 @@ import { EmployerCategoriesEditor } from "./EmployerCategoriesEditor";
 import { withTimeout } from "@/lib/withTimeout";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { TrafficLightRatingTab } from "./TrafficLightRatingTab";
 
 type EmployerSite = {
   id: string;
@@ -90,7 +91,7 @@ interface EmployerDetailModalProps {
   employerId: string | null;
   isOpen: boolean;
   onClose: () => void;
-  initialTab?: "overview" | "eba" | "sites" | "workers" | "categories" | "aliases";
+  initialTab?: "overview" | "eba" | "sites" | "workers" | "categories" | "aliases" | "ratings";
   onEmployerUpdated?: () => void;
   mode?: 'active' | 'pending_review'; // NEW: Support pending review mode
   onPendingReviewClose?: () => void; // NEW: Called when closing from pending review
@@ -530,14 +531,15 @@ export const EmployerDetailModal = ({
             </div>
           ) : (
             <>
-            <Tabs value={activeTab} onValueChange={(v: string) => setActiveTab(v as "overview" | "eba" | "sites" | "workers" | "categories" | "aliases")} className="space-y-6">
-              <TabsList className="grid w-full grid-cols-6">
+            <Tabs value={activeTab} onValueChange={(v: string) => setActiveTab(v as "overview" | "eba" | "sites" | "workers" | "categories" | "aliases" | "ratings")} className="space-y-6">
+              <TabsList className="grid w-full grid-cols-7">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="eba">EBA Details</TabsTrigger>
                 <TabsTrigger value="categories">Categories</TabsTrigger>
                 <TabsTrigger value="sites">Worksites</TabsTrigger>
                 <TabsTrigger value="workers">Workers</TabsTrigger>
                 <TabsTrigger value="aliases">Aliases</TabsTrigger>
+                <TabsTrigger value="ratings">Traffic Light Rating</TabsTrigger>
               </TabsList>
 
               <TabsContent value="overview" className="space-y-4">
@@ -1110,6 +1112,15 @@ export const EmployerDetailModal = ({
                     )}
                   </CardContent>
                 </Card>
+              </TabsContent>
+
+              <TabsContent value="ratings" className="space-y-4">
+                {employer && (
+                  <TrafficLightRatingTab
+                    employerId={employer.id}
+                    employerName={employer.name}
+                  />
+                )}
               </TabsContent>
               </Tabs>
               {isFwcSearchOpen && employer && (
