@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { FourPointRating, AssessmentType } from '@/types/assessments'
 
+export const dynamic = 'force-dynamic'
+
 // GET - Get 4-point rating distribution statistics
 export async function GET(request: NextRequest) {
   try {
