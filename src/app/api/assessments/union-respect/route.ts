@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createServerSupabase } from '@/lib/supabase/server'
 import {
   CreateUnionRespectAssessmentPayload,
   UnionRespectAssessment,
@@ -72,7 +72,7 @@ function calculateConfidenceLevel(
 // POST - Create new Union Respect Assessment
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = await createServerSupabase()
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -188,7 +188,7 @@ export async function POST(request: NextRequest) {
 // GET - List Union Respect Assessments with filtering
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = await createServerSupabase()
     const {
       data: { user },
     } = await supabase.auth.getUser()

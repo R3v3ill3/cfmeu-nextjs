@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createServerSupabase } from '@/lib/supabase/server'
 import { AssessmentType, FourPointRating } from '@/types/assessments'
 
 // Mobile-optimized endpoint for assessments with progressive loading
@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
   const startTime = Date.now()
 
   try {
-    const supabase = await createClient()
+    const supabase = await createServerSupabase()
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -218,7 +218,7 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now()
 
   try {
-    const supabase = await createClient()
+    const supabase = await createServerSupabase()
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -386,7 +386,7 @@ export async function PUT(request: NextRequest) {
   const startTime = Date.now()
 
   try {
-    const supabase = await createClient()
+    const supabase = await createServerSupabase()
     const {
       data: { user },
     } = await supabase.auth.getUser()

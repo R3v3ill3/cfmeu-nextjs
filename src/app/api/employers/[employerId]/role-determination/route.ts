@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createServerSupabase } from '@/lib/supabase/server'
 import { EmployerRole } from '@/types/assessments'
 
 // GET - Determine employer role based on data analysis
@@ -8,7 +8,7 @@ export async function GET(
   { params }: { params: { employerId: string } }
 ) {
   try {
-    const supabase = await createClient()
+    const supabase = await createServerSupabase()
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -83,7 +83,7 @@ export async function POST(
   { params }: { params: { employerId: string } }
 ) {
   try {
-    const supabase = await createClient()
+    const supabase = await createServerSupabase()
     const {
       data: { user },
     } = await supabase.auth.getUser()

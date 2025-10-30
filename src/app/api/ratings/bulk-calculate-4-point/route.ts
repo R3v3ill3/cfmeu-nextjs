@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createServerSupabase } from '@/lib/supabase/server'
 import { z } from 'zod'
 
 // Schema for bulk rating calculation
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
   const batchId = crypto.randomUUID()
 
   try {
-    const supabase = await createClient()
+    const supabase = await createServerSupabase()
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -133,7 +133,7 @@ export async function GET(
   { params }: { params: { batchId: string } }
 ) {
   try {
-    const supabase = await createClient()
+    const supabase = await createServerSupabase()
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -302,7 +302,7 @@ export async function DELETE(
   { params }: { params: { batchId: string } }
 ) {
   try {
-    const supabase = await createClient()
+    const supabase = await createServerSupabase()
     const {
       data: { user },
     } = await supabase.auth.getUser()

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createServerSupabase } from '@/lib/supabase/server'
 import {
   LegacyDataConversion,
   Safety4PointAssessment,
@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now()
 
   try {
-    const supabase = await createClient()
+    const supabase = await createServerSupabase()
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -315,7 +315,7 @@ export async function POST(request: NextRequest) {
 // GET - Get conversion statistics and audit trail
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = await createServerSupabase()
     const {
       data: { user },
     } = await supabase.auth.getUser()

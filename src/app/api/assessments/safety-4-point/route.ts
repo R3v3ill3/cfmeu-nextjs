@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createServerSupabase } from '@/lib/supabase/server'
 import {
   CreateSafety4PointAssessmentPayload,
   Safety4PointAssessment,
@@ -110,7 +110,7 @@ function calculateSafetyConfidenceLevel(
 // POST - Create new Safety 4-Point Assessment
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = await createServerSupabase()
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -230,7 +230,7 @@ export async function POST(request: NextRequest) {
 // GET - List Safety 4-Point Assessments with filtering
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = await createServerSupabase()
     const {
       data: { user },
     } = await supabase.auth.getUser()

@@ -15,11 +15,15 @@ function frequencyToNumeric(rating: FrequencyRating): number {
 }
 
 // Calculate overall score from assessment data
-function calculateOverallScore(assessmentData: RatingWizardFormData['assessment_data']): number {
-  const weights = {
-    union_respect: 0.35,  // 35% - 5 criteria
+function calculateOverallScore(
+  assessmentData: RatingWizardFormData['assessment_data'],
+  customWeights?: { [key: string]: number }
+): number {
+  // Use custom weights if provided, otherwise use default equal weights
+  const weights = customWeights || {
+    union_respect: 0.25,  // 25% - 5 criteria
     safety: 0.25,        // 25% - 3 criteria
-    subcontractor: 0.15, // 15% - 1 criterion
+    subcontractor: 0.25, // 25% - 1 criterion
     compliance: 0.25     // 25% - 3 criteria
   };
 
@@ -101,8 +105,25 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Get custom weights from database
+    let customWeights = null;
+    try {
+      const { data: weightConfig } = await supabase
+        .from('rating_weight_configs')
+        .select('weights')
+        .eq('track', 'organiser_expertise')
+        .eq('is_active', true)
+        .single();
+
+      if (weightConfig && weightConfig.weights) {
+        customWeights = weightConfig.weights;
+      }
+    } catch (error) {
+      console.log('No custom weights found, using defaults');
+    }
+
     // Calculate overall score and rating
-    const overallScore = calculateOverallScore(assessment_data);
+    const overallScore = calculateOverallScore(assessment_data, customWeights);
     const overallRating = scoreToTrafficLight(overallScore);
 
     // Determine confidence level based on notes and assessment method

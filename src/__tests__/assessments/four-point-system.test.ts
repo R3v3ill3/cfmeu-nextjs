@@ -10,7 +10,7 @@ import {
 
 // Mock Supabase client
 vi.mock('@/lib/supabase/server', () => ({
-  createClient: vi.fn(() => ({
+  createServerSupabase: vi.fn(() => ({
     auth: {
       getUser: vi.fn().mockResolvedValue({
         data: { user: { id: 'test-user-id' } }
@@ -517,7 +517,7 @@ describe('Four-Point Rating System', () => {
       }
 
       vi.doMock('@/lib/supabase/server', () => ({
-        createClient: () => mockSupabase
+        createServerSupabase: () => mockSupabase
       }))
 
       const response = await fetch('/api/assessments/union-respect', {

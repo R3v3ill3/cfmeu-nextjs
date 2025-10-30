@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createServerSupabase } from '@/lib/supabase/server'
 import {
   CreateUnionRespectAssessmentPayload,
   BulkAssessmentOperation,
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now()
 
   try {
-    const supabase = await createClient()
+    const supabase = await createServerSupabase()
     const {
       data: { user },
     } = await supabase.auth.getUser()
