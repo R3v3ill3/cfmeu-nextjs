@@ -161,15 +161,84 @@ export interface MobileRatingDisplayOptions {
   role_aware: boolean
 }
 
+// 4-point frequency scale for assessments
+export type FrequencyRating = 'always' | 'almost_always' | 'sometimes' | 'rarely_never'
+
+// Assessment categories for 4-point system
+export interface AssessmentCategory {
+  id: string
+  name: string
+  description: string
+  criteria: AssessmentCriterion[]
+}
+
+export interface AssessmentCriterion {
+  id: string
+  name: string
+  description: string
+  weight: number
+  required: boolean
+}
+
+// Union Respect Assessment (4 criteria - EBA removed as it's a hard prerequisite)
+export interface UnionRespectAssessment {
+  right_of_entry: FrequencyRating
+  delegate_accommodation: FrequencyRating
+  access_to_information: FrequencyRating
+  access_to_inductions: FrequencyRating
+}
+
+// Safety Assessment (3 criteria)
+export interface SafetyAssessment {
+  site_safety: FrequencyRating
+  safety_procedures: FrequencyRating
+  incident_reporting: FrequencyRating
+}
+
+// Subcontractor Assessment (1 criterion)
+export interface SubcontractorAssessment {
+  subcontractor_usage: FrequencyRating
+}
+
+// Compliance Assessment
+export interface ComplianceAssessment {
+  cbus_compliance: FrequencyRating
+  incolink_compliance: FrequencyRating
+  payment_timing: FrequencyRating
+}
+
+// Complete 4-point assessment data
+export interface Assessment4PointData {
+  union_respect: UnionRespectAssessment
+  safety: SafetyAssessment
+  subcontractor: SubcontractorAssessment
+  compliance: ComplianceAssessment
+}
+
 // Form data for rating wizard
 export interface RatingWizardFormData {
   employer_id: string
   track: RatingTrack
   role_context: RoleType
   project_id?: string
-  responses: Record<string, number | string | boolean>
+  assessment_data: Assessment4PointData
   notes?: string
   confidence_factors: Record<string, number>
+  assessment_method?: 'site_visit' | 'phone_call' | 'union_meeting' | 'worker_interview' | 'document_review' | 'other'
+  evidence_urls?: string[]
+  follow_up_required?: boolean
+  follow_up_date?: string | null
+}
+
+// Project count data for visualization
+export interface ProjectCountData {
+  assessed_projects: number
+  total_projects: number
+  weight_distribution: {
+    project_data: number // percentage (0-100)
+    organiser_expertise: number // percentage (0-100)
+  }
+  data_quality: 'high' | 'medium' | 'low'
 }
 
 // API response types

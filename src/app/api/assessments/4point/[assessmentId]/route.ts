@@ -52,7 +52,9 @@ export async function GET(request: NextRequest, { params }: { params: { assessme
     const { assessmentId } = params;
 
     // Check if 4-point rating system is enabled
-    if (!featureFlags.isEnabled('RATING_SYSTEM_4POINT')) {
+    // Temporarily bypass user context for development
+    const isEnabled = process.env.NODE_ENV === 'development' || featureFlags.isEnabled('RATING_SYSTEM_4POINT');
+    if (!isEnabled) {
       return NextResponse.json({ error: '4-point rating system not enabled' }, { status: 404 });
     }
 

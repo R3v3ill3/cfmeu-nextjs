@@ -15,6 +15,7 @@ export interface FeatureFlagConfig {
 export interface FeatureFlags {
   // Rating system core features
   RATING_SYSTEM_ENABLED: FeatureFlagConfig
+  RATING_SYSTEM_4POINT: FeatureFlagConfig
   RATING_DASHBOARD_ENABLED: FeatureFlagConfig
   RATING_WIZARD_ENABLED: FeatureFlagConfig
   RATING_COMPARISON_ENABLED: FeatureFlagConfig
@@ -45,6 +46,20 @@ const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
     environment: ['production', 'staging', 'development'],
     metadata: {
       description: 'Core rating system functionality',
+      owner: 'rating-system-team',
+      lastUpdated: new Date().toISOString()
+    }
+  },
+
+  RATING_SYSTEM_4POINT: {
+    enabled: process.env.RATING_SYSTEM_4POINT === 'true' || process.env.NODE_ENV === 'development',
+    rolloutPercentage: process.env.RATING_SYSTEM_4POINT_ROLLOUT_PERCENTAGE
+      ? parseInt(process.env.RATING_SYSTEM_4POINT_ROLLOUT_PERCENTAGE)
+      : 100,
+    allowedRoles: ['admin', 'lead_organiser', 'organiser'],
+    environment: ['production', 'staging', 'development'],
+    metadata: {
+      description: '4-point rating system for employer assessments',
       owner: 'rating-system-team',
       lastUpdated: new Date().toISOString()
     }

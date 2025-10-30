@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -31,7 +31,7 @@ import {
   Info
 } from "lucide-react";
 import { useEmployerCompliance, useUpsertEmployerCompliance } from "./hooks/useEmployerCompliance";
-import { ComplianceChecker, PaymentStatus, PaymentTiming, WorkerCountStatus } from "@/types/compliance";
+import { ComplianceChecker, PaymentStatus, PaymentTiming, WorkerCountStatus, EmployerComplianceCheck } from "@/types/compliance";
 import { FourPointRatingDisplay } from "@/components/ui/FourPointScaleSelector";
 import { UnionRespectAssessment } from "@/components/assessments/UnionRespectAssessment";
 import { SafetyAssessment4Point } from "@/components/assessments/SafetyAssessment4Point";
@@ -72,61 +72,242 @@ export function EmployerComplianceDetail({
     cbus_enforcement_flag: false,
     incolink_enforcement_flag: false,
     cbus_followup_required: false,
-    incolink_followup_required: false
+    incolink_followup_required: false,
+    // CBUS 3-point check fields
+    cbus_payment_status: null,
+    cbus_payment_timing: null,
+    cbus_worker_count_status: null,
+    cbus_check_date: null,
+    cbus_checked_by: [],
+    cbus_notes: null,
+    // INCOLINK 3-point check fields
+    incolink_payment_status: null,
+    incolink_payment_timing: null,
+    incolink_worker_count_status: null,
+    incolink_check_date: null,
+    incolink_checked_by: [],
+    incolink_notes: null
   };
 
   const [formData, setFormData] = useState(currentCompliance);
+  const [isMutating, setIsMutating] = useState(false);
+
+  // Sync formData when compliance data changes (but not during mutations)
+  useEffect(() => {
+    // Don't sync if we're currently mutating to avoid overwriting pending changes
+    if (isMutating) return;
+    
+    if (compliance.length > 0 && currentCompliance) {
+      // Only update if the data actually changed to avoid loops
+      // Compare IDs if available, otherwise compare the whole object
+      const currentId = currentCompliance.id;
+      if (currentId && formData.id && currentId === formData.id) {
+        // Same record, check if data changed
+        // Use a more granular comparison for status fields to avoid unnecessary updates
+        const hasDataChanged = 
+          currentCompliance.cbus_payment_status !== formData.cbus_payment_status ||
+          currentCompliance.cbus_payment_timing !== formData.cbus_payment_timing ||
+          currentCompliance.cbus_worker_count_status !== formData.cbus_worker_count_status ||
+          currentCompliance.incolink_payment_status !== formData.incolink_payment_status ||
+          currentCompliance.incolink_payment_timing !== formData.incolink_payment_timing ||
+          currentCompliance.incolink_worker_count_status !== formData.incolink_worker_count_status ||
+          currentCompliance.cbus_check_conducted !== formData.cbus_check_conducted ||
+          currentCompliance.incolink_check_conducted !== formData.incolink_check_conducted ||
+          currentCompliance.id !== formData.id;
+        
+        if (hasDataChanged) {
+          setFormData(currentCompliance as any);
+        }
+      } else if (!formData.id || (currentId && currentId !== formData.id)) {
+        // New record or ID changed, update formData
+        setFormData(currentCompliance as any);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [compliance, isMutating]);
+
+  // Helper function to clean data before sending to database
+  const cleanComplianceData = (data: any): Partial<EmployerComplianceCheck> => {
+    // Fields to exclude (metadata and relations)
+    const excludeFields = [
+      'id', 'created_at', 'updated_at', 'effective_from', 'effective_to', 
+      'version', 'is_current', 'updated_by', 'employers'
+    ];
+    
+    // Status fields that should be null if empty string
+    const statusFields = [
+      'cbus_payment_status', 'cbus_payment_timing', 'cbus_worker_count_status',
+      'incolink_payment_status', 'incolink_payment_timing', 'incolink_worker_count_status'
+    ];
+    
+    // Get all valid compliance fields from the type
+    const cleaned: any = {};
+    const validFields = [
+      'cbus_check_conducted', 'cbus_check_date', 'cbus_checked_by', 'cbus_payment_status',
+      'cbus_payment_timing', 'cbus_worker_count_status', 'cbus_enforcement_flag',
+      'cbus_followup_required', 'cbus_notes',
+      'incolink_check_conducted', 'incolink_check_date', 'incolink_checked_by',
+      'incolink_payment_status', 'incolink_payment_timing', 'incolink_worker_count_status',
+      'incolink_enforcement_flag', 'incolink_followup_required', 'incolink_notes',
+      'incolink_company_id', 'site_visit_id'
+    ];
+    
+    validFields.forEach(field => {
+      if (data.hasOwnProperty(field) && !excludeFields.includes(field)) {
+        let value = data[field];
+        
+        // Convert empty strings to null for status fields
+        if (statusFields.includes(field) && value === '') {
+          value = null;
+        }
+        
+        // Convert empty arrays to empty array (keep as is)
+        if (Array.isArray(value) && value.length === 0) {
+          value = [];
+        }
+        
+        cleaned[field] = value;
+      }
+    });
+    
+    return cleaned;
+  };
 
   const handleFieldChange = (field: string, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    setHasChanges(true);
+    // Use functional update pattern to get latest state and avoid stale closures
+    setFormData(prev => {
+      const updated = { ...prev, [field]: value };
+      setHasChanges(true);
 
-    // Auto-save for CBUS compliance fields (including 3-point check dropdowns)
-    if (field.startsWith('cbus_')) {
-      const updatedData = { ...formData, [field]: value };
-      upsertCompliance.mutate({
-        employerId,
-        updates: updatedData
-      }, {
-        onSuccess: () => {
-          setHasChanges(false);
-          toast.success("CBUS compliance updated");
-        },
-        onError: (error) => {
-          toast.error(`Failed to update CBUS compliance: ${error.message}`);
+      // Auto-enable "Check Conducted" and set date when all 3 CBUS selections are made
+      if (field.startsWith('cbus_payment_') || field === 'cbus_worker_count_status') {
+        const allThreeSelected = 
+          updated.cbus_payment_status !== null &&
+          updated.cbus_payment_timing !== null &&
+          updated.cbus_worker_count_status !== null;
+        
+        if (allThreeSelected && !updated.cbus_check_conducted) {
+          updated.cbus_check_conducted = true;
+          // Set date to today if not already set
+          if (!updated.cbus_check_date) {
+            updated.cbus_check_date = new Date().toISOString().split('T')[0];
+          }
         }
-      });
-    }
+      }
 
-    // Auto-save for INCOLINK compliance fields (including 3-point check dropdowns)
-    if (field.startsWith('incolink_')) {
-      const updatedData = { ...formData, [field]: value };
-      upsertCompliance.mutate({
-        employerId,
-        updates: updatedData
-      }, {
-        onSuccess: () => {
-          setHasChanges(false);
-          toast.success("INCOLINK compliance updated");
-        },
-        onError: (error) => {
-          toast.error(`Failed to update INCOLINK compliance: ${error.message}`);
+      // Auto-enable "Check Conducted" and set date when all 3 INCOLINK selections are made
+      if (field.startsWith('incolink_payment_') || field === 'incolink_worker_count_status') {
+        const allThreeSelected = 
+          updated.incolink_payment_status !== null &&
+          updated.incolink_payment_timing !== null &&
+          updated.incolink_worker_count_status !== null;
+        
+        if (allThreeSelected && !updated.incolink_check_conducted) {
+          updated.incolink_check_conducted = true;
+          // Set date to today if not already set
+          if (!updated.incolink_check_date) {
+            updated.incolink_check_date = new Date().toISOString().split('T')[0];
+          }
         }
-      });
-    }
+      }
+
+      // Auto-save for CBUS compliance fields (including 3-point check dropdowns)
+      if (field.startsWith('cbus_')) {
+        setIsMutating(true);
+        const cleanedUpdates = cleanComplianceData(updated);
+        upsertCompliance.mutate({
+          employerId,
+          updates: cleanedUpdates
+        }, {
+          onSuccess: (data) => {
+            // Update formData with the returned data to keep UI in sync
+            if (data) {
+              setFormData(prevData => {
+                // Merge the returned data, preserving all field values including null
+                const merged = { ...prevData };
+                // Update all compliance fields from the returned data
+                if ('cbus_payment_status' in data) merged.cbus_payment_status = data.cbus_payment_status;
+                if ('cbus_payment_timing' in data) merged.cbus_payment_timing = data.cbus_payment_timing;
+                if ('cbus_worker_count_status' in data) merged.cbus_worker_count_status = data.cbus_worker_count_status;
+                if ('cbus_check_conducted' in data) merged.cbus_check_conducted = data.cbus_check_conducted;
+                if ('cbus_check_date' in data) merged.cbus_check_date = data.cbus_check_date;
+                if ('cbus_checked_by' in data) merged.cbus_checked_by = data.cbus_checked_by;
+                if ('cbus_enforcement_flag' in data) merged.cbus_enforcement_flag = data.cbus_enforcement_flag;
+                if ('cbus_followup_required' in data) merged.cbus_followup_required = data.cbus_followup_required;
+                if ('cbus_notes' in data) merged.cbus_notes = data.cbus_notes;
+                return merged;
+              });
+            }
+            setHasChanges(false);
+            // Delay resetting isMutating to allow refetch to complete
+            setTimeout(() => setIsMutating(false), 500);
+            toast.success("CBUS compliance updated");
+          },
+          onError: (error: any) => {
+            console.error("CBUS update error:", error);
+            setIsMutating(false);
+            toast.error(`Failed to update CBUS compliance: ${error.message || 'Unknown error'}`);
+          }
+        });
+      }
+
+      // Auto-save for INCOLINK compliance fields (including 3-point check dropdowns)
+      if (field.startsWith('incolink_')) {
+        setIsMutating(true);
+        const cleanedUpdates = cleanComplianceData(updated);
+        upsertCompliance.mutate({
+          employerId,
+          updates: cleanedUpdates
+        }, {
+          onSuccess: (data) => {
+            // Update formData with the returned data to keep UI in sync
+            if (data) {
+              setFormData(prevData => {
+                // Merge the returned data, preserving all field values including null
+                const merged = { ...prevData };
+                // Update all compliance fields from the returned data
+                if ('incolink_payment_status' in data) merged.incolink_payment_status = data.incolink_payment_status;
+                if ('incolink_payment_timing' in data) merged.incolink_payment_timing = data.incolink_payment_timing;
+                if ('incolink_worker_count_status' in data) merged.incolink_worker_count_status = data.incolink_worker_count_status;
+                if ('incolink_check_conducted' in data) merged.incolink_check_conducted = data.incolink_check_conducted;
+                if ('incolink_check_date' in data) merged.incolink_check_date = data.incolink_check_date;
+                if ('incolink_checked_by' in data) merged.incolink_checked_by = data.incolink_checked_by;
+                if ('incolink_enforcement_flag' in data) merged.incolink_enforcement_flag = data.incolink_enforcement_flag;
+                if ('incolink_followup_required' in data) merged.incolink_followup_required = data.incolink_followup_required;
+                if ('incolink_notes' in data) merged.incolink_notes = data.incolink_notes;
+                return merged;
+              });
+            }
+            setHasChanges(false);
+            // Delay resetting isMutating to allow refetch to complete
+            setTimeout(() => setIsMutating(false), 500);
+            toast.success("INCOLINK compliance updated");
+          },
+          onError: (error: any) => {
+            console.error("INCOLINK update error:", error);
+            setIsMutating(false);
+            toast.error(`Failed to update INCOLINK compliance: ${error.message || 'Unknown error'}`);
+          }
+        });
+      }
+
+      return updated;
+    });
   };
 
   const handleSave = () => {
+    const cleanedUpdates = cleanComplianceData(formData);
     upsertCompliance.mutate({
       employerId,
-      updates: formData
+      updates: cleanedUpdates
     }, {
       onSuccess: () => {
         setHasChanges(false);
         toast.success("Compliance data saved");
       },
-      onError: (error) => {
-        toast.error(`Failed to save compliance data: ${error.message}`);
+      onError: (error: any) => {
+        console.error("Save error:", error);
+        toast.error(`Failed to save compliance data: ${error.message || 'Unknown error'}`);
       }
     });
   };
@@ -207,29 +388,160 @@ export function EmployerComplianceDetail({
                     </div>
                   </div>
 
-                  {formData.cbus_check_conducted && (
-                    <>
-                      <div>
-                        <Label>Check Date</Label>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button variant="outline" className="w-full justify-start text-left font-normal mt-1">
-                              <CalendarIcon className="mr-2 h-4 w-4" />
-                              {formData.cbus_check_date
-                                ? format(new Date(formData.cbus_check_date), "PPP")
-                                : "Select date"}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={formData.cbus_check_date ? new Date(formData.cbus_check_date) : undefined}
-                              onSelect={(date) => handleFieldChange('cbus_check_date', date?.toISOString().split('T')[0])}
-                            />
-                          </PopoverContent>
-                        </Popover>
+                  {/* Check Date - Always visible when check is conducted or all 3 selections are made */}
+                  {(formData.cbus_check_conducted || 
+                    (formData.cbus_payment_status !== null && 
+                     formData.cbus_payment_timing !== null && 
+                     formData.cbus_worker_count_status !== null)) && (
+                    <div>
+                      <Label>Check Date</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="w-full justify-start text-left font-normal mt-1">
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {formData.cbus_check_date
+                              ? format(new Date(formData.cbus_check_date), "PPP")
+                              : "Select date"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={formData.cbus_check_date ? new Date(formData.cbus_check_date) : new Date()}
+                            onSelect={(date) => handleFieldChange('cbus_check_date', date?.toISOString().split('T')[0])}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  )}
+
+                  {/* 3-Point CBUS Superannuation Audit - Always Visible */}
+                  <div className="space-y-3 border-t pt-3">
+                    <h6 className="font-medium text-sm flex items-center gap-2">
+                      📊 CBUS Superannuation Audit - 3 Point Check
+                      {formData.cbus_check_conducted && (
+                        <Badge variant="default" className="text-xs">In Progress</Badge>
+                      )}
+                    </h6>
+
+                    <div className="grid grid-cols-1 gap-3">
+                      <div className={cn(
+                        "p-4 border-2 rounded-lg transition-all",
+                        formData.cbus_payment_status === 'correct' ? "border-green-500 bg-green-50" :
+                        formData.cbus_payment_status === 'incorrect' ? "border-red-500 bg-red-50" :
+                        formData.cbus_payment_status === 'uncertain' ? "border-yellow-500 bg-yellow-50" :
+                        "border-gray-200 bg-gray-50"
+                      )}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Label className="font-medium">1. Paying to CBUS</Label>
+                              {formData.cbus_payment_status === 'correct' && <span className="text-green-600">✅</span>}
+                              {formData.cbus_payment_status === 'incorrect' && <span className="text-red-600">❌</span>}
+                              {formData.cbus_payment_status === 'uncertain' && <span className="text-yellow-600">❓</span>}
+                            </div>
+                            <p className="text-xs text-muted-foreground">Superannuation paid to correct entity</p>
+                          </div>
+                          <Select
+                            value={formData.cbus_payment_status || undefined}
+                            onValueChange={(value) => handleFieldChange('cbus_payment_status', value as PaymentStatus)}
+                          >
+                            <SelectTrigger className="w-36">
+                              <SelectValue placeholder="Select status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="correct">✅ Correct</SelectItem>
+                              <SelectItem value="incorrect">❌ Incorrect</SelectItem>
+                              <SelectItem value="uncertain">❓ Uncertain</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
 
+                      <div className={cn(
+                        "p-4 border-2 rounded-lg transition-all",
+                        formData.cbus_payment_timing === 'on_time' ? "border-green-500 bg-green-50" :
+                        formData.cbus_payment_timing === 'late' ? "border-red-500 bg-red-50" :
+                        formData.cbus_payment_timing === 'uncertain' ? "border-yellow-500 bg-yellow-50" :
+                        "border-gray-200 bg-gray-50"
+                      )}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Label className="font-medium">2. Paying On Time</Label>
+                              {formData.cbus_payment_timing === 'on_time' && <span className="text-green-600">✅</span>}
+                              {formData.cbus_payment_timing === 'late' && <span className="text-red-600">⏰</span>}
+                              {formData.cbus_payment_timing === 'uncertain' && <span className="text-yellow-600">❓</span>}
+                            </div>
+                            <p className="text-xs text-muted-foreground">Timely superannuation payments</p>
+                          </div>
+                          <Select
+                            value={formData.cbus_payment_timing || undefined}
+                            onValueChange={(value) => handleFieldChange('cbus_payment_timing', value as PaymentTiming)}
+                          >
+                            <SelectTrigger className="w-36">
+                              <SelectValue placeholder="Select timing" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="on_time">✅ On Time</SelectItem>
+                              <SelectItem value="late">⏰ Late</SelectItem>
+                              <SelectItem value="uncertain">❓ Uncertain</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <div className={cn(
+                        "p-4 border-2 rounded-lg transition-all",
+                        formData.cbus_worker_count_status === 'correct' ? "border-green-500 bg-green-50" :
+                        formData.cbus_worker_count_status === 'incorrect' ? "border-red-500 bg-red-50" :
+                        "border-gray-200 bg-gray-50"
+                      )}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Label className="font-medium">3. Paying for All Workers</Label>
+                              {formData.cbus_worker_count_status === 'correct' && <span className="text-green-600">✅</span>}
+                              {formData.cbus_worker_count_status === 'incorrect' && <span className="text-red-600">❌</span>}
+                            </div>
+                            <p className="text-xs text-muted-foreground">All employees covered by superannuation</p>
+                          </div>
+                          <Select
+                            value={formData.cbus_worker_count_status || undefined}
+                            onValueChange={(value) => handleFieldChange('cbus_worker_count_status', value as WorkerCountStatus)}
+                          >
+                            <SelectTrigger className="w-36">
+                              <SelectValue placeholder="Select coverage" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="correct">✅ All Workers</SelectItem>
+                              <SelectItem value="incorrect">❌ Missing Workers</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* CBUS Summary */}
+                    <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-blue-900">CBUS Audit Status</span>
+                        <Badge variant={
+                          (formData.cbus_payment_status === 'correct' &&
+                           formData.cbus_payment_timing === 'on_time' &&
+                           formData.cbus_worker_count_status === 'correct') ? "default" : "destructive"
+                        }>
+                          {(formData.cbus_payment_status === 'correct' &&
+                            formData.cbus_payment_timing === 'on_time' &&
+                            formData.cbus_worker_count_status === 'correct') ? "✅ Compliant" : "⚠️ Issues Found"}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* These fields should only show when check is conducted */}
+                  {formData.cbus_check_conducted && (
+                    <>
                       <div>
                         <Label>Checked By</Label>
                         <Select
@@ -245,130 +557,6 @@ export function EmployerComplianceDetail({
                             ))}
                           </SelectContent>
                         </Select>
-                      </div>
-
-                      {/* 3-Point CBUS Superannuation Audit - Always Visible */}
-                      <div className="space-y-3 border-t pt-3">
-                        <h6 className="font-medium text-sm flex items-center gap-2">
-                          📊 CBUS Superannuation Audit - 3 Point Check
-                          {formData.cbus_check_conducted && (
-                            <Badge variant="default" className="text-xs">In Progress</Badge>
-                          )}
-                        </h6>
-
-                        <div className="grid grid-cols-1 gap-3">
-                          <div className={cn(
-                            "p-4 border-2 rounded-lg transition-all",
-                            formData.cbus_payment_status === 'correct' ? "border-green-500 bg-green-50" :
-                            formData.cbus_payment_status === 'incorrect' ? "border-red-500 bg-red-50" :
-                            formData.cbus_payment_status === 'uncertain' ? "border-yellow-500 bg-yellow-50" :
-                            "border-gray-200 bg-gray-50"
-                          )}>
-                            <div className="flex items-center justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <Label className="font-medium">1. Paying to CBUS</Label>
-                                  {formData.cbus_payment_status === 'correct' && <span className="text-green-600">✅</span>}
-                                  {formData.cbus_payment_status === 'incorrect' && <span className="text-red-600">❌</span>}
-                                  {formData.cbus_payment_status === 'uncertain' && <span className="text-yellow-600">❓</span>}
-                                </div>
-                                <p className="text-xs text-muted-foreground">Superannuation paid to correct entity</p>
-                              </div>
-                              <Select
-                                value={formData.cbus_payment_status || ''}
-                                onValueChange={(value) => handleFieldChange('cbus_payment_status', value as PaymentStatus)}
-                              >
-                                <SelectTrigger className="w-36">
-                                  <SelectValue placeholder="Select status" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="correct">✅ Correct</SelectItem>
-                                  <SelectItem value="incorrect">❌ Incorrect</SelectItem>
-                                  <SelectItem value="uncertain">❓ Uncertain</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </div>
-
-                          <div className={cn(
-                            "p-4 border-2 rounded-lg transition-all",
-                            formData.cbus_payment_timing === 'on_time' ? "border-green-500 bg-green-50" :
-                            formData.cbus_payment_timing === 'late' ? "border-red-500 bg-red-50" :
-                            formData.cbus_payment_timing === 'uncertain' ? "border-yellow-500 bg-yellow-50" :
-                            "border-gray-200 bg-gray-50"
-                          )}>
-                            <div className="flex items-center justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <Label className="font-medium">2. Paying On Time</Label>
-                                  {formData.cbus_payment_timing === 'on_time' && <span className="text-green-600">✅</span>}
-                                  {formData.cbus_payment_timing === 'late' && <span className="text-red-600">⏰</span>}
-                                  {formData.cbus_payment_timing === 'uncertain' && <span className="text-yellow-600">❓</span>}
-                                </div>
-                                <p className="text-xs text-muted-foreground">Timely superannuation payments</p>
-                              </div>
-                              <Select
-                                value={formData.cbus_payment_timing || ''}
-                                onValueChange={(value) => handleFieldChange('cbus_payment_timing', value as PaymentTiming)}
-                              >
-                                <SelectTrigger className="w-36">
-                                  <SelectValue placeholder="Select timing" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="on_time">✅ On Time</SelectItem>
-                                  <SelectItem value="late">⏰ Late</SelectItem>
-                                  <SelectItem value="uncertain">❓ Uncertain</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </div>
-
-                          <div className={cn(
-                            "p-4 border-2 rounded-lg transition-all",
-                            formData.cbus_worker_count_status === 'correct' ? "border-green-500 bg-green-50" :
-                            formData.cbus_worker_count_status === 'incorrect' ? "border-red-500 bg-red-50" :
-                            "border-gray-200 bg-gray-50"
-                          )}>
-                            <div className="flex items-center justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <Label className="font-medium">3. Paying for All Workers</Label>
-                                  {formData.cbus_worker_count_status === 'correct' && <span className="text-green-600">✅</span>}
-                                  {formData.cbus_worker_count_status === 'incorrect' && <span className="text-red-600">❌</span>}
-                                </div>
-                                <p className="text-xs text-muted-foreground">All employees covered by superannuation</p>
-                              </div>
-                              <Select
-                                value={formData.cbus_worker_count_status || ''}
-                                onValueChange={(value) => handleFieldChange('cbus_worker_count_status', value as WorkerCountStatus)}
-                              >
-                                <SelectTrigger className="w-36">
-                                  <SelectValue placeholder="Select coverage" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="correct">✅ All Workers</SelectItem>
-                                  <SelectItem value="incorrect">❌ Missing Workers</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* CBUS Summary */}
-                        <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium text-blue-900">CBUS Audit Status</span>
-                            <Badge variant={
-                              (formData.cbus_payment_status === 'correct' &&
-                               formData.cbus_payment_timing === 'on_time' &&
-                               formData.cbus_worker_count_status === 'correct') ? "default" : "destructive"
-                            }>
-                              {(formData.cbus_payment_status === 'correct' &&
-                                formData.cbus_payment_timing === 'on_time' &&
-                                formData.cbus_worker_count_status === 'correct') ? "✅ Compliant" : "⚠️ Issues Found"}
-                            </Badge>
-                          </div>
-                        </div>
                       </div>
 
                       <div className="space-y-2">
@@ -440,29 +628,160 @@ export function EmployerComplianceDetail({
                     </div>
                   </div>
 
-                  {formData.incolink_check_conducted && (
-                    <>
-                      <div>
-                        <Label>Check Date</Label>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button variant="outline" className="w-full justify-start text-left font-normal mt-1">
-                              <CalendarIcon className="mr-2 h-4 w-4" />
-                              {formData.incolink_check_date
-                                ? format(new Date(formData.incolink_check_date), "PPP")
-                                : "Select date"}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={formData.incolink_check_date ? new Date(formData.incolink_check_date) : undefined}
-                              onSelect={(date) => handleFieldChange('incolink_check_date', date?.toISOString().split('T')[0])}
-                            />
-                          </PopoverContent>
-                        </Popover>
+                  {/* Check Date - Always visible when check is conducted or all 3 selections are made */}
+                  {(formData.incolink_check_conducted || 
+                    (formData.incolink_payment_status !== null && 
+                     formData.incolink_payment_timing !== null && 
+                     formData.incolink_worker_count_status !== null)) && (
+                    <div>
+                      <Label>Check Date</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="w-full justify-start text-left font-normal mt-1">
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {formData.incolink_check_date
+                              ? format(new Date(formData.incolink_check_date), "PPP")
+                              : "Select date"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={formData.incolink_check_date ? new Date(formData.incolink_check_date) : new Date()}
+                            onSelect={(date) => handleFieldChange('incolink_check_date', date?.toISOString().split('T')[0])}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  )}
+
+                  {/* 3-Point INCOLINK Entitlements Audit - Always Visible */}
+                  <div className="space-y-3 border-t pt-3">
+                    <h6 className="font-medium text-sm flex items-center gap-2">
+                      📊 INCOLINK Entitlements Audit - 3 Point Check
+                      {formData.incolink_check_conducted && (
+                        <Badge variant="default" className="text-xs">In Progress</Badge>
+                      )}
+                    </h6>
+
+                    <div className="grid grid-cols-1 gap-3">
+                      <div className={cn(
+                        "p-4 border-2 rounded-lg transition-all",
+                        formData.incolink_payment_status === 'correct' ? "border-green-500 bg-green-50" :
+                        formData.incolink_payment_status === 'incorrect' ? "border-red-500 bg-red-50" :
+                        formData.incolink_payment_status === 'uncertain' ? "border-yellow-500 bg-yellow-50" :
+                        "border-gray-200 bg-gray-50"
+                      )}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Label className="font-medium">1. Paying All Entitlements</Label>
+                              {formData.incolink_payment_status === 'correct' && <span className="text-green-600">✅</span>}
+                              {formData.incolink_payment_status === 'incorrect' && <span className="text-red-600">❌</span>}
+                              {formData.incolink_payment_status === 'uncertain' && <span className="text-yellow-600">❓</span>}
+                            </div>
+                            <p className="text-xs text-muted-foreground">Training and safety fund payments</p>
+                          </div>
+                          <Select
+                            value={formData.incolink_payment_status || undefined}
+                            onValueChange={(value) => handleFieldChange('incolink_payment_status', value as PaymentStatus)}
+                          >
+                            <SelectTrigger className="w-36">
+                              <SelectValue placeholder="Select status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="correct">✅ Correct</SelectItem>
+                              <SelectItem value="incorrect">❌ Incorrect</SelectItem>
+                              <SelectItem value="uncertain">❓ Uncertain</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
 
+                      <div className={cn(
+                        "p-4 border-2 rounded-lg transition-all",
+                        formData.incolink_payment_timing === 'on_time' ? "border-green-500 bg-green-50" :
+                        formData.incolink_payment_timing === 'late' ? "border-red-500 bg-red-50" :
+                        formData.incolink_payment_timing === 'uncertain' ? "border-yellow-500 bg-yellow-50" :
+                        "border-gray-200 bg-gray-50"
+                      )}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Label className="font-medium">2. Paying On Time</Label>
+                              {formData.incolink_payment_timing === 'on_time' && <span className="text-green-600">✅</span>}
+                              {formData.incolink_payment_timing === 'late' && <span className="text-red-600">⏰</span>}
+                              {formData.incolink_payment_timing === 'uncertain' && <span className="text-yellow-600">❓</span>}
+                            </div>
+                            <p className="text-xs text-muted-foreground">Timely INCOLINK payments</p>
+                          </div>
+                          <Select
+                            value={formData.incolink_payment_timing || undefined}
+                            onValueChange={(value) => handleFieldChange('incolink_payment_timing', value as PaymentTiming)}
+                          >
+                            <SelectTrigger className="w-36">
+                              <SelectValue placeholder="Select timing" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="on_time">✅ On Time</SelectItem>
+                              <SelectItem value="late">⏰ Late</SelectItem>
+                              <SelectItem value="uncertain">❓ Uncertain</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <div className={cn(
+                        "p-4 border-2 rounded-lg transition-all",
+                        formData.incolink_worker_count_status === 'correct' ? "border-green-500 bg-green-50" :
+                        formData.incolink_worker_count_status === 'incorrect' ? "border-red-500 bg-red-50" :
+                        "border-gray-200 bg-gray-50"
+                      )}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Label className="font-medium">3. Paying for All Workers</Label>
+                              {formData.incolink_worker_count_status === 'correct' && <span className="text-green-600">✅</span>}
+                              {formData.incolink_worker_count_status === 'incorrect' && <span className="text-red-600">❌</span>}
+                            </div>
+                            <p className="text-xs text-muted-foreground">All employees covered by entitlements</p>
+                          </div>
+                          <Select
+                            value={formData.incolink_worker_count_status || undefined}
+                            onValueChange={(value) => handleFieldChange('incolink_worker_count_status', value as WorkerCountStatus)}
+                          >
+                            <SelectTrigger className="w-36">
+                              <SelectValue placeholder="Select coverage" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="correct">✅ All Workers</SelectItem>
+                              <SelectItem value="incorrect">❌ Missing Workers</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* INCOLINK Summary */}
+                    <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-purple-900">INCOLINK Audit Status</span>
+                        <Badge variant={
+                          (formData.incolink_payment_status === 'correct' &&
+                           formData.incolink_payment_timing === 'on_time' &&
+                           formData.incolink_worker_count_status === 'correct') ? "default" : "destructive"
+                        }>
+                          {(formData.incolink_payment_status === 'correct' &&
+                            formData.incolink_payment_timing === 'on_time' &&
+                            formData.incolink_worker_count_status === 'correct') ? "✅ Compliant" : "⚠️ Issues Found"}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* These fields should only show when check is conducted */}
+                  {formData.incolink_check_conducted && (
+                    <>
                       <div>
                         <Label>Checked By</Label>
                         <Select
@@ -479,130 +798,6 @@ export function EmployerComplianceDetail({
                             <SelectItem value="incolink_officer">INCOLINK Officer</SelectItem>
                           </SelectContent>
                         </Select>
-                      </div>
-
-                      {/* 3-Point INCOLINK Entitlements Audit - Always Visible */}
-                      <div className="space-y-3 border-t pt-3">
-                        <h6 className="font-medium text-sm flex items-center gap-2">
-                          📊 INCOLINK Entitlements Audit - 3 Point Check
-                          {formData.incolink_check_conducted && (
-                            <Badge variant="default" className="text-xs">In Progress</Badge>
-                          )}
-                        </h6>
-
-                        <div className="grid grid-cols-1 gap-3">
-                          <div className={cn(
-                            "p-4 border-2 rounded-lg transition-all",
-                            formData.incolink_payment_status === 'correct' ? "border-green-500 bg-green-50" :
-                            formData.incolink_payment_status === 'incorrect' ? "border-red-500 bg-red-50" :
-                            formData.incolink_payment_status === 'uncertain' ? "border-yellow-500 bg-yellow-50" :
-                            "border-gray-200 bg-gray-50"
-                          )}>
-                            <div className="flex items-center justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <Label className="font-medium">1. Paying All Entitlements</Label>
-                                  {formData.incolink_payment_status === 'correct' && <span className="text-green-600">✅</span>}
-                                  {formData.incolink_payment_status === 'incorrect' && <span className="text-red-600">❌</span>}
-                                  {formData.incolink_payment_status === 'uncertain' && <span className="text-yellow-600">❓</span>}
-                                </div>
-                                <p className="text-xs text-muted-foreground">Training and safety fund payments</p>
-                              </div>
-                              <Select
-                                value={formData.incolink_payment_status || ''}
-                                onValueChange={(value) => handleFieldChange('incolink_payment_status', value as PaymentStatus)}
-                              >
-                                <SelectTrigger className="w-36">
-                                  <SelectValue placeholder="Select status" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="correct">✅ Correct</SelectItem>
-                                  <SelectItem value="incorrect">❌ Incorrect</SelectItem>
-                                  <SelectItem value="uncertain">❓ Uncertain</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </div>
-
-                          <div className={cn(
-                            "p-4 border-2 rounded-lg transition-all",
-                            formData.incolink_payment_timing === 'on_time' ? "border-green-500 bg-green-50" :
-                            formData.incolink_payment_timing === 'late' ? "border-red-500 bg-red-50" :
-                            formData.incolink_payment_timing === 'uncertain' ? "border-yellow-500 bg-yellow-50" :
-                            "border-gray-200 bg-gray-50"
-                          )}>
-                            <div className="flex items-center justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <Label className="font-medium">2. Paying On Time</Label>
-                                  {formData.incolink_payment_timing === 'on_time' && <span className="text-green-600">✅</span>}
-                                  {formData.incolink_payment_timing === 'late' && <span className="text-red-600">⏰</span>}
-                                  {formData.incolink_payment_timing === 'uncertain' && <span className="text-yellow-600">❓</span>}
-                                </div>
-                                <p className="text-xs text-muted-foreground">Timely INCOLINK payments</p>
-                              </div>
-                              <Select
-                                value={formData.incolink_payment_timing || ''}
-                                onValueChange={(value) => handleFieldChange('incolink_payment_timing', value as PaymentTiming)}
-                              >
-                                <SelectTrigger className="w-36">
-                                  <SelectValue placeholder="Select timing" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="on_time">✅ On Time</SelectItem>
-                                  <SelectItem value="late">⏰ Late</SelectItem>
-                                  <SelectItem value="uncertain">❓ Uncertain</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </div>
-
-                          <div className={cn(
-                            "p-4 border-2 rounded-lg transition-all",
-                            formData.incolink_worker_count_status === 'correct' ? "border-green-500 bg-green-50" :
-                            formData.incolink_worker_count_status === 'incorrect' ? "border-red-500 bg-red-50" :
-                            "border-gray-200 bg-gray-50"
-                          )}>
-                            <div className="flex items-center justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <Label className="font-medium">3. Paying for All Workers</Label>
-                                  {formData.incolink_worker_count_status === 'correct' && <span className="text-green-600">✅</span>}
-                                  {formData.incolink_worker_count_status === 'incorrect' && <span className="text-red-600">❌</span>}
-                                </div>
-                                <p className="text-xs text-muted-foreground">All employees covered by entitlements</p>
-                              </div>
-                              <Select
-                                value={formData.incolink_worker_count_status || ''}
-                                onValueChange={(value) => handleFieldChange('incolink_worker_count_status', value as WorkerCountStatus)}
-                              >
-                                <SelectTrigger className="w-36">
-                                  <SelectValue placeholder="Select coverage" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="correct">✅ All Workers</SelectItem>
-                                  <SelectItem value="incorrect">❌ Missing Workers</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* INCOLINK Summary */}
-                        <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium text-purple-900">INCOLINK Audit Status</span>
-                            <Badge variant={
-                              (formData.incolink_payment_status === 'correct' &&
-                               formData.incolink_payment_timing === 'on_time' &&
-                               formData.incolink_worker_count_status === 'correct') ? "default" : "destructive"
-                            }>
-                              {(formData.incolink_payment_status === 'correct' &&
-                                formData.incolink_payment_timing === 'on_time' &&
-                                formData.incolink_worker_count_status === 'correct') ? "✅ Compliant" : "⚠️ Issues Found"}
-                            </Badge>
-                          </div>
-                        </div>
                       </div>
 
                       <div className="space-y-2">

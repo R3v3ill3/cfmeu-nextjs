@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -443,7 +443,9 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
         {tradesForStage.map(trade => {
           const assignments = filteredRowsByTrade[trade.value] || [];
           if (assignments.length === 0) return null;
-          return assignments.map((row, index) => {
+          return (
+            <React.Fragment key={trade.value}>
+              {assignments.map((row, index) => {
             // Determine row background color based on EBA status
             let rowBgClass = "";
             if (row.employer_id && row.eba === true) {
@@ -484,7 +486,9 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
                 </TableCell>
               </TableRow>
             );
-          });
+          })}
+            </React.Fragment>
+          );
         })}
       </>
     )

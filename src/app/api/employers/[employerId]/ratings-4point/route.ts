@@ -29,12 +29,16 @@ interface ExpertiseAssessment4Point {
 
 interface EmployerRating4PointResponse {
   employer_id: string;
+  eba_status?: {
+    hasActiveEba: boolean;
+    status: 'red' | 'amber' | 'yellow' | 'green';
+  };
   current_rating: {
-    // Overall current rating (organiser expertise takes priority)
+    // Overall current rating (using weighted calculation)
     rating: 'red' | 'amber' | 'yellow' | 'green';
     score: number;
     confidence: 'very_high' | 'high' | 'medium' | 'low';
-    source: 'organiser_expertise' | 'project_average' | 'calculated';
+    source: 'organiser_expertise' | 'project_average' | 'hybrid';
     calculated_at: string;
   } | null;
 
@@ -75,9 +79,21 @@ interface EmployerRating4PointResponse {
     final_source: 'organiser_expertise' | 'project_average' | 'calculated';
   }>;
 
+  // Project count data for visualization
+  project_count_data?: {
+    assessed_projects: number;
+    total_projects: number;
+    weight_distribution: {
+      project_data: number;
+      organiser_expertise: number;
+    };
+    data_quality: 'high' | 'medium' | 'low';
+  };
+
   // Metadata
   retrieved_at: string;
   data_quality: 'high' | 'medium' | 'low' | 'very_low';
+  error?: string;
 }
 
 export async function GET(request: NextRequest, { params }: { params: { employerId: string } }) {
@@ -85,7 +101,10 @@ export async function GET(request: NextRequest, { params }: { params: { employer
     const { employerId } = params;
 
     // Check if 4-point rating system is enabled
-    if (!featureFlags.isEnabled('RATING_SYSTEM_4POINT')) {
+    // Temporarily bypass user context for development
+    const isEnabled = process.env.NODE_ENV === 'development' || featureFlags.isEnabled('RATING_SYSTEM_4POINT');
+    if (!isEnabled) {
+      console.log('4-point rating system is disabled via feature flag');
       return NextResponse.json({
         employer_id: employerId,
         current_rating: null,
@@ -93,115 +112,214 @@ export async function GET(request: NextRequest, { params }: { params: { employer
         expertise_assessments: { summary: null, assessments: [] },
         rating_history: [],
         retrieved_at: new Date().toISOString(),
-        data_quality: 'very_low'
+        data_quality: 'very_low',
+        error: '4-point rating system not enabled'
       });
     }
 
     const supabase = await createServerSupabase();
 
-    // Get current employer rating
-    const { data: currentRating, error: currentRatingError } = await supabase
-      .from('current_employer_ratings_4point')
-      .select('*')
-      .eq('employer_id', employerId)
-      .order('rating_date', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    // First check if the required tables exist by attempting a simple query
+    try {
+      const { error: tableCheckError } = await supabase
+        .from('union_respect_assessments_4point')
+        .select('count', { count: 'exact', head: true })
+        .limit(1);
 
-    if (currentRatingError && currentRatingError.code !== 'PGRST116') {
-      console.error('Error fetching current rating:', currentRatingError);
+      if (tableCheckError && tableCheckError.code === '42P01') {
+        // Table doesn't exist
+        console.log('4-point rating tables do not exist yet');
+        return NextResponse.json({
+          employer_id: employerId,
+          current_rating: null,
+          project_assessments: { summary: null, assessments: [] },
+          expertise_assessments: { summary: null, assessments: [] },
+          rating_history: [],
+          retrieved_at: new Date().toISOString(),
+          data_quality: 'very_low',
+          error: '4-point rating tables not found - migrations may need to be run'
+        });
+      }
+    } catch (error) {
+      console.log('Error checking tables, proceeding with queries:', error);
     }
 
-    // Get project-based assessments (Track 1)
-    const { data: projectAssessments, error: projectError } = await supabase
-      .from('union_respect_assessments_4point')
-      .select(`
-        id,
-        project_id,
-        assessment_date,
-        overall_union_respect_rating,
-        confidence_level,
-        notes,
-        projects!inner(name)
-      `)
-      .eq('employer_id', employerId)
-      .eq('projects.is_active', true)
-      .order('assessment_date', { ascending: false })
-      .limit(50);
+    // Get current employer rating using the weighted calculation function
+    let currentRating = null;
+    let weightedRatingData = null;
+    let ebaStatus = null;
 
-    if (projectError) {
-      console.error('Error fetching project assessments:', projectError);
+    try {
+      // Use the weighted rating calculation function
+      const { data: weightedData, error: weightedError } = await supabase
+        .rpc('calculate_weighted_employer_rating_4point', {
+          p_employer_id: employerId
+        });
+
+      if (weightedError) {
+        console.error('Error in weighted rating calculation:', weightedError);
+      } else {
+        weightedRatingData = weightedData;
+
+        // Also get EBA status
+        const { data: ebaData, error: ebaError } = await supabase
+          .from('employers')
+          .select('enterprise_agreement_status')
+          .eq('id', employerId)
+          .single();
+
+        if (!ebaError && ebaData) {
+          ebaStatus = {
+            hasActiveEba: ebaData.enterprise_agreement_status === true,
+            status: ebaData.enterprise_agreement_status === true ? 'yellow' : 'red'
+          };
+        }
+
+        // Convert weighted rating data to the expected format
+        if (weightedData) {
+          currentRating = {
+            id: weightedData.employer_id,
+            employer_id: weightedData.employer_id,
+            rating_date: weightedData.calculation_date,
+            current_rating: parseInt(weightedData.final_score),
+            current_score: parseFloat(weightedData.final_score),
+            eba_status_rating: weightedData.eba_data?.rating || null,
+            project_based_rating: parseInt(weightedData.project_rating),
+            expertise_rating: parseInt(weightedData.organiser_rating),
+            data_quality: weightedData.data_quality,
+            rating_source: 'hybrid',
+            weight_distribution: weightedData.weight_distribution,
+            calculation_audit: weightedData.calculation_audit,
+            rating_status: 'active',
+            has_project_data: weightedData.project_assessments_exist || false,
+            has_expertise_data: weightedData.organiser_assessments_exist || false,
+            has_eba_data: ebaStatus?.hasActiveEba || false,
+            last_updated: weightedData.calculated_at
+          };
+        }
+      }
+    } catch (error) {
+      console.error('Error in weighted rating calculation:', error);
     }
 
-    // Get safety assessments
-    const { data: safetyAssessments, error: safetyError } = await supabase
-      .from('safety_assessments_4point')
-      .select(`
-        id,
-        project_id,
-        assessment_date,
-        overall_safety_rating,
-        confidence_level,
-        notes,
-        projects!inner(name)
-      `)
-      .eq('employer_id', employerId)
-      .eq('projects.is_active', true)
-      .order('assessment_date', { ascending: false })
-      .limit(50);
+    // Get project-based assessments (Track 1) - with error handling
+    let projectAssessments: any[] = [];
+    let safetyAssessments: any[] = [];
+    let subcontractorAssessments: any[] = [];
 
-    if (safetyError) {
-      console.error('Error fetching safety assessments:', safetyError);
+    try {
+      const { data, error: projectError } = await supabase
+        .from('union_respect_assessments_4point')
+        .select(`
+          id,
+          project_id,
+          assessment_date,
+          overall_union_respect_rating,
+          confidence_level,
+          notes,
+          projects!inner(name)
+        `)
+        .eq('employer_id', employerId)
+        .eq('projects.is_active', true)
+        .order('assessment_date', { ascending: false })
+        .limit(50);
+
+      if (projectError) {
+        console.error('Error fetching union respect assessments:', projectError);
+      } else {
+        projectAssessments = data || [];
+      }
+    } catch (error) {
+      console.error('Error in union respect assessments query:', error);
     }
 
-    // Get subcontractor assessments
-    const { data: subcontractorAssessments, error: subcontractorError } = await supabase
-      .from('subcontractor_assessments_4point')
-      .select(`
-        id,
-        project_id,
-        assessment_date,
-        usage_rating,
-        confidence_level,
-        notes,
-        projects!inner(name)
-      `)
-      .eq('employer_id', employerId)
-      .eq('projects.is_active', true)
-      .order('assessment_date', { ascending: false })
-      .limit(50);
+    try {
+      const { data, error: safetyError } = await supabase
+        .from('safety_assessments_4point')
+        .select(`
+          id,
+          project_id,
+          assessment_date,
+          overall_safety_rating,
+          confidence_level,
+          notes,
+          projects!inner(name)
+        `)
+        .eq('employer_id', employerId)
+        .eq('projects.is_active', true)
+        .order('assessment_date', { ascending: false })
+        .limit(50);
 
-    if (subcontractorError) {
-      console.error('Error fetching subcontractor assessments:', subcontractorError);
+      if (safetyError) {
+        console.error('Error fetching safety assessments:', safetyError);
+      } else {
+        safetyAssessments = data || [];
+      }
+    } catch (error) {
+      console.error('Error in safety assessments query:', error);
     }
 
-    // Get organiser expertise assessments (Track 2) - from the actual organiser input table
-    const { data: expertiseAssessments, error: expertiseError } = await supabase
-      .from('organiser_overall_expertise_ratings')
-      .select(`
-        id,
-        assessment_date,
-        overall_score,
-        overall_rating,
-        confidence_level,
-        assessment_basis,
-        organiser_id,
-        profiles!organiser_overall_expertise_ratings_organiser_id_fkey(name)
-      `)
-      .eq('employer_id', employerId)
-      .eq('is_active', true)
-      .order('assessment_date', { ascending: false })
-      .limit(50);
+    try {
+      const { data, error: subcontractorError } = await supabase
+        .from('subcontractor_assessments_4point')
+        .select(`
+          id,
+          project_id,
+          assessment_date,
+          usage_rating,
+          confidence_level,
+          notes,
+          projects!inner(name)
+        `)
+        .eq('employer_id', employerId)
+        .eq('projects.is_active', true)
+        .order('assessment_date', { ascending: false })
+        .limit(50);
 
-    if (expertiseError) {
-      console.error('Error fetching expertise assessments:', expertiseError);
+      if (subcontractorError) {
+        console.error('Error fetching subcontractor assessments:', subcontractorError);
+      } else {
+        subcontractorAssessments = data || [];
+      }
+    } catch (error) {
+      console.error('Error in subcontractor assessments query:', error);
+    }
+
+    // Get organiser expertise assessments (Track 2) - with error handling
+    let expertiseAssessments: any[] = [];
+    try {
+      const { data, error: expertiseError } = await supabase
+        .from('organiser_overall_expertise_ratings')
+        .select(`
+          id,
+          assessment_date,
+          overall_score,
+          overall_rating,
+          confidence_level,
+          assessment_basis,
+          organiser_id,
+          profiles!organiser_overall_expertise_ratings_organiser_id_fkey(name)
+        `)
+        .eq('employer_id', employerId)
+        .eq('is_active', true)
+        .order('assessment_date', { ascending: false })
+        .limit(50);
+
+      if (expertiseError) {
+        console.error('Error fetching expertise assessments:', expertiseError);
+      } else {
+        expertiseAssessments = data || [];
+      }
+    } catch (error) {
+      console.error('Error in expertise assessments query:', error);
     }
 
     // Process project assessments
     const processedProjectAssessments: ProjectAssessment4Point[] = [];
 
-    if (projectAssessments) {
-      for (const assessment of projectAssessments) {
+    // Process union respect assessments
+    for (const assessment of projectAssessments || []) {
+      try {
         processedProjectAssessments.push({
           id: assessment.id,
           project_id: assessment.project_id,
@@ -213,11 +331,14 @@ export async function GET(request: NextRequest, { params }: { params: { employer
           confidence_level: assessment.confidence_level as any,
           notes: assessment.notes
         });
+      } catch (error) {
+        console.error('Error processing union respect assessment:', error, assessment);
       }
     }
 
-    if (safetyAssessments) {
-      for (const assessment of safetyAssessments) {
+    // Process safety assessments
+    for (const assessment of safetyAssessments || []) {
+      try {
         processedProjectAssessments.push({
           id: assessment.id,
           project_id: assessment.project_id,
@@ -229,11 +350,14 @@ export async function GET(request: NextRequest, { params }: { params: { employer
           confidence_level: assessment.confidence_level as any,
           notes: assessment.notes
         });
+      } catch (error) {
+        console.error('Error processing safety assessment:', error, assessment);
       }
     }
 
-    if (subcontractorAssessments) {
-      for (const assessment of subcontractorAssessments) {
+    // Process subcontractor assessments
+    for (const assessment of subcontractorAssessments || []) {
+      try {
         processedProjectAssessments.push({
           id: assessment.id,
           project_id: assessment.project_id,
@@ -245,6 +369,8 @@ export async function GET(request: NextRequest, { params }: { params: { employer
           confidence_level: assessment.confidence_level as any,
           notes: assessment.notes
         });
+      } catch (error) {
+        console.error('Error processing subcontractor assessment:', error, assessment);
       }
     }
 
@@ -275,12 +401,21 @@ export async function GET(request: NextRequest, { params }: { params: { employer
       projectSummary.unique_projects = projectGroups.size;
       projectSummary.latest_assessment_date = processedProjectAssessments[0].assessment_date;
       projectSummary.assessment_types = [...new Set(processedProjectAssessments.map(a => a.assessment_type))];
+    } else {
+      projectSummary = {
+        average_rating: 0,
+        average_rating_label: 'red' as const,
+        total_assessments: 0,
+        unique_projects: 0,
+        latest_assessment_date: null,
+        assessment_types: []
+      };
     }
 
     // Process expertise assessments
     const processedExpertiseAssessments: ExpertiseAssessment4Point[] = [];
-    if (expertiseAssessments) {
-      for (const assessment of expertiseAssessments) {
+    for (const assessment of expertiseAssessments || []) {
+      try {
         processedExpertiseAssessments.push({
           id: assessment.id,
           assessment_date: assessment.assessment_date,
@@ -291,6 +426,8 @@ export async function GET(request: NextRequest, { params }: { params: { employer
           assessment_basis: assessment.assessment_basis || 'Not specified',
           notes: null
         });
+      } catch (error) {
+        console.error('Error processing expertise assessment:', error, assessment);
       }
     }
 
@@ -316,12 +453,31 @@ export async function GET(request: NextRequest, { params }: { params: { employer
       const projectRatingRounded = Math.round(projectSummary.average_rating);
       const expertiseRatingRounded = Math.round(expertiseSummary.average_rating);
       expertiseSummary.has_conflicts = Math.abs(projectRatingRounded - expertiseRatingRounded) >= 1;
+    } else {
+      expertiseSummary = {
+        average_rating: 0,
+        average_rating_label: 'red' as const,
+        total_assessments: 0,
+        unique_organisers: 0,
+        latest_assessment_date: null,
+        has_conflicts: false
+      };
     }
 
-    // Determine current overall rating (organiser expertise takes priority)
+    // Use weighted calculation if available, otherwise fall back to the old logic
     let currentOverallRating = null;
-    if (expertiseSummary.total_assessments > 0) {
-      // Use expertise rating as primary
+    if (weightedRatingData) {
+      // Use the weighted calculation result
+      const finalScore = parseFloat(weightedRatingData.final_score);
+      currentOverallRating = {
+        rating: weightedRatingData.final_rating as 'red' | 'amber' | 'yellow' | 'green',
+        score: finalScore,
+        confidence: weightedRatingData.data_quality as 'very_high' | 'high' | 'medium' | 'low',
+        source: 'hybrid' as const,
+        calculated_at: weightedRatingData.calculated_at
+      };
+    } else if (expertiseSummary.total_assessments > 0) {
+      // Use expertise rating as primary (fallback)
       currentOverallRating = {
         rating: expertiseSummary.average_rating_label,
         score: Math.round(expertiseSummary.average_rating),
@@ -330,7 +486,7 @@ export async function GET(request: NextRequest, { params }: { params: { employer
         calculated_at: expertiseSummary.latest_assessment_date || new Date().toISOString()
       };
     } else if (projectSummary.total_assessments > 0) {
-      // Fall back to project rating
+      // Fall back to project rating (fallback)
       currentOverallRating = {
         rating: projectSummary.average_rating_label,
         score: Math.round(projectSummary.average_rating),
@@ -410,8 +566,50 @@ export async function GET(request: NextRequest, { params }: { params: { employer
       dataQuality = 'low';
     }
 
+    // Get total project count for this employer
+    let totalProjects = projectSummary.unique_projects; // Default to assessed projects
+    try {
+      const { data: projectCount, error: countError } = await supabase
+        .from('projects')
+        .select('id', { count: 'exact', head: true })
+        .eq('employer_id', employerId)
+        .eq('is_active', true);
+
+      if (!countError && projectCount !== null) {
+        totalProjects = projectCount;
+      }
+    } catch (error) {
+      console.error('Error fetching total project count:', error);
+    }
+
+    // Calculate weight distribution using the new formula: project_count * 0.10, capped at 90%
+    let projectDataWeight = 0;
+    let organiserExpertiseWeight = 100;
+
+    if (weightedRatingData && weightedRatingData.weight_distribution) {
+      // Use the calculated weights from the weighted function
+      projectDataWeight = Math.round((weightedRatingData.weight_distribution.project_weight || 0) * 100);
+      organiserExpertiseWeight = Math.round((weightedRatingData.weight_distribution.organiser_weight || 0) * 100);
+    } else {
+      // Fall back to the new formula if weighted calculation failed
+      const projectCount = projectSummary.unique_projects;
+      projectDataWeight = Math.min(90, projectCount * 10);
+      organiserExpertiseWeight = 100 - projectDataWeight;
+    }
+
+    const projectCountData = {
+      assessed_projects: projectSummary.unique_projects,
+      total_projects: totalProjects,
+      weight_distribution: {
+        project_data: projectDataWeight,
+        organiser_expertise: organiserExpertiseWeight
+      },
+      data_quality: dataQuality === 'very_low' ? 'low' : dataQuality as 'high' | 'medium' | 'low'
+    };
+
     const response: EmployerRating4PointResponse = {
       employer_id: employerId,
+      eba_status: ebaStatus || undefined,
       current_rating: currentOverallRating,
       project_assessments: {
         summary: projectSummary,
@@ -422,6 +620,7 @@ export async function GET(request: NextRequest, { params }: { params: { employer
         assessments: processedExpertiseAssessments.sort((a, b) => new Date(b.assessment_date).getTime() - new Date(a.assessment_date).getTime())
       },
       rating_history: ratingHistory,
+      project_count_data: projectCountData,
       retrieved_at: new Date().toISOString(),
       data_quality: dataQuality
     };
@@ -443,7 +642,8 @@ export async function GET(request: NextRequest, { params }: { params: { employer
       expertise_assessments: { summary: null, assessments: [] },
       rating_history: [],
       retrieved_at: new Date().toISOString(),
-      data_quality: 'very_low'
+      data_quality: 'very_low',
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
     }, {
       status: 500,
       headers: {

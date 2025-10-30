@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -264,8 +264,8 @@ export function EmployerComplianceTable({ projectId }: EmployerComplianceTablePr
                   const isExpanded = expandedEmployerId === contractor.employerId;
 
                   return (
-                    <>
-                      <TableRow key={contractor.employerId} className="cursor-pointer hover:bg-muted/50">
+                    <React.Fragment key={contractor.employerId}>
+                      <TableRow className="cursor-pointer hover:bg-muted/50">
                         <TableCell onClick={(e) => e.stopPropagation()}>
                           <Checkbox
                             checked={selectedEmployerIds.includes(contractor.employerId)}
@@ -330,7 +330,7 @@ export function EmployerComplianceTable({ projectId }: EmployerComplianceTablePr
                           </TableCell>
                         </TableRow>
                       )}
-                    </>
+                    </React.Fragment>
                   );
                 })}
               </>

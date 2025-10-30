@@ -34,6 +34,7 @@ import { ExpertiseAssessmentList } from "./ExpertiseAssessmentList";
 import { RatingHistoryChart } from "./RatingHistoryChart";
 import { AssessmentDetailModal } from "./AssessmentDetailModal";
 import { RatingWizardModal } from "./RatingWizardModal";
+import { ProjectCountIndicator } from "./ProjectCountIndicator";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -98,6 +99,7 @@ export function TrafficLightRatingTab({ employerId, employerName }: TrafficLight
         <AlertTriangle className="h-4 w-4" />
         <AlertDescription>
           Failed to load rating data. Please try again later.
+          {error.message && <div className="mt-1 text-xs text-muted-foreground">{error.message}</div>}
         </AlertDescription>
       </Alert>
     );
@@ -114,7 +116,28 @@ export function TrafficLightRatingTab({ employerId, employerName }: TrafficLight
     );
   }
 
-  const { current_rating, project_assessments, expertise_assessments, rating_history, data_quality } = ratingData;
+  const { current_rating, project_assessments, expertise_assessments, rating_history, data_quality, project_count_data, error: apiError } = ratingData;
+
+  // Show error message if API returned an error
+  if (apiError) {
+    return (
+      <Alert variant="destructive">
+        <AlertTriangle className="h-4 w-4" />
+        <AlertDescription>
+          <div className="font-medium">4-Point Rating System Not Available</div>
+          <div className="mt-1">{apiError}</div>
+          <div className="mt-2 text-xs">
+            This may be because:
+            <ul className="list-disc list-inside mt-1 space-y-1">
+              <li>The 4-point rating system feature flag is disabled</li>
+              <li>The database migrations have not been run yet</li>
+              <li>The required database tables do not exist</li>
+            </ul>
+          </div>
+        </AlertDescription>
+      </Alert>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -207,6 +230,13 @@ export function TrafficLightRatingTab({ employerId, employerName }: TrafficLight
               )}
             </div>
           </div>
+
+          {/* Project Count Data */}
+          {project_count_data && (
+            <div className="mt-4 pt-4 border-t">
+              <ProjectCountIndicator data={project_count_data} />
+            </div>
+          )}
 
           {/* Data Quality Indicator */}
           <div className="mt-4 pt-4 border-t">
