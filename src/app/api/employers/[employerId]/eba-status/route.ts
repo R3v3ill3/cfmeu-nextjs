@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/utils/supabase/server';
+import { createServerSupabase } from '@/lib/supabase/server';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { employerId: string } }
 ) {
   try {
-    const supabase = createClient();
+    const supabase = await createServerSupabase();
     const { employerId } = params;
 
     // Validate employer ID

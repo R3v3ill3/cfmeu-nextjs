@@ -73,6 +73,10 @@ export interface NewDashboardData {
   active_pre_construction: PreConstructionMetrics;
   projects: DashboardProject[];
   errors: string[];
+  debug?: {
+    via?: 'worker' | 'worker_fallback' | 'direct';
+    queryTime?: number;
+  };
 }
 
 export const useNewDashboardData = (opts?: { patchIds?: string[]; tier?: string; stage?: string; universe?: string }) => {
@@ -88,31 +92,26 @@ export const useNewDashboardData = (opts?: { patchIds?: string[]; tier?: string;
     staleTime: 30000, // 30 seconds
     queryFn: async (): Promise<NewDashboardData> => {
       const errors: string[] = [];
+      const startTime = Date.now();
 
-      try {
-        // If worker enabled, call it with Authorization and return
-        if (workerEnabled && workerUrl && session?.access_token) {
-          const searchParams = new URLSearchParams();
-          if (opts?.tier && opts.tier !== 'all') searchParams.set('tier', opts.tier);
-          if (opts?.stage && opts.stage !== 'all') searchParams.set('stage', opts.stage);
-          if (opts?.universe && opts.universe !== 'all') searchParams.set('universe', opts.universe);
-          if (opts?.patchIds && opts.patchIds.length > 0) searchParams.set('patchIds', opts.patchIds.join(','));
-
-          const url = `${workerUrl.replace(/\/$/, '')}/v1/dashboard?${searchParams.toString()}`;
-          const resp = await fetch(url, {
-            headers: {
-              'Authorization': `Bearer ${session.access_token}`,
-              'Content-Type': 'application/json'
-            }
-          });
-          if (!resp.ok) {
-            throw new Error(`Worker dashboard error ${resp.status}`);
-          }
-          const data = await resp.json();
-          ;(data as any).via = 'worker';
-          return { ...(data as any), errors } as NewDashboardData;
+      // Helper function to enrich data with debug info
+      const enrichDebug = (data: any, via: 'worker' | 'worker_fallback' | 'direct'): NewDashboardData => {
+        if (data && typeof data === 'object') {
+          return {
+            ...data,
+            errors: data.errors || errors,
+            debug: {
+              ...(data.debug || {}),
+              via,
+              queryTime: Date.now() - startTime,
+            },
+          } as NewDashboardData;
         }
+        return { ...data, errors, debug: { via, queryTime: Date.now() - startTime } } as NewDashboardData;
+      };
 
+      // Direct Supabase query fallback function
+      const fetchDirect = async (): Promise<NewDashboardData> => {
         // Optional patch scoping: resolve project IDs for selected patches
         let scopedProjectIds: string[] | null = null
         if (opts?.patchIds && opts.patchIds.length > 0) {
@@ -280,13 +279,59 @@ export const useNewDashboardData = (opts?: { patchIds?: string[]; tier?: string;
           projects: dashboardProjects,
           errors
         };
+      };
+
+      try {
+        // If worker enabled, try to use it with fallback
+        if (workerEnabled && workerUrl && session?.access_token) {
+          const searchParams = new URLSearchParams();
+          if (opts?.tier && opts.tier !== 'all') searchParams.set('tier', opts.tier);
+          if (opts?.stage && opts.stage !== 'all') searchParams.set('stage', opts.stage);
+          if (opts?.universe && opts.universe !== 'all') searchParams.set('universe', opts.universe);
+          if (opts?.patchIds && opts.patchIds.length > 0) searchParams.set('patchIds', opts.patchIds.join(','));
+
+          const url = `${workerUrl.replace(/\/$/, '')}/v1/dashboard?${searchParams.toString()}`;
+          
+          try {
+            const resp = await fetch(url, {
+              headers: {
+                'Authorization': `Bearer ${session.access_token}`,
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            if (!resp.ok) {
+              const status = resp.status;
+              // For 5xx or 429 errors, fallback to direct query
+              if (status >= 500 || status === 429) {
+                console.warn(`⚠️ Worker responded with ${status}, falling back to direct query`);
+                const directData = await fetchDirect();
+                return enrichDebug(directData, 'worker_fallback');
+              }
+              throw new Error(`Worker dashboard error ${resp.status}`);
+            }
+            
+            const data = await resp.json();
+            return enrichDebug({ ...data, errors }, 'worker');
+          } catch (error) {
+            // Connection refused, network error, etc. - fallback to direct query
+            console.warn('⚠️ Worker dashboard request failed, falling back to direct query', error);
+            const directData = await fetchDirect();
+            return enrichDebug(directData, 'worker_fallback');
+          }
+        }
+
+        // Worker not enabled, use direct query
+        const directData = await fetchDirect();
+        return enrichDebug(directData, 'direct');
+
         
       } catch (error) {
         console.error('Dashboard data loading error:', error);
         errors.push(`Database error: ${error instanceof Error ? error.message : 'Unknown error'}`);
         
         // Return empty but valid structure on error
-        return {
+        const errorData = {
           project_counts: {
             active_construction: 0,
             active_pre_construction: 0,
@@ -334,9 +379,10 @@ export const useNewDashboardData = (opts?: { patchIds?: string[]; tier?: string;
             avg_assigned_workers: 0,
             avg_members: 0
           },
-          projects: [],
+          projects: [] as DashboardProject[],
           errors
         };
+        return enrichDebug(errorData, workerEnabled ? 'worker_fallback' : 'direct');
       }
     }
   });

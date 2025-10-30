@@ -43,12 +43,27 @@ export function DesktopDashboardView() {
   return (
     <div className="space-y-6">
       {/* Removed decorative header per request */}
-      {data?.errors?.length ? (
-        <div className="flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4 text-amber-500" />
-          <p className="text-sm text-amber-700">Some data failed to load; showing partial results.</p>
-        </div>
-      ) : null}
+      <div className="flex items-center justify-between">
+        {data?.errors?.length ? (
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-500" />
+            <p className="text-sm text-amber-700">Some data failed to load; showing partial results.</p>
+          </div>
+        ) : <div />}
+        
+        {/* Optional debug badge showing worker status */}
+        {process.env.NEXT_PUBLIC_SHOW_DEBUG_BADGES === 'true' && data?.debug?.via && (
+          <div className="text-xs px-2 py-1 rounded border">
+            {data.debug.via === 'worker' ? (
+              <span className="text-green-600">🟢 Worker {data.debug.queryTime ? `(${data.debug.queryTime}ms)` : ''}</span>
+            ) : data.debug.via === 'worker_fallback' ? (
+              <span className="text-yellow-600">🟡 Worker Fallback {data.debug.queryTime ? `(${data.debug.queryTime}ms)` : ''}</span>
+            ) : (
+              <span className="text-blue-600">🔵 Direct {data.debug.queryTime ? `(${data.debug.queryTime}ms)` : ''}</span>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Compliance Alerts */}
       <ComplianceAlertsCard />

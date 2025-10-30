@@ -175,6 +175,45 @@ export function DashboardDebugInfo() {
               )}
             </div>
 
+            {/* Worker Status */}
+            {dashboardData?.debug?.via && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-gray-700 flex items-center">
+                  <Activity className="h-4 w-4 mr-2" />
+                  Worker Status
+                </h4>
+                <div className="text-xs bg-gray-50 p-2 rounded">
+                  <div className="flex items-center space-x-2">
+                    <span className="font-semibold">Data Source:</span>
+                    {dashboardData.debug.via === 'worker' ? (
+                      <Badge variant="default" className="bg-green-100 text-green-800">
+                        🟢 Worker
+                      </Badge>
+                    ) : dashboardData.debug.via === 'worker_fallback' ? (
+                      <Badge variant="default" className="bg-yellow-100 text-yellow-800">
+                        🟡 Worker Fallback
+                      </Badge>
+                    ) : (
+                      <Badge variant="default" className="bg-blue-100 text-blue-800">
+                        🔵 Direct Query
+                      </Badge>
+                    )}
+                  </div>
+                  {dashboardData.debug.queryTime !== undefined && (
+                    <div className="mt-1">
+                      <span className="font-semibold">Query Time:</span> {dashboardData.debug.queryTime}ms
+                    </div>
+                  )}
+                  <div className="mt-1">
+                    <span className="font-semibold">Worker URL:</span> {process.env.NEXT_PUBLIC_DASHBOARD_WORKER_URL || 'Not configured'}
+                  </div>
+                  <div className="mt-1">
+                    <span className="font-semibold">Worker Enabled:</span> {process.env.NEXT_PUBLIC_USE_WORKER_DASHBOARD === 'true' ? 'Yes' : 'No'}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Environment Info */}
             <div className="space-y-2">
               <h4 className="text-sm font-semibold text-gray-700">Environment Info</h4>
