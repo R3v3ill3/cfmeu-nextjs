@@ -64,7 +64,9 @@ function scoreToTrafficLight(score: number): 'red' | 'amber' | 'yellow' | 'green
 export async function POST(request: NextRequest) {
   try {
     // Check if 4-point rating system is enabled
-    const isEnabled = process.env.NODE_ENV === 'development' || featureFlags.isEnabled('RATING_SYSTEM_4POINT');
+    // In development, always enable. In production, check feature flag.
+    const isEnabled = process.env.NODE_ENV === 'development' ||
+                     (process.env.RATING_SYSTEM_4POINT === 'true');
     if (!isEnabled) {
       return NextResponse.json(
         { error: '4-point rating system not enabled' },
