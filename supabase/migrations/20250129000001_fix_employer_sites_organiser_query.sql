@@ -1,6 +1,5 @@
--- Enhance get_employer_sites function to include address, patch names, organiser names,
--- compliance check status, and traffic light rating
--- Drop the old function first since we're changing the return type
+-- Fix get_employer_sites function to properly filter patch_job_sites by effective_to
+-- This ensures organiser names are correctly retrieved
 DROP FUNCTION IF EXISTS get_employer_sites(UUID);
 
 CREATE FUNCTION get_employer_sites(p_employer_id UUID)
@@ -75,15 +74,43 @@ BEGIN
       LEFT JOIN patches pat ON pat.id = pjs_link.patch_id
       GROUP BY pjs.id
     ),
-    site_organisers AS (
-      SELECT 
+    site_patches_for_orgs AS (
+      SELECT DISTINCT
         pjs.id AS site_id,
-        ARRAY_AGG(DISTINCT prof.full_name ORDER BY prof.full_name) FILTER (WHERE prof.full_name IS NOT NULL) AS organiser_names
+        pjs_link.patch_id
       FROM project_job_sites pjs
       LEFT JOIN patch_job_sites pjs_link ON pjs_link.job_site_id = pjs.id AND pjs_link.effective_to IS NULL
-      LEFT JOIN organiser_patch_assignments opa ON opa.patch_id = pjs_link.patch_id AND opa.effective_to IS NULL
-      LEFT JOIN profiles prof ON prof.id = opa.organiser_id
-      GROUP BY pjs.id
+    ),
+    site_organisers AS (
+      SELECT 
+        spo.site_id,
+        ARRAY_AGG(DISTINCT org_name ORDER BY org_name) FILTER (WHERE org_name IS NOT NULL) AS organiser_names
+      FROM site_patches_for_orgs spo
+      LEFT JOIN (
+        -- Get live organisers from organiser_patch_assignments
+        SELECT 
+          opa.patch_id,
+          prof.full_name AS org_name
+        FROM organiser_patch_assignments opa
+        JOIN profiles prof ON prof.id = opa.organiser_id
+        WHERE opa.effective_to IS NULL
+          AND prof.full_name IS NOT NULL
+        
+        UNION
+        
+        -- Get draft/invited organisers from pending_users
+        SELECT 
+          patch_id,
+          CASE 
+            WHEN pu.role = 'lead_organiser' THEN pu.full_name || ' (lead)'
+            ELSE pu.full_name
+          END AS org_name
+        FROM pending_users pu
+        CROSS JOIN LATERAL unnest(pu.assigned_patch_ids::uuid[]) AS patch_id
+        WHERE pu.status IN ('draft', 'invited')
+          AND pu.full_name IS NOT NULL
+      ) AS orgs ON orgs.patch_id = spo.patch_id
+      GROUP BY spo.site_id
     ),
     project_compliance_data AS (
       SELECT 

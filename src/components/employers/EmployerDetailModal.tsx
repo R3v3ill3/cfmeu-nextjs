@@ -26,6 +26,7 @@ import {
   Edit,
   Trash2,
   CheckCircle,
+  X,
 } from "lucide-react";
 import { getEbaStatusInfo } from "./ebaHelpers";
 import { EmployerWorkersList } from "../workers/EmployerWorkersList";
@@ -122,14 +123,20 @@ function WorksiteCard({ site, employerId }: { site: EmployerSite; employerId: st
             {site.project_name || site.name}
           </h3>
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            {/* Compliance check badge */}
-            {site.compliance_check_conducted && (
+            {/* Compliance check badge - show tick if conducted, cross if not */}
+            {site.compliance_check_conducted ? (
               <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
                 <CheckCircle className="h-3 w-3 mr-1" />
+                Checked
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200">
+                <X className="h-3 w-3 mr-1" />
+                Not checked
               </Badge>
             )}
-            {/* Traffic light rating badge */}
-            {site.compliance_rating && site.compliance_rating !== 'unknown' && (
+            {/* Traffic light rating badge - only show if compliance check was conducted */}
+            {site.compliance_check_conducted && site.compliance_rating && site.compliance_rating !== 'unknown' && (
               <TrafficLightRatingDisplay
                 rating={site.compliance_rating as 'green' | 'amber' | 'yellow' | 'red'}
                 size="sm"
