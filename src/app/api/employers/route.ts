@@ -94,14 +94,14 @@ async function fetchEnhancedEmployerData(supabase: Awaited<ReturnType<typeof cre
 
       // Add roles and trades
       if (row.assignment_type === 'contractor_role' && row.contractor_role_types) {
-        const roleCode = row.contractor_role_types.code;
+        const roleCode = row.contractor_role_types?.code;
         if (roleCode && !projectsByEmployer[row.employer_id][projectId].roles.includes(roleCode)) {
           projectsByEmployer[row.employer_id][projectId].roles.push(roleCode);
         }
       }
 
       if (row.assignment_type === 'trade_work' && row.trade_types) {
-        const tradeCode = row.trade_types.code;
+        const tradeCode = row.trade_types?.code;
         if (tradeCode && !projectsByEmployer[row.employer_id][projectId].trades.includes(tradeCode)) {
           projectsByEmployer[row.employer_id][projectId].trades.push(tradeCode);
         }
@@ -895,7 +895,11 @@ async function getEmployersHandler(request: NextRequest) {
 }
 
 // Export rate-limited GET handler
-export const GET = withRateLimit(getEmployersHandler, RATE_LIMIT_PRESETS.EXPENSIVE_QUERY);
+export const GET = withRateLimit(getEmployersHandler, {
+  maxRequests: 30,
+  windowSeconds: 60,
+  burstAllowance: 5
+});
 
 // Health check endpoint
 export async function HEAD() {
