@@ -488,6 +488,17 @@ export const EmployerDetailModal = ({
           console.error("Error fetching employer sites:", res.error);
           return [];
         }
+        // Debug: Log the raw data to see what we're getting
+        console.log("Employer sites data:", res.data);
+        res.data?.forEach((site: any, idx: number) => {
+          console.log(`Site ${idx}:`, {
+            name: site.name,
+            project_name: site.project_name,
+            patch_names: site.patch_names,
+            organiser_names: site.organiser_names,
+            address: site.address,
+          });
+        });
         return res.data;
       } catch (err: any) {
         if (err?.code === "ETIMEDOUT") {

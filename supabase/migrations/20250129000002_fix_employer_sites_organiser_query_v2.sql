@@ -1,5 +1,5 @@
--- Fix get_employer_sites function to properly filter patch_job_sites by effective_to
--- This ensures organiser names are correctly retrieved
+-- Fix get_employer_sites function to properly retrieve organiser names
+-- This version restructures the organiser query to match the mapping sheets logic
 DROP FUNCTION IF EXISTS get_employer_sites(UUID);
 
 CREATE FUNCTION get_employer_sites(p_employer_id UUID)
