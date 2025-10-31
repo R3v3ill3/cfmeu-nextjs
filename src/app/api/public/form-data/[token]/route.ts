@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
 import type { Database } from '@/types/database';
+import { TRADE_OPTIONS, TRADE_STAGE_MAPPING } from '@/constants/trades';
 
 export const dynamic = 'force-dynamic'
 
@@ -26,6 +27,7 @@ export interface PublicFormData {
   employers?: any[];
   contractorRoleTypes?: any[];
   tradeOptions?: any[];
+  keyTrades?: Array<{ trade_type: string; label: string; stage: string }>;
   expiresAt: string;
   allowedActions: string[];
 }
@@ -47,6 +49,26 @@ export async function GET(
 
     // Use anon SSR client (no service-role key!)
     const supabase = await createServerSupabase();
+
+    // First, check if this is an audit compliance form
+    const { data: tokenValidation } = await supabase
+      .rpc('validate_public_token', { p_token: token });
+
+    if (tokenValidation && tokenValidation[0]?.resource_type === 'PROJECT_AUDIT_COMPLIANCE') {
+      // Handle audit compliance form data
+      const { data: auditData, error: auditError } = await supabase
+        .rpc('get_public_audit_form_data', { p_token: token });
+
+      if (auditError || !auditData) {
+        console.error('Failed to fetch audit form data:', auditError);
+        return NextResponse.json(
+          { error: auditData?.error || 'Failed to fetch audit form data' },
+          { status: auditData?.status || 500 }
+        );
+      }
+
+      return NextResponse.json(auditData);
+    }
 
     // Call RPC to get base form data (validates token internally)
     const { data: baseData, error: baseError } = await supabase
@@ -81,6 +103,25 @@ export async function GET(
     const { data: refData } = await supabase
       .rpc('get_public_form_reference_data', { p_token: token });
 
+    // Fetch key trades from database
+    const { data: keyTradesData, error: keyTradesError } = await supabase
+      .from('key_contractor_trades')
+      .select('trade_type, display_order')
+      .eq('is_active', true)
+      .order('display_order');
+
+    // Map key trades to include label and stage
+    const keyTrades = (keyTradesData || []).map(kt => {
+      const tradeOption = TRADE_OPTIONS.find(t => t.value === kt.trade_type);
+      const label = tradeOption?.label || kt.trade_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+      const stage = TRADE_STAGE_MAPPING[kt.trade_type] || 'other';
+      return {
+        trade_type: kt.trade_type,
+        label,
+        stage
+      };
+    });
+
     // Assemble complete response
     const formData: PublicFormData = {
       ...baseData,
@@ -90,6 +131,7 @@ export async function GET(
       },
       employers: refData?.employers || [],
       contractorRoleTypes: refData?.contractorRoleTypes || [],
+      keyTrades: keyTrades,
       tradeOptions: [
         // Early Works
         { value: 'demolition', label: 'Demolition', stage: 'early_works' },
@@ -140,6 +182,33 @@ export async function POST(
     // Use anon SSR client (no service-role key!)
     const supabase = await createServerSupabase();
 
+    // Check if this is an audit compliance submission
+    const { data: validation } = await supabase
+      .rpc('validate_public_token', { p_token: token });
+
+    if (!validation || validation.length === 0 || !validation[0].valid) {
+      return NextResponse.json({ error: 'Invalid token' }, { status: 403 });
+    }
+
+    if (validation[0].resource_type === 'PROJECT_AUDIT_COMPLIANCE') {
+      // Handle audit compliance form submission
+      const { data: auditResult, error: auditError } = await supabase
+        .rpc('submit_public_audit_form', {
+          p_token: token,
+          p_submission: submission as any
+        });
+
+      if (auditError || !auditResult?.success) {
+        console.error('Failed to submit audit form:', auditError || auditResult?.error);
+        return NextResponse.json(
+          { error: auditResult?.error || 'Failed to submit audit form' },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json(auditResult);
+    }
+
     // Submit basic form data (project, address, contacts) via RPC
     const { data: submitResult, error: submitError } = await supabase
       .rpc('submit_public_form', {
@@ -153,14 +222,6 @@ export async function POST(
         { error: 'Failed to submit form' },
         { status: 500 }
       );
-    }
-
-    // Get project ID from token validation
-    const { data: validation } = await supabase
-      .rpc('validate_public_token', { p_token: token });
-
-    if (!validation || validation.length === 0 || !validation[0].valid) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 403 });
     }
 
     const projectId = validation[0].resource_id;

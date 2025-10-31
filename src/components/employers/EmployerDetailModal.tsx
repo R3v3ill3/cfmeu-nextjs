@@ -111,6 +111,16 @@ function WorksiteCard({ site, employerId }: { site: EmployerSite; employerId: st
     }, 50);
   };
 
+  const handleComplianceBadgeClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click
+    // Navigate to project with audit & compliance tab focused
+    const href = `/projects/${site.project_id}?tab=audit-compliance`;
+    startNavigation(href);
+    setTimeout(() => {
+      router.push(href);
+    }, 50);
+  };
+
   return (
     <div
       onClick={handleClick}
@@ -125,23 +135,33 @@ function WorksiteCard({ site, employerId }: { site: EmployerSite; employerId: st
           <div className="flex items-center gap-1.5 flex-shrink-0">
             {/* Compliance check badge - show tick if conducted, cross if not */}
             {site.compliance_check_conducted ? (
-              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+              <Badge 
+                variant="outline" 
+                className="bg-green-50 text-green-700 border-green-200 cursor-pointer hover:bg-green-100 transition-colors"
+                onClick={handleComplianceBadgeClick}
+              >
                 <CheckCircle className="h-3 w-3 mr-1" />
                 Checked
               </Badge>
             ) : (
-              <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200">
+              <Badge 
+                variant="outline" 
+                className="bg-gray-50 text-gray-600 border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors"
+                onClick={handleComplianceBadgeClick}
+              >
                 <X className="h-3 w-3 mr-1" />
                 Not checked
               </Badge>
             )}
             {/* Traffic light rating badge - only show if compliance check was conducted */}
             {site.compliance_check_conducted && site.compliance_rating && site.compliance_rating !== 'unknown' && (
-              <TrafficLightRatingDisplay
-                rating={site.compliance_rating as 'green' | 'amber' | 'yellow' | 'red'}
-                size="sm"
-                className="flex-shrink-0"
-              />
+              <div onClick={handleComplianceBadgeClick} className="cursor-pointer hover:opacity-80 transition-opacity">
+                <TrafficLightRatingDisplay
+                  rating={site.compliance_rating as 'green' | 'amber' | 'yellow' | 'red'}
+                  size="sm"
+                  className="flex-shrink-0"
+                />
+              </div>
             )}
           </div>
         </div>

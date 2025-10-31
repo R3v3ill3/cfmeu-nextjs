@@ -13,6 +13,7 @@ const ROLE_SET = new Set<AllowedRole>(ALLOWED_ROLES);
 const VALID_RESOURCE_TYPES = [
   'PROJECT_MAPPING_SHEET',
   'PROJECT_SITE_VISIT',
+  'PROJECT_AUDIT_COMPLIANCE',
   // Add more resource types as needed
 ] as const;
 type ResourceType = typeof VALID_RESOURCE_TYPES[number];
@@ -20,6 +21,7 @@ type ResourceType = typeof VALID_RESOURCE_TYPES[number];
 export interface GenerateShareLinkRequest {
   resourceType: ResourceType;
   expiresInHours?: number; // Default: 48 hours
+  employerIds?: string[]; // For audit compliance forms - selected employers
 }
 
 export interface GenerateShareLinkResponse {
@@ -109,6 +111,21 @@ export async function POST(
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + expiresInHours);
 
+    // Validate employer IDs for audit compliance forms
+    if (body.resourceType === 'PROJECT_AUDIT_COMPLIANCE') {
+      if (!body.employerIds || body.employerIds.length === 0) {
+        return NextResponse.json(
+          { error: 'At least one employer must be selected for audit compliance forms' },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Build metadata object for resource-specific data
+    const metadata = body.resourceType === 'PROJECT_AUDIT_COMPLIANCE' 
+      ? { employerIds: body.employerIds }
+      : null;
+
     // Store token in database
     const { data: tokenRecord, error: insertError } = await serviceSupabase
       .from('secure_access_tokens')
@@ -118,6 +135,7 @@ export async function POST(
         resource_id: projectId,
         created_by: user.id,
         expires_at: expiresAt.toISOString(),
+        metadata: metadata,
       })
       .select('id, token, expires_at')
       .single();

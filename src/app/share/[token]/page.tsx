@@ -16,6 +16,7 @@ import { Clock, Building, Users, AlertTriangle, CheckCircle, Plus, Trash2, Edit,
 import Image from 'next/image';
 import DateInput from '@/components/ui/date-input';
 import { EmployerSearch } from '@/components/ui/EmployerSearch';
+import { PublicAuditComplianceForm } from '@/components/public/PublicAuditComplianceForm';
 
 interface PublicFormData {
   token: string;
@@ -76,6 +77,11 @@ interface PublicFormData {
     label: string;
     stage: string;
   }>;
+  keyTrades?: Array<{
+    trade_type: string;
+    label: string;
+    stage: string;
+  }>;
   contractorRoleTypes?: Array<{
     id: string;
     code: string;
@@ -133,6 +139,9 @@ export default function PublicFormPage() {
     newEmployerId?: string;
     newEmployerName?: string;
   }>>({});
+  
+  // Track which key trade is being edited (for inline employer search)
+  const [editingKeyTrade, setEditingKeyTrade] = useState<string | null>(null);
 
   // Fetch form data
   const { data: publicData, isLoading, error } = useQuery<PublicFormData>({
@@ -147,6 +156,11 @@ export default function PublicFormPage() {
       return response.json();
     },
   });
+
+  // Handle Audit & Compliance forms
+  if (publicData?.resourceType === 'PROJECT_AUDIT_COMPLIANCE') {
+    return <PublicAuditComplianceForm formData={publicData as any} />;
+  }
 
   // Initialize form data when publicData changes
   useEffect(() => {
@@ -286,10 +300,20 @@ export default function PublicFormPage() {
       } else if (actionData.action === 'add' && actionData.newEmployerId) {
         // Add contractor to empty key trade
         const contractor = publicData?.mappingSheetData?.tradeContractors?.find(tc => tc.id === contractorId);
+        let tradeType: string | undefined;
+        
         if (contractor && isTradeContractor) {
+          // Existing contractor found
+          tradeType = contractor.tradeType;
+        } else if (contractorId.startsWith('key_trade_placeholder:')) {
+          // Extract trade type from placeholder ID
+          tradeType = contractorId.replace('key_trade_placeholder:', '');
+        }
+        
+        if (tradeType) {
           tradeContractorUpdates.push({
             employerId: actionData.newEmployerId,
-            tradeType: contractor.tradeType,
+            tradeType: tradeType,
             estimatedWorkforce: null,
             action: 'create'
           });
@@ -870,9 +894,6 @@ export default function PublicFormPage() {
           <CardContent className="space-y-4 sm:space-y-5">
             {/* Group by stage */}
             {['early_works', 'structure', 'finishing', 'other'].map(stage => {
-              const stageContractors = publicData.mappingSheetData?.tradeContractors?.filter(tc => tc.stage === stage) || [];
-              if (stageContractors.length === 0) return null;
-
               const stageLabels: Record<string, string> = {
                 early_works: 'Early Works',
                 structure: 'Structure',
@@ -880,11 +901,48 @@ export default function PublicFormPage() {
                 other: 'Other'
               };
 
+              // Get key trades for this stage
+              const keyTradesForStage = publicData.keyTrades?.filter(kt => kt.stage === stage) || [];
+              
+              // Get existing contractors for this stage
+              const stageContractors = publicData.mappingSheetData?.tradeContractors?.filter(tc => tc.stage === stage) || [];
+              
+              // Create a set of key trade types for quick lookup
+              const keyTradeTypesSet = new Set(publicData.keyTrades?.map(kt => kt.trade_type) || []);
+              
+              // Separate contractors into key trades and non-key trades
+              const keyTradeContractors = stageContractors.filter(tc => keyTradeTypesSet.has(tc.tradeType));
+              const nonKeyTradeContractors = stageContractors.filter(tc => !keyTradeTypesSet.has(tc.tradeType));
+              
+              // Create a map of tradeType -> contractor for quick lookup
+              const contractorByTradeType = new Map<string, typeof stageContractors[0]>();
+              keyTradeContractors.forEach(tc => {
+                contractorByTradeType.set(tc.tradeType, tc);
+              });
+
+              // Skip stage if no key trades and no contractors
+              if (keyTradesForStage.length === 0 && stageContractors.length === 0) return null;
+
               return (
                 <div key={stage}>
                   <h4 className="font-semibold text-base sm:text-lg mb-2 sm:mb-3">{stageLabels[stage]}</h4>
                   <div className="space-y-2 sm:space-y-3">
-                    {stageContractors.map((contractor) => {
+                    {/* Display key trades first */}
+                    {keyTradesForStage.map((keyTrade) => {
+                      const existingContractor = contractorByTradeType.get(keyTrade.trade_type);
+                      const contractor = existingContractor || {
+                        id: `key_trade_placeholder:${keyTrade.trade_type}`,
+                        employerId: '',
+                        employerName: '',
+                        tradeType: keyTrade.trade_type,
+                        tradeLabel: keyTrade.label,
+                        stage: keyTrade.stage,
+                        estimatedWorkforce: null,
+                        ebaStatus: null,
+                        dataSource: undefined,
+                        matchStatus: undefined
+                      };
+                      
                       const contractorAction = contractorActions[contractor.id];
                       const needsReview = contractor.matchStatus === 'auto_matched' && contractor.dataSource === 'bci_import';
                       const isEmpty = !contractor.employerId; // Check if this is an empty key contractor trade
@@ -895,11 +953,14 @@ export default function PublicFormPage() {
                             <div className="flex-1">
                               <div className="font-medium text-sm sm:text-base">{contractor.tradeLabel}</div>
                               <div className="text-xs sm:text-sm text-muted-foreground mt-1">
-                                {isEmpty ? (
+                                {isEmpty && !contractorAction?.action ? (
                                   <span className="italic text-gray-400">No contractor assigned</span>
+                                ) : contractorAction?.action === 'add' && contractorAction.newEmployerName ? (
+                                  contractorAction.newEmployerName
+                                ) : contractorAction?.action === 'change' && contractorAction.newEmployerName ? (
+                                  contractorAction.newEmployerName
                                 ) : (
-                                  contractorAction?.action === 'change' && contractorAction.newEmployerName ? 
-                                    contractorAction.newEmployerName : contractor.employerName
+                                  contractor.employerName
                                 )}
                               </div>
                               {contractor.estimatedWorkforce && (
@@ -930,24 +991,41 @@ export default function PublicFormPage() {
                           </div>
                           
                           {/* Action buttons for empty key contractor trades */}
-                          {isEmpty && (
-                            <div className="flex gap-2 mt-3 pt-3 border-t">
-                              <Button 
-                                size="sm" 
-                                variant="outline"
-                                onClick={() => {
-                                  // In real implementation, show employer search modal
-                                  const newEmployerId = prompt('Enter employer ID to assign:');
-                                  if (newEmployerId) {
-                                    const employer = publicData.employers?.find(e => e.id === newEmployerId);
-                                    handleContractorAction(contractor.id, 'add', newEmployerId, employer?.name || 'Selected Employer');
-                                  }
-                                }}
-                                className="text-blue-600 border-blue-200 hover:bg-blue-50 h-10 sm:h-9 flex-1 sm:flex-initial"
-                              >
-                                <Plus className="h-4 w-4 sm:h-3 sm:w-3 mr-1" />
-                                Add Contractor
-                              </Button>
+                          {isEmpty && !contractorAction?.action && (
+                            <div className="mt-3 pt-3 border-t">
+                              {editingKeyTrade === contractor.id ? (
+                                <div className="space-y-2">
+                                  <Label className="text-sm">Select Employer</Label>
+                                  <EmployerSearch
+                                    employers={publicData.employers || []}
+                                    value={contractorAction?.newEmployerId || ''}
+                                    onSelect={(employerId, employerName) => {
+                                      handleContractorAction(contractor.id, 'add', employerId, employerName);
+                                      setEditingKeyTrade(null);
+                                    }}
+                                    placeholder="Search and select employer..."
+                                    className="h-10"
+                                  />
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => setEditingKeyTrade(null)}
+                                    className="text-xs"
+                                  >
+                                    Cancel
+                                  </Button>
+                                </div>
+                              ) : (
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  onClick={() => setEditingKeyTrade(contractor.id)}
+                                  className="text-blue-600 border-blue-200 hover:bg-blue-50 h-10 sm:h-9 flex-1 sm:flex-initial"
+                                >
+                                  <Plus className="h-4 w-4 sm:h-3 sm:w-3 mr-1" />
+                                  Add Contractor
+                                </Button>
+                              )}
                             </div>
                           )}
                           
@@ -1010,6 +1088,113 @@ export default function PublicFormPage() {
                                 <Badge variant="secondary" className="text-xs">
                                   <Plus className="h-3 w-3 mr-1" />
                                   Added by Delegate
+                                </Badge>
+                              )}
+                              {contractorAction.action === 'wrong' && (
+                                <Badge variant="destructive" className="text-xs">
+                                  <X className="h-3 w-3 mr-1" />
+                                  Marked as Wrong
+                                </Badge>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                    
+                    {/* Display non-key trade contractors */}
+                    {nonKeyTradeContractors.map((contractor) => {
+                      const contractorAction = contractorActions[contractor.id];
+                      const needsReview = contractor.matchStatus === 'auto_matched' && contractor.dataSource === 'bci_import';
+                      
+                      return (
+                        <div key={contractor.id} className="p-3 sm:p-4 border rounded-lg bg-card">
+                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-0">
+                            <div className="flex-1">
+                              <div className="font-medium text-sm sm:text-base">{contractor.tradeLabel}</div>
+                              <div className="text-xs sm:text-sm text-muted-foreground mt-1">
+                                {contractorAction?.action === 'change' && contractorAction.newEmployerName ? 
+                                  contractorAction.newEmployerName : contractor.employerName
+                                }
+                              </div>
+                              {contractor.estimatedWorkforce && (
+                                <div className="text-xs text-muted-foreground mt-1">
+                                  Est. workforce: {contractor.estimatedWorkforce}
+                                </div>
+                              )}
+                              {contractor.dataSource === 'bci_import' && (
+                                <div className="text-xs text-blue-600 mt-1">
+                                  BCI Match {needsReview ? '- Needs Review' : ''}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {contractor.ebaStatus ? (
+                                <Badge variant="default" className="text-xs gap-1">
+                                  <CheckCircle className="h-3 w-3" />
+                                  EBA Active
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-xs">
+                                  No EBA
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          
+                          {/* Action buttons for BCI matches that need review */}
+                          {needsReview && !contractorAction?.action && (
+                            <div className="flex flex-col sm:flex-row gap-2 mt-3 pt-3 border-t">
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => handleContractorAction(contractor.id, 'confirm')}
+                                className="text-green-600 border-green-200 hover:bg-green-50 h-10 sm:h-9"
+                              >
+                                <Check className="h-4 w-4 sm:h-3 sm:w-3 mr-1" />
+                                Confirm
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => {
+                                  // In real implementation, show employer search modal
+                                  const newEmployerId = prompt('Enter new employer ID:');
+                                  if (newEmployerId) {
+                                    const employer = publicData.employers?.find(e => e.id === newEmployerId);
+                                    handleContractorAction(contractor.id, 'change', newEmployerId, employer?.name || 'Selected Employer');
+                                  }
+                                }}
+                                className="text-blue-600 border-blue-200 hover:bg-blue-50 h-10 sm:h-9"
+                              >
+                                <Edit className="h-4 w-4 sm:h-3 sm:w-3 mr-1" />
+                                Change
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => handleContractorAction(contractor.id, 'wrong')}
+                                className="text-red-600 border-red-200 hover:bg-red-50 h-10 sm:h-9"
+                              >
+                                <X className="h-4 w-4 sm:h-3 sm:w-3 mr-1" />
+                                Mark as Wrong
+                              </Button>
+                            </div>
+                          )}
+                          
+                          {/* Show action taken */}
+                          {contractorAction?.action && (
+                            <div className="mt-3 pt-3 border-t">
+                              {contractorAction.action === 'confirm' && (
+                                <Badge variant="default" className="text-xs">
+                                  <Check className="h-3 w-3 mr-1" />
+                                  Confirmed by Delegate
+                                </Badge>
+                              )}
+                              {contractorAction.action === 'change' && (
+                                <Badge variant="secondary" className="text-xs">
+                                  <Edit className="h-3 w-3 mr-1" />
+                                  Changed by Delegate
                                 </Badge>
                               )}
                               {contractorAction.action === 'wrong' && (

@@ -9,8 +9,11 @@ import { Settings, FileDown, AlertCircle, CheckCircle } from "lucide-react";
 import { ProjectComplianceMobile } from "./ProjectComplianceMobile";
 import { EmployerComplianceMobile } from "./EmployerComplianceMobile";
 import { ComplianceReportingSettings } from "./ComplianceReportingSettings";
+import { ShareAuditFormGenerator } from "./ShareAuditFormGenerator";
 import { useProjectCompliance } from "./hooks/useProjectCompliance";
 import { useEmployerCompliance } from "./hooks/useEmployerCompliance";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 interface ComplianceMobileViewProps {
   projectId: string;
@@ -20,6 +23,21 @@ export function ComplianceMobileView({ projectId }: ComplianceMobileViewProps) {
   const [showReportingSettings, setShowReportingSettings] = useState(false);
   const { data: projectCompliance } = useProjectCompliance(projectId);
   const { data: employerCompliance = [] } = useEmployerCompliance(projectId);
+
+  // Get project name for share link
+  const { data: project } = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('id, name')
+        .eq('id', projectId)
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+  });
 
   const getComplianceScore = () => {
     if (!projectCompliance) return { percentage: 0, status: 'critical' };
@@ -56,6 +74,16 @@ export function ComplianceMobileView({ projectId }: ComplianceMobileViewProps) {
 
   return (
     <div className="space-y-4 p-4">
+      {/* Share Button - Mobile optimized */}
+      {project && (
+        <div className="flex justify-end">
+          <ShareAuditFormGenerator 
+            projectId={projectId} 
+            projectName={project.name}
+          />
+        </div>
+      )}
+
       {/* Overall Status Card */}
       <Card>
         <CardHeader className="pb-3">

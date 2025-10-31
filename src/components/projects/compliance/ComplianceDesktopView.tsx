@@ -7,9 +7,12 @@ import { ProjectComplianceGrid } from "./ProjectComplianceGrid";
 import { EmployerComplianceTable } from "./EmployerComplianceTable";
 import { ComplianceReportingSettings } from "./ComplianceReportingSettings";
 import { BulkActionsMenu } from "./BulkActionsMenu";
+import { ShareAuditFormGenerator } from "./ShareAuditFormGenerator";
 import { useProjectCompliance } from "./hooks/useProjectCompliance";
 import { useEmployerCompliance } from "./hooks/useEmployerCompliance";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 interface ComplianceDesktopViewProps {
   projectId: string;
@@ -19,6 +22,21 @@ export function ComplianceDesktopView({ projectId }: ComplianceDesktopViewProps)
   const [showReportingSettings, setShowReportingSettings] = useState(false);
   const { data: projectCompliance } = useProjectCompliance(projectId);
   const { data: employerCompliance } = useEmployerCompliance(projectId);
+
+  // Get project name for share link
+  const { data: project } = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('id, name')
+        .eq('id', projectId)
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+  });
 
   const handleExport = () => {
     // TODO: Implement export functionality
@@ -33,6 +51,12 @@ export function ComplianceDesktopView({ projectId }: ComplianceDesktopViewProps)
           <div className="flex items-center justify-between">
             <CardTitle>Project Compliance Status</CardTitle>
             <div className="flex gap-2">
+              {project && (
+                <ShareAuditFormGenerator 
+                  projectId={projectId} 
+                  projectName={project.name}
+                />
+              )}
               <Button
                 variant="outline"
                 size="sm"
