@@ -23,4 +23,6 @@ export const config = {
   port: Number(process.env.PORT ?? 3000),
   requestTimeoutMs: Number(process.env.REQUEST_TIMEOUT_MS ?? 15000),
   corsOrigin: process.env.CORS_ORIGIN || '*',
+  organizingMetricsWarmUrl: process.env.ORGANIZING_METRICS_WARM_URL ?? null,
+  organizingMetricsWarmToken: process.env.ORGANIZING_METRICS_WARM_TOKEN ?? null,
 }

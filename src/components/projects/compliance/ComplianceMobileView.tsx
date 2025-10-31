@@ -6,12 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Settings, FileDown, AlertCircle, CheckCircle } from "lucide-react";
-import { ProjectComplianceMobile } from "./ProjectComplianceMobile";
+import { ProjectComplianceMobileCard } from "./ProjectComplianceMobileCard";
 import { EmployerComplianceMobile } from "./EmployerComplianceMobile";
 import { ComplianceReportingSettings } from "./ComplianceReportingSettings";
 import { ShareAuditFormGenerator } from "./ShareAuditFormGenerator";
 import { useProjectCompliance } from "./hooks/useProjectCompliance";
 import { useEmployerCompliance } from "./hooks/useEmployerCompliance";
+import { useProjectComplianceRating } from "./hooks/useProjectComplianceRating";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -23,6 +24,7 @@ export function ComplianceMobileView({ projectId }: ComplianceMobileViewProps) {
   const [showReportingSettings, setShowReportingSettings] = useState(false);
   const { data: projectCompliance } = useProjectCompliance(projectId);
   const { data: employerCompliance = [] } = useEmployerCompliance(projectId);
+  const { data: projectRating } = useProjectComplianceRating(projectId);
 
   // Get project name for share link
   const { data: project } = useQuery({
@@ -40,24 +42,17 @@ export function ComplianceMobileView({ projectId }: ComplianceMobileViewProps) {
   });
 
   const getComplianceScore = () => {
-    if (!projectCompliance) return { percentage: 0, status: 'critical' };
-    
-    let total = 0;
-    let completed = 0;
+    if (!projectRating) return { percentage: 0, status: 'critical', label: 'Unknown' };
 
-    if (projectCompliance.delegate_identified) completed++;
-    if (projectCompliance.delegate_elected) completed++;
-    if (projectCompliance.hsr_chair_exists) completed++;
-    if (projectCompliance.abn_worker_check_conducted) completed++;
-    if (projectCompliance.inductions_attended) completed++;
-    if (projectCompliance.delegate_site_access && projectCompliance.delegate_site_access !== 'none') completed++;
+    const percentage = Math.round((projectRating.overallRating / 4) * 100);
+    const label = projectRating.overallRating === 4 ? 'Good' :
+                 projectRating.overallRating === 3 ? 'Moderate' :
+                 projectRating.overallRating === 2 ? 'Poor' : 'Critical';
 
-    total = 6;
-    const percentage = Math.round((completed / total) * 100);
-    
     return {
       percentage,
-      status: percentage >= 80 ? 'good' : percentage >= 50 ? 'warning' : 'critical'
+      status: projectRating.overallRating >= 3 ? 'good' : 'critical',
+      label
     };
   };
 
@@ -112,12 +107,13 @@ export function ComplianceMobileView({ projectId }: ComplianceMobileViewProps) {
           
           <div className="grid grid-cols-2 gap-4">
             <div className="text-center">
-              <div className="text-2xl font-bold">{score.percentage}%</div>
-              <Badge 
-                variant={score.status === 'good' ? 'default' : score.status === 'warning' ? 'secondary' : 'destructive'}
+              <div className="text-2xl font-bold">{score.label}</div>
+              <div className="text-lg text-muted-foreground">{score.percentage}%</div>
+              <Badge
+                variant={score.status === 'good' ? 'default' : 'destructive'}
                 className="mt-1"
               >
-                Project Compliance
+                Project Rating
               </Badge>
             </div>
             
@@ -142,21 +138,21 @@ export function ComplianceMobileView({ projectId }: ComplianceMobileViewProps) {
         <AccordionItem value="project">
           <AccordionTrigger className="hover:no-underline">
             <div className="flex items-center justify-between w-full pr-2">
-              <span className="font-medium">Project Compliance</span>
+              <span className="font-medium">Project Rating Details</span>
               <div className="flex items-center gap-2">
-                {score.percentage >= 80 ? (
+                {score.status === 'good' ? (
                   <CheckCircle className="h-4 w-4 text-green-600" />
                 ) : (
-                  <AlertCircle className="h-4 w-4 text-yellow-600" />
+                  <AlertCircle className="h-4 w-4 text-red-600" />
                 )}
                 <Badge variant="outline" className="text-xs">
-                  {score.percentage}%
+                  {score.label}
                 </Badge>
               </div>
             </div>
           </AccordionTrigger>
           <AccordionContent>
-            <ProjectComplianceMobile projectId={projectId} />
+            <ProjectComplianceMobileCard projectId={projectId} showFullDetails={true} />
           </AccordionContent>
         </AccordionItem>
         

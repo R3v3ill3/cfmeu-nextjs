@@ -3,6 +3,40 @@ import type { Logger } from 'pino'
 import { getServiceRoleClient } from './supabase'
 import { config } from './config'
 
+async function callOrganizingMetricsWarmEndpoint(logger: Logger) {
+  if (!config.organizingMetricsWarmUrl || !config.organizingMetricsWarmToken) {
+    logger.debug('Skipping organizing metrics warm-up (missing URL or token)')
+    return
+  }
+
+  try {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 10_000)
+    const response = await fetch(config.organizingMetricsWarmUrl, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${config.organizingMetricsWarmToken}`,
+        'Content-Type': 'application/json',
+      },
+      signal: controller.signal,
+    })
+    clearTimeout(timeout)
+
+    if (!response.ok) {
+      const body = await response.text()
+      logger.warn({ status: response.status, body }, 'Organizing metrics warm-up request failed')
+    } else {
+      logger.info('Organizing metrics warm-up successful')
+    }
+  } catch (err: any) {
+    if (err?.name === 'AbortError') {
+      logger.warn('Organizing metrics warm-up timed out')
+    } else {
+      logger.warn({ err }, 'Organizing metrics warm-up errored')
+    }
+  }
+}
+
 export function scheduleMaterializedViewRefreshes(logger: Logger) {
   const cron = config.refreshCron // default: every 10 minutes
 
@@ -13,6 +47,7 @@ export function scheduleMaterializedViewRefreshes(logger: Logger) {
       // Refresh all materialized views
       await svc.rpc('refresh_patch_project_mapping_view')
       await svc.rpc('refresh_project_list_comprehensive_view')
+      await svc.rpc('refresh_active_eba_employers')
 
       // Refresh employers comprehensive view (primary view used by Railway worker)
       try {
@@ -61,6 +96,10 @@ export function refreshPatchProjectMappingViewInBackground(logger: Logger) {
       logger.warn({ err: e }, 'Failed to auto-refresh patch_project_mapping_view')
     }
   })()
+}
+
+export async function warmOrganizingMetricsCache(logger: Logger) {
+  await callOrganizingMetricsWarmEndpoint(logger)
 }
 
 

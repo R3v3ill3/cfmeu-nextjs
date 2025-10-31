@@ -157,11 +157,6 @@ export default function PublicFormPage() {
     },
   });
 
-  // Handle Audit & Compliance forms
-  if (publicData?.resourceType === 'PROJECT_AUDIT_COMPLIANCE') {
-    return <PublicAuditComplianceForm formData={publicData as any} />;
-  }
-
   // Initialize form data when publicData changes
   useEffect(() => {
     if (publicData?.project) {
@@ -399,6 +394,11 @@ export default function PublicFormPage() {
       };
     }
   };
+
+  // Handle Audit & Compliance forms (AFTER all hooks are called)
+  if (publicData?.resourceType === 'PROJECT_AUDIT_COMPLIANCE') {
+    return <PublicAuditComplianceForm formData={publicData as any} />;
+  }
 
   if (isLoading) {
     return (

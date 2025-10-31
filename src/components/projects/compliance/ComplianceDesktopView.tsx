@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FileDown, Settings } from "lucide-react";
-import { ProjectComplianceGrid } from "./ProjectComplianceGrid";
+import { ProjectComplianceCard } from "./ProjectComplianceCard";
 import { EmployerComplianceTable } from "./EmployerComplianceTable";
 import { ComplianceReportingSettings } from "./ComplianceReportingSettings";
 import { BulkActionsMenu } from "./BulkActionsMenu";
@@ -52,8 +52,8 @@ export function ComplianceDesktopView({ projectId }: ComplianceDesktopViewProps)
             <CardTitle>Project Compliance Status</CardTitle>
             <div className="flex gap-2">
               {project && (
-                <ShareAuditFormGenerator 
-                  projectId={projectId} 
+                <ShareAuditFormGenerator
+                  projectId={projectId}
                   projectName={project.name}
                 />
               )}
@@ -78,7 +78,7 @@ export function ComplianceDesktopView({ projectId }: ComplianceDesktopViewProps)
               />
             </div>
           )}
-          <ProjectComplianceGrid projectId={projectId} />
+          <ProjectComplianceCard projectId={projectId} />
         </CardContent>
       </Card>
 

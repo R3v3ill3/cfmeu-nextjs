@@ -2,7 +2,7 @@ import express from 'express'
 import pino from 'pino'
 import { config } from './config'
 import { getServiceRoleClient, getUserClientFromToken, verifyJWT } from './supabase'
-import { scheduleMaterializedViewRefreshes, refreshPatchProjectMappingViewInBackground } from './refresh'
+import { scheduleMaterializedViewRefreshes, refreshPatchProjectMappingViewInBackground, warmOrganizingMetricsCache } from './refresh'
 import { cache, makeCacheKey } from './cache'
 import crypto from 'crypto'
 
@@ -1025,6 +1025,7 @@ server = app.listen(config.port, () => {
   logger.info({ port: config.port }, 'cfmeu-dashboard-worker listening')
   // Schedule materialized view refreshes
   scheduleMaterializedViewRefreshes(logger)
+  void warmOrganizingMetricsCache(logger)
 })
 
 // Graceful shutdown handler for HTTP worker

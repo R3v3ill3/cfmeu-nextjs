@@ -113,6 +113,39 @@ The implementation includes comprehensive performance monitoring:
 ⚠️ Slow organizing metrics query detected: {queryTime: 1200, appliedFilters: {...}}
 ```
 
+### Database Profiling
+
+Use `sql/explain_organizing_metrics.sql` to capture before/after timings for the
+`calculate_organizing_universe_metrics` RPC. Run the script from `psql` (or the
+Supabase SQL editor) with a service-role session:
+
+```sh
+psql "$SUPABASE_DB_URL" -f sql/explain_organizing_metrics.sql
+```
+
+Replace the sample UUIDs in the script with representative admin / organiser
+ids and patch ids. Execute each block twice and compare the warm-cache results
+before and after deploying the optimization migration.
+
+### Worker cache warming
+
+The Railway dashboard worker now keeps organizing metrics dependencies fresh:
+
+- Cron refresh invokes `refresh_active_eba_employers()` alongside the existing
+  materialized view refreshes.
+- Optional HTTP warm-up on boot (controlled via environment variables) seeds
+  CDN caches so the first dashboard visitor avoids a cold query.
+
+```
+# Worker environment (Railway / local dev)
+ORGANIZING_METRICS_WARM_URL=https://app.example.com/api/dashboard/organizing-metrics
+ORGANIZING_METRICS_WARM_TOKEN=<jwt-for-seeded-admin>
+```
+
+If either variable is omitted the worker skips warm-up and logs at `debug`
+level. Use a short-lived JWT tied to a read-only admin to avoid leaking
+privileged credentials.
+
 ## Component Updates
 
 ### Feature Flag Integration
