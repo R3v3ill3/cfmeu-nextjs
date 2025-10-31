@@ -35,7 +35,9 @@ export function ProjectCountIndicator({
 }: ProjectCountIndicatorProps) {
   const [showDetails, setShowDetails] = useState(false);
 
-  const completionPercentage = (data.assessed_projects / data.total_projects) * 100;
+  const completionPercentage = data.total_projects > 0
+    ? (data.assessed_projects / data.total_projects) * 100
+    : 0;
 
   const getDataQualityColor = (quality: string) => {
     switch (quality) {

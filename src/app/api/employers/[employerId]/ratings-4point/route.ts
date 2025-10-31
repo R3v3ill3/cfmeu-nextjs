@@ -208,82 +208,98 @@ export async function GET(request: NextRequest, { params }: { params: { employer
     let safetyAssessments: any[] = [];
     let subcontractorAssessments: any[] = [];
 
+    // First get the employer's projects
+    let employerProjectIds: string[] = [];
     try {
-      const { data, error: projectError } = await supabase
-        .from('union_respect_assessments_4point')
-        .select(`
-          id,
-          project_id,
-          assessment_date,
-          overall_union_respect_rating,
-          confidence_level,
-          notes,
-          projects!inner(name)
-        `)
-        .eq('employer_id', employerId)
-        .eq('projects.is_active', true)
-        .order('assessment_date', { ascending: false })
-        .limit(50);
+      const { data: employerProjects } = await supabase
+        .rpc('get_employer_sites', { p_employer_id: employerId });
 
-      if (projectError) {
-        console.error('Error fetching union respect assessments:', projectError);
-      } else {
-        projectAssessments = data || [];
+      if (employerProjects) {
+        employerProjectIds = [...new Set(employerProjects.map(p => p.project_id))];
       }
     } catch (error) {
-      console.error('Error in union respect assessments query:', error);
+      console.error('Error fetching employer projects:', error);
     }
 
-    try {
-      const { data, error: safetyError } = await supabase
-        .from('safety_assessments_4point')
-        .select(`
-          id,
-          project_id,
-          assessment_date,
-          overall_safety_rating,
-          confidence_level,
-          notes,
-          projects!inner(name)
-        `)
-        .eq('employer_id', employerId)
-        .eq('projects.is_active', true)
-        .order('assessment_date', { ascending: false })
-        .limit(50);
+    // Only fetch assessments if we have associated projects
+    if (employerProjectIds.length > 0) {
+      try {
+        const { data, error: projectError } = await supabase
+          .from('union_respect_assessments_4point')
+          .select(`
+            id,
+            project_id,
+            assessment_date,
+            overall_union_respect_rating,
+            confidence_level,
+            notes,
+            projects!inner(name)
+          `)
+          .eq('employer_id', employerId)
+          .in('project_id', employerProjectIds)
+          .order('assessment_date', { ascending: false })
+          .limit(50);
 
-      if (safetyError) {
-        console.error('Error fetching safety assessments:', safetyError);
-      } else {
-        safetyAssessments = data || [];
+        if (projectError) {
+          console.error('Error fetching union respect assessments:', projectError);
+        } else {
+          projectAssessments = data || [];
+        }
+      } catch (error) {
+        console.error('Error in union respect assessments query:', error);
       }
-    } catch (error) {
-      console.error('Error in safety assessments query:', error);
-    }
 
-    try {
-      const { data, error: subcontractorError } = await supabase
-        .from('subcontractor_assessments_4point')
-        .select(`
-          id,
-          project_id,
-          assessment_date,
-          usage_rating,
-          confidence_level,
-          notes,
-          projects!inner(name)
-        `)
-        .eq('employer_id', employerId)
-        .eq('projects.is_active', true)
-        .order('assessment_date', { ascending: false })
-        .limit(50);
+      try {
+        const { data, error: safetyError } = await supabase
+          .from('safety_assessments_4point')
+          .select(`
+            id,
+            project_id,
+            assessment_date,
+            overall_safety_rating,
+            confidence_level,
+            notes,
+            projects!inner(name)
+          `)
+          .eq('employer_id', employerId)
+          .in('project_id', employerProjectIds)
+          .order('assessment_date', { ascending: false })
+          .limit(50);
 
-      if (subcontractorError) {
-        console.error('Error fetching subcontractor assessments:', subcontractorError);
-      } else {
-        subcontractorAssessments = data || [];
+        if (safetyError) {
+          console.error('Error fetching safety assessments:', safetyError);
+        } else {
+          safetyAssessments = data || [];
+        }
+      } catch (error) {
+        console.error('Error in safety assessments query:', error);
       }
-    } catch (error) {
-      console.error('Error in subcontractor assessments query:', error);
+
+      try {
+        const { data, error: subcontractorError } = await supabase
+          .from('subcontractor_assessments_4point')
+          .select(`
+            id,
+            project_id,
+            assessment_date,
+            usage_rating,
+            confidence_level,
+            notes,
+            projects!inner(name)
+          `)
+          .eq('employer_id', employerId)
+          .in('project_id', employerProjectIds)
+          .order('assessment_date', { ascending: false })
+          .limit(50);
+
+        if (subcontractorError) {
+          console.error('Error fetching subcontractor assessments:', subcontractorError);
+        } else {
+          subcontractorAssessments = data || [];
+        }
+      } catch (error) {
+        console.error('Error in subcontractor assessments query:', error);
+      }
     }
 
     // Get organiser expertise assessments (Track 2) - with error handling
@@ -568,16 +584,17 @@ export async function GET(request: NextRequest, { params }: { params: { employer
     }
 
     // Get total project count for this employer
+    // Use the same logic as get_employer_sites function
     let totalProjects = projectSummary.unique_projects; // Default to assessed projects
     try {
-      const { data: projectCount, error: countError } = await supabase
-        .from('projects')
-        .select('id', { count: 'exact', head: true })
-        .eq('employer_id', employerId)
-        .eq('is_active', true);
+      // First get all projects where employer has a role or is builder
+      const { data: employerProjects, error: projectError } = await supabase
+        .rpc('get_employer_sites', { p_employer_id: employerId });
 
-      if (!countError && projectCount !== null) {
-        totalProjects = projectCount;
+      if (!projectError && employerProjects) {
+        // Count unique projects
+        const uniqueProjectIds = new Set(employerProjects.map(p => p.project_id));
+        totalProjects = uniqueProjectIds.size;
       }
     } catch (error) {
       console.error('Error fetching total project count:', error);
