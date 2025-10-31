@@ -62,6 +62,14 @@ interface PublicFormData {
       tradeLabel: string;
       stage: string;
       estimatedWorkforce?: number | null;
+      // New worker breakdown fields
+      estimatedFullTimeWorkers?: number | null;
+      estimatedCasualWorkers?: number | null;
+      estimatedAbnWorkers?: number | null;
+      membershipChecked?: boolean | null;
+      estimatedMembers?: number | null;
+      calculatedTotalWorkers?: number | null;
+      membershipPercentage?: number | null;
       ebaStatus?: boolean | null;
       dataSource?: string;
       matchStatus?: string;
@@ -131,7 +139,17 @@ export default function PublicFormPage() {
 
   // New contractor/trade state
   const [newContractorRole, setNewContractorRole] = useState({ employerId: '', employerName: '', roleCode: '' });
-  const [newTradeContractor, setNewTradeContractor] = useState({ employerId: '', employerName: '', tradeType: '', estimatedWorkforce: '' });
+  const [newTradeContractor, setNewTradeContractor] = useState({
+    employerId: '',
+    employerName: '',
+    tradeType: '',
+    estimatedWorkforce: '',
+    estimatedFullTimeWorkers: '',
+    estimatedCasualWorkers: '',
+    estimatedAbnWorkers: '',
+    membershipChecked: false,
+    estimatedMembers: ''
+  });
   
   // Contractor status management
   const [contractorActions, setContractorActions] = useState<Record<string, {
@@ -310,6 +328,12 @@ export default function PublicFormPage() {
             employerId: actionData.newEmployerId,
             tradeType: tradeType,
             estimatedWorkforce: null,
+            // New worker breakdown fields - null for empty key trades initially
+            estimatedFullTimeWorkers: null,
+            estimatedCasualWorkers: null,
+            estimatedAbnWorkers: null,
+            membershipChecked: false,
+            estimatedMembers: null,
             action: 'create'
           });
         }
@@ -330,6 +354,12 @@ export default function PublicFormPage() {
         employerId: newTradeContractor.employerId,
         tradeType: newTradeContractor.tradeType,
         estimatedWorkforce: newTradeContractor.estimatedWorkforce ? parseInt(newTradeContractor.estimatedWorkforce) : null,
+        // New worker breakdown fields
+        estimatedFullTimeWorkers: newTradeContractor.estimatedFullTimeWorkers ? parseInt(newTradeContractor.estimatedFullTimeWorkers) : null,
+        estimatedCasualWorkers: newTradeContractor.estimatedCasualWorkers ? parseInt(newTradeContractor.estimatedCasualWorkers) : null,
+        estimatedAbnWorkers: newTradeContractor.estimatedAbnWorkers ? parseInt(newTradeContractor.estimatedAbnWorkers) : null,
+        membershipChecked: newTradeContractor.membershipChecked,
+        estimatedMembers: newTradeContractor.estimatedMembers ? parseInt(newTradeContractor.estimatedMembers) : null,
         action: 'create'
       });
     }
@@ -358,9 +388,19 @@ export default function PublicFormPage() {
       toast.error('Please select both employer and trade type');
       return;
     }
-    
+
     toast.success('Trade contractor will be added when form is submitted');
-    setNewTradeContractor({ employerId: '', employerName: '', tradeType: '', estimatedWorkforce: '' });
+    setNewTradeContractor({
+      employerId: '',
+      employerName: '',
+      tradeType: '',
+      estimatedWorkforce: '',
+      estimatedFullTimeWorkers: '',
+      estimatedCasualWorkers: '',
+      estimatedAbnWorkers: '',
+      membershipChecked: false,
+      estimatedMembers: ''
+    });
   };
 
   const handleContractorAction = (contractorId: string, action: 'confirm' | 'change' | 'wrong' | 'add', newEmployerId?: string, newEmployerName?: string) => {
@@ -963,9 +1003,25 @@ export default function PublicFormPage() {
                                   contractor.employerName
                                 )}
                               </div>
-                              {contractor.estimatedWorkforce && (
+                              {contractor.calculatedTotalWorkers && (
                                 <div className="text-xs text-muted-foreground mt-1">
-                                  Est. workforce: {contractor.estimatedWorkforce}
+                                  Est. workforce: {contractor.calculatedTotalWorkers}
+                                  {contractor.estimatedFullTimeWorkers && contractor.estimatedCasualWorkers && contractor.estimatedAbnWorkers && (
+                                    <span className="ml-2">
+                                      (FT: {contractor.estimatedFullTimeWorkers}, Casual: {contractor.estimatedCasualWorkers}, ABN: {contractor.estimatedAbnWorkers})
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              {contractor.estimatedMembers && (
+                                <div className="text-xs text-muted-foreground mt-1">
+                                  Est. members: {contractor.estimatedMembers}
+                                  {contractor.membershipPercentage && ` (${contractor.membershipPercentage.toFixed(1)}%)`}
+                                </div>
+                              )}
+                              {contractor.membershipChecked && (
+                                <div className="text-xs text-green-600 mt-1">
+                                  ✓ Membership checked
                                 </div>
                               )}
                               {contractor.dataSource === 'bci_import' && (
@@ -1117,9 +1173,25 @@ export default function PublicFormPage() {
                                   contractorAction.newEmployerName : contractor.employerName
                                 }
                               </div>
-                              {contractor.estimatedWorkforce && (
+                              {contractor.calculatedTotalWorkers && (
                                 <div className="text-xs text-muted-foreground mt-1">
-                                  Est. workforce: {contractor.estimatedWorkforce}
+                                  Est. workforce: {contractor.calculatedTotalWorkers}
+                                  {contractor.estimatedFullTimeWorkers && contractor.estimatedCasualWorkers && contractor.estimatedAbnWorkers && (
+                                    <span className="ml-2">
+                                      (FT: {contractor.estimatedFullTimeWorkers}, Casual: {contractor.estimatedCasualWorkers}, ABN: {contractor.estimatedAbnWorkers})
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              {contractor.estimatedMembers && (
+                                <div className="text-xs text-muted-foreground mt-1">
+                                  Est. members: {contractor.estimatedMembers}
+                                  {contractor.membershipPercentage && ` (${contractor.membershipPercentage.toFixed(1)}%)`}
+                                </div>
+                              )}
+                              {contractor.membershipChecked && (
+                                <div className="text-xs text-green-600 mt-1">
+                                  ✓ Membership checked
                                 </div>
                               )}
                               {contractor.dataSource === 'bci_import' && (
@@ -1248,22 +1320,71 @@ export default function PublicFormPage() {
                     </Select>
                   </div>
                 </div>
-                <div className="flex gap-3">
-                  <div className="flex-1">
-                    <Label className="text-sm">Workforce</Label>
-                    <Input
-                      type="number"
-                      placeholder="Est."
-                      value={newTradeContractor.estimatedWorkforce}
-                      onChange={(e) => setNewTradeContractor(prev => ({ ...prev, estimatedWorkforce: e.target.value }))}
-                      className="h-11 sm:h-10"
-                    />
+                <div className="space-y-3">
+                  <div>
+                    <Label className="text-sm font-medium">Worker Breakdown (Optional)</Label>
+                    <div className="grid grid-cols-3 gap-2 mt-2">
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Full-Time</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          placeholder="0"
+                          value={newTradeContractor.estimatedFullTimeWorkers}
+                          onChange={(e) => setNewTradeContractor(prev => ({ ...prev, estimatedFullTimeWorkers: e.target.value }))}
+                          className="h-9 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Casual</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          placeholder="0"
+                          value={newTradeContractor.estimatedCasualWorkers}
+                          onChange={(e) => setNewTradeContractor(prev => ({ ...prev, estimatedCasualWorkers: e.target.value }))}
+                          className="h-9 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">ABN</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          placeholder="0"
+                          value={newTradeContractor.estimatedAbnWorkers}
+                          onChange={(e) => setNewTradeContractor(prev => ({ ...prev, estimatedAbnWorkers: e.target.value }))}
+                          className="h-9 text-sm"
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex-1 flex items-end">
-                    <Button onClick={addTradeContractor} size="sm" className="h-11 sm:h-10 w-full">
-                      <Plus className="h-4 w-4 mr-1" />
-                      Add
-                    </Button>
+                  <div className="flex gap-3">
+                    <div className="flex-1">
+                      <Label className="text-sm">Est. Members</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        placeholder="Optional"
+                        value={newTradeContractor.estimatedMembers}
+                        onChange={(e) => setNewTradeContractor(prev => ({ ...prev, estimatedMembers: e.target.value }))}
+                        className="h-11 sm:h-10"
+                      />
+                    </div>
+                    <div className="flex items-end gap-2">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="membershipChecked"
+                          checked={newTradeContractor.membershipChecked}
+                          onCheckedChange={(checked) => setNewTradeContractor(prev => ({ ...prev, membershipChecked: !!checked }))}
+                        />
+                        <Label htmlFor="membershipChecked" className="text-sm">Membership Checked</Label>
+                      </div>
+                      <Button onClick={addTradeContractor} size="sm" className="h-11 sm:h-10">
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>

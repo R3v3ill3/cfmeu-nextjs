@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { SingleEmployerDialogPicker } from "@/components/projects/SingleEmployerDialogPicker";
 import { toast } from "sonner";
 import { ManageTradeCompanyDialog } from "@/components/projects/mapping/ManageTradeCompanyDialog";
@@ -33,6 +34,15 @@ type Row = {
   eba: boolean | null;
   id?: string; // project_contractor_trades row id if exists
   isSkeleton?: boolean; // true for the base scaffold row per trade
+  // Worker breakdown fields
+  estimatedWorkforce?: number | null;
+  estimatedFullTimeWorkers?: number | null;
+  estimatedCasualWorkers?: number | null;
+  estimatedAbnWorkers?: number | null;
+  membershipChecked?: boolean | null;
+  estimatedMembers?: number | null;
+  calculatedTotalWorkers?: number | null;
+  membershipPercentage?: number | null;
   // Auto-match tracking fields
   dataSource?: 'manual' | 'bci_import' | 'other_import';
   matchStatus?: 'auto_matched' | 'confirmed' | 'needs_review';
@@ -49,6 +59,61 @@ type Row = {
 function startCase(s: string): string {
   return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
+
+// Helper function to update worker breakdown data
+const updateWorkerBreakdown = async (
+  row: Row,
+  projectId: string,
+  field: 'estimatedFullTimeWorkers' | 'estimatedCasualWorkers' | 'estimatedAbnWorkers' | 'estimatedMembers' | 'membershipChecked',
+  value: number | boolean | null
+) => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const updateData: any = {
+      worker_breakdown_updated_at: new Date().toISOString(),
+      worker_breakdown_updated_by: user.id,
+    };
+
+    // Map the field name to database column
+    const fieldMap = {
+      estimatedFullTimeWorkers: 'estimated_full_time_workers',
+      estimatedCasualWorkers: 'estimated_casual_workers',
+      estimatedAbnWorkers: 'estimated_abn_workers',
+      estimatedMembers: 'estimated_members',
+      membershipChecked: 'membership_checked',
+    };
+
+    updateData[fieldMap[field]] = value;
+
+    if (row.id && row.id.startsWith('assignment_trade:')) {
+      // Update project_assignments
+      const assignmentId = row.id.replace('assignment_trade:', '');
+      const { error } = await supabase
+        .from("project_assignments")
+        .update(updateData)
+        .eq("id", assignmentId);
+      if (error) throw error;
+    } else if (row.id && row.id.startsWith('project_trade:')) {
+      // Update project_contractor_trades
+      const tradeId = row.id.replace('project_trade:', '');
+      const { error } = await supabase
+        .from("project_contractor_trades")
+        .update(updateData)
+        .eq("id", tradeId);
+      if (error) throw error;
+    } else {
+      toast.error("Cannot update worker breakdown for unassigned row");
+      return;
+    }
+
+    toast.success("Worker breakdown updated successfully");
+  } catch (error: any) {
+    console.error("Error updating worker breakdown:", error);
+    toast.error(error.message || "Failed to update worker breakdown");
+  }
+};
 
 export function MappingSubcontractorsTable({ projectId }: { projectId: string }) {
   // Fetch key trades dynamically from database (replaces hard-coded list)
@@ -97,6 +162,15 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
       id: tc.id, // Keep full ID with prefix for table identification
       eba: tc.ebaStatus ?? null,
       isSkeleton: false,
+      // Worker breakdown fields
+      estimatedWorkforce: tc.estimatedWorkforce,
+      estimatedFullTimeWorkers: tc.estimatedFullTimeWorkers,
+      estimatedCasualWorkers: tc.estimatedCasualWorkers,
+      estimatedAbnWorkers: tc.estimatedAbnWorkers,
+      membershipChecked: tc.membershipChecked,
+      estimatedMembers: tc.estimatedMembers,
+      calculatedTotalWorkers: tc.calculatedTotalWorkers,
+      membershipPercentage: tc.membershipPercentage,
       // Auto-match tracking fields
       dataSource: tc.dataSource,
       matchStatus: tc.matchStatus,
@@ -168,6 +242,14 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
         match_status: 'confirmed',
         match_confidence: 1.0,
         confirmed_at: new Date().toISOString(),
+        // Include worker breakdown fields if they exist in the row
+        ...(r.estimatedFullTimeWorkers !== undefined && { estimated_full_time_workers: r.estimatedFullTimeWorkers }),
+        ...(r.estimatedCasualWorkers !== undefined && { estimated_casual_workers: r.estimatedCasualWorkers }),
+        ...(r.estimatedAbnWorkers !== undefined && { estimated_abn_workers: r.estimatedAbnWorkers }),
+        ...(r.membershipChecked !== undefined && { membership_checked: r.membershipChecked }),
+        ...(r.estimatedMembers !== undefined && { estimated_members: r.estimatedMembers }),
+        worker_breakdown_updated_at: new Date().toISOString(),
+        worker_breakdown_updated_by: user.id,
       };
 
       if (r.id && r.id.startsWith('assignment_trade:')) {
@@ -191,18 +273,28 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
       
       // Refresh local state with new/updated info
       const { data: emp } = await supabase.from("employers").select("enterprise_agreement_status").eq("id", employerId).maybeSingle();
-      const newRow: Row = { 
-        ...r, 
-        id: r.id, 
-        stage, 
-        employer_id: employerId, 
-        employer_name: employerName, 
-        isSkeleton: false, 
+      const newRow: Row = {
+        ...r,
+        id: r.id,
+        stage,
+        employer_id: employerId,
+        employer_name: employerName,
+        isSkeleton: false,
         eba: (emp as any)?.enterprise_agreement_status ?? null,
         status: r.status || 'active',
         statusUpdatedAt: new Date().toISOString(),
         statusUpdatedBy: user.id,
         dataSource: 'manual',
+        // Preserve worker breakdown fields
+        estimatedFullTimeWorkers: r.estimatedFullTimeWorkers,
+        estimatedCasualWorkers: r.estimatedCasualWorkers,
+        estimatedAbnWorkers: r.estimatedAbnWorkers,
+        membershipChecked: r.membershipChecked,
+        estimatedMembers: r.estimatedMembers,
+        calculatedTotalWorkers: r.calculatedTotalWorkers,
+        membershipPercentage: r.membershipPercentage,
+        workerBreakdownUpdatedAt: new Date().toISOString(),
+        workerBreakdownUpdatedBy: user.id,
         matchStatus: 'confirmed',
         matchConfidence: 1.0,
         confirmedAt: new Date().toISOString(),
@@ -411,6 +503,107 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
     </div>
   );
 
+  const workerCountCell = (row: Row) => {
+    if (!row.employer_id) return <span className="text-muted-foreground">—</span>;
+
+    const total = row.calculatedTotalWorkers || row.estimatedWorkforce || 0;
+    return (
+      <div className="text-center">
+        <span className="font-medium">{total}</span>
+      </div>
+    );
+  };
+
+  const workerBreakdownCell = (row: Row) => {
+    if (!row.employer_id) return <span className="text-muted-foreground">—</span>;
+
+    return (
+      <div className="space-y-1 min-w-[140px]">
+        <div className="flex items-center gap-2">
+          <Label className="text-xs text-muted-foreground w-12">FT:</Label>
+          <Input
+            type="number"
+            min="0"
+            value={row.estimatedFullTimeWorkers || ''}
+            onChange={(e) => {
+              const value = e.target.value ? parseInt(e.target.value) : null;
+              updateWorkerBreakdown(row, projectId, 'estimatedFullTimeWorkers', value);
+            }}
+            className="h-7 text-xs w-16"
+            placeholder="0"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Label className="text-xs text-muted-foreground w-12">Casual:</Label>
+          <Input
+            type="number"
+            min="0"
+            value={row.estimatedCasualWorkers || ''}
+            onChange={(e) => {
+              const value = e.target.value ? parseInt(e.target.value) : null;
+              updateWorkerBreakdown(row, projectId, 'estimatedCasualWorkers', value);
+            }}
+            className="h-7 text-xs w-16"
+            placeholder="0"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Label className="text-xs text-muted-foreground w-12">ABN:</Label>
+          <Input
+            type="number"
+            min="0"
+            value={row.estimatedAbnWorkers || ''}
+            onChange={(e) => {
+              const value = e.target.value ? parseInt(e.target.value) : null;
+              updateWorkerBreakdown(row, projectId, 'estimatedAbnWorkers', value);
+            }}
+            className="h-7 text-xs w-16"
+            placeholder="0"
+          />
+        </div>
+      </div>
+    );
+  };
+
+  const membershipCell = (row: Row) => {
+    if (!row.employer_id) return <span className="text-muted-foreground">—</span>;
+
+    return (
+      <div className="space-y-1 min-w-[120px]">
+        <div className="flex items-center gap-2">
+          <Checkbox
+            checked={row.membershipChecked || false}
+            onCheckedChange={(checked) => {
+              updateWorkerBreakdown(row, projectId, 'membershipChecked', checked);
+            }}
+            className="h-3 w-3"
+          />
+          <Label className="text-xs">Checked</Label>
+        </div>
+        <div className="flex items-center gap-2">
+          <Label className="text-xs text-muted-foreground w-8">Est:</Label>
+          <Input
+            type="number"
+            min="0"
+            max={row.calculatedTotalWorkers || undefined}
+            value={row.estimatedMembers || ''}
+            onChange={(e) => {
+              const value = e.target.value ? parseInt(e.target.value) : null;
+              updateWorkerBreakdown(row, projectId, 'estimatedMembers', value);
+            }}
+            className="h-7 text-xs w-14"
+            placeholder="0"
+          />
+        </div>
+        {row.membershipPercentage !== null && row.membershipPercentage > 0 && (
+          <div className="text-xs text-muted-foreground">
+            {row.membershipPercentage.toFixed(1)}%
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderSection = (title: string, stage: TradeStage) => {
     let tradesForStage = getTradeOptionsByStage()[stage] || [];
     
@@ -475,6 +668,9 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
                   )}
                 </TableCell>
                 <TableCell className="w-40">{ebaCell(row)}</TableCell>
+                <TableCell className="w-32 text-center">{workerCountCell(row)}</TableCell>
+                <TableCell className="w-40">{workerBreakdownCell(row)}</TableCell>
+                <TableCell className="w-32">{membershipCell(row)}</TableCell>
                 <TableCell className="w-20 text-center">
                   {row.employer_id && (
                     <ComplianceIndicator
@@ -628,6 +824,9 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
                 <TableHead>Company</TableHead>
                 <TableHead className="w-36">Status</TableHead>
                 <TableHead className="w-40">EBA (Y/N)</TableHead>
+                <TableHead className="w-32 text-center">Est. Workers</TableHead>
+                <TableHead className="w-40 text-center">Worker Breakdown</TableHead>
+                <TableHead className="w-32 text-center">Membership</TableHead>
                 <TableHead className="w-20 text-center">Compliance</TableHead>
               </TableRow>
             </TableHeader>

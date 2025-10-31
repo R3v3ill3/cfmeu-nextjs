@@ -174,6 +174,13 @@ BEGIN
   FROM employers e
   WHERE e.id = ANY(v_employer_ids);
   
+  -- Get submitted employers from metadata
+  DECLARE v_submitted_employers jsonb;
+  SELECT COALESCE(metadata->'submittedEmployers', '[]'::jsonb)
+  INTO v_submitted_employers
+  FROM secure_access_tokens
+  WHERE token = p_token;
+
   -- Build complete response
   v_result := jsonb_build_object(
     'token', p_token,
@@ -183,7 +190,8 @@ BEGIN
     'projectName', v_project.name,
     'projectTier', v_project.tier,
     'projectValue', v_project.value,
-    'employers', COALESCE(v_employers, '[]'::jsonb)
+    'employers', COALESCE(v_employers, '[]'::jsonb),
+    'submittedEmployers', v_submitted_employers
   );
   
   RETURN v_result;
@@ -432,13 +440,24 @@ BEGIN
       );
     END IF;
     
+    -- Track this employer as submitted in token metadata
+    UPDATE secure_access_tokens
+    SET metadata = jsonb_set(
+      COALESCE(metadata, '{}'::jsonb),
+      '{submittedEmployers}',
+      COALESCE(
+        metadata->'submittedEmployers',
+        '[]'::jsonb
+      ) || to_jsonb(ARRAY[v_employer_id::text])
+    )
+    WHERE token = p_token
+      -- Only add if not already in the array
+      AND NOT (metadata->'submittedEmployers' @> to_jsonb(ARRAY[v_employer_id::text]));
+    
     v_updated_count := v_updated_count + 1;
   END LOOP;
   
-  -- Mark token as used
-  UPDATE secure_access_tokens
-  SET used_at = now()
-  WHERE token = p_token;
+  -- Note: Token is NOT marked as used here - only when finalize is called
   
   RETURN jsonb_build_object(
     'success', true,
@@ -448,7 +467,64 @@ BEGIN
 END;
 $$;
 
+-- ==========================================
+-- 4. Finalize Audit Form Token
+-- ==========================================
+
+CREATE OR REPLACE FUNCTION finalize_audit_token(p_token text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_valid boolean;
+  v_error_message text;
+  v_resource_type text;
+  v_employer_ids uuid[];
+  v_submitted_employers jsonb;
+  v_submitted_count integer;
+  v_total_count integer;
+BEGIN
+  -- Validate token
+  SELECT valid, error_message, resource_type
+  INTO v_valid, v_error_message, v_resource_type
+  FROM validate_public_token(p_token)
+  LIMIT 1;
+  
+  IF NOT v_valid THEN
+    RETURN jsonb_build_object(
+      'success', false,
+      'error', v_error_message
+    );
+  END IF;
+  
+  -- Get metadata
+  SELECT 
+    ARRAY(SELECT jsonb_array_elements_text(metadata->'employerIds'))::uuid[],
+    COALESCE(metadata->'submittedEmployers', '[]'::jsonb)
+  INTO v_employer_ids, v_submitted_employers
+  FROM secure_access_tokens
+  WHERE token = p_token;
+  
+  v_total_count := array_length(v_employer_ids, 1);
+  v_submitted_count := jsonb_array_length(v_submitted_employers);
+  
+  -- Mark token as used
+  UPDATE secure_access_tokens
+  SET used_at = now()
+  WHERE token = p_token;
+  
+  RETURN jsonb_build_object(
+    'success', true,
+    'totalEmployers', v_total_count,
+    'submittedEmployers', v_submitted_count,
+    'message', format('Audit form completed. %s of %s employers assessed.', v_submitted_count, v_total_count)
+  );
+END;
+$$;
+
 -- Grant execute permissions
 GRANT EXECUTE ON FUNCTION get_public_audit_form_data(text) TO anon;
 GRANT EXECUTE ON FUNCTION submit_public_audit_form(text, jsonb) TO anon;
+GRANT EXECUTE ON FUNCTION finalize_audit_token(text) TO anon;
 

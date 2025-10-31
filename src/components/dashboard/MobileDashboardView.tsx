@@ -83,8 +83,8 @@ export function MobileDashboardView() {
         </CardContent>
       </Card>
 
-      {/* Pre-Construction Metrics */}
-      <div className="hidden">
+      {/* Pre-Construction Metrics (not mounted while hidden) */}
+      {false && (
         <PreConstructionMetricsComponent 
           data={data?.active_pre_construction || {
             total_projects: 0, total_builders: 0, eba_builders: 0, eba_builder_percentage: 0,
@@ -93,10 +93,10 @@ export function MobileDashboardView() {
           }} 
           isLoading={isLoading} 
         />
-      </div>
+      )}
       
-      {/* Active Construction Metrics */}
-      <div className="hidden">
+      {/* Active Construction Metrics (not mounted while hidden) */}
+      {false && (
         <ActiveConstructionMetricsComponent 
           data={data?.active_construction || {
             total_projects: 0, total_builders: 0, eba_builders: 0, eba_builder_percentage: 0,
@@ -108,7 +108,7 @@ export function MobileDashboardView() {
           }} 
           isLoading={isLoading} 
         />
-      </div>
+      )}
     </div>
   )
 }

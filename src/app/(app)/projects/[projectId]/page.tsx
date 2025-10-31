@@ -287,6 +287,85 @@ export default function ProjectDetailPage() {
     }
   })
 
+  // Add query for estimated worker breakdown from mapping sheet data
+  const { data: estimatedWorkerTotals } = useQuery({
+    queryKey: ["project-estimated-worker-totals", projectId],
+    enabled: !!projectId,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      // Get trade contractors from both project_assignments and project_contractor_trades
+      const { data: assignmentTrades } = await supabase
+        .from("project_assignments")
+        .select(`
+          estimated_full_time_workers,
+          estimated_casual_workers,
+          estimated_abn_workers,
+          estimated_members,
+          membership_checked
+        `)
+        .eq("project_id", projectId)
+        .eq("assignment_type", "trade_work");
+
+      const { data: projectTrades } = await supabase
+        .from("project_contractor_trades")
+        .select(`
+          estimated_full_time_workers,
+          estimated_casual_workers,
+          estimated_abn_workers,
+          estimated_members,
+          membership_checked
+        `)
+        .eq("project_id", projectId);
+
+      // Combine data from both sources
+      const allTrades = [...(assignmentTrades || []), ...(projectTrades || [])];
+
+      // Calculate totals
+      const totals = allTrades.reduce((acc, trade) => {
+        const fullTime = Number(trade.estimated_full_time_workers) || 0;
+        const casual = Number(trade.estimated_casual_workers) || 0;
+        const abn = Number(trade.estimated_abn_workers) || 0;
+        const members = Number(trade.estimated_members) || 0;
+        const membershipChecked = Boolean(trade.membership_checked);
+
+        return {
+          totalFullTimeWorkers: acc.totalFullTimeWorkers + fullTime,
+          totalCasualWorkers: acc.totalCasualWorkers + casual,
+          totalAbnWorkers: acc.totalAbnWorkers + abn,
+          totalEstimatedWorkers: acc.totalEstimatedWorkers + fullTime + casual + abn,
+          totalEstimatedMembers: acc.totalEstimatedMembers + members,
+          membershipCheckedCount: acc.membershipCheckedCount + (membershipChecked ? 1 : 0),
+          totalContractors: acc.totalContractors + 1,
+        };
+      }, {
+        totalFullTimeWorkers: 0,
+        totalCasualWorkers: 0,
+        totalAbnWorkers: 0,
+        totalEstimatedWorkers: 0,
+        totalEstimatedMembers: 0,
+        membershipCheckedCount: 0,
+        totalContractors: 0,
+      });
+
+      // Calculate membership percentage
+      const membershipPercentage = totals.totalEstimatedWorkers > 0
+        ? Math.round((totals.totalEstimatedMembers / totals.totalEstimatedWorkers) * 100 * 100) / 100
+        : 0;
+
+      // Calculate membership completion rate
+      const membershipCompletionRate = totals.totalContractors > 0
+        ? Math.round((totals.membershipCheckedCount / totals.totalContractors) * 100 * 100) / 100
+        : 0;
+
+      return {
+        ...totals,
+        membershipPercentage,
+        membershipCompletionRate,
+      };
+    }
+  })
+
   // Per-site membership totals for overview bars
   const { data: siteMembershipTotals = {} } = useQuery({
     queryKey: ["project-site-membership-totals", projectId, sortedSiteIds],
@@ -703,6 +782,7 @@ export default function ProjectDetailPage() {
                       builderHasEba: mappingSheetData?.builderHasEba,
                       organisers: (patchOrganisers as any[]).join(', '),
                       workerTotals,
+                      estimatedWorkerTotals,
                       ebaStats,
                       subsetStats,
                       lastVisit,

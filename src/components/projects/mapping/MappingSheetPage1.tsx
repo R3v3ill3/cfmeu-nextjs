@@ -44,6 +44,17 @@ type ProjectData = {
   builderHasEba: boolean | null;
   organisers: string;
   workerTotals: { totalWorkers: number; totalMembers: number; totalLeaders: number; } | null;
+  estimatedWorkerTotals: {
+    totalFullTimeWorkers: number;
+    totalCasualWorkers: number;
+    totalAbnWorkers: number;
+    totalEstimatedWorkers: number;
+    totalEstimatedMembers: number;
+    membershipCheckedCount: number;
+    totalContractors: number;
+    membershipPercentage: number;
+    membershipCompletionRate: number;
+  } | null;
   ebaStats: { ebaCount: number; employerCount: number; } | null;
   lastVisit: string | null;
   patches: Array<{ id: string; name: string }>;
@@ -567,7 +578,8 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
         </AccordionItem>
       </Accordion>
 
-      <div className="no-print grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 text-sm p-4 border rounded-lg bg-muted/20">
+      <div className="no-print grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mt-4 text-sm p-4 border rounded-lg bg-muted/20">
+        {/* Actual Worker Counts */}
         <div className="space-y-1">
           <div className="font-medium">Total workers</div>
           <div className="text-muted-foreground">{projectData.workerTotals?.totalWorkers ?? '—'}</div>
@@ -580,6 +592,43 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
           <div className="font-medium">Total leaders</div>
           <div className="text-muted-foreground">{projectData.workerTotals?.totalLeaders ?? '—'}</div>
         </div>
+
+        {/* Estimated Worker Breakdown */}
+        <div className="space-y-1">
+          <div className="font-medium">Est. workforce</div>
+          <div className="text-muted-foreground">{projectData.estimatedWorkerTotals?.totalEstimatedWorkers ?? '—'}</div>
+          {projectData.estimatedWorkerTotals && (
+            <div className="text-xs text-muted-foreground">
+              FT: {projectData.estimatedWorkerTotals.totalFullTimeWorkers} |
+              C: {projectData.estimatedWorkerTotals.totalCasualWorkers} |
+              ABN: {projectData.estimatedWorkerTotals.totalAbnWorkers}
+            </div>
+          )}
+        </div>
+        <div className="space-y-1">
+          <div className="font-medium">Est. members</div>
+          <div className="text-muted-foreground">{projectData.estimatedWorkerTotals?.totalEstimatedMembers ?? '—'}</div>
+          {projectData.estimatedWorkerTotals && projectData.estimatedWorkerTotals.membershipPercentage > 0 && (
+            <div className="text-xs text-muted-foreground">
+              {projectData.estimatedWorkerTotals.membershipPercentage.toFixed(1)}%
+            </div>
+          )}
+        </div>
+        <div className="space-y-1">
+          <div className="font-medium">Membership status</div>
+          <div className="text-muted-foreground">
+            {projectData.estimatedWorkerTotals ? (
+              <>
+                {projectData.estimatedWorkerTotals.membershipCheckedCount}/{projectData.estimatedWorkerTotals.totalContractors} checked
+                <div className="text-xs text-muted-foreground">
+                  {projectData.estimatedWorkerTotals.membershipCompletionRate.toFixed(1)}% complete
+                </div>
+              </>
+            ) : '—'}
+          </div>
+        </div>
+
+        {/* EBA and Project Info */}
         <div className="space-y-1">
           <div className="font-medium">EBA coverage</div>
           <div className="text-muted-foreground">{projectData.ebaStats ? `${projectData.ebaStats.ebaCount} / ${projectData.ebaStats.employerCount}` : "—"}</div>

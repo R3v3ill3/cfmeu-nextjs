@@ -51,6 +51,16 @@ export interface EmployerRecord {
   }>;
   roles?: Array<{ code: string; name: string; manual: boolean; derived: boolean }>;
   trades?: Array<{ code: string; name: string; manual: boolean; derived: boolean }>;
+  // Optional analytics from materialized view
+  _mat_view_data?: {
+    project_count?: number;
+    eba_recency_score?: number;
+    is_engaged?: boolean;
+    eba_category?: string | null;
+    actual_worker_count?: number | null;
+    most_recent_eba_date?: string | null;
+    view_refreshed_at?: string | null;
+  };
 }
 
 export interface EmployersResponse {

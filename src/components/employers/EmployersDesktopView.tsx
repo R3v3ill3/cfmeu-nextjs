@@ -129,7 +129,7 @@ export function EmployersDesktopView() {
   const serverSideResult = useEmployersServerSideCompatible({
     page,
     pageSize,
-    sort: sort as 'name' | 'estimated' | 'eba_recency',
+    sort: sort as 'name' | 'estimated' | 'eba_recency' | 'project_count',
     dir: dir as 'asc' | 'desc',
     q: q || undefined,
     engaged,
@@ -143,7 +143,7 @@ export function EmployersDesktopView() {
   const { refetch: refetchEmployers } = serverSideResult
 
   // Conditional data selection based on feature flag
-  const employersData = USE_SERVER_SIDE ? serverSideResult.data : allEmployersData
+  const employersData = (USE_SERVER_SIDE || sort === 'project_count') ? serverSideResult.data : allEmployersData
   const isFetching = USE_SERVER_SIDE ? serverSideResult.isFetching : clientFetching
 
   const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null)
@@ -291,6 +291,9 @@ export function EmployersDesktopView() {
         if (sort === "name") return s * String(a.name || "").localeCompare(String(b.name || ""))
         if (sort === "estimated") return s * ((a.estimated_worker_count || 0) - (b.estimated_worker_count || 0))
         if (sort === "eba_recency") return s * (scoreDate(a) - scoreDate(b))
+        // Fallback project_count sort when using client-side dataset
+        const pc = (x: any) => x?._mat_view_data?.project_count ?? x.projects?.length ?? x.project_assignments?.length ?? 0
+        if (sort === "project_count") return s * (pc(a) - pc(b))
         return 0
       }
       list.sort(cmp)
@@ -432,6 +435,7 @@ export function EmployersDesktopView() {
                 <SelectItem value="name">Name</SelectItem>
                 <SelectItem value="estimated">Estimated workers</SelectItem>
                 <SelectItem value="eba_recency">EBA recency</SelectItem>
+                <SelectItem value="project_count">Number of projects</SelectItem>
               </SelectContent>
             </Select>
           </div>

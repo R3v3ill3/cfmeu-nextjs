@@ -102,8 +102,8 @@ export function DesktopDashboardView() {
         </div>
       </div>
 
-      {/* Active Pre-Construction Metrics */}
-      <div className="hidden">
+      {/* Active Pre-Construction Metrics (not mounted while hidden) */}
+      {false && (
         <PreConstructionMetricsComponent
           data={data?.active_pre_construction || {
             total_projects: 0, total_builders: 0, eba_builders: 0, eba_builder_percentage: 0,
@@ -112,15 +112,15 @@ export function DesktopDashboardView() {
           }}
           isLoading={isLoading}
         />
-      </div>
+      )}
 
-      {/* Debug Info (Development Only) */}
-      <div className="hidden">
+      {/* Debug Info (Development Only, not mounted while hidden) */}
+      {false && (
         <DashboardDebugInfo />
-      </div>
+      )}
 
-      {/* Active Construction Metrics (moved to bottom) */}
-      <div className="hidden">
+      {/* Active Construction Metrics (moved to bottom, not mounted while hidden) */}
+      {false && (
         <ActiveConstructionMetricsComponent
           data={data?.active_construction || {
             total_projects: 0, total_builders: 0, eba_builders: 0, eba_builder_percentage: 0,
@@ -132,7 +132,7 @@ export function DesktopDashboardView() {
           }}
           isLoading={isLoading}
         />
-      </div>
+      )}
     </div>
   )
 }

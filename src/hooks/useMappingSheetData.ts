@@ -27,6 +27,17 @@ export interface TradeContractor {
   tradeLabel: string;
   stage: 'early_works' | 'structure' | 'finishing' | 'other';
   estimatedWorkforce?: number | null;
+  // New worker breakdown fields
+  estimatedFullTimeWorkers?: number | null;
+  estimatedCasualWorkers?: number | null;
+  estimatedAbnWorkers?: number | null;
+  membershipChecked?: boolean | null;
+  estimatedMembers?: number | null;
+  workerBreakdownUpdatedAt?: string | null;
+  workerBreakdownUpdatedBy?: string | null;
+  // Calculated totals
+  calculatedTotalWorkers?: number | null;
+  membershipPercentage?: number | null;
   ebaStatus?: boolean | null;
   source: 'project_contractor_trades' | 'site_contractor_trades';
   // Auto-match tracking fields
@@ -141,6 +152,14 @@ export function useMappingSheetData(projectId: string) {
         .select(`
           id,
           employer_id,
+          estimated_workers,
+          estimated_full_time_workers,
+          estimated_casual_workers,
+          estimated_abn_workers,
+          membership_checked,
+          estimated_members,
+          worker_breakdown_updated_at,
+          worker_breakdown_updated_by,
           status,
           status_updated_at,
           status_updated_by,
@@ -165,6 +184,13 @@ export function useMappingSheetData(projectId: string) {
         const tradeLabel = getTradeLabel(tradeType);
         const stage = getTradeStage(tradeType);
 
+        // Calculate totals
+        const breakdownTotal = (t.estimated_full_time_workers || 0) + (t.estimated_casual_workers || 0) + (t.estimated_abn_workers || 0);
+        const calculatedTotalWorkers = breakdownTotal > 0 ? breakdownTotal : (t.estimated_workers || null);
+        const membershipPercentage = calculatedTotalWorkers && calculatedTotalWorkers > 0
+          ? Math.round((t.estimated_members || 0) * 100 / calculatedTotalWorkers * 100) / 100
+          : null;
+
         tradeContractors.push({
           id: `assignment_trade:${t.id}`,
           employerId: t.employer_id,
@@ -172,6 +198,18 @@ export function useMappingSheetData(projectId: string) {
           tradeType,
           tradeLabel,
           stage,
+          estimatedWorkforce: t.estimated_workers,
+          // New worker breakdown fields
+          estimatedFullTimeWorkers: t.estimated_full_time_workers,
+          estimatedCasualWorkers: t.estimated_casual_workers,
+          estimatedAbnWorkers: t.estimated_abn_workers,
+          membershipChecked: t.membership_checked,
+          estimatedMembers: t.estimated_members,
+          workerBreakdownUpdatedAt: t.worker_breakdown_updated_at,
+          workerBreakdownUpdatedBy: t.worker_breakdown_updated_by,
+          // Calculated fields
+          calculatedTotalWorkers,
+          membershipPercentage,
           ebaStatus: t.employers?.enterprise_agreement_status !== 'no_eba',
           source: 'project_contractor_trades', // Consider this the same source type for UI
           dataSource: t.source,
@@ -190,7 +228,30 @@ export function useMappingSheetData(projectId: string) {
       // 4. Get trade contractors from project_contractor_trades (legacy)
       const { data: projectTrades } = await supabase
         .from("project_contractor_trades")
-        .select("id, employer_id, trade_type, stage, estimated_project_workforce, status, status_updated_at, status_updated_by, source, match_status, match_confidence, matched_at, confirmed_at, match_notes, employers(name, enterprise_agreement_status)")
+        .select(`
+          id,
+          employer_id,
+          trade_type,
+          stage,
+          estimated_project_workforce,
+          estimated_full_time_workers,
+          estimated_casual_workers,
+          estimated_abn_workers,
+          membership_checked,
+          estimated_members,
+          worker_breakdown_updated_at,
+          worker_breakdown_updated_by,
+          status,
+          status_updated_at,
+          status_updated_by,
+          source,
+          match_status,
+          match_confidence,
+          matched_at,
+          confirmed_at,
+          match_notes,
+          employers(name, enterprise_agreement_status)
+        `)
         .eq("project_id", projectId);
 
       (projectTrades || []).forEach((t: any) => {
@@ -203,6 +264,13 @@ export function useMappingSheetData(projectId: string) {
         const tradeLabel = getTradeLabel(t.trade_type);
         const stage = t.stage || getTradeStage(t.trade_type);
 
+        // Calculate totals
+        const breakdownTotal = (t.estimated_full_time_workers || 0) + (t.estimated_casual_workers || 0) + (t.estimated_abn_workers || 0);
+        const calculatedTotalWorkers = breakdownTotal > 0 ? breakdownTotal : (t.estimated_project_workforce || null);
+        const membershipPercentage = calculatedTotalWorkers && calculatedTotalWorkers > 0
+          ? Math.round((t.estimated_members || 0) * 100 / calculatedTotalWorkers * 100) / 100
+          : null;
+
         tradeContractors.push({
           id: `project_trade:${t.id}`,
           employerId: t.employer_id,
@@ -211,6 +279,17 @@ export function useMappingSheetData(projectId: string) {
           tradeLabel,
           stage,
           estimatedWorkforce: t.estimated_project_workforce,
+          // New worker breakdown fields
+          estimatedFullTimeWorkers: t.estimated_full_time_workers,
+          estimatedCasualWorkers: t.estimated_casual_workers,
+          estimatedAbnWorkers: t.estimated_abn_workers,
+          membershipChecked: t.membership_checked,
+          estimatedMembers: t.estimated_members,
+          workerBreakdownUpdatedAt: t.worker_breakdown_updated_at,
+          workerBreakdownUpdatedBy: t.worker_breakdown_updated_by,
+          // Calculated fields
+          calculatedTotalWorkers,
+          membershipPercentage,
           ebaStatus: t.employers?.enterprise_agreement_status !== 'no_eba',
           source: 'project_contractor_trades',
           dataSource: t.source,

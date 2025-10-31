@@ -9,7 +9,6 @@ import { toast } from "sonner";
 import { Copy, Share, ExternalLink, Clock, QrCode, Check } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import QRCode from "react-qr-code";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useMappingSheetData } from "@/hooks/useMappingSheetData";
 import { useKeyContractorTradesSet } from "@/hooks/useKeyContractorTrades";
@@ -283,85 +282,74 @@ export function ShareAuditFormGenerator({ projectId, projectName }: ShareAuditFo
               </Button>
             </div>
 
-            <Tabs defaultValue="link" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="link">Share Link</TabsTrigger>
-                <TabsTrigger value="qr">QR Code</TabsTrigger>
-              </TabsList>
+            {/* QR Code Display - Primary */}
+            <div className="text-center space-y-4">
+              <div className="flex justify-center">
+                <div className="rounded-xl border bg-white p-6 shadow-lg">
+                  <QRCode
+                    value={shareLink.shareUrl}
+                    size={240}
+                    style={{ height: "auto", width: "240px" }}
+                    viewBox="0 0 256 256"
+                    level="M"
+                  />
+                </div>
+              </div>
 
-              <TabsContent value="link" className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Secure Link</Label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={shareLink.shareUrl}
-                      readOnly
-                      className="flex-1 px-3 py-2 text-sm border rounded-md bg-muted"
-                    />
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => copyToClipboard(shareLink.shareUrl)}
-                    >
-                      <Copy className="h-4 w-4" />
-                    </Button>
+              {/* Mobile Scanning Instructions */}
+              <div className="space-y-3 max-w-sm mx-auto">
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm font-medium text-blue-800 mb-1">📱 For Mobile Users</p>
+                  <div className="text-xs text-blue-700 space-y-1">
+                    <div>• <strong>iPhone:</strong> Open Camera app and point at QR code</div>
+                    <div>• <strong>Android:</strong> Open Camera or Google Lens</div>
+                    <div>• <strong>No app needed</strong> - works with built-in camera</div>
                   </div>
                 </div>
 
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() => copyToClipboard(shareLink.shareUrl)}
-                  >
-                    <Copy className="h-4 w-4 mr-2" />
-                    Copy Link
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() => window.open(shareLink.shareUrl, '_blank')}
-                  >
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    Open Link
-                  </Button>
+                <div className="text-xs text-muted-foreground">
+                  QR code links directly to the audit & compliance form with all project data pre-loaded.
                 </div>
-              </TabsContent>
+              </div>
+            </div>
 
-              <TabsContent value="qr" className="space-y-4">
-                <div className="text-center space-y-4">
-                  {/* QR Code Display */}
-                  <div className="flex justify-center">
-                    <div className="rounded-xl border bg-white p-6 shadow-lg">
-                      <QRCode
-                        value={shareLink.shareUrl}
-                        size={240}
-                        style={{ height: "auto", width: "240px" }}
-                        viewBox="0 0 256 256"
-                        level="M"
-                      />
-                    </div>
-                  </div>
+            {/* Share Options Below */}
+            <div className="space-y-3 pt-4 border-t">
+              <Label className="text-sm font-medium">Share Link</Label>
+              
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={shareLink.shareUrl}
+                  readOnly
+                  className="flex-1 px-3 py-2 text-sm border rounded-md bg-muted"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => copyToClipboard(shareLink.shareUrl)}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
 
-                  {/* Instructions */}
-                  <div className="space-y-3 max-w-sm mx-auto">
-                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                      <p className="text-sm font-medium text-blue-800 mb-1">📱 For Mobile Users</p>
-                      <div className="text-xs text-blue-700 space-y-1">
-                        <div>• <strong>iPhone:</strong> Open Camera app and point at QR code</div>
-                        <div>• <strong>Android:</strong> Open Camera or Google Lens</div>
-                        <div>• <strong>No app needed</strong> - works with built-in camera</div>
-                      </div>
-                    </div>
-
-                    <div className="text-xs text-muted-foreground">
-                      QR code links directly to the audit & compliance form with all project data pre-loaded.
-                    </div>
-                  </div>
-                </div>
-              </TabsContent>
-            </Tabs>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => copyToClipboard(shareLink.shareUrl)}
+                >
+                  <Copy className="h-4 w-4 mr-2" />
+                  Copy Link
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => window.open(shareLink.shareUrl, '_blank')}
+                >
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Open Link
+                </Button>
+              </div>
+            </div>
 
             <div className="p-3 bg-muted rounded-md space-y-1">
               <div className="text-sm font-medium">Selected Employers ({selectedEmployerIds.length})</div>

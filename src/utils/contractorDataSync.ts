@@ -13,6 +13,12 @@ export interface ContractorAssignmentData {
   tradeType?: string;
   stage?: 'early_works' | 'structure' | 'finishing' | 'other';
   estimatedWorkforce?: number | null;
+  // New worker breakdown fields
+  estimatedFullTimeWorkers?: number | null;
+  estimatedCasualWorkers?: number | null;
+  estimatedAbnWorkers?: number | null;
+  membershipChecked?: boolean | null;
+  estimatedMembers?: number | null;
 }
 
 /**
@@ -20,7 +26,19 @@ export interface ContractorAssignmentData {
  * This ensures that contractor assignments are properly reflected in all data sources
  */
 export async function syncContractorAssignment(data: ContractorAssignmentData) {
-  const { projectId, employerId, role, tradeType, stage, estimatedWorkforce } = data;
+  const {
+    projectId,
+    employerId,
+    role,
+    tradeType,
+    stage,
+    estimatedWorkforce,
+    estimatedFullTimeWorkers,
+    estimatedCasualWorkers,
+    estimatedAbnWorkers,
+    membershipChecked,
+    estimatedMembers
+  } = data;
   
   try {
     // 1. If this is a builder role, update legacy builder_id field for backward compatibility
@@ -58,11 +76,18 @@ export async function syncContractorAssignment(data: ContractorAssignmentData) {
           employer_id: employerId,
           trade_type: tradeType,
           stage: stage || 'other',
-          estimated_project_workforce: estimatedWorkforce
+          estimated_project_workforce: estimatedWorkforce,
+          // New worker breakdown fields
+          estimated_full_time_workers: estimatedFullTimeWorkers,
+          estimated_casual_workers: estimatedCasualWorkers,
+          estimated_abn_workers: estimatedAbnWorkers,
+          membership_checked: membershipChecked,
+          estimated_members: estimatedMembers,
+          worker_breakdown_updated_at: new Date().toISOString(),
         }, {
           onConflict: 'project_id,employer_id,trade_type'
         });
-      
+
       if (tradeError) {
         console.error('Error syncing to project_contractor_trades:', tradeError);
       }
