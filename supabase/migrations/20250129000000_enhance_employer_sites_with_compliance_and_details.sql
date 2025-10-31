@@ -1,6 +1,9 @@
 -- Enhance get_employer_sites function to include address, patch names, organiser names,
 -- compliance check status, and traffic light rating
-CREATE OR REPLACE FUNCTION get_employer_sites(p_employer_id UUID)
+-- Drop the old function first since we're changing the return type
+DROP FUNCTION IF EXISTS get_employer_sites(UUID);
+
+CREATE FUNCTION get_employer_sites(p_employer_id UUID)
 RETURNS TABLE(
     id UUID,
     name TEXT,

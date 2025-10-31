@@ -51,11 +51,11 @@ type EmployerSite = {
   name: string;
   project_id: string;
   project_name: string;
-  address: string;
-  patch_names: string[];
-  organiser_names: string[];
-  compliance_check_conducted: boolean;
-  compliance_rating: 'green' | 'amber' | 'yellow' | 'red' | 'unknown' | null;
+  address?: string;
+  patch_names?: string[];
+  organiser_names?: string[];
+  compliance_check_conducted?: boolean;
+  compliance_rating?: 'green' | 'amber' | 'yellow' | 'red' | 'unknown' | null;
 };
 
 type EmployerWithEba = {
@@ -131,7 +131,7 @@ function WorksiteCard({ site, employerId }: { site: EmployerSite; employerId: st
             {/* Traffic light rating badge */}
             {site.compliance_rating && site.compliance_rating !== 'unknown' && (
               <TrafficLightRatingDisplay
-                rating={site.compliance_rating}
+                rating={site.compliance_rating as 'green' | 'amber' | 'yellow' | 'red'}
                 size="sm"
                 className="flex-shrink-0"
               />
@@ -148,18 +148,18 @@ function WorksiteCard({ site, employerId }: { site: EmployerSite; employerId: st
         )}
 
         {/* Patch and Organiser info */}
-        {(site.patch_names.length > 0 || site.organiser_names.length > 0) && (
+        {((site.patch_names?.length ?? 0) > 0 || (site.organiser_names?.length ?? 0) > 0) && (
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground pt-1">
-            {site.patch_names.length > 0 && (
+            {(site.patch_names?.length ?? 0) > 0 && (
               <div className="flex items-center gap-1">
                 <Tag className="h-3 w-3" />
-                <span>{site.patch_names.join(', ')}</span>
+                <span>{site.patch_names?.join(', ') ?? ''}</span>
               </div>
             )}
-            {site.organiser_names.length > 0 && (
+            {(site.organiser_names?.length ?? 0) > 0 && (
               <div className="flex items-center gap-1">
                 <Users className="h-3 w-3" />
-                <span>{site.organiser_names.join(', ')}</span>
+                <span>{site.organiser_names?.join(', ') ?? ''}</span>
               </div>
             )}
           </div>
