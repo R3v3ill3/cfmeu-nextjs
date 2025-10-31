@@ -192,7 +192,7 @@ export function TrafficLightRatingTab({ employerId, employerName }: TrafficLight
                     {project_assessments.summary.total_assessments} assessments
                     <br className="hidden sm:block" />
                     <span className="sm:hidden"> • </span>
-                    {project_assessments.summary.unique_projects} projects
+                    {project_assessments.summary.unique_projects} projects assessed
                   </div>
                 </div>
               ) : (
@@ -216,7 +216,7 @@ export function TrafficLightRatingTab({ employerId, employerName }: TrafficLight
                     {expertise_assessments.summary.total_assessments} assessments
                     <br className="hidden sm:block" />
                     <span className="sm:hidden"> • </span>
-                    {expertise_assessments.summary.unique_organisers} organisers
+                    {expertise_assessments.summary.unique_organisers} organisers assessing
                   </div>
                   {expertise_assessments.summary.has_conflicts && (
                     <div className="flex items-center justify-center gap-1 text-amber-600">
