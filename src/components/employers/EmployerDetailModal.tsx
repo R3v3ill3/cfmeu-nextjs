@@ -25,6 +25,7 @@ import {
   Tag,
   Edit,
   Trash2,
+  CheckCircle,
 } from "lucide-react";
 import { getEbaStatusInfo } from "./ebaHelpers";
 import { EmployerWorkersList } from "../workers/EmployerWorkersList";
@@ -41,12 +42,20 @@ import { withTimeout } from "@/lib/withTimeout";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TrafficLightRatingTab } from "./TrafficLightRatingTab";
+import { TrafficLightRatingDisplay } from "./TrafficLightRatingDisplay";
+import { useRouter } from "next/navigation";
+import { useNavigationLoading } from "@/hooks/useNavigationLoading";
 
 type EmployerSite = {
   id: string;
   name: string;
   project_id: string;
   project_name: string;
+  address: string;
+  patch_names: string[];
+  organiser_names: string[];
+  compliance_check_conducted: boolean;
+  compliance_rating: 'green' | 'amber' | 'yellow' | 'red' | 'unknown' | null;
 };
 
 type EmployerWithEba = {
@@ -86,6 +95,79 @@ type EmployerWithEba = {
     comments: string | null;
   }[];
 };
+
+// Worksite Card Component
+function WorksiteCard({ site, employerId }: { site: EmployerSite; employerId: string }) {
+  const router = useRouter();
+  const { startNavigation } = useNavigationLoading();
+
+  const handleClick = () => {
+    // Navigate to project with mapping sheet tab focused
+    const href = `/projects/${site.project_id}?tab=mappingsheets`;
+    startNavigation(href);
+    setTimeout(() => {
+      router.push(href);
+    }, 50);
+  };
+
+  return (
+    <div
+      onClick={handleClick}
+      className="border rounded-lg px-4 py-3 cursor-pointer hover:bg-accent/50 hover:shadow-md transition-all duration-200 group"
+    >
+      <div className="space-y-2">
+        {/* Header with project name and badges */}
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="font-semibold text-base truncate flex-1 group-hover:text-primary transition-colors">
+            {site.project_name || site.name}
+          </h3>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {/* Compliance check badge */}
+            {site.compliance_check_conducted && (
+              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                <CheckCircle className="h-3 w-3 mr-1" />
+              </Badge>
+            )}
+            {/* Traffic light rating badge */}
+            {site.compliance_rating && site.compliance_rating !== 'unknown' && (
+              <TrafficLightRatingDisplay
+                rating={site.compliance_rating}
+                size="sm"
+                className="flex-shrink-0"
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Address (replaces old subheading) */}
+        {site.address && (
+          <div className="flex items-start gap-1.5 text-sm text-muted-foreground">
+            <MapPin className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+            <span className="line-clamp-2">{site.address}</span>
+          </div>
+        )}
+
+        {/* Patch and Organiser info */}
+        {(site.patch_names.length > 0 || site.organiser_names.length > 0) && (
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground pt-1">
+            {site.patch_names.length > 0 && (
+              <div className="flex items-center gap-1">
+                <Tag className="h-3 w-3" />
+                <span>{site.patch_names.join(', ')}</span>
+              </div>
+            )}
+            {site.organiser_names.length > 0 && (
+              <div className="flex items-center gap-1">
+                <Users className="h-3 w-3" />
+                <span>{site.organiser_names.join(', ')}</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 interface EmployerDetailModalProps {
   employerId: string | null;
@@ -904,16 +986,9 @@ export const EmployerDetailModal = ({
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {employerSites.map((s: EmployerSite) => (
-                          <div key={s.id} className="flex items-center justify-between border rounded px-3 py-2">
-                            <div className="truncate mr-3">
-                              <div className="font-medium truncate">{s.name}</div>
-                              {s.project_name && (
-                                <div className="text-xs text-muted-foreground truncate">{s.project_name}</div>
-                              )}
-                            </div>
-                          </div>
+                          <WorksiteCard key={s.id} site={s} employerId={employerId || ''} />
                         ))}
                       </div>
                     </CardContent>
