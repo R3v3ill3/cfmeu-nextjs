@@ -25,6 +25,17 @@ export interface OrganizingUniverseMetrics {
   keyContractorEbaPercentage: number
   keyContractorsWithEba: number
   totalMappedKeyContractors: number
+
+  // Rating-related metrics
+  ratedProjectsPercentage: number
+  ratedProjectsCount: number
+  totalRatedableProjects: number
+  ratingsDistribution: {
+    red: number
+    amber: number
+    yellow: number
+    green: number
+  }
 }
 
 export interface OrganizingUniverseFilters {
@@ -220,7 +231,7 @@ export async function fetchOrganizingUniverseMetrics(filters: OrganizingUniverse
         : ['demolition', 'piling', 'concrete', 'scaffolding', 'form_work', 'tower_crane', 'mobile_crane', 'labour_hire', 'earthworks', 'traffic_control']
     )
     
-    const metrics = calculateMetrics(activeProjects || [], keyTrades)
+    const metrics = await calculateMetrics(activeProjects || [], keyTrades, supabase)
 
     return metrics
   } catch (error) {
@@ -231,9 +242,9 @@ export async function fetchOrganizingUniverseMetrics(filters: OrganizingUniverse
 
 /**
  * Calculate organizing universe metrics from project data
- * Pure function for safe metric calculations
+ * Now includes rating calculations
  */
-function calculateMetrics(projects: any[], keyContractorTrades: Set<string>): OrganizingUniverseMetrics {
+async function calculateMetrics(projects: any[], keyContractorTrades: Set<string>, supabase: any): Promise<OrganizingUniverseMetrics> {
   const totalActiveProjects = projects.length
   
   
@@ -353,6 +364,88 @@ function calculateMetrics(projects: any[], keyContractorTrades: Set<string>): Or
     ? Math.round((keyContractorsWithEba / mappedKeyContractors) * 100)
     : 0
 
+  // Calculate rating metrics
+  const projectIds = projects.map(p => p.id)
+  let ratedProjectsCount = 0
+  let ratingsDistribution = { red: 0, amber: 0, yellow: 0, green: 0 }
+
+  if (projectIds.length > 0) {
+    try {
+      // Get all employers associated with these projects
+      const { data: projectAssignments } = await supabase
+        .from('project_assignments')
+        .select('employer_id')
+        .in('project_id', projectIds)
+
+      const employerIds = new Set<string>()
+      if (projectAssignments) {
+        projectAssignments.forEach((pa: any) => {
+          if (pa.employer_id) employerIds.add(pa.employer_id)
+        })
+      }
+
+      if (employerIds.size > 0) {
+        const employerIdArray = Array.from(employerIds)
+
+        // Get the most recent rating for each employer
+        const { data: latestRatings } = await supabase
+          .from('employer_final_ratings')
+          .select('employer_id, final_rating, rating_date')
+          .in('employer_id', employerIdArray)
+          .eq('is_active', true)
+          .order('rating_date', { ascending: false })
+
+        if (latestRatings) {
+          // Get unique employers with their latest rating
+          const latestRatingsByEmployer = new Map<string, string>()
+          const seenEmployers = new Set<string>()
+          for (const rating of latestRatings) {
+            if (!seenEmployers.has(rating.employer_id)) {
+              latestRatingsByEmployer.set(rating.employer_id, rating.final_rating)
+              seenEmployers.add(rating.employer_id)
+            }
+          }
+
+          // Map ratings to colors (handle 'unknown' as 'yellow' for 4-point system)
+          const mapRatingToColor = (rating: string): 'red' | 'amber' | 'yellow' | 'green' => {
+            const ratingStr = String(rating).toLowerCase()
+            if (ratingStr === 'red') return 'red'
+            if (ratingStr === 'amber') return 'amber'
+            if (ratingStr === 'yellow' || ratingStr === 'unknown') return 'yellow'
+            if (ratingStr === 'green') return 'green'
+            return 'red' // Default
+          }
+
+          latestRatingsByEmployer.forEach((rating) => {
+            const color = mapRatingToColor(rating)
+            ratingsDistribution[color]++
+          })
+
+          // Get projects that have at least one rated employer
+          const { data: projectsWithRatedEmployers } = await supabase
+            .from('project_assignments')
+            .select('project_id')
+            .in('project_id', projectIds)
+            .in('employer_id', Array.from(latestRatingsByEmployer.keys()))
+
+          if (projectsWithRatedEmployers) {
+            const ratedProjectIds = new Set(
+              projectsWithRatedEmployers.map((pa: any) => pa.project_id)
+            )
+            ratedProjectsCount = ratedProjectIds.size
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error calculating rating metrics:', error)
+      // Continue with default values
+    }
+  }
+
+  const ratedProjectsPercentage = totalActiveProjects > 0
+    ? Math.round((ratedProjectsCount / totalActiveProjects) * 100)
+    : 0
+
   return {
     ebaProjectsPercentage,
     ebaProjectsCount,
@@ -367,7 +460,11 @@ function calculateMetrics(projects: any[], keyContractorTrades: Set<string>): Or
     totalKeyContractorsOnEbaBuilderProjects,
     keyContractorEbaPercentage,
     keyContractorsWithEba,
-    totalMappedKeyContractors: mappedKeyContractors
+    totalMappedKeyContractors: mappedKeyContractors,
+    ratedProjectsPercentage,
+    ratedProjectsCount,
+    totalRatedableProjects: totalActiveProjects,
+    ratingsDistribution
   }
 }
 
@@ -389,6 +486,10 @@ function getEmptyMetrics(): OrganizingUniverseMetrics {
     totalKeyContractorsOnEbaBuilderProjects: 0,
     keyContractorEbaPercentage: 0,
     keyContractorsWithEba: 0,
-    totalMappedKeyContractors: 0
+    totalMappedKeyContractors: 0,
+    ratedProjectsPercentage: 0,
+    ratedProjectsCount: 0,
+    totalRatedableProjects: 0,
+    ratingsDistribution: { red: 0, amber: 0, yellow: 0, green: 0 }
   }
 }

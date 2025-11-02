@@ -12,6 +12,7 @@ import { RoleBasedDashboard } from "@/components/dashboard/RoleBasedDashboard"
 import { ActiveConstructionMetricsComponent } from "@/components/dashboard/ActiveConstructionMetrics"
 import { EbaCoverageSection } from "@/components/dashboard/EbaCoverageSection"
 import { FilterIndicatorBadge } from "@/components/dashboard/FilterIndicatorBadge"
+import { TrafficLightOverviewPanel } from "@/components/dashboard/TrafficLightOverviewPanel"
 import { useActiveFilters } from "@/hooks/useActiveFilters"
 import Image from "next/image"
 
@@ -83,6 +84,9 @@ export function DesktopDashboardView() {
         isLoading={isLoading}
         errors={data?.errors}
       />
+
+      {/* Traffic Light Overview Panel */}
+      <TrafficLightOverviewPanel />
 
       {/* Organising Universe Summary */}
       <div className="lg:bg-white lg:border lg:border-gray-300 lg:rounded-lg lg:shadow-md">

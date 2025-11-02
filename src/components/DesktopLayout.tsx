@@ -129,7 +129,7 @@ export default function DesktopLayout({ children }: { children: ReactNode }) {
   const [aiHelpOpen, setAiHelpOpen] = useState(false)
   const pathname = usePathname()
   const { user, signOut } = useAuth()
-  const { data: userRole, isLoading: isLoadingRole } = useUserRole()
+  const { role: userRole, isLoading: isLoadingRole } = useUserRole()
   const items = useVisibleNavItems(userRole ?? null, isLoadingRole)
   const { isNavigating, startNavigation } = useNavigationLoading()
   const [query, setQuery] = useState("")

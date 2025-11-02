@@ -16,6 +16,7 @@ import { useNavigationLoading } from "@/hooks/useNavigationLoading";
 import { JoinQrDialog } from "@/components/JoinQrDialog";
 import { HelpLauncher } from "@/components/help/HelpLauncher";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 
 // Simple mobile detection
 const isMobile = () => {
@@ -42,13 +43,29 @@ const Layout = ({ children, onRefresh }: LayoutProps) => {
   const pathname = usePathname();
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
-  const { data: userRole, isLoading: isLoadingRole } = useUserRole();
+  const { role: userRole, isLoading: isLoadingRole, error: userRoleError } = useUserRole();
   const { visibility } = useNavigationVisibility();
   const { isNavigating, startNavigation } = useNavigationLoading();
   const [joinQrOpen, setJoinQrOpen] = useState(false);
+  const { toast } = useToast();
+  const [roleErrorNotified, setRoleErrorNotified] = useState(false);
 
   // Mobile navigation state
   const [canGoBack, setCanGoBack] = useState(false);
+  useEffect(() => {
+    if (userRoleError && !roleErrorNotified) {
+      toast({
+        title: "We couldn't confirm your access",
+        description: "Some navigation items may be hidden temporarily. We'll retry automatically.",
+        variant: "destructive",
+      });
+      setRoleErrorNotified(true);
+    }
+
+    if (!userRoleError && roleErrorNotified) {
+      setRoleErrorNotified(false);
+    }
+  }, [userRoleError, roleErrorNotified, toast]);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [touchStartX, setTouchStartX] = useState(0);

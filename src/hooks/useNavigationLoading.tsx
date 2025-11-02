@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react'
 import { usePathname } from 'next/navigation'
 import Image from 'next/image'
 
@@ -17,6 +17,7 @@ export function NavigationLoadingProvider({ children }: { children: ReactNode })
   const [isNavigating, setIsNavigating] = useState(false)
   const [targetPath, setTargetPath] = useState<string | null>(null)
   const pathname = usePathname()
+  const cancelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Clear navigation loading when pathname changes
   useEffect(() => {
@@ -30,12 +31,42 @@ export function NavigationLoadingProvider({ children }: { children: ReactNode })
         const timer = setTimeout(() => {
           setIsNavigating(false)
           setTargetPath(null)
+          if (cancelTimerRef.current) {
+            clearTimeout(cancelTimerRef.current)
+            cancelTimerRef.current = null
+          }
         }, 150)
         
         return () => clearTimeout(timer)
       }
     }
   }, [pathname, isNavigating, targetPath])
+
+  useEffect(() => {
+    if (isNavigating) {
+      if (cancelTimerRef.current) {
+        clearTimeout(cancelTimerRef.current)
+      }
+      cancelTimerRef.current = setTimeout(() => {
+        setIsNavigating(false)
+        setTargetPath(null)
+        cancelTimerRef.current = null
+      }, 8000)
+      return () => {
+        if (cancelTimerRef.current) {
+          clearTimeout(cancelTimerRef.current)
+          cancelTimerRef.current = null
+        }
+      }
+    }
+
+    return () => {
+      if (cancelTimerRef.current) {
+        clearTimeout(cancelTimerRef.current)
+        cancelTimerRef.current = null
+      }
+    }
+  }, [isNavigating])
 
   const startNavigation = (path: string) => {
     // Extract base paths for comparison
@@ -54,6 +85,10 @@ export function NavigationLoadingProvider({ children }: { children: ReactNode })
     setIsNavigating(loading)
     if (path) {
       setTargetPath(path)
+    }
+    if (!loading && cancelTimerRef.current) {
+      clearTimeout(cancelTimerRef.current)
+      cancelTimerRef.current = null
     }
   }
 

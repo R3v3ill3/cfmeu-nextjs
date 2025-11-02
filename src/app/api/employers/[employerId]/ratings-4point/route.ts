@@ -663,9 +663,9 @@ export async function GET(request: NextRequest, { params }: { params: { employer
       data_quality: 'very_low',
       error: error instanceof Error ? error.message : 'Unknown error occurred'
     }, {
-      status: 500,
+      status: 200,
       headers: {
-        'Cache-Control': 'no-cache',
+        'Cache-Control': 'no-cache, no-store',
         'Content-Type': 'application/json'
       }
     });

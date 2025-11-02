@@ -222,7 +222,10 @@ export function RatingProvider({ children }: RatingProviderProps) {
 
   try {
     const roleResult = useUserRole()
-    userRole = roleResult.data
+    userRole = roleResult.role
+    if (roleResult.error) {
+      console.error('UserRole hook error:', roleResult.error)
+    }
   } catch (error) {
     console.error('UserRole hook error:', error)
     dispatch({ type: "SET_ERROR", payload: "User role error" })
