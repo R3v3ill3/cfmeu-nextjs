@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { BarChart3, Filter } from "lucide-react"
+import { BarChart3, Filter, Calendar, FolderOpen, Users } from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
 import { PROJECT_TIER_LABELS, ProjectTier } from "@/components/projects/types"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
@@ -37,6 +37,18 @@ export function TrafficLightOverviewPanel() {
   const [ebaStatus, setEbaStatus] = useState<EbaStatusFilter>('all')
   const [projectTier, setProjectTier] = useState<ProjectTier | 'all'>('all')
   const [projectStatus, setProjectStatus] = useState<ProjectStatusFilter>('all')
+  const [timeFrame, setTimeFrame] = useState<'6_weeks' | '3_months' | '6_months' | '12_months' | 'ever'>('3_months')
+
+  // Fetch rating completion data
+  const { data: ratingCompletionData, isLoading: ratingLoading } = useQuery({
+    queryKey: ['rating-completion', timeFrame],
+    queryFn: async () => {
+      const response = await fetch(`/api/dashboard/rating-completion?timeFrame=${timeFrame}`)
+      if (!response.ok) throw new Error('Failed to fetch rating completion data')
+      return response.json()
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  })
 
   const { data, isLoading, error } = useQuery<TrafficLightDistributionResponse>({
     queryKey: ['traffic-light-distribution', ebaStatus, projectTier, projectStatus],
@@ -76,66 +88,153 @@ export function TrafficLightOverviewPanel() {
             </div>
           </div>
         </div>
-
-        {/* Filters */}
-        <div className="flex flex-wrap items-center gap-3 mt-4">
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-gray-600" />
-            <span className="text-xs font-medium text-muted-foreground">Filters:</span>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">EBA Status</span>
-            <Select value={ebaStatus} onValueChange={(value: any) => setEbaStatus(value)}>
-              <SelectTrigger className="w-32 h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="inactive">Inactive</SelectItem>
-                <SelectItem value="unknown">Unknown</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Project Tier</span>
-            <Select value={projectTier} onValueChange={(value: any) => setProjectTier(value)}>
-              <SelectTrigger className="w-32 h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Tiers</SelectItem>
-                {Object.entries(PROJECT_TIER_LABELS).map(([tier, label]) => (
-                  <SelectItem key={tier} value={tier}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Project Status</span>
-            <Select value={projectStatus} onValueChange={(value: any) => setProjectStatus(value)}>
-              <SelectTrigger className="w-36 h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="construction">Construction</SelectItem>
-                <SelectItem value="pre_construction">Pre-construction</SelectItem>
-                <SelectItem value="future">Future</SelectItem>
-                <SelectItem value="archived">Archived</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
       </CardHeader>
+      <CardContent className="space-y-4 sm:space-y-6">
+        {/* Rating Completion Section - at the top */}
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <h3 className="text-sm font-semibold text-gray-700">Rating Completion</h3>
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-gray-600" />
+              <span className="text-xs font-medium text-muted-foreground">Time Frame</span>
+              <Select value={timeFrame} onValueChange={(value: any) => setTimeFrame(value)}>
+                <SelectTrigger className="w-36 h-9 text-xs touch-manipulation">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="6_weeks">6 Weeks</SelectItem>
+                  <SelectItem value="3_months">3 Months</SelectItem>
+                  <SelectItem value="6_months">6 Months</SelectItem>
+                  <SelectItem value="12_months">12 Months</SelectItem>
+                  <SelectItem value="ever">Ever</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
 
-      <CardContent className="space-y-6">
-        {isLoading ? (
+          {/* Rating completion cards */}
+          {ratingLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="h-20 bg-gray-200 rounded animate-pulse"></div>
+              <div className="h-20 bg-gray-200 rounded animate-pulse"></div>
+            </div>
+          ) : ratingCompletionData ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {/* Projects rated card */}
+              <div className="border rounded-lg p-3 bg-blue-50 border-blue-200">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <FolderOpen className="h-4 w-4 text-blue-600" />
+                    <span className="text-sm font-medium text-gray-700">Projects Rated</span>
+                  </div>
+                  <Badge variant="secondary" className="text-xs">
+                    {ratingCompletionData.projectsRatedPercentage.toFixed(1)}%
+                  </Badge>
+                </div>
+                <Progress 
+                  value={ratingCompletionData.projectsRatedPercentage} 
+                  className="h-2 mb-1" 
+                />
+                <div className="flex justify-between text-xs text-gray-600">
+                  <span>
+                    {ratingCompletionData.projectsRatedCount} of {ratingCompletionData.totalProjects}
+                  </span>
+                  <span>{ratingCompletionData.projectsRatedPercentage.toFixed(1)}%</span>
+                </div>
+              </div>
+
+              {/* Employers rated card */}
+              <div className="border rounded-lg p-3 bg-green-50 border-green-200">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-green-600" />
+                    <span className="text-sm font-medium text-gray-700">Active Employers Rated</span>
+                  </div>
+                  <Badge variant="secondary" className="text-xs">
+                    {ratingCompletionData.employersRatedPercentage.toFixed(1)}%
+                  </Badge>
+                </div>
+                <Progress 
+                  value={ratingCompletionData.employersRatedPercentage} 
+                  className="h-2 mb-1" 
+                />
+                <div className="flex justify-between text-xs text-gray-600">
+                  <span>
+                    {ratingCompletionData.employersRatedCount} of {ratingCompletionData.totalEmployers}
+                  </span>
+                  <span>{ratingCompletionData.employersRatedPercentage.toFixed(1)}%</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground text-center py-8">
+              No rating data available.
+            </div>
+          )}
+        </div>
+
+        {/* Divider */}
+        <div className="border-t"></div>
+
+        {/* Traffic Light Distribution Section */}
+        <div className="space-y-4">
+          {/* Filters */}
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <Filter className="h-4 w-4 text-gray-600" />
+              <span className="text-xs font-medium text-muted-foreground">Filters:</span>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground hidden sm:inline">EBA Status</span>
+              <Select value={ebaStatus} onValueChange={(value: any) => setEbaStatus(value)}>
+                <SelectTrigger className="w-28 sm:w-32 h-9 text-xs touch-manipulation">
+                  <SelectValue placeholder="EBA" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                  <SelectItem value="unknown">Unknown</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground hidden sm:inline">Project Tier</span>
+              <Select value={projectTier} onValueChange={(value: any) => setProjectTier(value)}>
+                <SelectTrigger className="w-28 sm:w-32 h-9 text-xs touch-manipulation">
+                  <SelectValue placeholder="Tier" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Tiers</SelectItem>
+                  {Object.entries(PROJECT_TIER_LABELS).map(([tier, label]) => (
+                    <SelectItem key={tier} value={tier}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground hidden sm:inline">Project Status</span>
+              <Select value={projectStatus} onValueChange={(value: any) => setProjectStatus(value)}>
+                <SelectTrigger className="w-32 sm:w-36 h-9 text-xs touch-manipulation">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="construction">Construction</SelectItem>
+                  <SelectItem value="pre_construction">Pre-construction</SelectItem>
+                  <SelectItem value="future">Future</SelectItem>
+                  <SelectItem value="archived">Archived</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {isLoading ? (
           <div className="space-y-4">
             <div className="h-64 bg-gray-200 rounded animate-pulse"></div>
             <div className="h-64 bg-gray-200 rounded animate-pulse"></div>
@@ -157,7 +256,7 @@ export function TrafficLightOverviewPanel() {
 
               {/* Stacked bar chart for projects */}
               {projectsChartData.length > 0 && (
-                <div className="w-full" style={{ height: '200px', minHeight: '200px', minWidth: '300px' }}>
+                <div className="w-full" style={{ height: '250px', minHeight: '250px', minWidth: '280px' }}>
                   <ChartContainer
                     config={{
                       red: { label: "Red", color: "hsl(0, 84%, 60%)" },
@@ -191,7 +290,7 @@ export function TrafficLightOverviewPanel() {
               )}
 
               {/* Percentage breakdown for projects */}
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <div className="border rounded-lg p-2 bg-red-50 border-red-200">
                   <div className="text-xs text-gray-600 mb-1">Red</div>
                   <div className="text-lg font-bold text-red-600">{data.projects.distribution.red}</div>
@@ -226,7 +325,7 @@ export function TrafficLightOverviewPanel() {
 
                       {/* Stacked bar chart for employers */}
                       {employersChartData.length > 0 && (
-                        <div className="w-full" style={{ height: '200px', minHeight: '200px', minWidth: '300px' }}>
+                        <div className="w-full" style={{ height: '250px', minHeight: '250px', minWidth: '280px' }}>
                           <ChartContainer
                             config={{
                               red: { label: "Red", color: "hsl(0, 84%, 60%)" },
@@ -260,7 +359,7 @@ export function TrafficLightOverviewPanel() {
               )}
 
               {/* Percentage breakdown for employers */}
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <div className="border rounded-lg p-2 bg-red-50 border-red-200">
                   <div className="text-xs text-gray-600 mb-1">Red</div>
                   <div className="text-lg font-bold text-red-600">{data.employers.distribution.red}</div>
@@ -285,6 +384,7 @@ export function TrafficLightOverviewPanel() {
             </div>
           </>
         ) : null}
+        </div>
       </CardContent>
     </Card>
   )

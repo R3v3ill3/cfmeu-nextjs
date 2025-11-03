@@ -9,6 +9,8 @@ import { ProjectMetricsSection } from "@/components/dashboard/ProjectMetricsSect
 import { PreConstructionMetricsComponent } from "@/components/dashboard/PreConstructionMetrics"
 import { RoleBasedDashboard } from "@/components/dashboard/RoleBasedDashboard"
 import { ActiveConstructionMetricsComponent } from "@/components/dashboard/ActiveConstructionMetrics"
+import { EbaCoverageSection } from "@/components/dashboard/EbaCoverageSection"
+import { TrafficLightOverviewPanel } from "@/components/dashboard/TrafficLightOverviewPanel"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { FilterIndicatorBadge } from "@/components/dashboard/FilterIndicatorBadge"
 import { useActiveFilters } from "@/hooks/useActiveFilters"
@@ -40,7 +42,7 @@ export function MobileDashboardView() {
   }
 
   return (
-    <div className="space-y-4 px-safe py-4 pb-safe-bottom">
+    <div className="space-y-4 sm:space-y-6 px-4 py-4 pb-safe-bottom">
       {/* Removed decorative header per request */}
       {data?.errors?.length ? (
         <div className="flex items-center gap-2">
@@ -51,6 +53,9 @@ export function MobileDashboardView() {
 
       {/* Compliance Alerts */}
       <ComplianceAlertsCard />
+
+      {/* EBA Coverage - Added for mobile */}
+      <EbaCoverageSection />
 
       {/* Project Overview Section */}
       <ProjectMetricsSection 
@@ -64,6 +69,9 @@ export function MobileDashboardView() {
         isLoading={isLoading} 
         errors={data?.errors}
       />
+
+      {/* Traffic Light Overview Panel - Added for mobile */}
+      <TrafficLightOverviewPanel />
 
       {/* Organising Universe Summary */}
       <Card>

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableCaption, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
-import { FolderOpen, CheckCircle, BarChart3, TrendingUp, Calendar, Users } from "lucide-react"
+import { FolderOpen, CheckCircle, BarChart3, TrendingUp } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DashboardProject, DashboardProjectCounts } from "@/hooks/useNewDashboardData"
 import { PROJECT_TIER_LABELS, ProjectTier } from "@/components/projects/types"
@@ -15,7 +15,6 @@ import { FilterIndicatorBadge } from "./FilterIndicatorBadge"
 import { useActiveFilters } from "@/hooks/useActiveFilters"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Progress } from "@/components/ui/progress"
-import { useQuery } from "@tanstack/react-query"
 
 interface ProjectMetricsSectionProps {
   data: DashboardProjectCounts;
@@ -36,18 +35,6 @@ export function ProjectMetricsSection({ data, projects, isLoading }: ProjectMetr
   }, [sp]);
 
   const [tierFilter, setTierFilter] = useState<ProjectTier | 'all'>(tierFromParams ?? 'all');
-  const [timeFrame, setTimeFrame] = useState<'6_weeks' | '3_months' | '6_months' | '12_months' | 'ever'>('3_months');
-
-  // Fetch rating completion data
-  const { data: ratingCompletionData, isLoading: ratingLoading } = useQuery({
-    queryKey: ['rating-completion', timeFrame],
-    queryFn: async () => {
-      const response = await fetch(`/api/dashboard/rating-completion?timeFrame=${timeFrame}`)
-      if (!response.ok) throw new Error('Failed to fetch rating completion data')
-      return response.json()
-    },
-    staleTime: 5 * 60 * 1000, // 5 minutes
-  })
 
   const navigateToProjects = (organising_universe?: string, stage_class?: string) => {
     const params = new URLSearchParams();
@@ -286,18 +273,19 @@ export function ProjectMetricsSection({ data, projects, isLoading }: ProjectMetr
           </div>
         ) : (
           /* Desktop layout - original */
-          <div className="grid lg:grid-cols-2 gap-4">
+          <div className="grid lg:grid-cols-2 gap-6">
             {/* Left side: Data table */}
-            <div className="space-y-3">
-              <div className="overflow-x-auto">
-                <Table variant="desktop">
+            <div className="space-y-3 min-w-0 flex flex-col">
+              <div className="overflow-x-auto flex-1">
+                <div className="inline-block min-w-full align-middle">
+                  <Table variant="desktop" className="w-full min-w-[500px]">
                   <TableHeader variant="desktop">
                     <TableRow variant="desktop">
-                      <TableHead variant="desktop" className="py-2">Stage</TableHead>
-                      <TableHead variant="desktop" className="py-2">Active</TableHead>
-                      <TableHead variant="desktop" className="py-2">Potential</TableHead>
-                      <TableHead variant="desktop" className="py-2">Excluded</TableHead>
-                      <TableHead variant="desktop" className="py-2">Total</TableHead>
+                      <TableHead variant="desktop" className="py-2 min-w-[100px]">Stage</TableHead>
+                      <TableHead variant="desktop" className="py-2 text-center min-w-[80px]">Active</TableHead>
+                      <TableHead variant="desktop" className="py-2 text-center min-w-[80px]">Potential</TableHead>
+                      <TableHead variant="desktop" className="py-2 text-center min-w-[80px]">Excluded</TableHead>
+                      <TableHead variant="desktop" className="py-2 text-center min-w-[80px]">Total</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody variant="desktop">
@@ -309,7 +297,7 @@ export function ProjectMetricsSection({ data, projects, isLoading }: ProjectMetr
                       return (
                         <TableRow key={s.key} variant="desktop-hover">
                           <TableCell variant="desktop" className="font-medium py-2">{s.label}</TableCell>
-                          <TableCell variant="desktop" className="py-2">
+                          <TableCell variant="desktop" className="py-2 text-center">
                             <button
                               className="text-blue-700 hover:underline"
                               onClick={() => navigateToProjects('active', s.key)}
@@ -317,7 +305,7 @@ export function ProjectMetricsSection({ data, projects, isLoading }: ProjectMetr
                               {a}
                             </button>
                           </TableCell>
-                          <TableCell variant="desktop" className="py-2">
+                          <TableCell variant="desktop" className="py-2 text-center">
                             <button
                               className="text-blue-700 hover:underline"
                               onClick={() => navigateToProjects('potential', s.key)}
@@ -325,7 +313,7 @@ export function ProjectMetricsSection({ data, projects, isLoading }: ProjectMetr
                               {p}
                             </button>
                           </TableCell>
-                          <TableCell variant="desktop" className="py-2">
+                          <TableCell variant="desktop" className="py-2 text-center">
                             <button
                               className="text-blue-700 hover:underline"
                               onClick={() => navigateToProjects('excluded', s.key)}
@@ -333,7 +321,7 @@ export function ProjectMetricsSection({ data, projects, isLoading }: ProjectMetr
                               {e}
                             </button>
                           </TableCell>
-                          <TableCell variant="desktop" className="py-2">
+                          <TableCell variant="desktop" className="py-2 text-center font-medium">
                             <button
                               className="text-gray-900 hover:underline"
                               onClick={() => navigateToProjects(undefined, s.key)}
@@ -348,7 +336,8 @@ export function ProjectMetricsSection({ data, projects, isLoading }: ProjectMetr
                   {filteredStages.length === 0 && (
                     <TableCaption variant="desktop">No data to display yet.</TableCaption>
                   )}
-                </Table>
+                  </Table>
+                </div>
               </div>
               
               <Button 
@@ -362,83 +351,49 @@ export function ProjectMetricsSection({ data, projects, isLoading }: ProjectMetr
               </Button>
             </div>
 
-            {/* Right side: Rating completion visualizations */}
+            {/* Right side: Bar chart visualization */}
             <div className="flex flex-col justify-center space-y-4">
-              {/* Time frame selector */}
-              <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-gray-600" />
-                <span className="text-xs font-medium text-muted-foreground">Time Frame</span>
-                <Select value={timeFrame} onValueChange={(value: any) => setTimeFrame(value)}>
-                  <SelectTrigger className="w-36 h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="6_weeks">6 Weeks</SelectItem>
-                    <SelectItem value="3_months">3 Months</SelectItem>
-                    <SelectItem value="6_months">6 Months</SelectItem>
-                    <SelectItem value="12_months">12 Months</SelectItem>
-                    <SelectItem value="ever">Ever</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Rating completion cards */}
-              {ratingLoading ? (
-                <div className="space-y-3">
-                  <div className="h-20 bg-gray-200 rounded animate-pulse"></div>
-                  <div className="h-20 bg-gray-200 rounded animate-pulse"></div>
-                </div>
-              ) : ratingCompletionData ? (
-                <div className="space-y-3">
-                  {/* Projects rated card */}
-                  <div className="border rounded-lg p-3 bg-blue-50 border-blue-200">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <FolderOpen className="h-4 w-4 text-blue-600" />
-                        <span className="text-sm font-medium text-gray-700">Projects Rated</span>
-                      </div>
-                      <Badge variant="secondary" className="text-xs">
-                        {ratingCompletionData.projectsRatedPercentage.toFixed(1)}%
-                      </Badge>
-                    </div>
-                    <Progress 
-                      value={ratingCompletionData.projectsRatedPercentage} 
-                      className="h-2 mb-1" 
-                    />
-                    <div className="flex justify-between text-xs text-gray-600">
-                      <span>
-                        {ratingCompletionData.projectsRatedCount} of {ratingCompletionData.totalProjects}
-                      </span>
-                      <span>{ratingCompletionData.projectsRatedPercentage.toFixed(1)}%</span>
-                    </div>
-                  </div>
-
-                  {/* Employers rated card */}
-                  <div className="border rounded-lg p-3 bg-green-50 border-green-200">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <Users className="h-4 w-4 text-green-600" />
-                        <span className="text-sm font-medium text-gray-700">Employers Rated</span>
-                      </div>
-                      <Badge variant="secondary" className="text-xs">
-                        {ratingCompletionData.employersRatedPercentage.toFixed(1)}%
-                      </Badge>
-                    </div>
-                    <Progress 
-                      value={ratingCompletionData.employersRatedPercentage} 
-                      className="h-2 mb-1" 
-                    />
-                    <div className="flex justify-between text-xs text-gray-600">
-                      <span>
-                        {ratingCompletionData.employersRatedCount} of {ratingCompletionData.totalEmployers}
-                      </span>
-                      <span>{ratingCompletionData.employersRatedPercentage.toFixed(1)}%</span>
-                    </div>
-                  </div>
+              <h3 className="text-sm font-semibold text-gray-700">Project Distribution by Stage</h3>
+              {filteredChartData.length > 0 ? (
+                <div className="w-full" style={{ height: '300px', minHeight: '300px' }}>
+                  <ChartContainer
+                    config={{
+                      active: { label: "Active", color: "hsl(221, 83%, 53%)" },
+                      potential: { label: "Potential", color: "hsl(25, 95%, 53%)" },
+                      excluded: { label: "Excluded", color: "hsl(215, 16%, 47%)" },
+                    }}
+                    className="h-full w-full"
+                  >
+                    <BarChart data={filteredChartData}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis 
+                        dataKey="stage" 
+                        tickLine={false} 
+                        axisLine={false}
+                        tick={{ fontSize: 12 }}
+                        angle={-45}
+                        textAnchor="end"
+                        height={80}
+                      />
+                      <YAxis 
+                        allowDecimals={false}
+                        tick={{ fontSize: 12 }}
+                        width={40}
+                      />
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                      <ChartLegend 
+                        content={<ChartLegendContent />}
+                        wrapperStyle={{ fontSize: '12px', marginTop: '16px' }}
+                      />
+                      <Bar dataKey="active" fill="var(--color-active)" radius={[2, 2, 0, 0]} />
+                      <Bar dataKey="potential" fill="var(--color-potential)" radius={[2, 2, 0, 0]} />
+                      <Bar dataKey="excluded" fill="var(--color-excluded)" radius={[2, 2, 0, 0]} />
+                    </BarChart>
+                  </ChartContainer>
                 </div>
               ) : (
                 <div className="text-sm text-muted-foreground text-center py-8">
-                  No rating data available.
+                  No chart data available.
                 </div>
               )}
             </div>
