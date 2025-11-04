@@ -40,72 +40,11 @@ const nextConfig = {
     optimizeCss: true,
   },
 
-  // Bundle analyzer for development and production optimization
-  webpack: (config, { isServer, dev, webpack }) => {
-    // Force React to be bundled for both server and client
+  // Webpack configuration - minimal to avoid interfering with Next.js build process
+  webpack: (config, { isServer, dev }) => {
+    // Only add path aliases - let Next.js handle React bundling
     config.resolve.alias = {
       ...config.resolve.alias,
-      'react': 'react',
-      'react-dom': 'react-dom',
-    }
-
-    // Production optimizations - disabled to avoid build issues
-    // Next.js handles optimization by default, custom config can cause bundling issues
-    // if (!dev && isProduction && !isServer) {
-    //   // Advanced code splitting for production - only for client builds
-    //   // Server builds use Next.js defaults to avoid bundling issues
-    // }
-
-    // In development, simplify bundle splitting to avoid module resolution issues
-    if (dev) {
-      config.optimization.splitChunks = {
-        chunks: 'all',
-        minSize: 0,
-        maxSize: 250000,
-        cacheGroups: {
-          default: false,
-          vendors: false,
-          // Simple vendor chunk for node_modules
-          vendor: {
-            test: /[\\/]node_modules[\\/]/,
-            name: 'vendors',
-            priority: 10,
-            chunks: 'all',
-          },
-          // Bundle everything else together to avoid missing dependencies
-          app: {
-            name: 'app',
-            chunks: 'all',
-            priority: 20,
-          },
-        },
-      }
-    }
-
-    // Force React to be bundled on server side instead of externalized
-    if (isServer) {
-      // Filter out React from externals while keeping other Node.js modules
-      if (config.externals) {
-        if (Array.isArray(config.externals)) {
-          config.externals = config.externals.filter(ext =>
-            typeof ext === 'string' ? !ext.includes('react') : true
-          );
-        } else if (typeof config.externals === 'function') {
-          const originalExternals = config.externals;
-          config.externals = function(context, request, callback) {
-            if (request.includes('react') || request.includes('react-dom')) {
-              // Don't externalize React - let it be bundled
-              return callback();
-            }
-            return originalExternals(context, request, callback);
-          };
-        }
-      }
-    }
-    // Resolve optimizations
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      // Optimize imports
       '@components': '/src/components',
       '@lib': '/src/lib',
       '@hooks': '/src/hooks',
