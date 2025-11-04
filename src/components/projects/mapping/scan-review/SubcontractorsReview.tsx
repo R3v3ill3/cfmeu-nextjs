@@ -1136,8 +1136,8 @@ export function SubcontractorsReview({
       {/* Enhanced Guidance Section */}
       {showGuidance && (
         <Card className="border-amber-200 bg-amber-50">
-          <CardHeader className="pb-3">
-            <Collapsible open={expandedSections.has('guidance')} onOpenChange={() => toggleSection('guidance')}>
+          <Collapsible open={expandedSections.has('guidance')} onOpenChange={() => toggleSection('guidance')}>
+            <CardHeader className="pb-3">
               <CollapsibleTrigger className="flex items-center justify-between w-full">
                 <CardTitle className="text-lg font-semibold text-amber-900 flex items-center gap-2">
                   <Lightbulb className="h-5 w-5" />
@@ -1145,101 +1145,101 @@ export function SubcontractorsReview({
                 </CardTitle>
                 <ChevronDown className={`h-4 w-4 transition-transform ${expandedSections.has('guidance') ? 'rotate-180' : ''}`} />
               </CollapsibleTrigger>
-            </Collapsible>
-          </CardHeader>
-          <CollapsibleContent open={expandedSections.has('guidance')}>
-            <CardContent className="pt-0">
-              <Tabs value={selectedFeatureTab} onValueChange={(value) => setSelectedFeatureTab(value as any)}>
-                <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="overview">Overview</TabsTrigger>
-                  <TabsTrigger value="aliases">Employer Aliases</TabsTrigger>
-                  <TabsTrigger value="eba">EBA Management</TabsTrigger>
-                </TabsList>
+            </CardHeader>
+            <CollapsibleContent>
+              <CardContent className="pt-0">
+                <Tabs value={selectedFeatureTab} onValueChange={(value) => setSelectedFeatureTab(value as any)}>
+                  <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="overview">Overview</TabsTrigger>
+                    <TabsTrigger value="aliases">Employer Aliases</TabsTrigger>
+                    <TabsTrigger value="eba">EBA Management</TabsTrigger>
+                  </TabsList>
 
-                <TabsContent value="overview" className="mt-4">
-                  <div className="space-y-3">
-                    <div className="flex items-start gap-3 p-3 bg-white rounded-lg border border-amber-200">
-                      <ArrowRight className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
-                      <div>
-                        <div className="font-medium text-amber-900">Start with Data Entry Fixes</div>
-                        <div className="text-sm text-amber-700">
-                          Look for "Other" trades with missing company names - click "Fix Entry" to correct data entry errors.
+                  <TabsContent value="overview" className="mt-4">
+                    <div className="space-y-3">
+                      <div className="flex items-start gap-3 p-3 bg-white rounded-lg border border-amber-200">
+                        <ArrowRight className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <div className="font-medium text-amber-900">Start with Data Entry Fixes</div>
+                          <div className="text-sm text-amber-700">
+                            Look for "Other" trades with missing company names - click "Fix Entry" to correct data entry errors.
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3 p-3 bg-white rounded-lg border border-amber-200">
+                        <ArrowRight className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <div className="font-medium text-amber-900">Review Employer Matches</div>
+                          <div className="text-sm text-amber-700">
+                            Highlighted entries need manual review - click "Review Match" to confirm or change employer assignments.
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3 p-3 bg-white rounded-lg border border-amber-200">
+                        <ArrowRight className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <div className="font-medium text-amber-900">Use Keyboard Shortcuts</div>
+                          <div className="text-sm text-amber-700">
+                            Navigate with arrow keys, press ? for shortcuts, Ctrl+A for aliases, Ctrl+E for EBA search.
+                          </div>
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-start gap-3 p-3 bg-white rounded-lg border border-amber-200">
-                      <ArrowRight className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
-                      <div>
-                        <div className="font-medium text-amber-900">Review Employer Matches</div>
-                        <div className="text-sm text-amber-700">
-                          Highlighted entries need manual review - click "Review Match" to confirm or change employer assignments.
+                  </TabsContent>
+
+                  <TabsContent value="aliases" className="mt-4">
+                    <div className="space-y-3">
+                      <div className="p-3 bg-white rounded-lg border border-blue-200">
+                        <div className="font-medium text-blue-900 mb-2">What are Employer Aliases?</div>
+                        <div className="text-sm text-blue-700 mb-2">
+                          Aliases connect scanned company names to your existing employer database, improving future matching accuracy.
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            onClick={handleQuickAliasCreation}
+                            disabled={processingAction === 'alias-creation'}
+                            className="gap-2"
+                          >
+                            <Tags className="h-4 w-4" />
+                            {processingAction === 'alias-creation' ? 'Analyzing...' : 'Quick Alias Creation'}
+                          </Button>
+                          <span className="text-xs text-gray-600">
+                            Automatically find high-confidence suggestions
+                          </span>
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-start gap-3 p-3 bg-white rounded-lg border border-amber-200">
-                      <ArrowRight className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
-                      <div>
-                        <div className="font-medium text-amber-900">Use Keyboard Shortcuts</div>
-                        <div className="text-sm text-amber-700">
-                          Navigate with arrow keys, press ? for shortcuts, Ctrl+A for aliases, Ctrl+E for EBA search.
+                  </TabsContent>
+
+                  <TabsContent value="eba" className="mt-4">
+                    <div className="space-y-3">
+                      <div className="p-3 bg-white rounded-lg border border-green-200">
+                        <div className="font-medium text-green-900 mb-2">EBA Status Management</div>
+                        <div className="text-sm text-green-700 mb-2">
+                          Update employer EBA status from scanned documents and search the Fair Work Commission database.
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            onClick={handleQuickEbaSearch}
+                            disabled={processingAction === 'eba-search'}
+                            className="gap-2"
+                          >
+                            <FileSearch className="h-4 w-4" />
+                            {processingAction === 'eba-search' ? 'Loading...' : 'Batch EBA Search'}
+                          </Button>
+                          <span className="text-xs text-gray-600">
+                            {employersNeedingEbaUpdate.length} employers need updates
+                          </span>
                         </div>
                       </div>
                     </div>
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="aliases" className="mt-4">
-                  <div className="space-y-3">
-                    <div className="p-3 bg-white rounded-lg border border-blue-200">
-                      <div className="font-medium text-blue-900 mb-2">What are Employer Aliases?</div>
-                      <div className="text-sm text-blue-700 mb-2">
-                        Aliases connect scanned company names to your existing employer database, improving future matching accuracy.
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          onClick={handleQuickAliasCreation}
-                          disabled={processingAction === 'alias-creation'}
-                          className="gap-2"
-                        >
-                          <Tags className="h-4 w-4" />
-                          {processingAction === 'alias-creation' ? 'Analyzing...' : 'Quick Alias Creation'}
-                        </Button>
-                        <span className="text-xs text-gray-600">
-                          Automatically find high-confidence suggestions
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="eba" className="mt-4">
-                  <div className="space-y-3">
-                    <div className="p-3 bg-white rounded-lg border border-green-200">
-                      <div className="font-medium text-green-900 mb-2">EBA Status Management</div>
-                      <div className="text-sm text-green-700 mb-2">
-                        Update employer EBA status from scanned documents and search the Fair Work Commission database.
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          onClick={handleQuickEbaSearch}
-                          disabled={processingAction === 'eba-search'}
-                          className="gap-2"
-                        >
-                          <FileSearch className="h-4 w-4" />
-                          {processingAction === 'eba-search' ? 'Loading...' : 'Batch EBA Search'}
-                        </Button>
-                        <span className="text-xs text-gray-600">
-                          {employersNeedingEbaUpdate.length} employers need updates
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </CollapsibleContent>
+                  </TabsContent>
+                </Tabs>
+              </CardContent>
+            </CollapsibleContent>
+          </Collapsible>
         </Card>
       )}
 

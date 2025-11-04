@@ -264,6 +264,7 @@ export function MobileDashboard({
                 const metric = getMetricInfo(metricKey)
                 const value = data.metrics[metricKey as keyof typeof data.metrics]
                 const isSelected = selectedMetric === metricKey
+                const MetricIcon = metric.icon
 
                 return (
                   <Card
@@ -275,7 +276,7 @@ export function MobileDashboard({
                   >
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between mb-2">
-                        <metric.icon className={`h-5 w-5 ${metric.color}`} />
+                        <MetricIcon className={`h-5 w-5 ${metric.color}`} />
                         {metricKey === 'alertsCount' && value > 0 && (
                           <Badge variant="destructive" className="text-xs">
                             {value}
@@ -447,7 +448,9 @@ export function MobileDashboard({
                         <SheetTitle>Tasks</SheetTitle>
                       </SheetHeader>
                       <div className="mt-6 space-y-3">
-                        {data.tasks.filter(t => !t.completed).map((task) => (
+                        {data.tasks.filter(t => !t.completed).map((task) => {
+                          const TaskIcon = getTaskIcon(task.type)
+                          return (
                           <Card key={task.id}>
                             <CardContent className="p-4">
                               <div className="flex items-start gap-3">
@@ -460,7 +463,7 @@ export function MobileDashboard({
                                 <div className="flex-1">
                                   <h4 className="font-medium text-sm">{task.title}</h4>
                                   <div className="flex items-center gap-2 mt-1">
-                                    <getTaskIcon(task.type) className="h-3 w-3 text-muted-foreground" />
+                                    <TaskIcon className="h-3 w-3 text-muted-foreground" />
                                     <span className="text-xs text-muted-foreground capitalize">{task.type}</span>
                                     {task.dueDate && (
                                       <span className="text-xs text-muted-foreground">
@@ -478,7 +481,8 @@ export function MobileDashboard({
                               </div>
                             </CardContent>
                           </Card>
-                        ))}
+                          )
+                        })}
                       </div>
                     </SheetContent>
                   </Sheet>
@@ -500,12 +504,13 @@ export function MobileDashboard({
                 <div className="space-y-2">
                   {data.alerts.slice(0, 2).map((alert) => {
                     const alertInfo = getAlertInfo(alert.type)
+                    const AlertIcon = alertInfo.icon
                     return (
                       <div
                         key={alert.id}
                         className="flex items-start gap-2 p-2 bg-red-50 rounded-lg"
                       >
-                        <alertInfo.icon className={`h-4 w-4 ${alertInfo.color} mt-0.5`} />
+                        <AlertIcon className={`h-4 w-4 ${alertInfo.color} mt-0.5`} />
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-medium truncate">{alert.title}</p>
                           <p className="text-xs text-muted-foreground">
@@ -531,11 +536,12 @@ export function MobileDashboard({
                       <div className="mt-6 space-y-3">
                         {data.alerts.map((alert) => {
                           const alertInfo = getAlertInfo(alert.type)
+                          const AlertIcon = alertInfo.icon
                           return (
                             <Card key={alert.id}>
                               <CardContent className="p-4">
                                 <div className="flex items-start gap-3">
-                                  <alertInfo.icon className={`h-5 w-5 ${alertInfo.color} mt-0.5`} />
+                                  <AlertIcon className={`h-5 w-5 ${alertInfo.color} mt-0.5`} />
                                   <div className="flex-1">
                                     <h4 className="font-medium text-sm">{alert.title}</h4>
                                     <p className="text-xs text-muted-foreground mt-1">{alert.message}</p>
