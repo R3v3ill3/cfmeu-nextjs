@@ -49,91 +49,12 @@ const nextConfig = {
       'react-dom': 'react-dom',
     }
 
-    // Production optimizations
-    if (!dev && isProduction && !isServer) {
-      // Advanced code splitting for production - only for client builds
-      // Server builds use Next.js defaults to avoid bundling issues
-      config.optimization.splitChunks = {
-        chunks: 'all',
-        minSize: 20000,
-        maxSize: 250000,
-        cacheGroups: {
-          default: {
-            minChunks: 2,
-            priority: -20,
-            reuseExistingChunk: true,
-          },
-          vendor: {
-            test: /[\\/]node_modules[\\/]/,
-            name: 'vendor',
-            priority: 10,
-            chunks: 'all',
-          },
-          // Framework chunks
-          framework: {
-            test: /[\\/]node_modules[\\/](react|react-dom|scheduler|prop-types)[\\/]/,
-            name: 'framework',
-            priority: 40,
-            chunks: 'all',
-            enforce: true,
-          },
-          // Lib chunks for common libraries
-          lib: {
-            test: /[\\/]node_modules[\\/](@radix-ui|@tanstack|lucide-react|date-fns|recharts)[\\/]/,
-            name: 'lib',
-            priority: 30,
-            chunks: 'all',
-          },
-          // Common chunks for shared utilities
-          common: {
-            name: 'common',
-            minChunks: 3,
-            priority: 20,
-            chunks: 'all',
-            reuseExistingChunk: true,
-          },
-          // Mobile-specific chunks
-          mobile: {
-            test: /[\\/]src[\\/](hooks|components)[\\/]mobile[\\/]/,
-            name: 'mobile',
-            priority: 15,
-            chunks: 'async',
-          },
-        },
-      }
-
-      // Tree shaking optimizations (client only)
-      config.optimization.usedExports = true
-      config.optimization.sideEffects = false
-
-      // Module concatenation (client only)
-      config.optimization.concatenateModules = true
-
-      // Production-specific plugins
-      config.plugins.push(
-        // Remove console logs in production
-        new webpack.DefinePlugin({
-          'process.env.NODE_ENV': JSON.stringify('production'),
-        })
-      )
-
-      // Optimize module resolution
-      config.resolve.alias = {
-        ...config.resolve.alias,
-        // Route aliases for better tree shaking
-        '@components/mobile': '/src/components/mobile',
-        '@components/shared': '/src/components/shared',
-        '@hooks/mobile': '/src/hooks/mobile',
-        '@hooks/shared': '/src/hooks/shared',
-      }
-
-      // Enable module federation for micro-frontends (if needed)
-      if (!isServer) {
-        config.optimization.runtimeChunk = {
-          name: 'runtime',
-        }
-      }
-    }
+    // Production optimizations - disabled to avoid build issues
+    // Next.js handles optimization by default, custom config can cause bundling issues
+    // if (!dev && isProduction && !isServer) {
+    //   // Advanced code splitting for production - only for client builds
+    //   // Server builds use Next.js defaults to avoid bundling issues
+    // }
 
     // In development, simplify bundle splitting to avoid module resolution issues
     if (dev) {

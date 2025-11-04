@@ -52,6 +52,7 @@ interface EmployerAliasManagerProps {
   isOpen: boolean
   onOpenChange: (open: boolean) => void
   onAliasUpdate?: () => void
+  suggestedAlias?: string // Pre-fill alias name when creating from a suggestion
 }
 
 interface AliasFormData {
@@ -65,7 +66,8 @@ export function EmployerAliasManager({
   employerName,
   isOpen,
   onOpenChange,
-  onAliasUpdate
+  onAliasUpdate,
+  suggestedAlias
 }: EmployerAliasManagerProps) {
   const [aliases, setAliases] = useState<EmployerAlias[]>([])
   const [loading, setLoading] = useState(true)
@@ -84,6 +86,29 @@ export function EmployerAliasManager({
     isAuthoritative: false
   })
   const [submitting, setSubmitting] = useState(false)
+  const [hasAutoOpened, setHasAutoOpened] = useState(false)
+  
+  // Auto-open create dialog with suggested alias when provided
+  useEffect(() => {
+    if (isOpen && suggestedAlias && !editDialog.open && !hasAutoOpened) {
+      // Small delay to ensure dialog is fully mounted
+      const timer = setTimeout(() => {
+        setFormData({
+          alias: suggestedAlias,
+          notes: `Added from scanned document`,
+          isAuthoritative: true // Auto-enable for suggested aliases
+        })
+        setEditDialog({ open: true, mode: 'create' })
+        setHasAutoOpened(true)
+      }, 100)
+      return () => clearTimeout(timer)
+    }
+    
+    // Reset when dialog closes
+    if (!isOpen) {
+      setHasAutoOpened(false)
+    }
+  }, [isOpen, suggestedAlias, editDialog.open, hasAutoOpened]) // Only react to isOpen and suggestedAlias changes
 
   // Fetch aliases for this employer
   useEffect(() => {
@@ -150,7 +175,11 @@ export function EmployerAliasManager({
   })
 
   const handleCreateAlias = () => {
-    setFormData({ alias: '', notes: '', isAuthoritative: false })
+    setFormData({ 
+      alias: suggestedAlias || '', 
+      notes: suggestedAlias ? `Added from scanned document` : '', 
+      isAuthoritative: !!suggestedAlias 
+    })
     setEditDialog({ open: true, mode: 'create' })
   }
 
@@ -176,33 +205,74 @@ export function EmployerAliasManager({
     setSubmitting(true)
 
     try {
-      const aliasData = {
-        alias: formData.alias.trim(),
-        alias_normalized: formData.alias.trim().toLowerCase(),
-        notes: formData.notes.trim() || null,
-        is_authoritative: formData.isAuthoritative,
-        employer_id: employerId,
-        updated_at: new Date().toISOString()
+      const normalizedAlias = formData.alias.trim().toLowerCase()
+      
+      // Check if alias already exists for this employer
+      const { data: existingAliases } = await supabase
+        .from('employer_aliases')
+        .select('id, alias')
+        .eq('employer_id', employerId)
+        .eq('alias_normalized', normalizedAlias)
+
+      if (existingAliases && existingAliases.length > 0) {
+        if (editDialog.mode === 'create' || 
+            (editDialog.mode === 'edit' && editDialog.alias && existingAliases.some(a => a.id !== editDialog.alias!.id))) {
+          toast.error(`An alias "${existingAliases[0].alias}" already exists for this employer`)
+          setSubmitting(false)
+          return
+        }
       }
 
       if (editDialog.mode === 'create') {
-        const { error } = await supabase
-          .from('employer_aliases')
-          .insert({
-            ...aliasData,
-            created_at: new Date().toISOString()
-          })
+        const insertData = {
+          alias: formData.alias.trim(),
+          alias_normalized: normalizedAlias,
+          notes: formData.notes.trim() || null,
+          is_authoritative: formData.isAuthoritative,
+          employer_id: employerId,
+          source_system: 'manual',
+          source_identifier: suggestedAlias || null,
+          collected_at: new Date().toISOString(),
+          created_at: new Date().toISOString()
+        }
 
-        if (error) throw error
-        toast.success('Alias created successfully')
-      } else {
         const { error } = await supabase
           .from('employer_aliases')
-          .update(aliasData)
+          .insert(insertData)
+
+        if (error) {
+          // Handle duplicate constraint violation more gracefully
+          if (error.code === '23505') { // Unique violation
+            toast.error(`An alias "${formData.alias.trim()}" already exists for this employer`)
+          } else {
+            throw error
+          }
+        } else {
+          toast.success('Alias created successfully')
+        }
+      } else {
+        const updateData = {
+          alias: formData.alias.trim(),
+          alias_normalized: normalizedAlias,
+          notes: formData.notes.trim() || null,
+          is_authoritative: formData.isAuthoritative,
+          updated_at: new Date().toISOString()
+        }
+
+        const { error } = await supabase
+          .from('employer_aliases')
+          .update(updateData)
           .eq('id', editDialog.alias!.id)
 
-        if (error) throw error
-        toast.success('Alias updated successfully')
+        if (error) {
+          if (error.code === '23505') { // Unique violation
+            toast.error(`An alias "${formData.alias.trim()}" already exists for this employer`)
+          } else {
+            throw error
+          }
+        } else {
+          toast.success('Alias updated successfully')
+        }
       }
 
       // Refetch aliases
@@ -214,10 +284,12 @@ export function EmployerAliasManager({
 
       setAliases(data || [])
       setEditDialog({ open: false, mode: 'create' })
+      setFormData({ alias: '', notes: '', isAuthoritative: false })
       onAliasUpdate?.()
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to save alias:', error)
-      toast.error('Failed to save alias')
+      const errorMessage = error?.message || 'Failed to save alias'
+      toast.error(errorMessage)
     } finally {
       setSubmitting(false)
     }

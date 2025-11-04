@@ -48,6 +48,7 @@ export function EmployerMatchDialog({
   const [employerType, setEmployerType] = useState<string>('small_contractor')
   const [showAliasManager, setShowAliasManager] = useState(false)
   const [selectedEmployerForAliases, setSelectedEmployerForAliases] = useState<any>(null)
+  const [shouldAutoCreateAlias, setShouldAutoCreateAlias] = useState(false)
 
   // Search results
   const searchResults = useMemo(() => {
@@ -178,6 +179,7 @@ export function EmployerMatchDialog({
 
   const handleManageAliases = (employer: any) => {
     setSelectedEmployerForAliases(employer)
+    setShouldAutoCreateAlias(false) // Don't auto-open create dialog when managing aliases
     setShowAliasManager(true)
   }
 
@@ -194,15 +196,8 @@ export function EmployerMatchDialog({
     if (!selectedEmployer) return
 
     setSelectedEmployerForAliases(selectedEmployer)
+    setShouldAutoCreateAlias(true) // Auto-open create dialog with suggested alias
     setShowAliasManager(true)
-
-    // Suggest creating an alias from the scanned company name
-    setTimeout(() => {
-      // This will be handled by the alias manager component
-      toast.info('Suggesting alias', {
-        description: `Consider adding "${companyName}" as an alias for ${selectedEmployer.name}`
-      })
-    }, 100)
   }
 
   const isValid = 
@@ -540,8 +535,14 @@ export function EmployerMatchDialog({
             employerId={selectedEmployerForAliases.id}
             employerName={selectedEmployerForAliases.name}
             isOpen={showAliasManager}
-            onOpenChange={setShowAliasManager}
+            onOpenChange={(open) => {
+              setShowAliasManager(open)
+              if (!open) {
+                setShouldAutoCreateAlias(false) // Reset when closing
+              }
+            }}
             onAliasUpdate={handleAliasUpdate}
+            suggestedAlias={shouldAutoCreateAlias ? companyName : undefined} // Only pre-fill when suggesting
           />
         )}
       </DialogContent>
