@@ -1,0 +1,40 @@
+{
+  "timestamp": "2025-11-04T06:16:53.258Z",
+  "summary": {
+    "totalRoutes": 2,
+    "missingRoutes": 1,
+    "routesWithIssues": 2,
+    "highPriorityIssues": 0
+  },
+  "routes": [
+    {
+      "route": "/:batchId",
+      "path": "batches_disabled_20251026_142049/[batchId]/page.tsx",
+      "exists": false,
+      "missingComponents": [],
+      "missingAPIs": [],
+      "missingDBTables": [
+        "batch_uploads",
+        "profiles"
+      ],
+      "internalLinks": [],
+      "status": "MISSING_ROUTE",
+      "priority": "MEDIUM",
+      "recommendation": "Create missing route: /:batchId"
+    },
+    {
+      "route": "/page.tsx",
+      "path": "batches_disabled_20251026_142049/page.tsx",
+      "exists": true,
+      "missingComponents": [],
+      "missingAPIs": [],
+      "missingDBTables": [
+        "batch_uploads"
+      ],
+      "internalLinks": [],
+      "status": "BROKEN_LINKS",
+      "priority": "LOW",
+      "recommendation": "Verify database tables exist and migrations are applied"
+    }
+  ]
+}

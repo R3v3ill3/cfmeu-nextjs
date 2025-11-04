@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const strict = process.env.STRICT_CI === '1'
+const isProduction = process.env.NODE_ENV === 'production'
+
 const nextConfig = {
   reactStrictMode: true,
   eslint: {
@@ -24,12 +26,15 @@ const nextConfig = {
       '@radix-ui/react-dropdown-menu',
       '@radix-ui/react-select',
       '@radix-ui/react-tabs',
-      'lucide-react',
-      'date-fns',
       'recharts',
+      'sonner',
+      '@hookform/resolvers',
+      'react-hook-form',
+      'clsx',
+      'tailwind-merge',
     ],
     // Server components
-    serverComponentsExternalPackages: ['sharp'],
+    serverComponentsExternalPackages: ['sharp', 'canvas'],
     // Mobile optimizations
     scrollRestoration: true,
     largePageDataBytes: 128 * 1000, // 128KB for mobile
@@ -37,15 +42,112 @@ const nextConfig = {
     optimizeServerReact: true,
     // Enable web vitals reporting
     webVitalsAttribution: ['CLS', 'LCP'],
+    // Production optimizations
+    ...(isProduction && {
+      // Optimize chunks for better caching
+      optimizeCss: true,
+      // Enable static optimization
+      staticWorkerRequestDeduping: true,
+      // Reduce client-side JavaScript
+      serverComponentsHmrCache: true,
+    }),
   },
 
-  // Bundle analyzer for development
-  webpack: (config, { isServer, dev }) => {
+  // Bundle analyzer for development and production optimization
+  webpack: (config, { isServer, dev, webpack }) => {
     // Force React to be bundled for both server and client
     config.resolve.alias = {
       ...config.resolve.alias,
       'react': 'react',
       'react-dom': 'react-dom',
+    }
+
+    // Production optimizations
+    if (!dev && isProduction) {
+      // Advanced code splitting for production
+      config.optimization.splitChunks = {
+        chunks: 'all',
+        minSize: 20000,
+        maxSize: isServer ? 500000 : 250000, // Larger chunks for server
+        cacheGroups: {
+          default: {
+            minChunks: 2,
+            priority: -20,
+            reuseExistingChunk: true,
+          },
+          vendor: {
+            test: /[\\/]node_modules[\\/]/,
+            name(module) {
+              const packageName = module.context.match(/[\\/]node_modules[\\/](.*?)([\\/]|$)/)[1];
+              return `npm.${packageName.replace('@', '')}`;
+            },
+            priority: 10,
+            chunks: 'all',
+          },
+          // Framework chunks
+          framework: {
+            test: /[\\/]node_modules[\\/](react|react-dom|scheduler|prop-types)[\\/]/,
+            name: 'framework',
+            priority: 40,
+            chunks: 'all',
+            enforce: true,
+          },
+          // Lib chunks for common libraries
+          lib: {
+            test: /[\\/]node_modules[\\/](@radix-ui|@tanstack|lucide-react|date-fns|recharts)[\\/]/,
+            name: 'lib',
+            priority: 30,
+            chunks: 'all',
+          },
+          // Common chunks for shared utilities
+          common: {
+            name: 'common',
+            minChunks: 3,
+            priority: 20,
+            chunks: 'all',
+            reuseExistingChunk: true,
+          },
+          // Mobile-specific chunks
+          mobile: {
+            test: /[\\/]src[\\/](hooks|components)[\\/]mobile[\\/]/,
+            name: 'mobile',
+            priority: 15,
+            chunks: 'async',
+          },
+        },
+      }
+
+      // Tree shaking optimizations
+      config.optimization.usedExports = true
+      config.optimization.sideEffects = false
+
+      // Module concatenation
+      config.optimization.concatenateModules = true
+
+      // Production-specific plugins
+      config.plugins.push(
+        // Remove console logs in production
+        new webpack.DefinePlugin({
+          'process.env.NODE_ENV': JSON.stringify('production'),
+        })
+      )
+
+      // Optimize module resolution
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        // Route aliases for better tree shaking
+        '@components/mobile': '/src/components/mobile',
+        '@components/shared': '/src/components/shared',
+        '@hooks/mobile': '/src/hooks/mobile',
+        '@hooks/shared': '/src/hooks/shared',
+      }
+
+      // Enable module federation for micro-frontends (if needed)
+      if (!isServer) {
+        config.optimization.runtimeChunk = {
+          name: 'runtime',
+        }
+      }
     }
 
     // In development, simplify bundle splitting to avoid module resolution issues
@@ -72,7 +174,6 @@ const nextConfig = {
           },
         },
       }
-      return config
     }
 
     // Force React to be bundled on server side instead of externalized

@@ -44,6 +44,12 @@ const ChartContainer = forwardRef<
 >(({ id, className, children, config, ...props }, ref) => {
   const uniqueId = useId()
   const chartId = `chart-${id || uniqueId.replace(/:/g, "")}`
+  
+  // Check if explicit height is provided (h-full, h-[300px], etc.) to override aspect-video
+  const hasExplicitHeight = className?.includes('h-') || className?.includes('height')
+  const baseClasses = hasExplicitHeight 
+    ? "flex justify-center text-xs min-h-[200px] min-w-[300px]" 
+    : "flex aspect-video justify-center text-xs min-h-[200px] min-w-[300px]"
 
   return (
     <ChartContext.Provider value={{ config }}>
@@ -51,13 +57,25 @@ const ChartContainer = forwardRef<
         data-chart={chartId}
         ref={ref}
         className={cn(
-          "flex aspect-video justify-center text-xs min-h-[200px] min-w-[300px] [&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-none [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-sector]:outline-none [&_.recharts-surface]:outline-none",
+          baseClasses,
+          "[&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-none [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-sector]:outline-none [&_.recharts-surface]:outline-none",
           className
         )}
+        style={{
+          width: '100%',
+          height: hasExplicitHeight ? undefined : '100%',
+          ...props.style
+        }}
         {...props}
       >
         <ChartStyle id={chartId} config={config} />
-        <RechartsPrimitive.ResponsiveContainer minHeight={200} minWidth={300}>
+        <RechartsPrimitive.ResponsiveContainer 
+          width="100%" 
+          height="100%" 
+          minHeight={200} 
+          minWidth={300}
+          aspect={undefined}
+        >
           {children}
         </RechartsPrimitive.ResponsiveContainer>
       </div>

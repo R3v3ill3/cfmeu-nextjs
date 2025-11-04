@@ -1,0 +1,14 @@
+{
+  "disabledDirectories": [
+    "batches_disabled_20251026_142049"
+  ],
+  "schedule": "0 9 * * 1-5",
+  "notifications": {},
+  "excludePatterns": [
+    "*.test.*",
+    "*.spec.*",
+    "node_modules/**",
+    ".next/**",
+    "coverage/**"
+  ]
+}

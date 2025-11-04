@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { toast } from 'sonner'
 
 interface ErrorHandlerOptions {
@@ -8,6 +8,7 @@ interface ErrorHandlerOptions {
   retryDelay?: number
   showToast?: boolean
   logToConsole?: boolean
+  cleanupOnUnmount?: boolean
 }
 
 interface ErrorState {
@@ -25,6 +26,8 @@ interface UseErrorHandlerReturn extends ErrorState {
     operation: () => Promise<T>,
     context?: string
   ) => Promise<T | null>
+  setCleanupFunction: (cleanupFn: () => void) => void
+  forceCleanup: () => void
 }
 
 export function useErrorHandler(options: ErrorHandlerOptions = {}): UseErrorHandlerReturn {
@@ -33,6 +36,7 @@ export function useErrorHandler(options: ErrorHandlerOptions = {}): UseErrorHand
     retryDelay = 1000,
     showToast = true,
     logToConsole = true,
+    cleanupOnUnmount = true,
   } = options
 
   const [errorState, setErrorState] = useState<ErrorState>({
@@ -43,27 +47,56 @@ export function useErrorHandler(options: ErrorHandlerOptions = {}): UseErrorHand
   })
 
   const retryOperationRef = useRef<(() => Promise<void>) | null>(null)
+  const timeoutRefs = useRef<NodeJS.Timeout[]>([])
+  const isMountedRef = useRef(true)
+  const cleanupRef = useRef<(() => void) | null>(null)
+
+  // Cleanup function for timeouts and resources
+  const cleanup = useCallback(() => {
+    // Clear all pending timeouts
+    timeoutRefs.current.forEach(timeoutId => {
+      clearTimeout(timeoutId)
+    })
+    timeoutRefs.current = []
+
+    // Clear retry operation
+    retryOperationRef.current = null
+
+    // Mark as unmounted
+    isMountedRef.current = false
+
+    // Call custom cleanup if provided
+    if (cleanupRef.current) {
+      cleanupRef.current()
+      cleanupRef.current = null
+    }
+  }, [])
 
   const handleError = useCallback((error: Error | string, context?: string) => {
+    // Don't handle errors if component is unmounted
+    if (!isMountedRef.current) return
+
     const errorObj = typeof error === 'string' ? new Error(error) : error
 
     if (logToConsole) {
       console.error(`Error${context ? ` in ${context}` : ''}:`, errorObj)
     }
 
-    setErrorState({
+    setErrorState(prev => ({
       error: errorObj,
       hasError: true,
       isRetrying: false,
-      retryCount: errorState.retryCount,
-    })
+      retryCount: prev.retryCount,
+    }))
 
     if (showToast) {
       toast.error(`Error${context ? ` in ${context}` : ''}: ${errorObj.message}`)
     }
-  }, [errorState.retryCount, showToast, logToConsole])
+  }, [showToast, logToConsole])
 
   const clearError = useCallback(() => {
+    if (!isMountedRef.current) return
+
     setErrorState({
       error: null,
       hasError: false,
@@ -74,7 +107,7 @@ export function useErrorHandler(options: ErrorHandlerOptions = {}): UseErrorHand
   }, [])
 
   const retry = useCallback(async () => {
-    if (!retryOperationRef.current || errorState.retryCount >= maxRetries) {
+    if (!retryOperationRef.current || errorState.retryCount >= maxRetries || !isMountedRef.current) {
       return
     }
 
@@ -85,24 +118,45 @@ export function useErrorHandler(options: ErrorHandlerOptions = {}): UseErrorHand
     }))
 
     try {
-      // Add exponential backoff delay
-      await new Promise(resolve =>
-        setTimeout(resolve, retryDelay * Math.pow(2, errorState.retryCount))
-      )
+      // Add exponential backoff delay with proper timeout management
+      const delay = retryDelay * Math.pow(2, errorState.retryCount)
+      await new Promise<void>((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+          // Remove from tracking when resolved
+          timeoutRefs.current = timeoutRefs.current.filter(id => id !== timeoutId)
+          if (isMountedRef.current) {
+            resolve()
+          } else {
+            reject(new Error('Component unmounted during retry delay'))
+          }
+        }, delay)
+
+        // Track timeout for cleanup
+        timeoutRefs.current.push(timeoutId)
+      })
+
+      // Check if still mounted before executing retry
+      if (!isMountedRef.current) {
+        return
+      }
 
       await retryOperationRef.current()
       clearError()
 
-      if (showToast) {
+      if (showToast && isMountedRef.current) {
         toast.success('Operation completed successfully after retry')
       }
     } catch (error) {
-      handleError(error as Error, 'retry attempt')
+      if (isMountedRef.current) {
+        handleError(error as Error, 'retry attempt')
+      }
     } finally {
-      setErrorState(prev => ({
-        ...prev,
-        isRetrying: false,
-      }))
+      if (isMountedRef.current) {
+        setErrorState(prev => ({
+          ...prev,
+          isRetrying: false,
+        }))
+      }
     }
   }, [errorState.retryCount, maxRetries, retryDelay, showToast, handleError, clearError])
 
@@ -110,17 +164,35 @@ export function useErrorHandler(options: ErrorHandlerOptions = {}): UseErrorHand
     operation: () => Promise<T>,
     context?: string
   ): Promise<T | null> => {
-    retryOperationRef.current = async () => await operation()
+    if (!isMountedRef.current) return null
+
+    retryOperationRef.current = async () => {
+      if (!isMountedRef.current) throw new Error('Component unmounted')
+      return await operation()
+    }
 
     try {
       const result = await operation()
-      clearError()
+      if (isMountedRef.current) {
+        clearError()
+      }
       return result
     } catch (error) {
-      handleError(error as Error, context)
+      if (isMountedRef.current) {
+        handleError(error as Error, context)
+      }
       return null
     }
   }, [handleError, clearError])
+
+  // Add cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (cleanupOnUnmount) {
+        cleanup()
+      }
+    }
+  }, [cleanup, cleanupOnUnmount])
 
   return {
     ...errorState,
@@ -128,6 +200,10 @@ export function useErrorHandler(options: ErrorHandlerOptions = {}): UseErrorHand
     clearError,
     retry,
     executeWithErrorHandling,
+    setCleanupFunction: (cleanupFn: () => void) => {
+      cleanupRef.current = cleanupFn
+    },
+    forceCleanup: cleanup,
   }
 }
 

@@ -21,6 +21,9 @@ async function getUserRole(userId: string): Promise<AppRole | null> {
 export const dynamic = 'force-dynamic'
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[AppLayout] Rendering layout for (app) route group')
+  }
   const supabase = await createServerSupabase()
   let user = null as null | { id: string }
   try {
@@ -30,6 +33,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     // Ignore and treat as unauthenticated
   }
   if (!user) {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[AppLayout] No user found, redirecting to /auth')
+    }
     redirect('/auth')
   }
   const role = user ? await getUserRole(user.id) : null
@@ -37,6 +43,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const userAgent = hdrs.get('user-agent') || undefined
   const isMobile = isMobileOrTablet(userAgent)
   const currentPath = hdrs.get('x-pathname') || ''
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[AppLayout] Rendering with mobile:', isMobile, 'path:', currentPath)
+  }
   return (
     <AuthProvider>
       <HelpContextProvider initialPathname={currentPath || '/'} initialRole={role}>
