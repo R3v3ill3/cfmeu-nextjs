@@ -37,20 +37,7 @@ const nextConfig = {
     serverComponentsExternalPackages: ['sharp', 'canvas'],
     // Mobile optimizations
     scrollRestoration: true,
-    largePageDataBytes: 128 * 1000, // 128KB for mobile
     optimizeCss: true,
-    optimizeServerReact: true,
-    // Enable web vitals reporting
-    webVitalsAttribution: ['CLS', 'LCP'],
-    // Production optimizations
-    ...(isProduction && {
-      // Optimize chunks for better caching
-      optimizeCss: true,
-      // Enable static optimization
-      staticWorkerRequestDeduping: true,
-      // Reduce client-side JavaScript
-      serverComponentsHmrCache: true,
-    }),
   },
 
   // Bundle analyzer for development and production optimization
