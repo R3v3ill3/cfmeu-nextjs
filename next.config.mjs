@@ -50,12 +50,13 @@ const nextConfig = {
     }
 
     // Production optimizations
-    if (!dev && isProduction) {
-      // Advanced code splitting for production
+    if (!dev && isProduction && !isServer) {
+      // Advanced code splitting for production - only for client builds
+      // Server builds use Next.js defaults to avoid bundling issues
       config.optimization.splitChunks = {
         chunks: 'all',
         minSize: 20000,
-        maxSize: isServer ? 500000 : 250000, // Larger chunks for server
+        maxSize: 250000,
         cacheGroups: {
           default: {
             minChunks: 2,
@@ -101,11 +102,11 @@ const nextConfig = {
         },
       }
 
-      // Tree shaking optimizations
+      // Tree shaking optimizations (client only)
       config.optimization.usedExports = true
       config.optimization.sideEffects = false
 
-      // Module concatenation
+      // Module concatenation (client only)
       config.optimization.concatenateModules = true
 
       // Production-specific plugins
