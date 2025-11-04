@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { ReactNode } from 'react'
-import { usePerformanceMonitoring } from "@/hooks/useMobilePerformance"
+import { useMobilePerformance } from "@/hooks/useMobilePerformance"
 
 // Performance thresholds for mobile devices
 export const PERFORMANCE_THRESHOLDS = {
@@ -239,7 +239,7 @@ export function PerformanceMonitor({
   enabled = true,
   interval = 30000, // 30 seconds
 }: PerformanceMonitorProps) {
-  const { metrics, startMonitoring, stopMonitoring } = usePerformanceMonitoring()
+  const { metrics, startMonitoring, stopMonitoring } = useMobilePerformance()
 
   useEffect(() => {
     if (!enabled) return

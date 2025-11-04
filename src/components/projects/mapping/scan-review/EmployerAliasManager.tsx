@@ -568,7 +568,9 @@ export function EmployerAliasManager({
               </DialogTitle>
               <DialogDescription>
                 {editDialog.mode === 'create'
-                  ? 'Add an alternative name that will match this employer'
+                  ? suggestedAlias && formData.alias === suggestedAlias
+                    ? `Add "${suggestedAlias}" as an alias for this employer to improve future matching`
+                    : 'Add an alternative name that will match this employer'
                   : 'Modify the alias details'
                 }
               </DialogDescription>
