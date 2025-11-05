@@ -39,7 +39,16 @@ export function usePendingProjectData({ projectId, enabled = true }: UsePendingP
               state,
               postcode,
               latitude,
-              longitude
+              longitude,
+              site_contacts (
+                id,
+                name,
+                role,
+                phone,
+                email,
+                created_at,
+                updated_at
+              )
             ),
             project_assignments (
               id,
@@ -68,17 +77,6 @@ export function usePendingProjectData({ projectId, enabled = true }: UsePendingP
                 name,
                 code
               )
-            ),
-            project_contacts (
-              id,
-              name,
-              role,
-              company,
-              phone,
-              email,
-              is_primary,
-              source,
-              created_at
             ),
             scan:mapping_sheet_scans!mapping_sheet_scans_project_id_fkey (
               id,

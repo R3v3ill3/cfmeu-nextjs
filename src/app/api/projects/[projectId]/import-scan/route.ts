@@ -88,18 +88,44 @@ export async function POST(
       if (safeProjectDecisions.address) {
         const { data: project } = await serviceSupabase
           .from('projects')
-          .select('main_job_site_id')
+          .select('main_job_site_id, name')
           .eq('id', projectId)
           .single()
 
         if (project?.main_job_site_id) {
+          // Update existing job site
           await serviceSupabase
             .from('job_sites')
             .update({ 
               full_address: safeProjectDecisions.address,
-              location: safeProjectDecisions.address 
+              location: safeProjectDecisions.address,
+              latitude: safeProjectDecisions.address_latitude || null,
+              longitude: safeProjectDecisions.address_longitude || null,
             })
             .eq('id', project.main_job_site_id)
+        } else {
+          // Create new job site if it doesn't exist
+          const { data: newJobSite, error: jobSiteError } = await serviceSupabase
+            .from('job_sites')
+            .insert({
+              project_id: projectId,
+              name: project?.name || 'Main Site',
+              is_main_site: true,
+              location: safeProjectDecisions.address,
+              full_address: safeProjectDecisions.address,
+              latitude: safeProjectDecisions.address_latitude || null,
+              longitude: safeProjectDecisions.address_longitude || null,
+            })
+            .select('id')
+            .single()
+
+          if (!jobSiteError && newJobSite) {
+            // Update project with the new main_job_site_id
+            await serviceSupabase
+              .from('projects')
+              .update({ main_job_site_id: newJobSite.id })
+              .eq('id', projectId)
+          }
         }
       }
 
@@ -119,16 +145,62 @@ export async function POST(
       // Get project's main site
       const { data: project } = await serviceSupabase
         .from('projects')
-        .select('main_job_site_id')
+        .select('main_job_site_id, name')
         .eq('id', projectId)
         .single()
 
-      if (!project?.main_job_site_id) {
-        throw new Error('Project has no main job site')
+      let mainJobSiteId = project?.main_job_site_id
+
+      // If project doesn't have a main job site, create one from scan data
+      if (!mainJobSiteId) {
+        // Try to get address from project decisions or scan data
+        const address = safeProjectDecisions.address || projectDecisions?.address
+        
+        if (address) {
+          // Create a new job site for this project
+          const { data: newJobSite, error: jobSiteError } = await serviceSupabase
+            .from('job_sites')
+            .insert({
+              project_id: projectId,
+              name: project?.name || 'Main Site',
+              is_main_site: true,
+              location: address,
+              full_address: address,
+              latitude: safeProjectDecisions.address_latitude || projectDecisions?.address_latitude || null,
+              longitude: safeProjectDecisions.address_longitude || projectDecisions?.address_longitude || null,
+            })
+            .select('id')
+            .single()
+
+          if (jobSiteError || !newJobSite) {
+            console.error('Failed to create job site:', jobSiteError)
+            throw new Error(`Failed to create job site: ${jobSiteError?.message || 'Unknown error'}`)
+          }
+
+          // Update project with the new main_job_site_id
+          const { error: updateError } = await serviceSupabase
+            .from('projects')
+            .update({ main_job_site_id: newJobSite.id })
+            .eq('id', projectId)
+
+          if (updateError) {
+            console.error('Failed to update project with main_job_site_id:', updateError)
+            throw new Error(`Failed to update project: ${updateError.message}`)
+          }
+
+          mainJobSiteId = newJobSite.id
+          console.log('Created main job site for project:', projectId, 'Job site ID:', mainJobSiteId)
+        } else {
+          // No address available - cannot create contacts without a job site
+          console.warn('Project has no main job site and no address data available. Skipping contact creation.')
+          // Skip contact creation but continue with rest of import
+        }
       }
 
-      for (const contact of preparedContacts) {
-        if (contact.existingId) {
+      // Only proceed with contact creation if we have a job site
+      if (mainJobSiteId) {
+        for (const contact of preparedContacts) {
+          if (contact.existingId) {
           const name = contact.name?.trim() || null
           const email = contact.email?.trim() || null
           const phone = contact.phone?.trim() || null
@@ -160,11 +232,11 @@ export async function POST(
             continue
           }
           
-          // Create new
+          // Create new contact
           const { error } = await serviceSupabase
             .from('site_contacts')
             .insert({
-              job_site_id: project.main_job_site_id,
+              job_site_id: mainJobSiteId,
               role: contact.role,
               name,
               email,
@@ -177,6 +249,8 @@ export async function POST(
             contactsCreated++
           }
         }
+      } else {
+        console.log('Skipping contact creation - no job site available')
       }
     }
 
