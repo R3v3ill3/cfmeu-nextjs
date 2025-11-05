@@ -7,9 +7,14 @@
 -- Prerequisites:
 --   * Run from a session authenticated as service_role (or using Supabase SQL IDE)
 --   * Replace the sample UUIDs with real patch / user ids that reflect prod usage
+--   * This script REQUIRES authentication - cannot be run via PostgREST/anon key
 --
 -- NOTE: run each block twice and compare the second (warm cache) result before
 --       and after the migration to measure improvements.
+--
+-- ERROR: If you see "Authentication required" error:
+--   This script must be run with service_role credentials in Supabase SQL Editor
+--   or via direct database connection, not through the API/PostgREST
 
 -- Baseline: admin without patch filters (replicates dashboard landing experience)
 EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)

@@ -2,10 +2,11 @@
 -- Identifies slow RLS policies and potential performance bottlenecks
 
 -- 1. Check for slow queries on key tables (requires pg_stat_statements extension)
--- Note: This requires the extension to be enabled
+-- Note: This requires the extension to be enabled and appropriate permissions
+-- Using relname instead of tablename for compatibility
 SELECT 
   schemaname,
-  tablename,
+  relname as tablename,
   seq_scan,
   seq_tup_read,
   idx_scan,
@@ -21,7 +22,7 @@ SELECT
   last_autoanalyze
 FROM pg_stat_user_tables
 WHERE schemaname = 'public'
-  AND tablename IN ('profiles', 'projects', 'employers', 'job_sites', 'project_assignments', 'site_employers')
+  AND relname IN ('profiles', 'projects', 'employers', 'job_sites', 'project_assignments', 'site_employers')
 ORDER BY seq_scan DESC;
 
 -- 2. Check RLS policies on key tables
@@ -66,9 +67,9 @@ ORDER BY tc.table_name, kcu.column_name;
 -- 4. Check table sizes and dead tuples (indicates need for VACUUM)
 SELECT 
   schemaname,
-  tablename,
-  pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size,
-  pg_size_pretty(pg_relation_size(schemaname||'.'||tablename)) AS table_size,
+  relname as tablename,
+  pg_size_pretty(pg_total_relation_size(schemaname||'.'||relname)) AS size,
+  pg_size_pretty(pg_relation_size(schemaname||'.'||relname)) AS table_size,
   n_live_tup,
   n_dead_tup,
   CASE 
@@ -77,7 +78,7 @@ SELECT
   END as dead_tuple_percentage
 FROM pg_stat_user_tables
 WHERE schemaname = 'public'
-  AND tablename IN ('profiles', 'projects', 'employers', 'job_sites', 'project_assignments', 'site_employers')
+  AND relname IN ('profiles', 'projects', 'employers', 'job_sites', 'project_assignments', 'site_employers')
 ORDER BY n_dead_tup DESC;
 
 -- 5. Check for long-running queries (if pg_stat_activity is accessible)

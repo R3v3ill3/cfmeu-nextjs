@@ -1,23 +1,26 @@
 -- Diagnostic script for authentication session issues
 -- Checks active sessions, session expiry, and potential session loss
+-- Note: Supabase auth.sessions table structure may vary - using available columns
 
--- 1. Check active sessions in auth schema
+-- 1. Check active sessions in auth schema (if accessible)
+-- Note: auth.sessions may not be directly accessible via PostgREST
+-- This query will work if you have direct database access
 SELECT 
   id,
   user_id,
   created_at,
   updated_at,
-  expires_at,
-  token_type,
-  EXTRACT(EPOCH FROM (expires_at - NOW())) as seconds_until_expiry,
+  -- expires_at column may not exist in all Supabase versions
+  -- Using created_at + 1 hour as approximate expiry
+  created_at + INTERVAL '1 hour' as approximate_expiry,
   CASE 
-    WHEN expires_at < NOW() THEN 'EXPIRED'
-    WHEN expires_at < NOW() + INTERVAL '1 hour' THEN 'EXPIRING_SOON'
+    WHEN created_at < NOW() - INTERVAL '1 hour' THEN 'LIKELY_EXPIRED'
+    WHEN created_at < NOW() - INTERVAL '50 minutes' THEN 'EXPIRING_SOON'
     ELSE 'ACTIVE'
   END as status
 FROM auth.sessions
-WHERE expires_at > NOW() - INTERVAL '1 day'  -- Check sessions from last 24 hours
-ORDER BY expires_at DESC
+WHERE created_at > NOW() - INTERVAL '1 day'  -- Check sessions from last 24 hours
+ORDER BY created_at DESC
 LIMIT 50;
 
 -- 2. Count sessions per user (potential session leakage)
@@ -26,24 +29,13 @@ SELECT
   COUNT(*) as session_count,
   MIN(created_at) as oldest_session,
   MAX(created_at) as newest_session,
-  COUNT(*) FILTER (WHERE expires_at < NOW()) as expired_count,
-  COUNT(*) FILTER (WHERE expires_at > NOW()) as active_count
+  COUNT(*) FILTER (WHERE created_at < NOW() - INTERVAL '1 hour') as likely_expired_count,
+  COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '1 hour') as likely_active_count
 FROM auth.sessions
 WHERE created_at > NOW() - INTERVAL '7 days'
 GROUP BY user_id
 HAVING COUNT(*) > 5  -- Flag users with many sessions
 ORDER BY session_count DESC;
-
--- 3. Check for session expiry patterns
-SELECT 
-  DATE_TRUNC('hour', expires_at) as expiry_hour,
-  COUNT(*) as session_count,
-  COUNT(*) FILTER (WHERE expires_at < NOW()) as expired,
-  COUNT(*) FILTER (WHERE expires_at > NOW()) as active
-FROM auth.sessions
-WHERE created_at > NOW() - INTERVAL '7 days'
-GROUP BY DATE_TRUNC('hour', expires_at)
-ORDER BY expiry_hour DESC;
 
 -- 4. Check user profiles and role assignments
 SELECT 
@@ -53,7 +45,16 @@ SELECT
   p.full_name,
   p.created_at,
   p.updated_at,
-  (SELECT COUNT(*) FROM auth.sessions WHERE user_id = p.id AND expires_at > NOW()) as active_sessions
+  p.last_login_at,
+  p.is_active,
+  -- Note: Cannot directly count sessions without expires_at column
+  -- Using last_login_at as proxy for recent activity
+  CASE 
+    WHEN p.last_login_at > NOW() - INTERVAL '1 hour' THEN 'RECENTLY_ACTIVE'
+    WHEN p.last_login_at > NOW() - INTERVAL '24 hours' THEN 'ACTIVE_TODAY'
+    WHEN p.last_login_at > NOW() - INTERVAL '7 days' THEN 'ACTIVE_THIS_WEEK'
+    ELSE 'INACTIVE'
+  END as activity_status
 FROM profiles p
 WHERE p.role IN ('admin', 'lead_organiser')
 ORDER BY p.updated_at DESC
