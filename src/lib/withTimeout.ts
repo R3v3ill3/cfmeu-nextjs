@@ -3,13 +3,14 @@
  */
 export const QUERY_TIMEOUTS = {
   // Simple queries (role, profile, basic selects)
-  SIMPLE: 5000,        // 5 seconds
+  // Increased from 5s to 10s due to database performance issues
+  SIMPLE: 10000,       // 10 seconds
   // Medium queries (single table with filters, basic joins)
-  MEDIUM: 10000,      // 10 seconds
+  MEDIUM: 15000,      // 15 seconds
   // Complex queries (multiple joins, aggregations, nested relations)
-  COMPLEX: 20000,     // 20 seconds
+  COMPLEX: 25000,     // 25 seconds
   // Very complex queries (deeply nested, large datasets)
-  VERY_COMPLEX: 30000, // 30 seconds
+  VERY_COMPLEX: 35000, // 35 seconds
 } as const;
 
 /**

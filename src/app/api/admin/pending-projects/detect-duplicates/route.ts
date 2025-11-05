@@ -156,9 +156,7 @@ export async function POST(request: NextRequest) {
         created_at,
         main_job_site:job_sites!main_job_site_id (
           full_address,
-          suburb,
-          state,
-          postcode
+          location
         )
       `)
       .eq('approval_status', 'pending')
@@ -192,9 +190,7 @@ export async function POST(request: NextRequest) {
         created_at,
         main_job_site:job_sites!main_job_site_id (
           full_address,
-          suburb,
-          state,
-          postcode
+          location
         )
       `)
       .eq('approval_status', 'active')

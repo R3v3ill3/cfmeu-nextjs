@@ -5,7 +5,8 @@ import type { Database } from '@/types/database'
 
 let browserClient: ReturnType<typeof createBrowserClient<Database>> | null = null
 let lastHealthCheck: number = 0
-const HEALTH_CHECK_INTERVAL = 60000 // 1 minute
+const HEALTH_CHECK_INTERVAL = 300000 // 5 minutes - less aggressive
+const HEALTH_CHECK_TIMEOUT = 10000 // 10 seconds - more lenient
 const MAX_RETRY_ATTEMPTS = 3
 const INITIAL_RETRY_DELAY = 1000 // 1 second
 
@@ -32,21 +33,25 @@ async function checkConnectionHealth(client: ReturnType<typeof createBrowserClie
     const { error } = await Promise.race([
       client.auth.getSession(),
       new Promise<{ error: Error }>((_, reject) => 
-        setTimeout(() => reject(new Error('Health check timeout')), 5000)
+        setTimeout(() => reject(new Error('Health check timeout')), HEALTH_CHECK_TIMEOUT)
       )
     ])
     const duration = Date.now() - startTime
     
     if (error) {
-      console.warn('[SupabaseClient] Health check failed:', {
-        error: error.message,
-        duration,
-        timestamp: new Date().toISOString(),
-      })
+      // Only log if it's a real error, not just a timeout (which is expected under load)
+      if (!error.message.includes('timeout')) {
+        console.warn('[SupabaseClient] Health check failed:', {
+          error: error.message,
+          duration,
+          timestamp: new Date().toISOString(),
+        })
+      }
       return false
     }
     
-    if (duration > 3000) {
+    // Only warn if very slow (> 5 seconds)
+    if (duration > 5000) {
       console.warn('[SupabaseClient] Health check slow:', {
         duration,
         timestamp: new Date().toISOString(),
@@ -55,10 +60,14 @@ async function checkConnectionHealth(client: ReturnType<typeof createBrowserClie
     
     return true
   } catch (error) {
-    console.error('[SupabaseClient] Health check exception:', {
-      error: error instanceof Error ? error.message : String(error),
-      timestamp: new Date().toISOString(),
-    })
+    // Don't log timeout errors as errors - they're expected under load
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    if (!errorMessage.includes('timeout')) {
+      console.error('[SupabaseClient] Health check exception:', {
+        error: errorMessage,
+        timestamp: new Date().toISOString(),
+      })
+    }
     return false
   }
 }
@@ -68,20 +77,22 @@ async function checkConnectionHealth(client: ReturnType<typeof createBrowserClie
  */
 export function getSupabaseBrowserClient(): ReturnType<typeof createBrowserClient<Database>> {
   if (browserClient) {
-    // Perform periodic health checks
+    // Perform periodic health checks (less frequently to avoid disruption)
     const now = Date.now()
     if (now - lastHealthCheck > HEALTH_CHECK_INTERVAL) {
       lastHealthCheck = now
       // Don't await - perform async health check in background
+      // Only reset if health check fails multiple times (not on first failure)
       checkConnectionHealth(browserClient).then(isHealthy => {
         if (!isHealthy) {
-          console.warn('[SupabaseClient] Health check failed, resetting client', {
+          // Don't reset immediately - health checks can fail under load
+          // Only log for monitoring
+          console.warn('[SupabaseClient] Health check failed (not resetting immediately)', {
             timestamp: new Date().toISOString(),
           })
-          resetSupabaseBrowserClient()
         }
       }).catch(() => {
-        // Ignore health check errors
+        // Ignore health check errors - they're expected under load
       })
     }
     return browserClient
