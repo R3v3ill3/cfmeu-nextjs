@@ -202,9 +202,9 @@ export function EnhancedProjectReviewDialog({
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="contacts">
                   Contacts
-                  {project.project_contacts && project.project_contacts.length > 0 && (
+                  {project.main_job_site?.site_contacts && project.main_job_site.site_contacts.length > 0 && (
                     <Badge variant="secondary" className="ml-1 text-xs">
-                      {project.project_contacts.length}
+                      {project.main_job_site.site_contacts.length}
                     </Badge>
                   )}
                 </TabsTrigger>
@@ -232,7 +232,7 @@ export function EnhancedProjectReviewDialog({
 
                 <TabsContent value="contacts">
                   <ContactsSection
-                    contacts={project.project_contacts || []}
+                    contacts={project.main_job_site?.site_contacts || []}
                     readOnly={true}
                   />
                 </TabsContent>

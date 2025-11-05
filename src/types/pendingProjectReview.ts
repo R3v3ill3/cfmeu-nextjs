@@ -33,6 +33,7 @@ export interface PendingProject {
   main_job_site_id: string | null;
   main_job_site?: JobSiteDetails | null;
   project_assignments?: ProjectAssignmentDetails[];
+  // Deprecated: Use main_job_site?.site_contacts instead
   project_contacts?: ProjectContactDetails[];
   scan?: MappingSheetScanDetails[];
 }
@@ -46,6 +47,7 @@ export interface JobSiteDetails {
   postcode: string | null;
   latitude: number | null;
   longitude: number | null;
+  site_contacts?: SiteContactDetails[];
 }
 
 export interface ProjectAssignmentDetails {
@@ -75,14 +77,22 @@ export interface EmployerDetails {
 
 export interface ProjectContactDetails {
   id: string;
-  name: string | null;
-  role: string | null;
-  company: string | null;
+  name: string;
+  role: string;
   phone: string | null;
   email: string | null;
-  is_primary: boolean;
-  source: string | null;
   created_at: string;
+  updated_at: string;
+}
+
+export interface SiteContactDetails {
+  id: string;
+  name: string;
+  role: string;
+  phone: string | null;
+  email: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface MappingSheetScanDetails {

@@ -12,12 +12,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { User, Mail, Phone, Building, Star, Edit, Trash } from 'lucide-react';
-import type { ProjectContactDetails } from '@/types/pendingProjectReview';
+import { User, Mail, Phone, Edit, Trash } from 'lucide-react';
+import type { SiteContactDetails } from '@/types/pendingProjectReview';
 
 interface ContactsSectionProps {
-  contacts: ProjectContactDetails[];
-  onEdit?: (contact: ProjectContactDetails) => void;
+  contacts: SiteContactDetails[];
+  onEdit?: (contact: SiteContactDetails) => void;
   onDelete?: (contactId: string) => void;
   onAdd?: () => void;
   readOnly?: boolean;
@@ -75,9 +75,7 @@ export function ContactsSection({
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Role</TableHead>
-              <TableHead>Company</TableHead>
               <TableHead>Contact Info</TableHead>
-              <TableHead>Source</TableHead>
               {!readOnly && <TableHead className="text-right">Actions</TableHead>}
             </TableRow>
           </TableHeader>
@@ -85,29 +83,11 @@ export function ContactsSection({
             {contacts.map((contact) => (
               <TableRow key={contact.id}>
                 <TableCell>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{contact.name || 'N/A'}</span>
-                    {contact.is_primary && (
-                      <Badge variant="default" className="flex items-center gap-1">
-                        <Star className="h-3 w-3" />
-                        Primary
-                      </Badge>
-                    )}
-                  </div>
+                  <span className="font-medium">{contact.name}</span>
                 </TableCell>
                 <TableCell>
                   {contact.role ? (
                     <Badge variant="outline">{contact.role}</Badge>
-                  ) : (
-                    <span className="text-muted-foreground">N/A</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  {contact.company ? (
-                    <div className="flex items-center gap-1">
-                      <Building className="h-3 w-3 text-muted-foreground" />
-                      <span className="text-sm">{contact.company}</span>
-                    </div>
                   ) : (
                     <span className="text-muted-foreground">N/A</span>
                   )}
@@ -140,15 +120,6 @@ export function ContactsSection({
                       <span className="text-muted-foreground">No contact info</span>
                     )}
                   </div>
-                </TableCell>
-                <TableCell>
-                  {contact.source ? (
-                    <Badge variant="secondary" className="text-xs">
-                      {contact.source}
-                    </Badge>
-                  ) : (
-                    <span className="text-muted-foreground text-xs">Unknown</span>
-                  )}
                 </TableCell>
                 {!readOnly && (
                   <TableCell className="text-right">
