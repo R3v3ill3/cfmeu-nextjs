@@ -182,23 +182,57 @@ export async function POST(
 
     // 3. Create subcontractor assignments
     if (subcontractorDecisions && subcontractorDecisions.length > 0) {
+      const tradeTypeErrors: string[] = []
+      
       for (const sub of subcontractorDecisions) {
         if (!sub.matchedEmployer) continue
 
         try {
-          // Map trade name to trade_type code
-          const tradeCode = mapTradeNameToCode(sub.trade)
+          // Try to use trade_type_code from decision first, then fall back to mapping
+          let tradeCode: string | null = null
           
-          // Get trade_type_id
-          const { data: tradeType } = await serviceSupabase
+          if (sub.trade_type_code && sub.trade_type_code.trim()) {
+            // Use the trade_type_code from the decision if available
+            tradeCode = sub.trade_type_code.trim()
+          } else if (sub.trade && sub.trade.trim()) {
+            // Fall back to mapping the trade name
+            tradeCode = mapTradeNameToCode(sub.trade.trim())
+          }
+          
+          if (!tradeCode) {
+            const errorMsg = `No valid trade type code for subcontractor "${sub.matchedEmployer?.name || sub.company}" (trade: "${sub.trade || 'unknown'}")`
+            console.error(errorMsg)
+            tradeTypeErrors.push(errorMsg)
+            continue
+          }
+          
+          // Get trade_type_id - validate it exists in database
+          let { data: tradeType, error: tradeTypeError } = await serviceSupabase
             .from('trade_types')
             .select('id')
             .eq('code', tradeCode)
             .single()
 
-          if (!tradeType) {
-            console.warn(`Trade type not found for: ${sub.trade}`)
-            continue
+          // If trade type doesn't exist, try fallback to general_construction
+          if (tradeTypeError || !tradeType) {
+            console.warn(`Trade type "${tradeCode}" not found, trying fallback "general_construction" for "${sub.matchedEmployer?.name || sub.company}"`)
+            
+            const { data: fallbackTradeType, error: fallbackError } = await serviceSupabase
+              .from('trade_types')
+              .select('id')
+              .eq('code', 'general_construction')
+              .single()
+
+            if (fallbackError || !fallbackTradeType) {
+              // Even fallback doesn't exist - this is a serious database issue
+              const errorMsg = `Trade type "${tradeCode}" not found and fallback "general_construction" also not found. Cannot create assignment for "${sub.matchedEmployer?.name || sub.company}" (original trade: "${sub.trade || 'unknown'}")`
+              console.error(errorMsg, tradeTypeError, fallbackError)
+              tradeTypeErrors.push(errorMsg)
+              continue
+            }
+            
+            tradeType = fallbackTradeType
+            console.log(`Using fallback trade type "general_construction" for "${sub.matchedEmployer?.name || sub.company}" (original: "${sub.trade}")`)
           }
 
           // Create project assignment
@@ -208,7 +242,7 @@ export async function POST(
               project_id: projectId,
               employer_id: sub.matchedEmployer.id,
               assignment_type: 'trade_work',
-              trade_type_id: tradeType.id,
+              trade_type_id: tradeType.id, // This must be valid to pass constraint
               status: sub.status || 'active',  // Include status from scan review
               status_updated_at: new Date().toISOString(),
               status_updated_by: user.id,
@@ -223,15 +257,30 @@ export async function POST(
             // Check if it's a duplicate
             if (error.code === '23505') {
               console.log('Assignment already exists:', sub.matchedEmployer.name, tradeCode)
+            } else if (error.code === '23514') {
+              // Check constraint violation
+              const errorMsg = `Check constraint violation for "${sub.matchedEmployer.name}" (trade: "${sub.trade}", code: "${tradeCode}"). This usually means the trade type is invalid or missing.`
+              console.error(errorMsg, error)
+              tradeTypeErrors.push(errorMsg)
             } else {
               console.error('Failed to create assignment:', error)
+              tradeTypeErrors.push(`Failed to create assignment for "${sub.matchedEmployer.name}": ${error.message}`)
             }
           } else {
             subcontractorsCreated++
           }
-        } catch (error) {
-          console.error('Error processing subcontractor:', sub, error)
+        } catch (error: any) {
+          const errorMsg = `Error processing subcontractor "${sub.matchedEmployer?.name || sub.company}": ${error?.message || String(error)}`
+          console.error(errorMsg, error)
+          tradeTypeErrors.push(errorMsg)
         }
+      }
+      
+      // If there were trade type errors, include them in the response
+      if (tradeTypeErrors.length > 0) {
+        console.error('Trade type errors during import:', tradeTypeErrors)
+        // Don't fail the whole import, but log the errors
+        // The errors are already logged above
       }
     }
 

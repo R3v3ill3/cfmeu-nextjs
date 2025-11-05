@@ -263,10 +263,20 @@ export function SubcontractorsReview({
 
       // 2. Add each additional employer as separate decision
       decision.additionalEmployers?.forEach((addEmp: any) => {
+        // Ensure we have a valid trade_type_code - use from decision or map from trade name
+        let tradeTypeCode = decision.trade_type_code
+        if (!tradeTypeCode && decision.trade) {
+          tradeTypeCode = mapTradeNameToCode(decision.trade)
+        }
+        // Fallback to general_construction if still no code
+        if (!tradeTypeCode) {
+          tradeTypeCode = 'general_construction'
+        }
+        
         flattenedDecisions.push({
           trade: decision.trade,
           stage: decision.stage,
-          trade_type_code: decision.trade_type_code,
+          trade_type_code: tradeTypeCode, // Ensure always has a valid code
           company: addEmp.name,
           matchedEmployer: {
             id: addEmp.id,
