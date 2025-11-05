@@ -45,8 +45,12 @@ const baseNavItems: NavItem[] = [
   { path: "/site-visits", label: "Site Visits", icon: FileCheck, description: "Site visit records and reports" },
 ]
 
-function useVisibleNavItems(userRole: string | null, isLoadingRole: boolean): NavItem[] {
+function useVisibleNavItems(userRole: string | null, isLoadingRole: boolean, cachedRole?: string | null): NavItem[] {
   const { visibility } = useNavigationVisibility()
+  // Use cached role if available to prevent menu flicker during refetch
+  const effectiveRole = userRole ?? cachedRole ?? null;
+  const effectiveIsLoading = isLoadingRole && !cachedRole;
+  
   const items: NavItem[] = []
   
   // Always show Dashboard
@@ -55,10 +59,10 @@ function useVisibleNavItems(userRole: string | null, isLoadingRole: boolean): Na
   // Always show Projects
   items.push({ path: "/projects", label: "Projects", icon: FolderOpen, description: "Manage construction projects" })
   
-  // Wait for role to load before showing role-dependent items
-  if (!isLoadingRole && userRole) {
+  // Wait for role to load before showing role-dependent items (but use cached role if available)
+  if (!effectiveIsLoading && effectiveRole) {
     // Patch - check role and visibility
-    if ((userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") && visibility.patch) {
+    if ((effectiveRole === "organiser" || effectiveRole === "lead_organiser" || effectiveRole === "admin") && visibility.patch) {
       items.push({ path: "/patch", label: "Patch", icon: Users, description: "Patch management and organization" })
     }
   }
@@ -83,15 +87,15 @@ function useVisibleNavItems(userRole: string | null, isLoadingRole: boolean): Na
     items.push({ path: "/map", label: "Map", icon: MapPin, description: "Interactive patch and job site maps" })
   }
   
-  // Wait for role to load before showing role-dependent items
-  if (!isLoadingRole && userRole) {
+  // Wait for role to load before showing role-dependent items (but use cached role if available)
+  if (!effectiveIsLoading && effectiveRole) {
     // Site Visits - check role and visibility
-    if ((userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") && visibility.site_visits) {
+    if ((effectiveRole === "organiser" || effectiveRole === "lead_organiser" || effectiveRole === "admin") && visibility.site_visits) {
       items.push({ path: "/site-visits", label: "Site Visits", icon: FileCheck, description: "Site visit records and reports" })
     }
     
     // Campaigns - check role and visibility
-    if ((userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") && visibility.campaigns) {
+    if ((effectiveRole === "organiser" || effectiveRole === "lead_organiser" || effectiveRole === "admin") && visibility.campaigns) {
       items.push({ path: "/campaigns", label: "Campaigns", icon: BarChart3, description: "Campaign activities and tracking" })
     }
   }
@@ -105,17 +109,18 @@ function useVisibleNavItems(userRole: string | null, isLoadingRole: boolean): Na
   // Settings - always show for authenticated users
   items.push({ path: "/settings", label: "Settings", icon: Settings, description: "Account settings and preferences" })
 
-  // Wait for role to load before showing role-dependent items
-  if (!isLoadingRole && userRole) {
+  // Wait for role to load before showing role-dependent items (but use cached role if available)
+  if (!effectiveIsLoading && effectiveRole) {
     // Lead Console - show for lead organisers and admins when enabled
-    if ((userRole === "lead_organiser" || userRole === "admin") && visibility.lead_console) {
+    if ((effectiveRole === "lead_organiser" || effectiveRole === "admin") && visibility.lead_console) {
       items.push({ path: "/lead", label: "Co-ordinator Console", icon: Crown, description: "Manage organisers and patch assignments" })
     }
 
     // Administration - show for admins and lead organisers
-    if (userRole === "admin" || userRole === "lead_organiser") {
-      const label = userRole === "admin" ? "Administration" : "Management"
-      const description = userRole === "admin" 
+    // Use cached role to prevent flicker during refetch
+    if (effectiveRole === "admin" || effectiveRole === "lead_organiser") {
+      const label = effectiveRole === "admin" ? "Administration" : "Management"
+      const description = effectiveRole === "admin" 
         ? "System administration and user management" 
         : "Co-ordinator management and data operations"
       items.push({ path: "/admin", label, icon: Shield, description })
@@ -129,8 +134,58 @@ export default function DesktopLayout({ children }: { children: ReactNode }) {
   const [aiHelpOpen, setAiHelpOpen] = useState(false)
   const pathname = usePathname()
   const { user, signOut } = useAuth()
-  const { role: userRole, isLoading: isLoadingRole } = useUserRole()
-  const items = useVisibleNavItems(userRole ?? null, isLoadingRole)
+  const { role: userRole, isLoading: isLoadingRole, error: roleError } = useUserRole()
+  
+  // Get cached role from sessionStorage to prevent menu flicker
+  const [cachedRole, setCachedRole] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null
+    const stored = window.sessionStorage.getItem("cfmeu:user-role")
+    return stored ? stored : null
+  })
+  
+  // Update cached role when role changes
+  useEffect(() => {
+    if (userRole) {
+      setCachedRole(userRole)
+    }
+  }, [userRole])
+  
+  const items = useVisibleNavItems(userRole ?? null, isLoadingRole, cachedRole)
+  
+  // Log role loading failures
+  useEffect(() => {
+    if (roleError) {
+      console.error('[DesktopLayout] Role loading failed:', {
+        userId: user?.id,
+        error: roleError,
+        errorMessage: roleError instanceof Error ? roleError.message : String(roleError),
+        pathname,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }, [roleError, user?.id, pathname]);
+  
+  // Log when Administration menu should appear/disappear
+  useEffect(() => {
+    const shouldShowAdmin = !isLoadingRole && userRole && (userRole === "admin" || userRole === "lead_organiser");
+    const hasAdminItem = items.some(item => item.path === "/admin");
+    
+    if (shouldShowAdmin && !hasAdminItem) {
+      console.warn('[DesktopLayout] Administration menu should be visible but is missing', {
+        userRole,
+        isLoadingRole,
+        pathname,
+        timestamp: new Date().toISOString(),
+      });
+    } else if (!shouldShowAdmin && hasAdminItem) {
+      console.warn('[DesktopLayout] Administration menu should not be visible but is present', {
+        userRole,
+        isLoadingRole,
+        pathname,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }, [userRole, isLoadingRole, items, pathname]);
   const { isNavigating, startNavigation } = useNavigationLoading()
   const [query, setQuery] = useState("")
   const [joinQrOpen, setJoinQrOpen] = useState(false)

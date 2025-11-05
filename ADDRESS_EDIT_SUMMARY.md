@@ -33,7 +33,14 @@ Successfully added the ability to edit project addresses in the Edit Project Dia
 - Saves both address text and coordinates
 - Links job site to project automatically
 
-### 4. Mobile Support
+### 4. Automatic Patch Assignment ✨ NEW
+- When address has coordinates, automatically assigns to geographic patch
+- Only assigns if project not already in a patch
+- Uses database trigger with PostGIS spatial matching
+- Notifies user when patch is auto-assigned
+- Based on geofencing boundaries
+
+### 5. Mobile Support
 - Geolocation "Use Current Location" button
 - Touch-friendly interface
 - Responsive design
@@ -93,12 +100,16 @@ Stage:        [dropdown]
 - Accurate addresses with Google validation
 - Use current location when at construction site
 - See validation errors immediately
+- **Automatic patch assignment** - no manual work needed
+- Clear notification when patch is assigned
 
 ### For the System
 - Standardized address format
 - Coordinates enable mapping features
-- Automatic patch assignment via geofencing
+- **Automatic patch assignment via geofencing** - projects auto-assigned to territories
 - Proximity search capabilities
+- Reduced manual admin work
+- Geographic accuracy
 
 ## How It Works
 
@@ -116,12 +127,16 @@ User enters "789 Pitt St, Sydney NSW 2000"
 User saves → New main job site created and linked to project
 ```
 
-### Scenario 3: Use Geolocation (Mobile)
+### Scenario 3: Use Geolocation with Auto Patch Assignment (Mobile)
 ```
-Organiser visits construction site
+Organiser visits construction site in Parramatta
 Opens Edit on mobile → Clicks location icon
 GPS coordinates → "10 Construction Way, Parramatta NSW 2150"
 Saves → Address and coordinates stored
+      → System checks: project has no patch assigned
+      → Coordinates fall within "Parramatta" patch boundary
+      → Automatically assigns to Parramatta patch
+      → User sees: "✅ Automatically assigned to patch: Parramatta"
 ```
 
 ## Data Schema
@@ -202,6 +217,8 @@ geom: GEOMETRY      -- PostGIS spatial data
 ✅ Mobile geolocation supported
 ✅ Existing addresses pre-filled
 ✅ New job sites created when needed
+✅ **Automatic patch assignment based on coordinates**
+✅ **User notification when patch assigned**
 ✅ No breaking changes to existing functionality
 ✅ Documentation complete
 

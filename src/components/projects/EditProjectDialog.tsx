@@ -268,6 +268,7 @@ export function EditProjectDialog({
       if (updErr) throw updErr;
 
       // 1b) Update or create main job site with address
+      let updatedJobSiteId = mainJobSiteId;
       if (addressData?.formatted) {
         const sitePayload: any = {
           full_address: addressData.formatted,
@@ -309,6 +310,7 @@ export function EditProjectDialog({
             console.warn("Failed to create job site:", siteCreateErr);
             toast.warning("Project updated but address creation failed");
           } else if (newSite) {
+            updatedJobSiteId = newSite.id;
             // Link new job site as main site
             const { error: linkErr } = await supabase
               .from("projects")
@@ -320,6 +322,36 @@ export function EditProjectDialog({
             } else {
               setMainJobSiteId(newSite.id);
             }
+          }
+        }
+
+        // 1c) Check if patch was auto-assigned based on coordinates
+        // The database trigger `job_sites_set_patch_from_coords` automatically assigns patches
+        // when coordinates are present. Let's check if it was assigned and notify the user.
+        if (updatedJobSiteId && addressData.lat && addressData.lng) {
+          try {
+            const { data: jobSiteWithPatch, error: patchCheckErr } = await supabase
+              .from("job_sites")
+              .select("patch_id, patches:patch_id(name)")
+              .eq("id", updatedJobSiteId)
+              .single();
+
+            if (!patchCheckErr && jobSiteWithPatch?.patch_id) {
+              const patchData = Array.isArray(jobSiteWithPatch.patches) 
+                ? jobSiteWithPatch.patches[0] 
+                : jobSiteWithPatch.patches;
+              
+              if (patchData?.name) {
+                // Patch was automatically assigned!
+                toast.success(`Automatically assigned to patch: ${patchData.name}`, {
+                  description: "Based on project location coordinates",
+                  duration: 4000,
+                });
+              }
+            }
+          } catch (e) {
+            // Non-critical - don't block the save
+            console.debug("Could not check patch assignment:", e);
           }
         }
       }

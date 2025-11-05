@@ -39,7 +39,7 @@ import { FwcEbaSearchModal } from "./FwcEbaSearchModal";
 import { IncolinkActionModal } from "./IncolinkActionModal";
 import { useToast } from "@/hooks/use-toast";
 import { EmployerCategoriesEditor } from "./EmployerCategoriesEditor";
-import { withTimeout } from "@/lib/withTimeout";
+import { withTimeout, QUERY_TIMEOUTS } from "@/lib/withTimeout";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TrafficLightRatingTab } from "./TrafficLightRatingTab";
@@ -248,7 +248,7 @@ export const EmployerDetailModal = ({
             .select("role")
             .eq("id", user.id)
             .maybeSingle(),
-          15000,
+          QUERY_TIMEOUTS.SIMPLE,
           "fetch my role"
         );
         if (res.error) throw res.error;
@@ -268,7 +268,17 @@ export const EmployerDetailModal = ({
   const { data: employer, isLoading, error: employerError, refetch: refetchEmployer } = useQuery({
     queryKey: ["employer-detail", employerId],
     queryFn: async () => {
-      if (!employerId) return null;
+      if (!employerId) {
+        console.log('[EmployerDetailModal] No employerId provided, returning null');
+        return null;
+      }
+      
+      const startTime = Date.now();
+      console.log('[EmployerDetailModal] Fetching employer details', {
+        employerId,
+        timestamp: new Date().toISOString(),
+      });
+      
       const supabase = getSupabaseBrowserClient();
       try {
         const res = await withTimeout<any>(
@@ -283,12 +293,20 @@ export const EmployerDetailModal = ({
             )
             .eq("id", employerId)
             .single(),
-          20000,
+          QUERY_TIMEOUTS.COMPLEX,
           "fetch employer details"
         );
         if (res.error) {
           // Log and fall back to separate queries; some rows may fail due to relationship issues or RLS
-          console.error("Employer relational fetch failed, falling back:", res.error);
+          const duration = Date.now() - startTime;
+          console.error("[EmployerDetailModal] Employer relational fetch failed, falling back:", {
+            employerId,
+            error: res.error,
+            errorCode: res.error.code,
+            errorMessage: res.error.message,
+            duration,
+            timestamp: new Date().toISOString(),
+          });
 
           // Base employer (no nested relations)
           const base = await withTimeout<any>(
@@ -302,7 +320,7 @@ export const EmployerDetailModal = ({
               )
               .eq("id", employerId)
               .single(),
-            20000,
+            QUERY_TIMEOUTS.MEDIUM,
             "fetch employer base"
           );
           if (base.error) throw base.error;
@@ -330,7 +348,7 @@ export const EmployerDetailModal = ({
                 `)
                 .eq("employer_id", employerId)
                 .order("fwc_certified_date", { ascending: false }),
-              20000,
+              QUERY_TIMEOUTS.MEDIUM,
               "fetch employer eba records"
             );
             if (!eba.error) {
@@ -340,18 +358,49 @@ export const EmployerDetailModal = ({
             // Ignore EBA errors; not critical for base rendering
           }
 
+          const duration = Date.now() - startTime;
+          console.log('[EmployerDetailModal] Fallback fetch completed', {
+            employerId,
+            duration,
+            hasBaseData: !!base.data,
+            ebaRecordsCount: ebaRecords.length,
+          });
           return {
             ...base.data,
             company_eba_records: ebaRecords,
           } as EmployerWithEba;
         }
+        const duration = Date.now() - startTime;
+        console.log('[EmployerDetailModal] Employer details fetched successfully', {
+          employerId,
+          duration,
+          hasEbaRecords: !!(res.data as any)?.company_eba_records?.length,
+        });
         return res.data as EmployerWithEba;
       } catch (err: any) {
+        const duration = Date.now() - startTime;
+        console.error('[EmployerDetailModal] Exception fetching employer details:', {
+          employerId,
+          error: err,
+          errorCode: err?.code,
+          errorMessage: err instanceof Error ? err.message : String(err),
+          duration,
+          timestamp: new Date().toISOString(),
+        });
         if (err?.code === "ETIMEDOUT") {
+          console.warn('[EmployerDetailModal] Timeout detected, resetting Supabase client');
           resetSupabaseBrowserClient();
         }
         throw err;
       }
+    },
+    onError: (error) => {
+      console.error('[EmployerDetailModal] Query error:', {
+        employerId,
+        error,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        timestamp: new Date().toISOString(),
+      });
     },
     enabled: !!employerId && isOpen && !authLoading,
     retry: 1,

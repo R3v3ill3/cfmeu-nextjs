@@ -28,11 +28,35 @@ export async function middleware(req: NextRequest) {
   )
 
   // IMPORTANT: Refresh auth session - this handles PKCE code exchange when present
+  const authStartTime = Date.now();
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser()
+  const authDuration = Date.now() - authStartTime;
 
-  console.log('[Middleware] Auth user:', user ? `User ${user.id}` : 'No session', 'Path:', req.nextUrl.pathname)
+  const timestamp = new Date().toISOString();
+  const logData = {
+    path: req.nextUrl.pathname,
+    userId: user?.id || null,
+    hasSession: !!user,
+    authDuration,
+    timestamp,
+    method: req.method,
+  };
+
+  if (authError) {
+    console.error('[Middleware] Auth error:', {
+      ...logData,
+      error: authError,
+      errorMessage: authError.message,
+      errorCode: authError.status,
+    });
+  } else if (!user) {
+    console.warn('[Middleware] No authenticated user', logData);
+  } else {
+    console.log('[Middleware] Auth user:', `User ${user.id}`, logData);
+  }
   
   // Generate a cryptographically secure nonce for CSP
   const nonce = Buffer.from(crypto.randomUUID()).toString('base64')

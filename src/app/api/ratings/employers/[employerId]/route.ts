@@ -90,14 +90,18 @@ export async function GET(request: NextRequest, { params }: { params: { employer
       environment: process.env.NODE_ENV || 'development'
     });
 
-    // Check if rating system is enabled
+    // Check if rating system is enabled - early return to prevent unnecessary processing
     if (!featureFlags.isEnabled('RATING_SYSTEM_ENABLED')) {
-      console.log('Rating system is disabled - returning empty data');
+      console.log('[RatingAPI] Rating system is disabled - returning empty data immediately', {
+        employerId,
+        timestamp: new Date().toISOString(),
+      });
       const emptyResponse: EmployerRatingResponse = {
         rating_history: [],
         project_data_rating: null,
         organiser_expertise_rating: null
       };
+      // Return immediately without any database queries
       return NextResponse.json(emptyResponse, {
         status: 200,
         headers: {

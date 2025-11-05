@@ -22,17 +22,38 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     // Set up auth state listener
     const supabase = getSupabaseBrowserClient();
+    
+    console.log('[useAuth] Setting up auth state listener');
+    
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        const timestamp = new Date().toISOString();
+        console.log(`[useAuth] Auth state change: ${event}`, {
+          timestamp,
+          hasSession: !!session,
+          userId: session?.user?.id,
+          sessionExpires: session?.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
+        });
+        
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
+        
+        if (!session?.user) {
+          console.warn('[useAuth] Session lost - no user in session', { event, timestamp });
+        }
+        
         if (session?.user && (event === 'SIGNED_IN' || event === 'USER_UPDATED')) {
           // Sync profile and apply any pending role
           try {
+            console.log('[useAuth] Applying pending user on login', { userId: session.user.id });
             await supabase.rpc('apply_pending_user_on_login');
+            console.log('[useAuth] Successfully applied pending user');
           } catch (error) {
-            console.error('Failed to apply pending user:', error);
+            console.error('[useAuth] Failed to apply pending user:', error, {
+              userId: session.user.id,
+              errorMessage: error instanceof Error ? error.message : String(error),
+            });
           }
           // If user remains viewer, raise a pending request automatically
           try {
@@ -49,19 +70,39 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 notes: 'Self-signup request'
               });
             }
-          } catch {}
+          } catch (error) {
+            console.warn('[useAuth] Failed to check/update viewer status:', error);
+          }
         }
       }
     );
 
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    console.log('[useAuth] Fetching initial session');
+    const startTime = Date.now();
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      const duration = Date.now() - startTime;
+      if (error) {
+        console.error('[useAuth] Error fetching initial session:', error, { duration });
+      } else {
+        console.log('[useAuth] Initial session loaded', {
+          duration,
+          hasSession: !!session,
+          userId: session?.user?.id,
+        });
+      }
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+    }).catch((error) => {
+      console.error('[useAuth] Exception fetching initial session:', error);
+      setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      console.log('[useAuth] Cleaning up auth state listener');
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signOut = async () => {

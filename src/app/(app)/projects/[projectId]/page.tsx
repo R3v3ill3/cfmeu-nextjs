@@ -112,29 +112,75 @@ export default function ProjectDetailPage() {
   const [estSaving, setEstSaving] = useState(false)
   const [showContractorAssignment, setShowContractorAssignment] = useState(false)
 
-  const { data: project, isLoading: projectLoading, isFetching: projectFetching } = useQuery({
+  const { data: project, isLoading: projectLoading, isFetching: projectFetching, error: projectError } = useQuery({
     queryKey: ["project-detail", projectId],
     enabled: !!projectId,
     staleTime: 30000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("projects")
-        .select(`
-          id, name, main_job_site_id, value, tier, organising_universe, stage_class, 
-          proposed_start_date, proposed_finish_date, roe_email, project_type, 
-          state_funding, federal_funding, builder_id,
-          project_assignments(
-            assignment_type,
-            contractor_role_types(code),
-            employers(name, enterprise_agreement_status)
-          )
-        `)
-        .eq("id", projectId)
-        .maybeSingle()
-      if (error) throw error
-      return data
-    }
+      const startTime = Date.now();
+      console.log('[ProjectDetailPage] Fetching project details', {
+        projectId,
+        timestamp: new Date().toISOString(),
+      });
+      
+      try {
+        const { data, error } = await supabase
+          .from("projects")
+          .select(`
+            id, name, main_job_site_id, value, tier, organising_universe, stage_class, 
+            proposed_start_date, proposed_finish_date, roe_email, project_type, 
+            state_funding, federal_funding, builder_id,
+            project_assignments(
+              assignment_type,
+              contractor_role_types(code),
+              employers(name, enterprise_agreement_status)
+            )
+          `)
+          .eq("id", projectId)
+          .maybeSingle()
+        
+        const duration = Date.now() - startTime;
+        
+        if (error) {
+          console.error('[ProjectDetailPage] Error fetching project:', {
+            projectId,
+            error,
+            errorCode: error.code,
+            errorMessage: error.message,
+            duration,
+            timestamp: new Date().toISOString(),
+          });
+          throw error;
+        }
+        
+        console.log('[ProjectDetailPage] Project details fetched successfully', {
+          projectId,
+          duration,
+          hasData: !!data,
+        });
+        
+        return data;
+      } catch (err) {
+        const duration = Date.now() - startTime;
+        console.error('[ProjectDetailPage] Exception fetching project:', {
+          projectId,
+          error: err,
+          errorMessage: err instanceof Error ? err.message : String(err),
+          duration,
+          timestamp: new Date().toISOString(),
+        });
+        throw err;
+      }
+    },
+    onError: (error) => {
+      console.error('[ProjectDetailPage] Query error:', {
+        projectId,
+        error,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        timestamp: new Date().toISOString(),
+      });
+    },
   })
 
   const { data: sites = [], isLoading: sitesLoading, isFetching: sitesFetching } = useQuery({

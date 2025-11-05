@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
-import { withTimeout } from "@/lib/withTimeout"
+import { withTimeout, QUERY_TIMEOUTS } from "@/lib/withTimeout"
 import { refreshSupabaseClient } from "@/integrations/supabase/client"
 import { EmployerCard } from "@/components/employers/EmployerCard"
 import { useState, useMemo, useCallback, useEffect } from "react"
@@ -112,7 +112,7 @@ export function EmployersDesktopView() {
         .order("name", { ascending: true })
         .limit(5000) // Future-proof limit to handle growth
       try {
-        const { data, error } = await withTimeout<any>(query, 20000, "fetch employers list")
+        const { data, error } = await withTimeout<any>(query, QUERY_TIMEOUTS.COMPLEX, "fetch employers list")
         if (error) throw error
         return data || []
       } catch (err: any) {
