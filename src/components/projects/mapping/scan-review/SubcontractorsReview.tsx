@@ -1527,13 +1527,19 @@ export function SubcontractorsReview({
           <CardHeader>
             <CardTitle>Subcontractors</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto max-w-full relative">
+        <CardContent className="p-0">
+          <div 
+            className="overflow-x-scroll max-w-full relative [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:bg-gray-100 [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb:hover]:bg-gray-400" 
+            style={{ 
+              scrollbarWidth: 'thin', 
+              scrollbarColor: '#cbd5e1 #f1f5f9'
+            }}
+          >
             <Table className="w-full">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="min-w-[6rem]">Stage</TableHead>
-                  <TableHead className="min-w-[8rem]">Trade</TableHead>
+                  <TableHead className="sticky left-0 bg-white dark:bg-slate-950 min-w-[6rem] border-r border-gray-200 z-20 shadow-[2px_0_4px_rgba(0,0,0,0.05)]">Stage</TableHead>
+                  <TableHead className="sticky left-[6rem] bg-white dark:bg-slate-950 min-w-[8rem] border-r border-gray-200 z-20 shadow-[2px_0_4px_rgba(0,0,0,0.05)]">Trade</TableHead>
                   <TableHead className="min-w-[12rem]">Current Employers</TableHead>
                   <TableHead className="min-w-[12rem]">Additional to Add</TableHead>
                   <TableHead className="min-w-[10rem]">Scanned Company</TableHead>
@@ -1542,7 +1548,7 @@ export function SubcontractorsReview({
                   <TableHead className="min-w-[8rem]">Status</TableHead>
                   <TableHead className="min-w-[4rem]">EBA</TableHead>
                   <TableHead className="min-w-[6rem]">Confidence</TableHead>
-                  <TableHead className="sticky right-0 bg-white min-w-[13rem] border-l border-gray-200 z-10">Actions</TableHead>
+                  <TableHead className="sticky right-0 bg-white dark:bg-slate-950 min-w-[13rem] border-l border-gray-200 z-20 shadow-[-2px_0_4px_rgba(0,0,0,0.05)]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1556,7 +1562,7 @@ export function SubcontractorsReview({
                     `}
                     onClick={() => handleRowSelect(index)}
                   >
-                    <TableCell>
+                    <TableCell className={`sticky left-0 border-r border-gray-200 z-10 shadow-[2px_0_4px_rgba(0,0,0,0.05)] ${selectedRowIndex === index ? 'bg-blue-100 dark:bg-blue-950' : decision.needsReview ? 'bg-yellow-50 dark:bg-yellow-950' : 'bg-white dark:bg-slate-950'}`}>
                       <div className="flex items-center gap-2">
                         {selectedRowIndex === index && (
                           <div className="w-1 h-6 bg-blue-500 rounded-full animate-pulse" />
@@ -1566,7 +1572,7 @@ export function SubcontractorsReview({
                         </Badge>
                       </div>
                     </TableCell>
-                    <TableCell className="font-medium">
+                    <TableCell className={`sticky left-[6rem] font-medium border-r border-gray-200 z-10 shadow-[2px_0_4px_rgba(0,0,0,0.05)] ${selectedRowIndex === index ? 'bg-blue-100 dark:bg-blue-950' : decision.needsReview ? 'bg-yellow-50 dark:bg-yellow-950' : 'bg-white dark:bg-slate-950'}`}>
                       {editingIndex === index ? (
                         <Input
                           value={editingTradeName}
@@ -1776,7 +1782,7 @@ export function SubcontractorsReview({
                     </TableCell>
                     
                     {/* Actions */}
-                    <TableCell className={`sticky right-0 min-w-[13rem] border-l border-gray-200 z-10 ${decision.needsReview ? 'bg-yellow-50' : 'bg-white'}`}>
+                    <TableCell className={`sticky right-0 min-w-[13rem] border-l border-gray-200 z-10 shadow-[-2px_0_4px_rgba(0,0,0,0.05)] ${selectedRowIndex === index ? 'bg-blue-100 dark:bg-blue-950' : decision.needsReview ? 'bg-yellow-50 dark:bg-yellow-950' : 'bg-white dark:bg-slate-950'}`}>
                       <div className="space-y-1">
                         {editingIndex === index ? (
                           <>
