@@ -298,13 +298,13 @@ export const EmployerDetailModal = ({
         );
         if (res.error) {
           // Log and fall back to separate queries; some rows may fail due to relationship issues or RLS
-          const duration = Date.now() - startTime;
+          const errorDuration = Date.now() - startTime;
           console.error("[EmployerDetailModal] Employer relational fetch failed, falling back:", {
             employerId,
             error: res.error,
             errorCode: res.error.code,
             errorMessage: res.error.message,
-            duration,
+            duration: errorDuration,
             timestamp: new Date().toISOString(),
           });
 
@@ -358,10 +358,10 @@ export const EmployerDetailModal = ({
             // Ignore EBA errors; not critical for base rendering
           }
 
-          const duration = Date.now() - startTime;
+          const fallbackDuration = Date.now() - startTime;
           console.log('[EmployerDetailModal] Fallback fetch completed', {
             employerId,
-            duration,
+            duration: fallbackDuration,
             hasBaseData: !!base.data,
             ebaRecordsCount: ebaRecords.length,
           });
