@@ -1538,8 +1538,8 @@ export function SubcontractorsReview({
             <Table className="w-full">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="sticky left-0 bg-white dark:bg-slate-950 min-w-[6rem] border-r border-gray-200 z-20">Stage</TableHead>
-                  <TableHead className="sticky left-[6rem] bg-white dark:bg-slate-950 min-w-[8rem] border-r border-gray-200 z-20">Trade</TableHead>
+                  <TableHead className="sticky left-0 bg-white min-w-[6rem] border-r border-gray-200 z-20">Stage</TableHead>
+                  <TableHead className="sticky left-[6rem] bg-white min-w-[8rem] border-r border-gray-200 z-20">Trade</TableHead>
                   <TableHead className="min-w-[12rem]">Current Employers</TableHead>
                   <TableHead className="min-w-[12rem]">Additional to Add</TableHead>
                   <TableHead className="min-w-[10rem]">Scanned Company</TableHead>
@@ -1548,7 +1548,7 @@ export function SubcontractorsReview({
                   <TableHead className="min-w-[8rem]">Status</TableHead>
                   <TableHead className="min-w-[4rem]">EBA</TableHead>
                   <TableHead className="min-w-[6rem]">Confidence</TableHead>
-                  <TableHead className="sticky right-0 bg-white dark:bg-slate-950 min-w-[13rem] border-l border-gray-200 z-20">Actions</TableHead>
+                  <TableHead className="sticky right-0 bg-white min-w-[13rem] border-l border-gray-200 z-20">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1562,7 +1562,7 @@ export function SubcontractorsReview({
                     `}
                     onClick={() => handleRowSelect(index)}
                   >
-                    <TableCell className={`sticky left-0 border-r border-gray-200 z-10 ${selectedRowIndex === index ? 'bg-blue-100 dark:bg-blue-950' : decision.needsReview ? 'bg-yellow-50 dark:bg-yellow-950' : 'bg-white dark:bg-slate-950'}`}>
+                    <TableCell className={`sticky left-0 border-r border-gray-200 z-10 ${selectedRowIndex === index ? 'bg-blue-100' : decision.needsReview ? 'bg-yellow-50' : 'bg-white'}`}>
                       <div className="flex items-center gap-2">
                         {selectedRowIndex === index && (
                           <div className="w-1 h-6 bg-blue-500 rounded-full animate-pulse" />
@@ -1572,7 +1572,7 @@ export function SubcontractorsReview({
                         </Badge>
                       </div>
                     </TableCell>
-                    <TableCell className={`sticky left-[6rem] font-medium border-r border-gray-200 z-10 ${selectedRowIndex === index ? 'bg-blue-100 dark:bg-blue-950' : decision.needsReview ? 'bg-yellow-50 dark:bg-yellow-950' : 'bg-white dark:bg-slate-950'}`}>
+                    <TableCell className={`sticky left-[6rem] font-medium border-r border-gray-200 z-10 ${selectedRowIndex === index ? 'bg-blue-100' : decision.needsReview ? 'bg-yellow-50' : 'bg-white'}`}>
                       {editingIndex === index ? (
                         <Input
                           value={editingTradeName}
@@ -1782,7 +1782,7 @@ export function SubcontractorsReview({
                     </TableCell>
                     
                     {/* Actions */}
-                    <TableCell className={`sticky right-0 min-w-[13rem] border-l border-gray-200 z-10 ${selectedRowIndex === index ? 'bg-blue-100 dark:bg-blue-950' : decision.needsReview ? 'bg-yellow-50 dark:bg-yellow-950' : 'bg-white dark:bg-slate-950'}`}>
+                    <TableCell className={`sticky right-0 min-w-[13rem] border-l border-gray-200 z-10 ${selectedRowIndex === index ? 'bg-blue-100' : decision.needsReview ? 'bg-yellow-50' : 'bg-white'}`}>
                       <div className="space-y-1">
                         {editingIndex === index ? (
                           <>
