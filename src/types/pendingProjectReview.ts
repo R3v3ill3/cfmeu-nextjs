@@ -96,12 +96,12 @@ export interface SiteContactDetails {
 export interface MappingSheetScanDetails {
   id: string;
   file_name: string;
-  uploaded_at: string | null;
+  created_at: string;      // When the file was uploaded (scan record created)
   uploaded_by: string | null;
   file_size_bytes: number | null;
   status: string;
   upload_mode: string | null;
-  created_at: string;
+  updated_at: string;      // When the scan record was last modified
   uploader?: {
     id: string;
     email: string | null;

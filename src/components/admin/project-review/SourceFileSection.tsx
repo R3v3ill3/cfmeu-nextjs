@@ -68,15 +68,15 @@ export function SourceFileSection({ scans }: SourceFileSectionProps) {
                     <FileText className="h-4 w-4 text-primary flex-shrink-0" />
                     <h4 className="font-medium truncate">{scan.file_name}</h4>
                   </div>
-                  {scan.scan_type && (
+                  {scan.upload_mode && (
                     <Badge variant="outline" className="mt-1 text-xs">
-                      {scan.scan_type}
+                      {scan.upload_mode === 'new_project' ? 'New Project' : 'Existing Project'}
                     </Badge>
                   )}
                 </div>
-                {scan.file_size && (
+                {scan.file_size_bytes && (
                   <div className="text-sm text-muted-foreground">
-                    {formatFileSize(scan.file_size)}
+                    {formatFileSize(scan.file_size_bytes)}
                   </div>
                 )}
               </div>
@@ -97,7 +97,7 @@ export function SourceFileSection({ scans }: SourceFileSectionProps) {
                   <div>
                     <Label className="text-xs">Uploaded at</Label>
                     <p className="font-medium text-foreground">
-                      {formatDate(scan.uploaded_at)}
+                      {formatDate(scan.created_at)}
                     </p>
                   </div>
                 </div>

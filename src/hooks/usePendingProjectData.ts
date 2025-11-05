@@ -79,12 +79,12 @@ export function usePendingProjectData({ projectId, enabled = true }: UsePendingP
             scan:mapping_sheet_scans!mapping_sheet_scans_project_id_fkey (
               id,
               file_name,
-              uploaded_at,
+              created_at,
               uploaded_by,
               file_size_bytes,
               status,
               upload_mode,
-              created_at
+              updated_at
             )
           `)
           .eq('id', projectId)
