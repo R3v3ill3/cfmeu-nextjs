@@ -33,11 +33,9 @@ export function usePendingProjectData({ projectId, enabled = true }: UsePendingP
             *,
             main_job_site:job_sites!main_job_site_id (
               id,
+              name,
+              location,
               full_address,
-              address_line_1,
-              suburb,
-              state,
-              postcode,
               latitude,
               longitude,
               site_contacts (

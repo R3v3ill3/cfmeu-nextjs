@@ -197,9 +197,11 @@ export async function GET(request: NextRequest) {
         main_job_site: project.main_job_site
           ? {
               full_address: project.main_job_site.full_address,
-              suburb: project.main_job_site.suburb,
-              state: project.main_job_site.state,
-              postcode: project.main_job_site.postcode,
+              location: project.main_job_site.location,
+              // Note: job_sites doesn't have suburb/state/postcode columns
+              suburb: null,
+              state: null,
+              postcode: null,
             }
           : null,
         builder: Array.isArray(project.builder) && project.builder.length > 0 && project.builder[0].employer

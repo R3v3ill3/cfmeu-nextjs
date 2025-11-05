@@ -1176,10 +1176,10 @@ export class ProjectDataService {
       id: data.id,
       name: data.name,
       description: data.description,
-      address: data.job_sites?.address,
-      suburb: data.job_sites?.suburb,
-      state: data.job_sites?.state,
-      postcode: data.job_sites?.postcode,
+      address: data.job_sites?.full_address || data.job_sites?.location,
+      suburb: null, // job_sites doesn't have suburb column
+      state: null, // job_sites doesn't have state column
+      postcode: null, // job_sites doesn't have postcode column
       project_type: data.project_type,
       value: data.value,
       start_date: data.start_date,

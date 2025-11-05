@@ -221,17 +221,7 @@ export function PendingProjectMatchSearch({
                           </div>
                         )}
 
-                        {(result.main_job_site?.suburb || result.main_job_site?.state || result.main_job_site?.postcode) && (
-                          <div className="ml-4 text-xs">
-                            {[
-                              result.main_job_site?.suburb,
-                              result.main_job_site?.state,
-                              result.main_job_site?.postcode
-                            ]
-                              .filter(Boolean)
-                              .join(', ')}
-                          </div>
-                        )}
+                        {/* Address details - note: job_sites only has full_address and location, not parsed suburb/state/postcode */}
 
                         {result.builder && (
                           <div className="flex items-center gap-1">

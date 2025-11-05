@@ -40,11 +40,9 @@ export interface PendingProject {
 
 export interface JobSiteDetails {
   id: string;
+  name: string;
+  location: string;
   full_address: string | null;
-  address_line_1: string | null;
-  suburb: string | null;
-  state: string | null;
-  postcode: string | null;
   latitude: number | null;
   longitude: number | null;
   site_contacts?: SiteContactDetails[];

@@ -232,14 +232,9 @@ export async function POST(request: NextRequest) {
           otherProject.main_job_site?.full_address || null
         );
         const valueSim = calculateValueSimilarity(project.value, otherProject.value);
-        const postcodeMatch = checkPostcodeMatch(
-          project.main_job_site?.postcode || null,
-          otherProject.main_job_site?.postcode || null
-        );
-        const stateMatch = checkStateMatch(
-          project.main_job_site?.state || null,
-          otherProject.main_job_site?.state || null
-        );
+        // Note: job_sites doesn't have postcode/state columns, only full_address and location
+        const postcodeMatch = false; // Can't match postcodes without that field
+        const stateMatch = false; // Can't match states without that field
 
         const overallSim = calculateOverallSimilarity(
           nameSim,
@@ -262,10 +257,10 @@ export async function POST(request: NextRequest) {
           id: project.id,
           name: project.name,
           value: project.value,
-          address: project.main_job_site?.full_address || null,
-          suburb: project.main_job_site?.suburb || null,
-          state: project.main_job_site?.state || null,
-          postcode: project.main_job_site?.postcode || null,
+          address: project.main_job_site?.full_address || project.main_job_site?.location || null,
+          suburb: null, // job_sites doesn't have suburb column
+          state: null, // job_sites doesn't have state column
+          postcode: null, // job_sites doesn't have postcode column
           created_at: project.created_at,
           auto_merged: false,
           merged_from_pending_ids: [],
@@ -280,10 +275,10 @@ export async function POST(request: NextRequest) {
               id: matchedProject.id,
               name: matchedProject.name,
               value: matchedProject.value,
-              address: matchedProject.main_job_site?.full_address || null,
-              suburb: matchedProject.main_job_site?.suburb || null,
-              state: matchedProject.main_job_site?.state || null,
-              postcode: matchedProject.main_job_site?.postcode || null,
+              address: matchedProject.main_job_site?.full_address || matchedProject.main_job_site?.location || null,
+              suburb: null, // job_sites doesn't have suburb column
+              state: null, // job_sites doesn't have state column
+              postcode: null, // job_sites doesn't have postcode column
               created_at: matchedProject.created_at,
               auto_merged: false,
               merged_from_pending_ids: [],

@@ -468,7 +468,7 @@ export class SiteVisitDataService {
         .select(`
           *,
           projects!inner(name, project_type),
-          job_sites!inner(address, suburb)
+          job_sites!inner(location, full_address)
         `)
         .eq('employer_id', employerId)
         .gte('visit_date', cutoffDate.toISOString())
