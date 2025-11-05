@@ -50,7 +50,59 @@ export function EmployerMatchDialog({
   const [selectedEmployerForAliases, setSelectedEmployerForAliases] = useState<any>(null)
   const [shouldAutoCreateAlias, setShouldAutoCreateAlias] = useState(false)
 
-  // Search results
+  // Calculate relevance score for better sorting
+  const calculateRelevanceScore = (name: string, query: string): number => {
+    const nameLower = name.toLowerCase()
+    const queryLower = query.toLowerCase()
+    
+    let score = 0
+    
+    // Exact match: 1000 points (highest priority)
+    if (nameLower === queryLower) {
+      return 1000
+    }
+    
+    // Starts with query: 500 points
+    if (nameLower.startsWith(queryLower)) {
+      score += 500
+    }
+    
+    // Word boundary match: 300 points (e.g., "Oz" in "Oz Building" vs "Oz" in "Blah Oz Company")
+    const wordBoundaryRegex = new RegExp(`\\b${queryLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i')
+    if (wordBoundaryRegex.test(name)) {
+      score += 300
+    }
+    
+    // Contains query: 100 points
+    if (nameLower.includes(queryLower)) {
+      score += 100
+    }
+    
+    // Position bonus: earlier matches are better (max 50 points)
+    const position = nameLower.indexOf(queryLower)
+    if (position >= 0) {
+      // Closer to start = higher score (50 points for position 0, decreasing)
+      score += Math.max(0, 50 - Math.min(position, 50))
+    }
+    
+    // Word match bonus: if query matches a complete word, add bonus
+    const nameWords = nameLower.split(/\s+/)
+    const queryWords = queryLower.split(/\s+/)
+    
+    for (const nameWord of nameWords) {
+      for (const queryWord of queryWords) {
+        if (nameWord === queryWord) {
+          score += 150 // Complete word match
+        } else if (nameWord.startsWith(queryWord)) {
+          score += 75 // Word starts with query
+        }
+      }
+    }
+    
+    return score
+  }
+
+  // Search results with improved relevance scoring
   const searchResults = useMemo(() => {
     if (!searchQuery) return []
     
@@ -85,23 +137,23 @@ export function EmployerMatchDialog({
         
         return false
       })
+      .map(emp => ({
+        ...emp,
+        relevanceScore: calculateRelevanceScore(emp.name, query)
+      }))
       .sort((a, b) => {
-        // Sort by relevance
+        // Sort by relevance score (higher is better)
+        if (b.relevanceScore !== a.relevanceScore) {
+          return b.relevanceScore - a.relevanceScore
+        }
+        
+        // If scores are equal, sort alphabetically as tiebreaker
         const aName = a.name.toLowerCase()
         const bName = b.name.toLowerCase()
-        
-        // Exact matches first
-        if (aName === query && bName !== query) return -1
-        if (bName === query && aName !== query) return 1
-        
-        // Then starts with query
-        if (aName.startsWith(query) && !bName.startsWith(query)) return -1
-        if (bName.startsWith(query) && !aName.startsWith(query)) return 1
-        
-        // Then alphabetical
         return aName.localeCompare(bName)
       })
-      .slice(0, 200)
+      .map(({ relevanceScore, ...emp }) => emp) // Remove relevanceScore from final results
+      .slice(0, 500) // Increased from 200 to 500 for better coverage
     
     return matches
   }, [searchQuery, allEmployers])
