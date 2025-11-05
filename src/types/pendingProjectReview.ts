@@ -53,7 +53,7 @@ export interface ProjectAssignmentDetails {
   assignment_type: 'builder' | 'subcontractor' | 'other';
   employer_id: string;
   employer?: EmployerDetails | null;
-  contractor_role_id: string | null;
+  contractor_role_type_id: string | null;
   contractor_role?: { name: string; code: string } | null;
   trade_type_id: string | null;
   trade_type?: { name: string; code: string } | null;

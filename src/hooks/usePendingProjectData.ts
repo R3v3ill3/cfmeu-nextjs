@@ -52,7 +52,7 @@ export function usePendingProjectData({ projectId, enabled = true }: UsePendingP
               id,
               assignment_type,
               employer_id,
-              contractor_role_id,
+              contractor_role_type_id,
               trade_type_id,
               created_at,
               source,
@@ -67,11 +67,11 @@ export function usePendingProjectData({ projectId, enabled = true }: UsePendingP
                 phone,
                 email
               ),
-              contractor_role:contractor_role_types (
+              contractor_role:contractor_role_types!contractor_role_type_id (
                 name,
                 code
               ),
-              trade_type:trade_types (
+              trade_type:trade_types!trade_type_id (
                 name,
                 code
               )
