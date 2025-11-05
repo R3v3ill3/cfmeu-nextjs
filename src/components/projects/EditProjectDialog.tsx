@@ -15,6 +15,7 @@ import { SingleEmployerDialogPicker } from "@/components/projects/SingleEmployer
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
 import { calculateProjectTier } from "@/components/projects/types"
+import { GoogleAddressInput, GoogleAddress, AddressValidationError } from "@/components/projects/GoogleAddressInput"
 
 type EditableProject = {
   id: string;
@@ -46,6 +47,10 @@ export function EditProjectDialog({
   const [projectType, setProjectType] = useState<string>("");
   const [stateFunding, setStateFunding] = useState<string>("");
   const [federalFunding, setFederalFunding] = useState<string>("");
+  // Address state
+  const [addressData, setAddressData] = useState<GoogleAddress | null>(null);
+  const [addressValidationError, setAddressValidationError] = useState<AddressValidationError | null>(null);
+  const [mainJobSiteId, setMainJobSiteId] = useState<string | null>(null);
   // Roles & JV states
   const [builderIds, setBuilderIds] = useState<string[]>([]);
   const [headContractorId, setHeadContractorId] = useState<string>("");
@@ -70,6 +75,10 @@ export function EditProjectDialog({
     setProjectType("");
     setStateFunding("");
     setFederalFunding("");
+    // Reset address state; it'll be loaded via loadRelations
+    setAddressData(null);
+    setAddressValidationError(null);
+    setMainJobSiteId(null);
     // Reset relational states; they'll be loaded via loadRelations
     setBuilderIds([]);
     setHeadContractorId("");
@@ -110,8 +119,37 @@ export function EditProjectDialog({
         setJvStatus("no");
         setJvLabel("");
       }
+
+      // Load main job site address
+      const { data: projectData, error: projErr } = await supabase
+        .from("projects")
+        .select("main_job_site_id")
+        .eq("id", project.id)
+        .single();
+      
+      if (projErr) {
+        console.warn("Failed to load project data:", projErr);
+      } else if (projectData?.main_job_site_id) {
+        const { data: jobSite, error: siteErr } = await supabase
+          .from("job_sites")
+          .select("id, full_address, location, latitude, longitude")
+          .eq("id", projectData.main_job_site_id)
+          .single();
+        
+        if (!siteErr && jobSite) {
+          setMainJobSiteId(jobSite.id);
+          const address = jobSite.full_address || jobSite.location;
+          if (address) {
+            setAddressData({
+              formatted: address,
+              lat: jobSite.latitude || undefined,
+              lng: jobSite.longitude || undefined,
+            });
+          }
+        }
+      }
     } catch (e) {
-      toast.error("Failed to load roles/JV: " + (e as Error).message);
+      toast.error("Failed to load project data: " + (e as Error).message);
     } finally {
       setLoadingRelations(false);
     }
@@ -228,6 +266,63 @@ export function EditProjectDialog({
         .update(payload)
         .eq("id", project.id);
       if (updErr) throw updErr;
+
+      // 1b) Update or create main job site with address
+      if (addressData?.formatted) {
+        const sitePayload: any = {
+          full_address: addressData.formatted,
+          location: addressData.formatted,
+        };
+
+        // Add coordinates if available
+        if (addressData.lat && addressData.lng) {
+          sitePayload.latitude = addressData.lat;
+          sitePayload.longitude = addressData.lng;
+        }
+
+        if (mainJobSiteId) {
+          // Update existing main job site
+          const { error: siteUpdErr } = await supabase
+            .from("job_sites")
+            .update(sitePayload)
+            .eq("id", mainJobSiteId);
+          if (siteUpdErr) {
+            console.warn("Failed to update job site address:", siteUpdErr);
+            toast.warning("Project updated but address update failed");
+          }
+        } else {
+          // Create new main job site
+          const newSitePayload = {
+            ...sitePayload,
+            project_id: project.id,
+            name: name.trim() || "Main Site",
+            is_main_site: true,
+          };
+
+          const { data: newSite, error: siteCreateErr } = await supabase
+            .from("job_sites")
+            .insert(newSitePayload)
+            .select("id")
+            .single();
+
+          if (siteCreateErr) {
+            console.warn("Failed to create job site:", siteCreateErr);
+            toast.warning("Project updated but address creation failed");
+          } else if (newSite) {
+            // Link new job site as main site
+            const { error: linkErr } = await supabase
+              .from("projects")
+              .update({ main_job_site_id: newSite.id })
+              .eq("id", project.id);
+            
+            if (linkErr) {
+              console.warn("Failed to link job site:", linkErr);
+            } else {
+              setMainJobSiteId(newSite.id);
+            }
+          }
+        }
+      }
 
       // 2) Upsert JV metadata
       const jvPayload: any = {
@@ -396,6 +491,30 @@ export function EditProjectDialog({
             <Label htmlFor="proj_name">Project Name</Label>
             <Input id="proj_name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" />
           </div>
+          
+          {/* Address Input with Google Places Autocomplete */}
+          <div className="space-y-2">
+            <GoogleAddressInput
+              value={addressData?.formatted}
+              onChange={(addr, error) => {
+                setAddressData(addr);
+                setAddressValidationError(error);
+              }}
+              placeholder="Enter project address..."
+              showLabel={true}
+              required={false}
+              requireSelection={false}
+              onValidationChange={setAddressValidationError}
+              enableGeolocation={true}
+            />
+            {addressValidationError && (
+              <p className="text-sm text-amber-600">{addressValidationError.message}</p>
+            )}
+            {addressData?.formatted && !addressValidationError && (
+              <p className="text-sm text-green-600">✓ Address selected</p>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label>Stage</Label>
