@@ -201,52 +201,53 @@ export async function POST(
       if (mainJobSiteId) {
         for (const contact of preparedContacts) {
           if (contact.existingId) {
-          const name = contact.name?.trim() || null
-          const email = contact.email?.trim() || null
-          const phone = contact.phone?.trim() || null
-          // Update existing
-          const { error } = await serviceSupabase
-            .from('site_contacts')
-            .update({
-              name,
-              email,
-              phone,
-            })
-            .eq('id', contact.existingId)
+            const name = contact.name?.trim() || null
+            const email = contact.email?.trim() || null
+            const phone = contact.phone?.trim() || null
+            // Update existing
+            const { error } = await serviceSupabase
+              .from('site_contacts')
+              .update({
+                name,
+                email,
+                phone,
+              })
+              .eq('id', contact.existingId)
 
-          if (error) {
-            console.error('Failed to update contact:', error)
-          }
-        } else {
-          if (!contact.role) {
-            console.warn('Skipping site contact with invalid role:', contact)
-            continue
-          }
-          const name = contact.name?.trim() || null
-          const email = contact.email?.trim() || null
-          const phone = contact.phone?.trim() || null
-          
-          // Skip contacts without valid names (handles "Nil" or empty values from scans)
-          if (!name || name.toLowerCase() === 'nil') {
-            console.log(`Skipping contact with role ${contact.role} - no valid name (${contact.name})`)
-            continue
-          }
-          
-          // Create new contact
-          const { error } = await serviceSupabase
-            .from('site_contacts')
-            .insert({
-              job_site_id: mainJobSiteId,
-              role: contact.role,
-              name,
-              email,
-              phone,
-            })
-
-          if (error) {
-            console.error('Failed to create contact:', error)
+            if (error) {
+              console.error('Failed to update contact:', error)
+            }
           } else {
-            contactsCreated++
+            if (!contact.role) {
+              console.warn('Skipping site contact with invalid role:', contact)
+              continue
+            }
+            const name = contact.name?.trim() || null
+            const email = contact.email?.trim() || null
+            const phone = contact.phone?.trim() || null
+            
+            // Skip contacts without valid names (handles "Nil" or empty values from scans)
+            if (!name || name.toLowerCase() === 'nil') {
+              console.log(`Skipping contact with role ${contact.role} - no valid name (${contact.name})`)
+              continue
+            }
+            
+            // Create new contact
+            const { error } = await serviceSupabase
+              .from('site_contacts')
+              .insert({
+                job_site_id: mainJobSiteId,
+                role: contact.role,
+                name,
+                email,
+                phone,
+              })
+
+            if (error) {
+              console.error('Failed to create contact:', error)
+            } else {
+              contactsCreated++
+            }
           }
         }
       } else {
