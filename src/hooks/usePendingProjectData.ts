@@ -82,14 +82,11 @@ export function usePendingProjectData({ projectId, enabled = true }: UsePendingP
               id,
               file_name,
               uploaded_at,
-              uploader_id,
-              file_size,
-              scan_type,
-              uploader:profiles!uploader_id (
-                id,
-                email,
-                full_name
-              )
+              uploaded_by,
+              file_size_bytes,
+              status,
+              upload_mode,
+              created_at
             )
           `)
           .eq('id', projectId)
@@ -100,7 +97,37 @@ export function usePendingProjectData({ projectId, enabled = true }: UsePendingP
           throw new Error(projectError.message);
         }
 
-        setData(project as PendingProject);
+        // Fetch uploader profiles separately if we have scans with uploaded_by
+        let projectWithUploaders = project;
+        if (project?.scan && Array.isArray(project.scan) && project.scan.length > 0) {
+          const uploaderIds = project.scan
+            .map((scan: any) => scan.uploaded_by)
+            .filter((id: string | null) => id !== null) as string[];
+
+          if (uploaderIds.length > 0) {
+            const { data: uploaderProfiles } = await supabase
+              .from('profiles')
+              .select('id, email, full_name')
+              .in('id', uploaderIds);
+
+            if (uploaderProfiles) {
+              const uploaderMap = new Map(
+                uploaderProfiles.map((p: any) => [p.id, p])
+              );
+
+              // Attach uploader profiles to scans
+              projectWithUploaders = {
+                ...project,
+                scan: project.scan.map((scan: any) => ({
+                  ...scan,
+                  uploader: scan.uploaded_by ? uploaderMap.get(scan.uploaded_by) ?? null : null,
+                })),
+              };
+            }
+          }
+        }
+
+        setData(projectWithUploaders as PendingProject);
       } catch (err) {
         console.error('Error fetching project data:', err);
         setError(err instanceof Error ? err.message : 'Failed to fetch project data');

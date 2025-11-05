@@ -98,15 +98,17 @@ export interface SiteContactDetails {
 export interface MappingSheetScanDetails {
   id: string;
   file_name: string;
-  uploaded_at: string;
-  uploader_id: string;
+  uploaded_at: string | null;
+  uploaded_by: string | null;
+  file_size_bytes: number | null;
+  status: string;
+  upload_mode: string | null;
+  created_at: string;
   uploader?: {
     id: string;
-    email: string;
+    email: string | null;
     full_name: string | null;
   } | null;
-  file_size: number | null;
-  scan_type: string | null;
 }
 
 export interface ProjectDuplicateMatch {
