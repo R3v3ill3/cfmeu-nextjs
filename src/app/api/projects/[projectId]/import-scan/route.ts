@@ -235,7 +235,24 @@ export async function POST(
             console.log(`Using fallback trade type "general_construction" for "${sub.matchedEmployer?.name || sub.company}" (original: "${sub.trade}")`)
           }
 
-          // Create project assignment
+          // Create project assignment - use upsert to handle duplicates gracefully
+          // Check if assignment already exists first to avoid constraint violation
+          const { data: existingAssignment } = await serviceSupabase
+            .from('project_assignments')
+            .select('id')
+            .eq('project_id', projectId)
+            .eq('employer_id', sub.matchedEmployer.id)
+            .eq('trade_type_id', tradeType.id)
+            .eq('assignment_type', 'trade_work')
+            .maybeSingle()
+
+          if (existingAssignment) {
+            // Assignment already exists - skip silently
+            console.log('Assignment already exists:', sub.matchedEmployer.name, tradeCode)
+            continue
+          }
+
+          // Insert new assignment
           const { error } = await serviceSupabase
             .from('project_assignments')
             .insert({
@@ -254,9 +271,9 @@ export async function POST(
             })
 
           if (error) {
-            // Check if it's a duplicate
+            // Check if it's a duplicate (race condition - another request created it)
             if (error.code === '23505') {
-              console.log('Assignment already exists:', sub.matchedEmployer.name, tradeCode)
+              console.log('Assignment already exists (race condition):', sub.matchedEmployer.name, tradeCode)
             } else if (error.code === '23514') {
               // Check constraint violation
               const errorMsg = `Check constraint violation for "${sub.matchedEmployer.name}" (trade: "${sub.trade}", code: "${tradeCode}"). This usually means the trade type is invalid or missing.`
