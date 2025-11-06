@@ -110,7 +110,7 @@ export default function ProjectDetailPage() {
 
   // Access control: Check if user can access this project
   // Admins can access all projects, organisers and lead_organisers can only access projects in their assigned patches
-  const { data: projectPatches, isLoading: projectPatchesLoading } = useQuery({
+  const { data: accessControlPatches, isLoading: accessControlPatchesLoading } = useQuery({
     queryKey: ["project-patches-access", projectId],
     enabled: !!projectId,
     queryFn: async () => {
@@ -130,7 +130,7 @@ export default function ProjectDetailPage() {
   })
 
   // Show access control loading state
-  if (accessiblePatchesLoading || projectPatchesLoading) {
+  if (accessiblePatchesLoading || accessControlPatchesLoading) {
     return (
       <div className="p-6">
         <div className="flex items-center justify-center py-12">
@@ -142,7 +142,7 @@ export default function ProjectDetailPage() {
   }
 
   // Check access control
-  const hasAccess = role === 'admin' || (projectPatches && projectPatches.some(patchId =>
+  const hasAccess = role === 'admin' || (accessControlPatches && accessControlPatches.some(patchId =>
     accessiblePatches.some(accessiblePatch => accessiblePatch.id === patchId)
   ))
 
