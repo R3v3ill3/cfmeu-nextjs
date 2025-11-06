@@ -201,6 +201,11 @@ export function ProjectsMobileView() {
   const universeFilter = sp.get("universe") || sp.get("universeFilter") || "all"
   const stageFilter = sp.get("stage") || sp.get("stageFilter") || "all"
   const ebaFilter = sp.get("eba") || "all"
+  const ratingStatusFilter = sp.get("ratingStatus") || "all"
+  const auditStatusFilter = sp.get("auditStatus") || "all"
+  const mappingStatusFilter = sp.get("mappingStatus") || "all"
+  const mappingUpdateStatusFilter = sp.get("mappingUpdateStatus") || "all"
+  const complianceCheckStatusFilter = sp.get("complianceCheckStatus") || "all"
   
   const PAGE_SIZE = 12 // Slightly smaller for mobile
   
@@ -321,7 +326,7 @@ export function ProjectsMobileView() {
   const serverSideResult = useProjectsServerSideCompatible({
     page: view === "map" ? 1 : page,
     pageSize: view === "map" ? 9999 : PAGE_SIZE, // Fetch all projects for map view
-    sort: sort as 'name' | 'value' | 'tier' | 'workers' | 'members' | 'delegates' | 'eba_coverage' | 'employers' | 'created_at',
+    sort: sort as 'name' | 'value' | 'tier' | 'workers' | 'members' | 'delegates' | 'eba_coverage' | 'employers' | 'created_at' | 'key_contractors_rated_value',
     dir: dir as 'asc' | 'desc',
     q: q || undefined,
     tier: tierFilter !== 'all' ? tierFilter.replace('_', '') as any : undefined,
@@ -329,6 +334,11 @@ export function ProjectsMobileView() {
     universe: universeFilter !== 'all' ? universeFilter as any : undefined,
     stage: stageFilter !== 'all' ? stageFilter as any : undefined,
     eba: ebaFilter !== 'all' ? ebaFilter as any : undefined,
+    ratingStatus: ratingStatusFilter !== 'all' ? ratingStatusFilter as any : undefined,
+    auditStatus: auditStatusFilter !== 'all' ? auditStatusFilter as any : undefined,
+    mappingStatus: mappingStatusFilter !== 'all' ? mappingStatusFilter as any : undefined,
+    mappingUpdateStatus: mappingUpdateStatusFilter !== 'all' ? mappingUpdateStatusFilter as any : undefined,
+    complianceCheckStatus: complianceCheckStatusFilter !== 'all' ? complianceCheckStatusFilter as any : undefined,
   })
 
   const { projects, totalCount, hasNext, hasPrev, isLoading, isFetching, error } = serverSideResult
@@ -353,6 +363,11 @@ export function ProjectsMobileView() {
     universeFilter !== 'all' ? 'universe' : null,
     stageFilter !== 'all' ? 'stage' : null,
     ebaFilter !== 'all' ? 'eba' : null,
+    ratingStatusFilter !== 'all' ? 'ratingStatus' : null,
+    auditStatusFilter !== 'all' ? 'auditStatus' : null,
+    mappingStatusFilter !== 'all' ? 'mappingStatus' : null,
+    mappingUpdateStatusFilter !== 'all' ? 'mappingUpdateStatus' : null,
+    complianceCheckStatusFilter !== 'all' ? 'complianceCheckStatus' : null,
   ].filter(Boolean).length
 
   if (isInitialLoad) {
@@ -601,6 +616,82 @@ export function ProjectsMobileView() {
                 </SelectContent>
               </Select>
             </div>
+
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Rating Status</label>
+              <Select value={ratingStatusFilter} onValueChange={(value) => setParam("ratingStatus", value)}>
+                <SelectTrigger className="h-11">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="rated">Rated</SelectItem>
+                  <SelectItem value="unrated">Unrated</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Audit Status</label>
+              <Select value={auditStatusFilter} onValueChange={(value) => setParam("auditStatus", value)}>
+                <SelectTrigger className="h-11">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="has_audit">Has Audit</SelectItem>
+                  <SelectItem value="no_audit">No Audit</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Mapping Status</label>
+              <Select value={mappingStatusFilter} onValueChange={(value) => setParam("mappingStatus", value)}>
+                <SelectTrigger className="h-11">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="no_roles">No Roles</SelectItem>
+                  <SelectItem value="no_trades">No Trades</SelectItem>
+                  <SelectItem value="bci_only">BCI Only</SelectItem>
+                  <SelectItem value="has_manual">Has Manual</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Mapping Update</label>
+              <Select value={mappingUpdateStatusFilter} onValueChange={(value) => setParam("mappingUpdateStatus", value)}>
+                <SelectTrigger className="h-11">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="recent">Recent (0-7 days)</SelectItem>
+                  <SelectItem value="recent_week">Recent Week (7-30 days)</SelectItem>
+                  <SelectItem value="stale">Stale (30+ days)</SelectItem>
+                  <SelectItem value="never">Never</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Compliance Check</label>
+              <Select value={complianceCheckStatusFilter} onValueChange={(value) => setParam("complianceCheckStatus", value)}>
+                <SelectTrigger className="h-11">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="0-3_months">0-3 months</SelectItem>
+                  <SelectItem value="3-6_months">3-6 months</SelectItem>
+                  <SelectItem value="6-12_months">6-12 months</SelectItem>
+                  <SelectItem value="12_plus_never">12+ months/Never</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           
           {activeFilters > 0 && (
@@ -613,6 +704,11 @@ export function ProjectsMobileView() {
                 setParam("universe", "all")
                 setParam("eba", "all")
                 setParam("workers", "all")
+                setParam("ratingStatus", "all")
+                setParam("auditStatus", "all")
+                setParam("mappingStatus", "all")
+                setParam("mappingUpdateStatus", "all")
+                setParam("complianceCheckStatus", "all")
               }}
               className="w-full text-muted-foreground h-11"
             >
@@ -649,6 +745,7 @@ export function ProjectsMobileView() {
                   <SelectItem value="workers">Workers</SelectItem>
                   <SelectItem value="members">Members</SelectItem>
                   <SelectItem value="created_at">Created</SelectItem>
+                  <SelectItem value="key_contractors_rated_value">$ Key Contractors Rated</SelectItem>
                 </SelectContent>
               </Select>
             </div>

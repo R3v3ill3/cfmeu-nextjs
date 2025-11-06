@@ -29,6 +29,8 @@ import { CfmeuEbaBadge, getProjectEbaStatus } from "@/components/ui/CfmeuEbaBadg
 import { OrganizingUniverseBadge } from "@/components/ui/OrganizingUniverseBadge"
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner"
 import { useKeyContractorTradesSet } from "@/hooks/useKeyContractorTrades"
+import { MappingStatusBadge } from "@/components/projects/MappingStatusBadge"
+import { AuditStatusBadge } from "@/components/projects/AuditStatusBadge"
 import Link from "next/link"
 import { WorkerDetailModal } from "@/components/workers/WorkerDetailModal"
 import { GoogleAddressInput, GoogleAddress } from "@/components/projects/GoogleAddressInput"
@@ -405,6 +407,19 @@ function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: Proje
           )}
         </div>
         <div className="pt-2 mt-auto space-y-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <MappingStatusBadge 
+              projectId={p.id} 
+              mappingStatus={(p as any).mapping_status}
+              variant="compact"
+            />
+            <AuditStatusBadge 
+              projectId={p.id} 
+              hasComplianceChecks={(p as any).has_compliance_checks}
+              lastComplianceCheckDate={(p as any).last_compliance_check_date}
+              variant="compact"
+            />
+          </div>
           <Button 
             className="w-full" 
             size="sm" 
@@ -414,18 +429,6 @@ function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: Proje
             }}
           >
             Open project
-          </Button>
-          <Button 
-            className="w-full" 
-            size="sm"
-            variant="outline"
-            onClick={(e) => {
-              e.stopPropagation()
-              startNavigation(`/projects/${p.id}?tab=site-visits`)
-              setTimeout(() => router.push(`/projects/${p.id}?tab=site-visits`), 50)
-            }}
-          >
-            Record Site Visit
           </Button>
         </div>
       </CardContent>
@@ -492,6 +495,11 @@ export function ProjectsDesktopView() {
   const stageFilter = sp.get("stage") || sp.get("stageFilter") || "all"
   const specialFilter = sp.get("special") || "all"
   const ebaFilter = sp.get("eba") || "all"
+  const ratingStatusFilter = sp.get("ratingStatus") || "all"
+  const auditStatusFilter = sp.get("auditStatus") || "all"
+  const mappingStatusFilter = sp.get("mappingStatus") || "all"
+  const mappingUpdateStatusFilter = sp.get("mappingUpdateStatus") || "all"
+  const complianceCheckStatusFilter = sp.get("complianceCheckStatus") || "all"
   const page = Math.max(1, parseInt(sp.get('page') || '1', 10) || 1)
   const PAGE_SIZE = 24
 
@@ -663,8 +671,41 @@ export function ProjectsDesktopView() {
       }
       filters.push({ key: 'eba', value: ebaFilter, label: ebaLabels[ebaFilter as keyof typeof ebaLabels] || `EBA: ${ebaFilter}` })
     }
+    if (ratingStatusFilter !== 'all') {
+      filters.push({ key: 'ratingStatus', value: ratingStatusFilter, label: `Rating: ${ratingStatusFilter === 'rated' ? 'Rated' : 'Unrated'}` })
+    }
+    if (auditStatusFilter !== 'all') {
+      filters.push({ key: 'auditStatus', value: auditStatusFilter, label: `Audit: ${auditStatusFilter === 'has_audit' ? 'Has Audit' : 'No Audit'}` })
+    }
+    if (mappingStatusFilter !== 'all') {
+      const mappingLabels = {
+        'no_roles': 'Mapping: No Roles',
+        'no_trades': 'Mapping: No Trades',
+        'bci_only': 'Mapping: BCI Only',
+        'has_manual': 'Mapping: Has Manual'
+      }
+      filters.push({ key: 'mappingStatus', value: mappingStatusFilter, label: mappingLabels[mappingStatusFilter as keyof typeof mappingLabels] || `Mapping: ${mappingStatusFilter}` })
+    }
+    if (mappingUpdateStatusFilter !== 'all') {
+      const updateLabels = {
+        'recent': 'Update: Recent (0-7 days)',
+        'recent_week': 'Update: Recent Week (7-30 days)',
+        'stale': 'Update: Stale (30+ days)',
+        'never': 'Update: Never'
+      }
+      filters.push({ key: 'mappingUpdateStatus', value: mappingUpdateStatusFilter, label: updateLabels[mappingUpdateStatusFilter as keyof typeof updateLabels] || `Update: ${mappingUpdateStatusFilter}` })
+    }
+    if (complianceCheckStatusFilter !== 'all') {
+      const complianceLabels = {
+        '0-3_months': 'Compliance: 0-3 months',
+        '3-6_months': 'Compliance: 3-6 months',
+        '6-12_months': 'Compliance: 6-12 months',
+        '12_plus_never': 'Compliance: 12+ months/Never'
+      }
+      filters.push({ key: 'complianceCheckStatus', value: complianceCheckStatusFilter, label: complianceLabels[complianceCheckStatusFilter as keyof typeof complianceLabels] || `Compliance: ${complianceCheckStatusFilter}` })
+    }
     return filters
-  }, [q, tierFilter, universeFilter, stageFilter, workersFilter, specialFilter, ebaFilter])
+  }, [q, tierFilter, universeFilter, stageFilter, workersFilter, specialFilter, ebaFilter, ratingStatusFilter, auditStatusFilter, mappingStatusFilter, mappingUpdateStatusFilter, complianceCheckStatusFilter])
 
   // If a patch is selected, compute project ids that have at least one site linked to these patches
   const { data: patchProjectIds = [], isFetching: fetchingPatchProjects } = useQuery<string[]>({
@@ -709,6 +750,11 @@ export function ProjectsDesktopView() {
     workers: workersFilter as any,
     special: specialFilter as any,
     eba: ebaFilter as any,
+    ratingStatus: ratingStatusFilter !== 'all' ? ratingStatusFilter as any : undefined,
+    auditStatus: auditStatusFilter !== 'all' ? auditStatusFilter as any : undefined,
+    mappingStatus: mappingStatusFilter !== 'all' ? mappingStatusFilter as any : undefined,
+    mappingUpdateStatus: mappingUpdateStatusFilter !== 'all' ? mappingUpdateStatusFilter as any : undefined,
+    complianceCheckStatus: complianceCheckStatusFilter !== 'all' ? complianceCheckStatusFilter as any : undefined,
   })
 
   // CLIENT-SIDE DATA FETCHING (Original implementation)
@@ -1065,6 +1111,7 @@ export function ProjectsDesktopView() {
                   <SelectItem value="members">Member Count</SelectItem>
                   <SelectItem value="delegates">Has Delegate</SelectItem>
                   <SelectItem value="eba_coverage">EBA Coverage</SelectItem>
+                  <SelectItem value="key_contractors_rated_value">$ Key Contractors Rated</SelectItem>
                 </SelectContent>
               </Select>
               <ToggleGroup type="single" variant="outline" size="sm" value={dir} onValueChange={(v) => v && setParam("dir", v)}>
@@ -1222,6 +1269,82 @@ export function ProjectsDesktopView() {
                   <SelectContent>
                     <SelectItem value="all">All</SelectItem>
                     <SelectItem value="noBuilderWithEmployers">No Builder, Has Employers</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Rating Status</div>
+                <Select value={ratingStatusFilter} onValueChange={(value) => setParam("ratingStatus", value)}>
+                  <SelectTrigger className="h-8">
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="rated">Rated</SelectItem>
+                    <SelectItem value="unrated">Unrated</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Audit Status</div>
+                <Select value={auditStatusFilter} onValueChange={(value) => setParam("auditStatus", value)}>
+                  <SelectTrigger className="h-8">
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="has_audit">Has Audit</SelectItem>
+                    <SelectItem value="no_audit">No Audit</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Mapping Status</div>
+                <Select value={mappingStatusFilter} onValueChange={(value) => setParam("mappingStatus", value)}>
+                  <SelectTrigger className="h-8">
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="no_roles">No Roles</SelectItem>
+                    <SelectItem value="no_trades">No Trades</SelectItem>
+                    <SelectItem value="bci_only">BCI Only</SelectItem>
+                    <SelectItem value="has_manual">Has Manual</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Mapping Update</div>
+                <Select value={mappingUpdateStatusFilter} onValueChange={(value) => setParam("mappingUpdateStatus", value)}>
+                  <SelectTrigger className="h-8">
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="recent">Recent (0-7 days)</SelectItem>
+                    <SelectItem value="recent_week">Recent Week (7-30 days)</SelectItem>
+                    <SelectItem value="stale">Stale (30+ days)</SelectItem>
+                    <SelectItem value="never">Never</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Compliance Check</div>
+                <Select value={complianceCheckStatusFilter} onValueChange={(value) => setParam("complianceCheckStatus", value)}>
+                  <SelectTrigger className="h-8">
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="0-3_months">0-3 months</SelectItem>
+                    <SelectItem value="3-6_months">3-6 months</SelectItem>
+                    <SelectItem value="6-12_months">6-12 months</SelectItem>
+                    <SelectItem value="12_plus_never">12+ months/Never</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

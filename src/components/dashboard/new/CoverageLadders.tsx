@@ -6,6 +6,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Cell } from "recharts"
 import { useOrganizingUniverseMetrics } from "@/hooks/useOrganizingUniverseMetrics"
 import { useOrganizingUniverseMetricsServerSideCompatible } from "@/hooks/useOrganizingUniverseMetricsServerSide"
+import { useCoverageLadders } from "@/hooks/useCoverageLadders"
 import { useSearchParams } from "next/navigation"
 import { FilterIndicatorBadge } from "@/components/dashboard/FilterIndicatorBadge"
 import { useActiveFilters } from "@/hooks/useActiveFilters"
@@ -24,22 +25,61 @@ export function CoverageLadders({ patchIds = [] }: CoverageLaddersProps) {
   const normalizedStage = stage && stage !== 'all' ? stage : 'construction'
   const normalizedUniverse = universe && universe !== 'all' ? universe : 'active'
 
-  // Get metrics from server-side or client-side
-  const { data: clientMetrics } = useOrganizingUniverseMetrics({ 
-    universe: normalizedUniverse, 
-    stage: normalizedStage 
+  // Try to get data from worker first, then fallback to server-side or client-side
+  const { data: workerData, error: workerError } = useCoverageLadders({
+    patchIds,
+    universe: universe,
+    stage: stage,
+    tier: undefined // Add tier support if needed later
   })
-  const { data: serverMetrics } = useOrganizingUniverseMetricsServerSideCompatible({ 
-    universe: normalizedUniverse, 
-    stage: normalizedStage, 
-    patchIds 
-  })
-  const metrics = serverMetrics || clientMetrics
 
-  // Calculate Projects Ladder data
+  const { data: clientMetrics } = useOrganizingUniverseMetrics({
+    universe: normalizedUniverse,
+    stage: normalizedStage
+  })
+  const { data: serverMetrics } = useOrganizingUniverseMetricsServerSideCompatible({
+    universe: normalizedUniverse,
+    stage: normalizedStage,
+    patchIds
+  })
+  const metrics = workerData ? null : (serverMetrics || clientMetrics)
+
+  // Calculate Projects Ladder data - use worker data if available
   const projectsLadderData = useMemo(() => {
+    if (workerData) {
+      // Use data from Railway worker
+      return {
+        total: workerData.projects.total,
+        segments: [
+          {
+            name: "Unknown builder",
+            value: workerData.projects.unknownBuilders,
+            percentage: workerData.projects.knownBuilderPercentage === 100 ? 0 : Math.round((workerData.projects.unknownBuilders / workerData.projects.total) * 100),
+            color: "#e5e7eb", // light grey
+          },
+          {
+            name: "Known, non-EBA builder",
+            value: workerData.projects.knownNonEbaBuilders,
+            percentage: Math.round((workerData.projects.knownNonEbaBuilders / workerData.projects.total) * 100),
+            color: "hsl(221 83% 53%)", // blue
+          },
+          {
+            name: "EBA builder",
+            value: workerData.projects.ebaBuilders,
+            percentage: Math.round((workerData.projects.ebaBuilders / workerData.projects.total) * 100),
+            color: "hsl(142 71% 45%)", // green
+          },
+        ],
+        knownBuilders: workerData.projects.knownBuilders,
+        ebaBuilders: workerData.projects.ebaBuilders,
+        knownBuilderPercentage: workerData.projects.knownBuilderPercentage,
+        ebaOfKnownPercentage: workerData.projects.ebaOfKnownPercentage,
+      }
+    }
+
     if (!metrics) return null
 
+    // Fallback to original logic using metrics data
     const totalProjects = metrics.totalActiveProjects || 0
     const knownBuilders = metrics.knownBuilderCount || 0
     const ebaBuilders = metrics.ebaProjectsCount || 0
@@ -70,19 +110,51 @@ export function CoverageLadders({ patchIds = [] }: CoverageLaddersProps) {
       ],
       knownBuilders,
       ebaBuilders,
-      knownBuilderPercentage: knownBuilders > 0 && totalProjects > 0 
-        ? Math.round((knownBuilders / totalProjects) * 100) 
+      knownBuilderPercentage: knownBuilders > 0 && totalProjects > 0
+        ? Math.round((knownBuilders / totalProjects) * 100)
         : 0,
-      ebaOfKnownPercentage: knownBuilders > 0 
-        ? Math.round((ebaBuilders / knownBuilders) * 100) 
+      ebaOfKnownPercentage: knownBuilders > 0
+        ? Math.round((ebaBuilders / knownBuilders) * 100)
         : 0,
     }
-  }, [metrics])
+  }, [workerData, metrics])
 
-  // Calculate Contractor Ladder data
+  // Calculate Contractor Ladder data - use worker data if available
   const contractorLadderData = useMemo(() => {
+    if (workerData) {
+      // Use data from Railway worker
+      return {
+        total: workerData.contractors.total,
+        segments: [
+          {
+            name: "Unidentified slot",
+            value: workerData.contractors.unidentified,
+            percentage: workerData.contractors.identifiedPercentage === 100 ? 0 : Math.round((workerData.contractors.unidentified / workerData.contractors.total) * 100),
+            color: "#e5e7eb", // light grey
+          },
+          {
+            name: "Identified contractor, non-EBA",
+            value: workerData.contractors.identifiedNonEba,
+            percentage: Math.round((workerData.contractors.identifiedNonEba / workerData.contractors.total) * 100),
+            color: "hsl(221 83% 53%)", // blue
+          },
+          {
+            name: "Identified contractor, EBA",
+            value: workerData.contractors.eba,
+            percentage: Math.round((workerData.contractors.eba / workerData.contractors.total) * 100),
+            color: "hsl(142 71% 45%)", // green
+          },
+        ],
+        identified: workerData.contractors.identified,
+        eba: workerData.contractors.eba,
+        identifiedPercentage: workerData.contractors.identifiedPercentage,
+        ebaOfIdentifiedPercentage: workerData.contractors.ebaOfIdentifiedPercentage,
+      }
+    }
+
     if (!metrics) return null
 
+    // Fallback to original logic using metrics data
     const totalSlots = metrics.totalKeyContractorSlots || 0
     const identified = metrics.mappedKeyContractors || 0
     const eba = metrics.keyContractorsWithEba || 0
@@ -113,31 +185,36 @@ export function CoverageLadders({ patchIds = [] }: CoverageLaddersProps) {
       ],
       identified,
       eba,
-      identifiedPercentage: totalSlots > 0 
-        ? Math.round((identified / totalSlots) * 100) 
+      identifiedPercentage: totalSlots > 0
+        ? Math.round((identified / totalSlots) * 100)
         : 0,
-      ebaOfIdentifiedPercentage: identified > 0 
-        ? Math.round((eba / identified) * 100) 
+      ebaOfIdentifiedPercentage: identified > 0
+        ? Math.round((eba / identified) * 100)
         : 0,
     }
-  }, [metrics])
+  }, [workerData, metrics])
 
-  // Format data for stacked bar chart
-  const projectsChartData = projectsLadderData ? [{
-    name: "Projects",
-    "Unknown builder": projectsLadderData.segments[0].value,
-    "Known, non-EBA builder": projectsLadderData.segments[1].value,
-    "EBA builder": projectsLadderData.segments[2].value,
-  }] : []
+  // Format data for stacked bar chart - use worker chart data if available
+  const projectsChartData = workerData
+    ? workerData.projects.chartData
+    : (projectsLadderData ? [{
+        name: "Projects",
+        "Unknown builder": projectsLadderData.segments[0].value,
+        "Known, non-EBA builder": projectsLadderData.segments[1].value,
+        "EBA builder": projectsLadderData.segments[2].value,
+      }] : [])
 
-  const contractorChartData = contractorLadderData ? [{
-    name: "Contractors",
-    "Unidentified slot": contractorLadderData.segments[0].value,
-    "Identified contractor, non-EBA": contractorLadderData.segments[1].value,
-    "Identified contractor, EBA": contractorLadderData.segments[2].value,
-  }] : []
+  const contractorChartData = workerData
+    ? workerData.contractors.chartData
+    : (contractorLadderData ? [{
+        name: "Contractors",
+        "Unidentified slot": contractorLadderData.segments[0].value,
+        "Identified contractor, non-EBA": contractorLadderData.segments[1].value,
+        "Identified contractor, EBA": contractorLadderData.segments[2].value,
+      }] : [])
 
-  const ladderHeightClasses = "w-full h-[112px] sm:h-[128px] lg:h-[120px]"
+  // Simplified height classes to fix mobile rendering issues
+  const ladderHeightClasses = "w-full h-[120px]"
 
   const CustomTooltip = ({ active, payload }: any) => {
     if (!active || !payload || payload.length === 0) return null
@@ -174,7 +251,7 @@ export function CoverageLadders({ patchIds = [] }: CoverageLaddersProps) {
     )
   }
 
-  if (!metrics) {
+  if (!metrics && !workerData) {
     return (
       <Card className="lg:bg-white lg:border-gray-300 lg:shadow-md">
         <CardHeader className="pb-3">

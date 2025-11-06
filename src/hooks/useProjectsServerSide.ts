@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 export interface ProjectsParams {
   page: number;
   pageSize: number;
-  sort: 'name' | 'value' | 'tier' | 'workers' | 'members' | 'delegates' | 'eba_coverage' | 'employers' | 'created_at';
+  sort: 'name' | 'value' | 'tier' | 'workers' | 'members' | 'delegates' | 'eba_coverage' | 'employers' | 'created_at' | 'key_contractors_rated_value';
   dir: 'asc' | 'desc';
   q?: string;
   patch?: string; // Comma-separated patch IDs
@@ -15,6 +15,11 @@ export interface ProjectsParams {
   workers?: 'all' | 'zero' | 'nonzero';
   special?: 'all' | 'noBuilderWithEmployers';
   eba?: 'all' | 'eba_active' | 'eba_inactive' | 'builder_unknown';
+  ratingStatus?: 'all' | 'rated' | 'unrated';
+  auditStatus?: 'all' | 'has_audit' | 'no_audit';
+  mappingStatus?: 'all' | 'no_roles' | 'no_trades' | 'bci_only' | 'has_manual';
+  mappingUpdateStatus?: 'all' | 'recent' | 'recent_week' | 'stale' | 'never';
+  complianceCheckStatus?: 'all' | '0-3_months' | '3-6_months' | '6-12_months' | '12_plus_never';
   newOnly?: boolean;
   since?: string;
 }
@@ -39,6 +44,13 @@ export interface ProjectRecord {
       enterprise_agreement_status?: boolean | null;
     } | null;
   }[];
+  // New computed fields for filtering
+  has_project_rating?: boolean;
+  has_compliance_checks?: boolean;
+  mapping_status?: 'no_roles' | 'no_trades' | 'bci_only' | 'has_manual';
+  mapping_last_updated?: string | null;
+  last_compliance_check_date?: string | null;
+  key_contractors_rated_value?: number | null;
 }
 
 export interface ProjectSummary {
@@ -124,6 +136,26 @@ export function useProjectsServerSide(params: ProjectsParams) {
       
       if (params.eba && params.eba !== 'all') {
         searchParams.set('eba', params.eba);
+      }
+
+      if (params.ratingStatus && params.ratingStatus !== 'all') {
+        searchParams.set('ratingStatus', params.ratingStatus);
+      }
+
+      if (params.auditStatus && params.auditStatus !== 'all') {
+        searchParams.set('auditStatus', params.auditStatus);
+      }
+
+      if (params.mappingStatus && params.mappingStatus !== 'all') {
+        searchParams.set('mappingStatus', params.mappingStatus);
+      }
+
+      if (params.mappingUpdateStatus && params.mappingUpdateStatus !== 'all') {
+        searchParams.set('mappingUpdateStatus', params.mappingUpdateStatus);
+      }
+
+      if (params.complianceCheckStatus && params.complianceCheckStatus !== 'all') {
+        searchParams.set('complianceCheckStatus', params.complianceCheckStatus);
       }
 
       if (params.newOnly) {

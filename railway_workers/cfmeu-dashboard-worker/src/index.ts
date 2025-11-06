@@ -846,6 +846,195 @@ app.get('/v1/dashboard', async (req, res) => {
 })
 
 // ============================================================================
+// GET /v1/coverage-ladders — Coverage ladder metrics for dashboard visualization
+// ============================================================================
+app.get('/v1/coverage-ladders', async (req, res) => {
+  const startTime = Date.now()
+  const token = getBearerToken(req)
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+
+  const tier = (req.query.tier ? String(req.query.tier) : undefined) || undefined
+  const stage = (req.query.stage ? String(req.query.stage) : undefined) || undefined
+  const universe = (req.query.universe ? String(req.query.universe) : undefined) || undefined
+  const rawPatch = req.query.patchIds ? String(req.query.patchIds) : undefined
+  const patchIds = rawPatch ? rawPatch.split(',').map((s) => s.trim()).filter(Boolean) : undefined
+
+  // Normalize parameters for CoverageLadders component
+  const normalizedStage = (!stage || stage === 'all') ? 'construction' : stage
+  const normalizedUniverse = (!universe || universe === 'all') ? 'active' : universe
+
+  const cacheKey = makeCacheKey('coverage-ladders', hashToken(token), {
+    tier,
+    stage: normalizedStage,
+    universe: normalizedUniverse,
+    patchIds
+  })
+  const cached = cache.get<any>(cacheKey)
+  if (cached) {
+    return res.status(200).set({ 'X-Cache': 'HIT' }).json(cached)
+  }
+
+  try {
+    const { client: sb } = await ensureAuthorizedUser(token)
+
+    // Optional scoping: patch -> project ids (using mapping view, fallback if needed)
+    let scopedProjectIds: string[] | null = null
+    if (patchIds && patchIds.length > 0) {
+      let { data: patchProjects } = await sb
+        .from('patch_project_mapping_view')
+        .select('project_id')
+        .in('patch_id', patchIds)
+
+      if (!patchProjects || patchProjects.length === 0) {
+        const { data: fallbackData, error: fbErr } = await sb
+          .from('job_sites')
+          .select('project_id')
+          .in('patch_id', patchIds)
+          .not('project_id', 'is', null)
+        if (fbErr) throw fbErr
+        patchProjects = fallbackData || []
+      }
+      scopedProjectIds = Array.from(new Set((patchProjects || []).map((r: any) => r.project_id).filter(Boolean)))
+    }
+
+    // Get projects for the specified universe and stage
+    let projectsQuery = sb.from('projects').select('id, organising_universe, stage_class, tier')
+    if (scopedProjectIds && scopedProjectIds.length > 0) projectsQuery = projectsQuery.in('id', scopedProjectIds)
+    if (tier && tier !== 'all') projectsQuery = projectsQuery.eq('tier', tier)
+    projectsQuery = projectsQuery.eq('organising_universe', normalizedUniverse)
+    projectsQuery = projectsQuery.eq('stage_class', normalizedStage)
+    const { data: projects, error: projectsError } = await projectsQuery
+    if (projectsError) throw projectsError
+
+    const projectIds = (projects || []).map((p: any) => p.id)
+    const totalProjects = projectIds.length
+
+    // Initialize ladder metrics
+    let knownBuilders = 0
+    let ebaBuilders = 0
+    let totalKeyContractorSlots = 0
+    let identifiedKeyContractors = new Set<string>()
+    let ebaKeyContractors = new Set<string>()
+
+    if (projectIds.length > 0) {
+      // Get builder/contractor data for projects
+      const { data: assignments } = await sb
+        .from('project_assignments')
+        .select(`
+          employer_id,
+          assignment_type,
+          contractor_role_types ( code ),
+          employers!inner (
+            id,
+            company_eba_records (fwc_certified_date)
+          )
+        `)
+        .in('project_id', projectIds)
+
+      if (assignments) {
+        // Process builders (contractor_role = 'builder')
+        const builderAssignments = assignments.filter(a =>
+          Array.isArray(a.contractor_role_types) && a.contractor_role_types.some(rt => rt.code === 'builder')
+        )
+        const uniqueBuilderIds = new Set(builderAssignments.map(a => a.employer_id))
+        knownBuilders = uniqueBuilderIds.size
+
+        // Count EBA builders
+        builderAssignments.forEach(assignment => {
+          const employer = Array.isArray(assignment.employers) ? assignment.employers[0] : assignment.employers
+          const hasEba = employer?.company_eba_records &&
+            Array.isArray(employer.company_eba_records) &&
+            employer.company_eba_records.some((eba: any) => eba.fwc_certified_date)
+          if (hasEba) {
+            ebaBuilders++
+          }
+        })
+
+        // Process key contractors (trade_work assignments)
+        const tradeAssignments = assignments.filter(a => a.assignment_type === 'trade_work')
+        totalKeyContractorSlots = tradeAssignments.length
+
+        // Identify contractors with EBAs
+        tradeAssignments.forEach(assignment => {
+          const employer = Array.isArray(assignment.employers) ? assignment.employers[0] : assignment.employers
+          identifiedKeyContractors.add(assignment.employer_id)
+
+          const hasEba = employer?.company_eba_records &&
+            Array.isArray(employer.company_eba_records) &&
+            employer.company_eba_records.some((eba: any) => eba.fwc_certified_date)
+          if (hasEba) {
+            ebaKeyContractors.add(assignment.employer_id)
+          }
+        })
+      }
+    }
+
+    const unknownBuilders = totalProjects - knownBuilders
+    const knownNonEbaBuilders = knownBuilders - ebaBuilders
+    const unidentifiedSlots = totalKeyContractorSlots - identifiedKeyContractors.size
+    const identifiedNonEbaContractors = identifiedKeyContractors.size - ebaKeyContractors.size
+
+    // Format response for CoverageLadders component
+    const response = {
+      projects: {
+        total: totalProjects,
+        knownBuilders,
+        ebaBuilders,
+        unknownBuilders,
+        knownNonEbaBuilders,
+        knownBuilderPercentage: totalProjects > 0 ? Math.round((knownBuilders / totalProjects) * 100) : 0,
+        ebaOfKnownPercentage: knownBuilders > 0 ? Math.round((ebaBuilders / knownBuilders) * 100) : 0,
+        chartData: [{
+          name: "Projects",
+          "Unknown builder": unknownBuilders,
+          "Known, non-EBA builder": knownNonEbaBuilders,
+          "EBA builder": ebaBuilders,
+        }]
+      },
+      contractors: {
+        total: totalKeyContractorSlots,
+        identified: identifiedKeyContractors.size,
+        eba: ebaKeyContractors.size,
+        unidentified: unidentifiedSlots,
+        identifiedNonEba: identifiedNonEbaContractors,
+        identifiedPercentage: totalKeyContractorSlots > 0 ? Math.round((identifiedKeyContractors.size / totalKeyContractorSlots) * 100) : 0,
+        ebaOfIdentifiedPercentage: identifiedKeyContractors.size > 0 ? Math.round((ebaKeyContractors.size / identifiedKeyContractors.size) * 100) : 0,
+        chartData: [{
+          name: "Contractors",
+          "Unidentified slot": unidentifiedSlots,
+          "Identified contractor, non-EBA": identifiedNonEbaContractors,
+          "Identified contractor, EBA": ebaKeyContractors.size,
+        }]
+      },
+      debug: {
+        queryTime: Date.now() - startTime,
+        stage: normalizedStage,
+        universe: normalizedUniverse,
+        patchIds: patchIds || null
+      }
+    }
+
+    cache.set(cacheKey, response, 30_000) // 30 second cache
+    res.status(200).set({ 'Cache-Control': 'public, max-age=30', 'X-Cache': 'MISS' }).json(response)
+  } catch (err: any) {
+    if (err?.message === 'Unauthorized') {
+      return res.status(401).json({ error: 'Unauthorized' })
+    }
+    if (err?.message === 'Forbidden') {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+    if (err?.message === 'profile_load_failed') {
+      logger.error({ err }, 'Profile load failed for coverage ladders')
+      return res.status(500).json({ error: 'Unable to load user profile' })
+    }
+    logger.error({ err }, 'Coverage ladders endpoint error')
+    res.status(500).json({ error: 'Failed to fetch coverage ladders data' })
+  }
+})
+
+// ============================================================================
 // GET /v1/employers — Employer list with comprehensive data and caching
 // ============================================================================
 app.get('/v1/employers', async (req, res) => {

@@ -17,7 +17,7 @@ export const dynamic = 'force-dynamic'
 export interface ProjectsRequest {
   page: number;
   pageSize: number;
-  sort: 'name' | 'value' | 'tier' | 'workers' | 'members' | 'delegates' | 'eba_coverage' | 'employers';
+  sort: 'name' | 'value' | 'tier' | 'workers' | 'members' | 'delegates' | 'eba_coverage' | 'employers' | 'key_contractors_rated_value';
   dir: 'asc' | 'desc';
   q?: string;
   patch?: string; // Comma-separated patch IDs
@@ -27,6 +27,11 @@ export interface ProjectsRequest {
   workers?: 'all' | 'zero' | 'nonzero';
   special?: 'all' | 'noBuilderWithEmployers';
   eba?: 'all' | 'eba_active' | 'eba_inactive' | 'builder_unknown';
+  ratingStatus?: 'all' | 'rated' | 'unrated';
+  auditStatus?: 'all' | 'has_audit' | 'no_audit';
+  mappingStatus?: 'all' | 'no_roles' | 'no_trades' | 'bci_only' | 'has_manual';
+  mappingUpdateStatus?: 'all' | 'recent' | 'recent_week' | 'stale' | 'never';
+  complianceCheckStatus?: 'all' | '0-3_months' | '3-6_months' | '6-12_months' | '12_plus_never';
 }
 
 export interface ProjectRecord {
@@ -50,6 +55,13 @@ export interface ProjectRecord {
       eba_status_source?: string | null;
     } | null;
   }[];
+  // New computed fields for filtering
+  has_project_rating?: boolean;
+  has_compliance_checks?: boolean;
+  mapping_status?: 'no_roles' | 'no_trades' | 'bci_only' | 'has_manual';
+  mapping_last_updated?: string | null;
+  last_compliance_check_date?: string | null;
+  key_contractors_rated_value?: number | null;
 }
 
 export interface ProjectSummary {
@@ -131,6 +143,11 @@ async function getProjectsHandler(request: NextRequest) {
     const workers = (searchParams.get('workers') || 'all') as ProjectsRequest['workers'];
     const special = (searchParams.get('special') || 'all') as ProjectsRequest['special'];
     const eba = (searchParams.get('eba') || 'all') as ProjectsRequest['eba'];
+    const ratingStatus = (searchParams.get('ratingStatus') || 'all') as ProjectsRequest['ratingStatus'];
+    const auditStatus = (searchParams.get('auditStatus') || 'all') as ProjectsRequest['auditStatus'];
+    const mappingStatus = (searchParams.get('mappingStatus') || 'all') as ProjectsRequest['mappingStatus'];
+    const mappingUpdateStatus = (searchParams.get('mappingUpdateStatus') || 'all') as ProjectsRequest['mappingUpdateStatus'];
+    const complianceCheckStatus = (searchParams.get('complianceCheckStatus') || 'all') as ProjectsRequest['complianceCheckStatus'];
     const newOnlyParam = searchParams.get('newOnly');
     const newOnly = newOnlyParam === '1' || newOnlyParam === 'true';
     const sinceParam = searchParams.get('since') || undefined;
@@ -259,77 +276,429 @@ async function getProjectsHandler(request: NextRequest) {
       }
     }
 
-    // Apply sorting with exact same logic as client plus created_at support
-    const needsClientSorting = ["workers", "members", "delegates", "eba_coverage", "employers"].includes(sort);
+    // Fetch all matching projects first (before pagination) to compute status fields
+    // We'll apply status-based filters and then paginate
+    const { data: allProjectsData, error: allProjectsError } = await query.select('id');
     
-    if (!needsClientSorting) {
-      // Database-sortable fields
-      if (sort === 'name') {
-        query = query.order('name', { ascending: dir === 'asc' });
-      } else if (sort === 'value') {
-        query = query.order('value', { ascending: dir === 'asc', nullsFirst: false });
-      } else if (sort === 'tier') {
-        query = query.order('tier', { ascending: dir === 'asc', nullsFirst: false });
-      } else {
-        // Default to created_at desc if unspecified, or allow explicit created_at sort
-        query = query.order('created_at', { ascending: dir === 'asc' });
-      }
-    } else {
-      // Pre-computed summary fields can now be sorted server-side too!
-      if (sort === 'workers') {
-        query = query.order('total_workers', { ascending: dir === 'asc' });
-      } else if (sort === 'members') {
-        query = query.order('total_members', { ascending: dir === 'asc' });
-      } else if (sort === 'employers') {
-        query = query.order('engaged_employer_count', { ascending: dir === 'asc' });
-      } else if (sort === 'eba_coverage') {
-        query = query.order('eba_coverage_percent', { ascending: dir === 'asc' });
-      } else if (sort === 'delegates') {
-        // Sort by whether delegate_name exists
-        query = query.order('delegate_name', { ascending: dir === 'asc', nullsFirst: dir === 'desc' });
-      }
-    }
-
-    // Apply pagination
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
-    query = query.range(from, to);
-
-    // Execute query
-    const { data, error, count } = await query;
-
-    if (error) {
-      console.error('Projects API error:', error);
+    if (allProjectsError) {
+      console.error('Projects API error fetching project IDs:', allProjectsError);
       return NextResponse.json(
         { error: 'Failed to fetch projects' },
         { status: 500 }
       );
     }
 
-    // Transform data to match client expectations
-    const projects: ProjectRecord[] = (data || []).map((row: any) => ({
-      id: row.id,
-      name: row.name,
-      main_job_site_id: row.main_job_site_id,
-      value: row.value,
-      tier: row.tier,
-      organising_universe: row.organising_universe,
-      stage_class: row.stage_class,
-      created_at: row.created_at,
-      full_address: row.full_address,
+    const allProjectIds = (allProjectsData || []).map((p: any) => p.id);
+    
+    if (allProjectIds.length === 0) {
+      // No projects match the base filters
+      const response: ProjectsResponse = {
+        projects: [],
+        summaries: {},
+        pagination: { page, pageSize, totalCount: 0, totalPages: 0 },
+        debug: {
+          queryTime: Date.now() - startTime,
+          cacheHit: false,
+          appliedFilters: {
+            q, patchIds, tier, universe, stage, workers, special, eba,
+            ratingStatus, auditStatus, mappingStatus, mappingUpdateStatus, complianceCheckStatus,
+            sort, dir, newOnly, since: sinceParam || (profile as any)?.last_seen_projects_at || null
+          },
+          patchProjectCount,
+          patchFilteringUsed: patchIds.length > 0,
+          patchFilteringMethod
+        }
+      };
+      return NextResponse.json(response);
+    }
+
+    // Fetch status data for all matching projects in parallel
+    const [ratingData, complianceData, mappingData, keyContractorTrades] = await Promise.all([
+      // Project-specific ratings (project_compliance_assessments)
+      supabase
+        .from('project_compliance_assessments')
+        .select('project_id')
+        .in('project_id', allProjectIds)
+        .eq('is_active', true),
       
-      // Transform project_assignments_data back to expected format
-      project_assignments: (row.project_assignments_data || []).map((assignment: any) => ({
-        ...assignment,
-        employers: assignment.employers
-          ? {
-              ...assignment.employers,
-              enterprise_agreement_status: assignment.employers.enterprise_agreement_status ?? null,
-              eba_status_source: assignment.employers.eba_status_source ?? null,
-            }
-          : null,
-      })),
-    }));
+      // Compliance checks (employer_compliance_checks)
+      supabase
+        .from('employer_compliance_checks')
+        .select('project_id, updated_at, cbus_check_date, incolink_check_date')
+        .in('project_id', allProjectIds)
+        .eq('is_current', true),
+      
+      // Mapping status (project_assignments)
+      supabase
+        .from('project_assignments')
+        .select('project_id, assignment_type, source, updated_at')
+        .in('project_id', allProjectIds),
+      
+      // Key contractor trades for rating value calculation
+      supabase
+        .from('key_contractor_trades')
+        .select('trade_type')
+        .eq('is_active', true)
+    ]);
+
+    // Process status data into maps for efficient lookup
+    const projectRatings = new Set((ratingData.data || []).map((r: any) => r.project_id));
+    const projectComplianceChecks = new Map<string, { hasCheck: boolean; lastDate: string | null }>();
+    const projectMappingStatus = new Map<string, { status: string; lastUpdated: string | null }>();
+    const keyContractorTradeCodes = new Set((keyContractorTrades.data || []).map((t: any) => t.trade_type));
+
+    // Process compliance checks
+    (complianceData.data || []).forEach((check: any) => {
+      const projectId = check.project_id;
+      const dates = [
+        check.updated_at,
+        check.cbus_check_date ? new Date(check.cbus_check_date).toISOString() : null,
+        check.incolink_check_date ? new Date(check.incolink_check_date).toISOString() : null
+      ].filter(Boolean) as string[];
+      
+      const lastDate = dates.length > 0 ? dates.sort().reverse()[0] : null;
+      
+      if (!projectComplianceChecks.has(projectId)) {
+        projectComplianceChecks.set(projectId, { hasCheck: true, lastDate });
+      } else {
+        const existing = projectComplianceChecks.get(projectId)!;
+        if (lastDate && (!existing.lastDate || lastDate > existing.lastDate)) {
+          existing.lastDate = lastDate;
+        }
+      }
+    });
+
+    // Process mapping status
+    const mappingByProject = new Map<string, { hasRoles: boolean; hasTrades: boolean; sources: Set<string>; lastUpdated: string | null }>();
+    
+    (mappingData.data || []).forEach((assignment: any) => {
+      const projectId = assignment.project_id;
+      if (!mappingByProject.has(projectId)) {
+        mappingByProject.set(projectId, {
+          hasRoles: false,
+          hasTrades: false,
+          sources: new Set(),
+          lastUpdated: null
+        });
+      }
+      
+      const project = mappingByProject.get(projectId)!;
+      if (assignment.assignment_type === 'contractor_role') {
+        project.hasRoles = true;
+      } else if (assignment.assignment_type === 'trade_work') {
+        project.hasTrades = true;
+      }
+      
+      if (assignment.source) {
+        project.sources.add(assignment.source);
+      }
+      
+      if (assignment.updated_at) {
+        if (!project.lastUpdated || assignment.updated_at > project.lastUpdated) {
+          project.lastUpdated = assignment.updated_at;
+        }
+      }
+    });
+
+    // Determine mapping status for each project
+    // Projects not in mappingByProject have no assignments (no_roles)
+    allProjectIds.forEach((projectId) => {
+      if (!mappingByProject.has(projectId)) {
+        projectMappingStatus.set(projectId, { status: 'no_roles', lastUpdated: null });
+      } else {
+        const data = mappingByProject.get(projectId)!;
+        let status: string;
+        if (!data.hasRoles) {
+          status = 'no_roles';
+        } else if (!data.hasTrades) {
+          status = 'no_trades';
+        } else if (data.sources.size === 1 && data.sources.has('bci_import')) {
+          status = 'bci_only';
+        } else {
+          status = 'has_manual';
+        }
+        
+        projectMappingStatus.set(projectId, { status, lastUpdated: data.lastUpdated });
+      }
+    });
+
+    // Calculate key contractors rated value for each project
+    // This requires checking which key contractors on each project have project-specific ratings
+    const keyContractorRatedValue = new Map<string, number>();
+    
+    if (sort === 'key_contractors_rated_value' || ratingStatus === 'rated') {
+      // Get project values first
+      const { data: projectValues } = await supabase
+        .from('projects')
+        .select('id, value')
+        .in('id', allProjectIds);
+      
+      const projectValueMap = new Map((projectValues || []).map((p: any) => [p.id, p.value || 0]));
+      
+      // Get key contractor role assignments (builder, head_contractor)
+      const { data: roleAssignments } = await supabase
+        .from('project_assignments')
+        .select('project_id, employer_id, contractor_role_types(code)')
+        .in('project_id', allProjectIds)
+        .eq('assignment_type', 'contractor_role');
+      
+      // Get key contractor trade assignments
+      const { data: tradeAssignments } = await supabase
+        .from('project_assignments')
+        .select('project_id, employer_id, trade_types(code)')
+        .in('project_id', allProjectIds)
+        .eq('assignment_type', 'trade_work');
+      
+      // Combine all key contractor assignments
+      const keyContractorAssignments: Array<{ project_id: string; employer_id: string }> = [];
+      
+      (roleAssignments || []).forEach((a: any) => {
+        const roleCode = a.contractor_role_types?.code;
+        if (roleCode === 'builder' || roleCode === 'head_contractor') {
+          keyContractorAssignments.push({ project_id: a.project_id, employer_id: a.employer_id });
+        }
+      });
+      
+      (tradeAssignments || []).forEach((a: any) => {
+        const tradeCode = a.trade_types?.code;
+        if (tradeCode && keyContractorTradeCodes.has(tradeCode)) {
+          keyContractorAssignments.push({ project_id: a.project_id, employer_id: a.employer_id });
+        }
+      });
+
+      // Get which of these employers have project-specific ratings
+      const keyContractorEmployerIds = Array.from(new Set(keyContractorAssignments.map(a => a.employer_id)));
+      
+      if (keyContractorEmployerIds.length > 0) {
+        const { data: ratedEmployers } = await supabase
+          .from('project_compliance_assessments')
+          .select('project_id, employer_id')
+          .in('project_id', allProjectIds)
+          .in('employer_id', keyContractorEmployerIds)
+          .eq('is_active', true);
+
+        const ratedSet = new Set((ratedEmployers || []).map((r: any) => `${r.project_id}:${r.employer_id}`));
+
+        // Calculate value for each project (count each project only once)
+        const projectsWithRatedKeyContractors = new Set<string>();
+        
+        keyContractorAssignments.forEach((assignment) => {
+          const projectId = assignment.project_id;
+          const employerId = assignment.employer_id;
+          const key = `${projectId}:${employerId}`;
+          
+          if (ratedSet.has(key)) {
+            projectsWithRatedKeyContractors.add(projectId);
+          }
+        });
+        
+        // Set the value for each project (only count once per project)
+        projectsWithRatedKeyContractors.forEach((projectId) => {
+          const projectValue = projectValueMap.get(projectId) || 0;
+          keyContractorRatedValue.set(projectId, projectValue);
+        });
+      }
+    }
+
+    // Filter projects based on status filters
+    let filteredProjectIds = allProjectIds.filter((projectId: string) => {
+      // Rating status filter
+      if (ratingStatus === 'rated' && !projectRatings.has(projectId)) {
+        return false;
+      }
+      if (ratingStatus === 'unrated' && projectRatings.has(projectId)) {
+        return false;
+      }
+
+      // Audit status filter
+      const compliance = projectComplianceChecks.get(projectId);
+      if (auditStatus === 'has_audit' && (!compliance || !compliance.hasCheck)) {
+        return false;
+      }
+      if (auditStatus === 'no_audit' && compliance && compliance.hasCheck) {
+        return false;
+      }
+
+      // Mapping status filter
+      const mapping = projectMappingStatus.get(projectId);
+      if (mappingStatus !== 'all') {
+        if (!mapping || mapping.status !== mappingStatus) {
+          return false;
+        }
+      }
+
+      // Mapping update status filter
+      if (mappingUpdateStatus !== 'all') {
+        const mapping = projectMappingStatus.get(projectId);
+        const lastUpdated = mapping?.lastUpdated ? new Date(mapping.lastUpdated) : null;
+        const now = new Date();
+        
+        if (mappingUpdateStatus === 'never' && lastUpdated !== null) {
+          return false;
+        }
+        if (mappingUpdateStatus === 'recent' && (!lastUpdated || (now.getTime() - lastUpdated.getTime()) > 7 * 24 * 60 * 60 * 1000)) {
+          return false;
+        }
+        if (mappingUpdateStatus === 'recent_week' && (!lastUpdated || (now.getTime() - lastUpdated.getTime()) < 7 * 24 * 60 * 60 * 1000 || (now.getTime() - lastUpdated.getTime()) > 30 * 24 * 60 * 60 * 1000)) {
+          return false;
+        }
+        if (mappingUpdateStatus === 'stale' && (!lastUpdated || (now.getTime() - lastUpdated.getTime()) <= 30 * 24 * 60 * 60 * 1000)) {
+          return false;
+        }
+      }
+
+      // Compliance check status filter
+      if (complianceCheckStatus !== 'all') {
+        const compliance = projectComplianceChecks.get(projectId);
+        const lastDate = compliance?.lastDate ? new Date(compliance.lastDate) : null;
+        const now = new Date();
+        
+        if (!lastDate) {
+          if (complianceCheckStatus !== '12_plus_never') {
+            return false;
+          }
+        } else {
+          const monthsAgo = (now.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24 * 30);
+          
+          if (complianceCheckStatus === '0-3_months' && monthsAgo > 3) {
+            return false;
+          }
+          if (complianceCheckStatus === '3-6_months' && (monthsAgo <= 3 || monthsAgo > 6)) {
+            return false;
+          }
+          if (complianceCheckStatus === '6-12_months' && (monthsAgo <= 6 || monthsAgo > 12)) {
+            return false;
+          }
+          if (complianceCheckStatus === '12_plus_never' && monthsAgo <= 12) {
+            return false;
+          }
+        }
+      }
+
+      return true;
+    });
+
+    // Now fetch the actual project data with the filtered IDs
+    let filteredQuery = supabase.from('project_list_comprehensive_view').select('*', { count: 'exact' });
+    filteredQuery = filteredQuery.in('id', filteredProjectIds);
+
+    // Apply sorting with exact same logic as client plus created_at support
+    const needsClientSorting = ["workers", "members", "delegates", "eba_coverage", "employers", "key_contractors_rated_value"].includes(sort);
+    
+    if (!needsClientSorting) {
+      // Database-sortable fields
+      if (sort === 'name') {
+        filteredQuery = filteredQuery.order('name', { ascending: dir === 'asc' });
+      } else if (sort === 'value') {
+        filteredQuery = filteredQuery.order('value', { ascending: dir === 'asc', nullsFirst: false });
+      } else if (sort === 'tier') {
+        filteredQuery = filteredQuery.order('tier', { ascending: dir === 'asc', nullsFirst: false });
+      } else {
+        // Default to created_at desc if unspecified, or allow explicit created_at sort
+        filteredQuery = filteredQuery.order('created_at', { ascending: dir === 'asc' });
+      }
+    } else {
+      // Pre-computed summary fields can now be sorted server-side too!
+      if (sort === 'workers') {
+        filteredQuery = filteredQuery.order('total_workers', { ascending: dir === 'asc' });
+      } else if (sort === 'members') {
+        filteredQuery = filteredQuery.order('total_members', { ascending: dir === 'asc' });
+      } else if (sort === 'employers') {
+        filteredQuery = filteredQuery.order('engaged_employer_count', { ascending: dir === 'asc' });
+      } else if (sort === 'eba_coverage') {
+        filteredQuery = filteredQuery.order('eba_coverage_percent', { ascending: dir === 'asc' });
+      } else if (sort === 'delegates') {
+        // Sort by whether delegate_name exists
+        filteredQuery = filteredQuery.order('delegate_name', { ascending: dir === 'asc', nullsFirst: dir === 'desc' });
+      } else if (sort === 'key_contractors_rated_value') {
+        // For this sort, we need to sort in memory after fetching
+        // We'll handle this after fetching the data
+      }
+    }
+
+    // Apply pagination
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    
+    // If sorting by key_contractors_rated_value, we need to fetch all and sort in memory
+    let data: any[];
+    let count: number;
+    
+    if (sort === 'key_contractors_rated_value') {
+      // Fetch all matching projects
+      const { data: allData, error: allError, count: allCount } = await filteredQuery;
+      if (allError) {
+        console.error('Projects API error:', allError);
+        return NextResponse.json(
+          { error: 'Failed to fetch projects' },
+          { status: 500 }
+        );
+      }
+      
+      // Sort by key contractors rated value
+      const sorted = (allData || []).sort((a: any, b: any) => {
+        const aValue = keyContractorRatedValue.get(a.id) || 0;
+        const bValue = keyContractorRatedValue.get(b.id) || 0;
+        return dir === 'asc' ? aValue - bValue : bValue - aValue;
+      });
+      
+      // Apply pagination
+      data = sorted.slice(from, to + 1);
+      count = allCount || 0;
+    } else {
+      // Normal pagination
+      filteredQuery = filteredQuery.range(from, to);
+      const result = await filteredQuery;
+      data = result.data || [];
+      count = result.count || 0;
+      
+      if (result.error) {
+        console.error('Projects API error:', result.error);
+        return NextResponse.json(
+          { error: 'Failed to fetch projects' },
+          { status: 500 }
+        );
+      }
+    }
+
+    // Transform data to match client expectations
+    const projects: ProjectRecord[] = (data || []).map((row: any) => {
+      const projectId = row.id;
+      const mapping = projectMappingStatus.get(projectId);
+      const compliance = projectComplianceChecks.get(projectId);
+      
+      return {
+        id: row.id,
+        name: row.name,
+        main_job_site_id: row.main_job_site_id,
+        value: row.value,
+        tier: row.tier,
+        organising_universe: row.organising_universe,
+        stage_class: row.stage_class,
+        created_at: row.created_at,
+        full_address: row.full_address,
+        
+        // Transform project_assignments_data back to expected format
+        project_assignments: (row.project_assignments_data || []).map((assignment: any) => ({
+          ...assignment,
+          employers: assignment.employers
+            ? {
+                ...assignment.employers,
+                enterprise_agreement_status: assignment.employers.enterprise_agreement_status ?? null,
+                eba_status_source: assignment.employers.eba_status_source ?? null,
+              }
+            : null,
+        })),
+        
+        // Add computed status fields
+        has_project_rating: projectRatings.has(projectId),
+        has_compliance_checks: compliance?.hasCheck || false,
+        mapping_status: mapping?.status as 'no_roles' | 'no_trades' | 'bci_only' | 'has_manual' | undefined,
+        mapping_last_updated: mapping?.lastUpdated || null,
+        last_compliance_check_date: compliance?.lastDate || null,
+        key_contractors_rated_value: keyContractorRatedValue.get(projectId) || null,
+      };
+    });
 
     // Transform summaries to match client expectations
     const summaries: Record<string, ProjectSummary> = {};
@@ -372,6 +741,11 @@ async function getProjectsHandler(request: NextRequest) {
             workers,
             special,
             eba,
+            ratingStatus,
+            auditStatus,
+            mappingStatus,
+            mappingUpdateStatus,
+            complianceCheckStatus,
             sort,
             dir,
             newOnly,
