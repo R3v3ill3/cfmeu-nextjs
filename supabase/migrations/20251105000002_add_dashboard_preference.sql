@@ -28,3 +28,4 @@ COMMENT ON COLUMN profiles.dashboard_preference IS
 COMMENT ON TABLE app_settings IS 
   'Application-wide settings. Includes navigation_visibility and default_dashboard (admin config)';
 
+

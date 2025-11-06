@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { getProjectIdsForPatches } from '@/lib/patch-filtering';
+import { withTimeout, isDatabaseTimeoutError } from '@/lib/query-timeout';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 20; // Vercel timeout limit
 
 type TimeFrame = '6_weeks' | '3_months' | '6_months' | '12_months' | 'ever';
 
@@ -43,9 +45,10 @@ function getCutoffDate(timeFrame: TimeFrame): Date | null {
 }
 
 export async function GET(request: NextRequest) {
+  const startTime = Date.now();
+  const { searchParams } = new URL(request.url);
+  const timeFrame = (searchParams.get('timeFrame') || '3_months') as TimeFrame;
   try {
-    const { searchParams } = new URL(request.url);
-    const timeFrame = (searchParams.get('timeFrame') || '3_months') as TimeFrame;
     const patchIds = searchParams.get('patchIds')?.split(',').map((id) => id.trim()).filter(Boolean) ?? [];
     const universe = searchParams.get('universe') || 'active';
     const stage = searchParams.get('stage') || 'construction';
@@ -83,24 +86,48 @@ export async function GET(request: NextRequest) {
     }
 
     if (patchIds.length > 0) {
-      const projectIds = await getProjectIdsForPatches(supabase, patchIds);
+      try {
+        const projectIds = await withTimeout(
+          getProjectIdsForPatches(supabase, patchIds),
+          10000,
+          'Patch filtering query timeout'
+        );
 
-      if (projectIds.length === 0) {
-        return NextResponse.json({
-          projectsRatedPercentage: 0,
-          employersRatedPercentage: 0,
-          projectsRatedCount: 0,
-          totalProjects: 0,
-          employersRatedCount: 0,
-          totalEmployers: 0,
-          timeFrame
-        } as RatingCompletionResponse);
+        if (projectIds.length === 0) {
+          return NextResponse.json({
+            projectsRatedPercentage: 0,
+            employersRatedPercentage: 0,
+            projectsRatedCount: 0,
+            totalProjects: 0,
+            employersRatedCount: 0,
+            totalEmployers: 0,
+            timeFrame
+          } as RatingCompletionResponse);
+        }
+
+        projectsQuery = projectsQuery.in('id', projectIds);
+      } catch (error) {
+        console.error('Error in patch filtering:', error);
+        if (isDatabaseTimeoutError(error)) {
+          return NextResponse.json({
+            projectsRatedPercentage: 0,
+            employersRatedPercentage: 0,
+            projectsRatedCount: 0,
+            totalProjects: 0,
+            employersRatedCount: 0,
+            totalEmployers: 0,
+            timeFrame
+          } as RatingCompletionResponse);
+        }
+        throw error;
       }
-
-      projectsQuery = projectsQuery.in('id', projectIds);
     }
 
-    const { data: filteredProjects, error: projectsError } = await projectsQuery;
+    const { data: filteredProjects, error: projectsError } = await withTimeout(
+      projectsQuery,
+      10000,
+      'Projects query timeout'
+    );
 
     if (projectsError) {
       console.error('Error fetching projects:', projectsError);
@@ -127,12 +154,32 @@ export async function GET(request: NextRequest) {
     let paError: any = null;
     
     if (projectIds.length > 0) {
-      const result = await supabase
-        .from('project_assignments')
-        .select('employer_id')
-        .in('project_id', projectIds);
-      projectAssignments = result.data || [];
-      paError = result.error;
+      try {
+        const result = await withTimeout(
+          supabase
+            .from('project_assignments')
+            .select('employer_id')
+            .in('project_id', projectIds),
+          10000,
+          'Project assignments query timeout'
+        );
+        projectAssignments = result.data || [];
+        paError = result.error;
+      } catch (error) {
+        console.error('Error fetching project assignments:', error);
+        if (isDatabaseTimeoutError(error)) {
+          return NextResponse.json({
+            projectsRatedPercentage: 0,
+            employersRatedPercentage: 0,
+            projectsRatedCount: 0,
+            totalProjects: totalProjects || 0,
+            employersRatedCount: 0,
+            totalEmployers: 0,
+            timeFrame
+          } as RatingCompletionResponse);
+        }
+        throw error;
+      }
     }
 
     if (paError) {
@@ -163,7 +210,7 @@ export async function GET(request: NextRequest) {
         chunks.push(employerIdArray.slice(i, i + chunkSize));
       }
 
-      // Execute all chunk queries in parallel
+      // Execute all chunk queries in parallel with timeouts
       const ratingQueries = chunks.map(chunk => {
         let query = supabase
           .from('employer_final_ratings')
@@ -175,7 +222,7 @@ export async function GET(request: NextRequest) {
           query = query.gte('rating_date', cutoffDateStr);
         }
 
-        return query;
+        return withTimeout(query, 8000, 'Employer ratings query timeout');
       });
 
       let ratedEmployers: any[] | null = null;
@@ -234,13 +281,17 @@ export async function GET(request: NextRequest) {
           chunks.push(ratedEmployerIdArray.slice(i, i + chunkSize));
         }
 
-        // Execute all chunk queries in parallel
+        // Execute all chunk queries in parallel with timeouts
         const projectQueries = chunks.map(chunk =>
-          supabase
-            .from('project_assignments')
-            .select('project_id')
-            .in('project_id', projectIds)
-            .in('employer_id', chunk)
+          withTimeout(
+            supabase
+              .from('project_assignments')
+              .select('project_id')
+              .in('project_id', projectIds)
+              .in('employer_id', chunk),
+            8000,
+            'Project assignments query timeout'
+          )
         );
 
         const projectResults = await Promise.all(projectQueries);
@@ -278,10 +329,25 @@ export async function GET(request: NextRequest) {
       timeFrame
     } as RatingCompletionResponse);
   } catch (error) {
+    const queryTime = Date.now() - startTime;
     console.error('Error in rating-completion API:', error);
+    console.error('Query execution time:', queryTime, 'ms');
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     const errorStack = error instanceof Error ? error.stack : undefined;
     console.error('Error stack:', errorStack);
+    
+    if (isDatabaseTimeoutError(error)) {
+      console.error('Database timeout error detected');
+      return NextResponse.json({
+        projectsRatedPercentage: 0,
+        employersRatedPercentage: 0,
+        projectsRatedCount: 0,
+        totalProjects: 0,
+        employersRatedCount: 0,
+        totalEmployers: 0,
+        timeFrame
+      } as RatingCompletionResponse);
+    }
     
     // Check if this is a network/fetch error
     if (errorMessage.includes('fetch failed') || errorMessage.includes('TypeError')) {

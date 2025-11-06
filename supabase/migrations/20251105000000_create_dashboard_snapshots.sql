@@ -222,3 +222,4 @@ GRANT EXECUTE ON FUNCTION create_dashboard_snapshot TO authenticated, service_ro
 COMMENT ON TABLE dashboard_snapshots IS 'Weekly/monthly snapshots of dashboard metrics with frozen configuration state for historical comparisons';
 COMMENT ON FUNCTION create_dashboard_snapshot IS 'Creates a snapshot of current dashboard metrics with frozen key contractor list and patch assignments';
 
+

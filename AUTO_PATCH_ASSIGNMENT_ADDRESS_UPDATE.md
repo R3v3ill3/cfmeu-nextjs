@@ -401,3 +401,4 @@ WHERE js.full_address IS NOT NULL
 The automatic patch assignment feature streamlines the organizing workflow by eliminating manual patch assignment for projects with geographic addresses.
 
 
+

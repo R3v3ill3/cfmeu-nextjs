@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { getProjectIdsForPatches } from '@/lib/patch-filtering'
+import { withTimeout, isDatabaseTimeoutError } from '@/lib/query-timeout'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 20 // Vercel timeout limit
 
 export interface ContractorTypeHeatmapData {
   trade_type: string
@@ -31,6 +33,8 @@ export async function GET(request: NextRequest) {
     const universe = searchParams.get('universe') || 'active'
     const stage = searchParams.get('stage') || 'construction'
 
+    const startTime = Date.now()
+
     // Get active projects with filters
     let projectsQuery = supabase
       .from('projects')
@@ -41,16 +45,32 @@ export async function GET(request: NextRequest) {
     // Apply patch filtering if specified
     let projectIds: string[] = []
     if (patchIds.length > 0) {
-      projectIds = await getProjectIdsForPatches(supabase, patchIds)
-      
-      if (projectIds.length > 0) {
-        projectsQuery = projectsQuery.in('id', projectIds)
-      } else {
-        return NextResponse.json({ data: [] }, { status: 200 })
+      try {
+        projectIds = await withTimeout(
+          getProjectIdsForPatches(supabase, patchIds),
+          10000,
+          'Patch filtering query timeout'
+        )
+        
+        if (projectIds.length > 0) {
+          projectsQuery = projectsQuery.in('id', projectIds)
+        } else {
+          return NextResponse.json({ data: [] }, { status: 200 })
+        }
+      } catch (error) {
+        console.error('Error in patch filtering:', error)
+        if (isDatabaseTimeoutError(error)) {
+          return NextResponse.json({ data: [] }, { status: 200 })
+        }
+        throw error
       }
     }
 
-    const { data: projects, error: projectsError } = await projectsQuery
+    const { data: projects, error: projectsError } = await withTimeout(
+      projectsQuery,
+      10000,
+      'Projects query timeout'
+    )
 
     if (projectsError) {
       console.error('Error fetching projects:', projectsError)
@@ -64,10 +84,14 @@ export async function GET(request: NextRequest) {
     projectIds = projects.map(p => p.id)
 
     // Get key contractor trades
-    const { data: keyTradesData, error: keyTradesError } = await supabase
-      .from('key_contractor_trades')
-      .select('trade_type')
-      .eq('is_active', true)
+    const { data: keyTradesData, error: keyTradesError } = await withTimeout(
+      supabase
+        .from('key_contractor_trades')
+        .select('trade_type')
+        .eq('is_active', true),
+      8000,
+      'Key trades query timeout'
+    )
 
     if (keyTradesError) {
       console.error('Error fetching key trades:', keyTradesError)
@@ -83,26 +107,76 @@ export async function GET(request: NextRequest) {
     }
 
     // Get all trade assignments for these projects
-    const { data: assignments, error: assignmentsError } = await supabase
-      .from('project_assignments')
-      .select(`
-        id,
-        project_id,
-        employer_id,
-        trade_type_id,
-        trade_types!inner(code),
-        employers!inner(
+    // Simplified query to avoid deep nesting that causes stack depth issues
+    const { data: assignments, error: assignmentsError } = await withTimeout(
+      supabase
+        .from('project_assignments')
+        .select(`
           id,
-          company_eba_records!left(fwc_certified_date)
-        )
-      `)
-      .in('project_id', projectIds)
-      .eq('assignment_type', 'trade_work')
-      .not('trade_type_id', 'is', null)
+          project_id,
+          employer_id,
+          trade_type_id,
+          trade_types!inner(code)
+        `)
+        .in('project_id', projectIds)
+        .eq('assignment_type', 'trade_work')
+        .not('trade_type_id', 'is', null),
+      10000,
+      'Project assignments query timeout'
+    )
 
     if (assignmentsError) {
       console.error('Error fetching assignments:', assignmentsError)
+      if (isDatabaseTimeoutError(assignmentsError)) {
+        return NextResponse.json({ data: [] }, { status: 200 })
+      }
       return NextResponse.json({ error: 'Failed to fetch assignments' }, { status: 500 })
+    }
+
+    // Get employer IDs to fetch EBA records separately
+    const employerIds = new Set<string>()
+    assignments?.forEach(assignment => {
+      if (assignment.employer_id) {
+        employerIds.add(assignment.employer_id)
+      }
+    })
+
+    // Fetch EBA records separately to avoid deep nesting
+    const employerEbaMap = new Map<string, boolean>()
+    if (employerIds.size > 0) {
+      try {
+        const employerIdArray = Array.from(employerIds)
+        // Batch queries to avoid PostgREST limits
+        const chunkSize = 200
+        const chunks: string[][] = []
+        for (let i = 0; i < employerIdArray.length; i += chunkSize) {
+          chunks.push(employerIdArray.slice(i, i + chunkSize))
+        }
+
+        const ebaQueries = chunks.map(chunk =>
+          withTimeout(
+            supabase
+              .from('company_eba_records')
+              .select('employer_id, fwc_certified_date')
+              .in('employer_id', chunk)
+              .not('fwc_certified_date', 'is', null),
+            8000,
+            'EBA records query timeout'
+          )
+        )
+
+        const ebaResults = await Promise.all(ebaQueries)
+        ebaResults.forEach(result => {
+          if (result.data) {
+            result.data.forEach((eba: any) => {
+              employerEbaMap.set(eba.employer_id, true)
+            })
+          }
+        })
+      } catch (error) {
+        console.error('Error fetching EBA records:', error)
+        // Continue without EBA data rather than failing completely
+      }
     }
 
     // Aggregate by trade type
@@ -131,14 +205,8 @@ export async function GET(request: NextRequest) {
 
       stats.identified += 1
 
-      // Check if employer has EBA
-      const employer = (assignment.employers as any)
-      const ebaRecords = employer?.company_eba_records || []
-      const hasEba = Array.isArray(ebaRecords) 
-        ? ebaRecords.some((eba: any) => eba.fwc_certified_date)
-        : false
-
-      if (hasEba) {
+      // Check if employer has EBA using the separately fetched EBA map
+      if (assignment.employer_id && employerEbaMap.has(assignment.employer_id)) {
         stats.eba += 1
       }
     })
@@ -167,7 +235,15 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ data: heatmapData }, { status: 200 })
   } catch (error) {
+    const queryTime = Date.now() - (startTime || Date.now())
     console.error('Error in contractor-type-heatmap route:', error)
+    console.error('Query execution time:', queryTime, 'ms')
+    
+    if (isDatabaseTimeoutError(error)) {
+      console.error('Database timeout error detected')
+      return NextResponse.json({ data: [] }, { status: 200 })
+    }
+    
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

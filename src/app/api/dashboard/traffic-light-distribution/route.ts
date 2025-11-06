@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { getProjectIdsForPatches } from '@/lib/patch-filtering';
+import { withTimeout, isDatabaseTimeoutError } from '@/lib/query-timeout';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 20; // Vercel timeout limit
 
 type TrafficLightRating = 'red' | 'amber' | 'yellow' | 'green';
 type EbaStatusFilter = 'all' | 'active' | 'inactive' | 'unknown';
@@ -74,6 +76,7 @@ function isProjectStatusFilter(value: string | null | undefined): value is Proje
 }
 
 export async function GET(request: NextRequest) {
+  const startTime = Date.now();
   try {
     const { searchParams } = new URL(request.url);
     const ebaStatus = (searchParams.get('ebaStatus') || 'all') as EbaStatusFilter;
@@ -130,16 +133,33 @@ export async function GET(request: NextRequest) {
 
     // Apply patch filtering if specified
     if (patchIds.length > 0) {
-      const projectIds = await getProjectIdsForPatches(supabase, patchIds);
+      try {
+        const projectIds = await withTimeout(
+          getProjectIdsForPatches(supabase, patchIds),
+          10000,
+          'Patch filtering query timeout'
+        );
 
-      if (projectIds.length === 0) {
-        return NextResponse.json(emptyResponse);
+        if (projectIds.length === 0) {
+          return NextResponse.json(emptyResponse);
+        }
+
+        projectsQuery = projectsQuery.in('id', projectIds);
+      } catch (error) {
+        console.error('Error in patch filtering:', error);
+        if (isDatabaseTimeoutError(error)) {
+          return NextResponse.json(emptyResponse);
+        }
+        throw error;
       }
-
-      projectsQuery = projectsQuery.in('id', projectIds);
     }
 
-    const { data: filteredProjects, error: projectsError } = await projectsQuery;
+    const projectsResult = await withTimeout(
+      projectsQuery,
+      10000,
+      'Projects query timeout'
+    ) as { data: any[] | null; error: any };
+    const { data: filteredProjects, error: projectsError } = projectsResult;
 
     if (projectsError) {
       console.error('Error fetching projects:', projectsError);
@@ -157,12 +177,24 @@ export async function GET(request: NextRequest) {
     let paError: any = null;
     
     if (projectIds.length > 0) {
-      const result = await supabase
-        .from('project_assignments')
-        .select('employer_id, project_id')
-        .in('project_id', projectIds);
-      projectAssignments = result.data || [];
-      paError = result.error;
+      try {
+        const result = await withTimeout(
+          supabase
+            .from('project_assignments')
+            .select('employer_id, project_id')
+            .in('project_id', projectIds),
+          10000,
+          'Project assignments query timeout'
+        ) as { data: any[] | null; error: any };
+        projectAssignments = result.data || [];
+        paError = result.error;
+      } catch (error) {
+        console.error('Error fetching project assignments:', error);
+        if (isDatabaseTimeoutError(error)) {
+          return NextResponse.json(emptyResponse);
+        }
+        throw error;
+      }
     }
 
     if (paError) {
@@ -191,7 +223,7 @@ export async function GET(request: NextRequest) {
       chunks.push(employerIdArray.slice(i, i + chunkSize));
     }
 
-    // Execute all chunk queries in parallel
+    // Execute all chunk queries in parallel with timeouts
     const ratingQueries = chunks.map(chunk => {
       let query = supabase
         .from('employer_final_ratings')
@@ -208,27 +240,27 @@ export async function GET(request: NextRequest) {
         query = query.eq('eba_status', 'unknown');
       }
 
-      return query;
+      return withTimeout(query, 8000, 'Employer ratings query timeout');
     });
 
     let latestRatingsData: any[] | null = null;
     let ratingsError: any = null;
     
-    try {
-      const results = await Promise.all(ratingQueries);
-      
-      // Combine results from all chunks
-      const allRatings: any[] = [];
-      for (const result of results) {
-        if (result.error) {
-          console.error('Error in chunk query:', result.error);
-          ratingsError = result.error;
-          break;
+      try {
+        const results = await Promise.all(ratingQueries) as Array<{ data: any[] | null; error: any }>;
+        
+        // Combine results from all chunks
+        const allRatings: any[] = [];
+        for (const result of results) {
+          if (result.error) {
+            console.error('Error in chunk query:', result.error);
+            ratingsError = result.error;
+            break;
+          }
+          if (result.data) {
+            allRatings.push(...result.data);
+          }
         }
-        if (result.data) {
-          allRatings.push(...result.data);
-        }
-      }
 
       if (!ratingsError && allRatings.length > 0) {
         // Sort by rating_date descending to get latest ratings first
@@ -365,10 +397,28 @@ export async function GET(request: NextRequest) {
       }
     } as RatingDistributionResponse);
   } catch (error) {
+    const queryTime = Date.now() - startTime;
     console.error('Error in traffic-light-distribution API:', error);
+    console.error('Query execution time:', queryTime, 'ms');
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     const errorStack = error instanceof Error ? error.stack : undefined;
     console.error('Error stack:', errorStack);
+    
+    if (isDatabaseTimeoutError(error)) {
+      console.error('Database timeout error detected');
+      return NextResponse.json({
+        projects: {
+          distribution: { red: 0, amber: 0, yellow: 0, green: 0 },
+          percentages: { red: 0, amber: 0, yellow: 0, green: 0 },
+          total: 0,
+        },
+        employers: {
+          distribution: { red: 0, amber: 0, yellow: 0, green: 0 },
+          percentages: { red: 0, amber: 0, yellow: 0, green: 0 },
+          total: 0,
+        },
+      } as RatingDistributionResponse);
+    }
     
     // Check if this is a network/fetch error
     if (errorMessage.includes('fetch failed') || errorMessage.includes('TypeError')) {

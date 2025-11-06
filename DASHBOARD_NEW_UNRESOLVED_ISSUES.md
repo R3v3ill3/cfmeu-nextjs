@@ -248,3 +248,4 @@ The Recharts warning appears **repeatedly** (10+ times per page load), suggestin
 - **Consider starting from scratch** with a single simple chart to isolate the issue
 - **Use browser inspection tools** rather than making blind code changes
 
+
