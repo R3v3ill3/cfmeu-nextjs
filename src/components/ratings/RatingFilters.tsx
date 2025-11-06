@@ -104,13 +104,13 @@ export function RatingFiltersComponent({
     onFiltersChange?.({})
   }
 
-  // Count active filters
-  const activeFilterCount = [
+  // Count active filters - memoized for performance
+  const activeFilterCount = useMemo(() => [
     filters.rating?.length || 0,
     filters.confidence?.length || 0,
     filters.track ? 1 : 0,
     filters.role_context ? 1 : 0,
-  ].reduce((sum, count) => sum + count, 0)
+  ].reduce((sum, count) => sum + count, 0), [filters.rating, filters.confidence, filters.track, filters.role_context])
 
   if (compact) {
     return (

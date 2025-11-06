@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
+import { asUserProfile, mapPatchAssignments, mapProjectIds } from '@/types/api'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,8 +24,9 @@ export async function GET(request: NextRequest) {
       .maybeSingle()
     if (profileError) return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
 
-    const role = (profile as any)?.role as string | null
-    const effectiveSince = sinceParam || (profile as any)?.last_seen_projects_at || null
+    const userProfile = asUserProfile(profile)
+    const role = userProfile?.role || null
+    const effectiveSince = sinceParam || userProfile?.last_seen_projects_at || null
     if (!effectiveSince) {
       return NextResponse.json({ count: 0, since: null, aggregated: true })
     }
@@ -38,14 +40,14 @@ export async function GET(request: NextRequest) {
             .select('patch_id')
             .eq('lead_organiser_id', user.id)
             .is('effective_to', null)
-          patchIds = Array.from(new Set(((assigns as any[]) || []).map((r: any) => r.patch_id).filter(Boolean)))
+          patchIds = mapPatchAssignments(assigns)
         } else if (role === 'organiser') {
           const { data: assigns } = await supabase
             .from('organiser_patch_assignments')
             .select('patch_id')
             .eq('organiser_id', user.id)
             .is('effective_to', null)
-          patchIds = Array.from(new Set(((assigns as any[]) || []).map((r: any) => r.patch_id).filter(Boolean)))
+          patchIds = mapPatchAssignments(assigns)
         }
       } catch {}
     }
@@ -63,7 +65,7 @@ export async function GET(request: NextRequest) {
         .select('project_id')
         .in('patch_id', patchIds)
       if (ppErr) return NextResponse.json({ error: 'Patch filtering failed' }, { status: 500 })
-      const projectIds = Array.from(new Set((patchProjects || []).map((r: any) => r.project_id)))
+      const projectIds = mapProjectIds(patchProjects)
       if (projectIds.length === 0) return NextResponse.json({ count: 0, since: effectiveSince, aggregated: patchIds.length > 1 })
       q = supabase.from('project_list_comprehensive_view').select('id', { count: 'exact', head: true }).in('id', projectIds).gt('created_at', effectiveSince)
     }

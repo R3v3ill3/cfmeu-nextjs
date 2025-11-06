@@ -44,7 +44,7 @@ export function NewDashboardPage() {
   return (
     <div
       data-testid="dashboard-new-root"
-      className="space-y-4 sm:space-y-6 p-4 lg:p-6 pb-safe-bottom"
+      className="space-y-4 px-4 py-4 pb-safe-bottom sm:space-y-6 sm:px-6 sm:py-6 lg:px-6 lg:py-6"
     >
       {/* Hero KPI Strip - Placeholder for now */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

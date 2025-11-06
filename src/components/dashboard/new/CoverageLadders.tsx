@@ -46,35 +46,48 @@ export function CoverageLadders({ patchIds = [] }: CoverageLaddersProps) {
 
   // Calculate Projects Ladder data - use worker data if available
   const projectsLadderData = useMemo(() => {
-    if (workerData) {
-      // Use data from Railway worker
-      return {
-        total: workerData.projects.total,
-        segments: [
-          {
-            name: "Unknown builder",
-            value: workerData.projects.unknownBuilders,
-            percentage: workerData.projects.knownBuilderPercentage === 100 ? 0 : Math.round((workerData.projects.unknownBuilders / workerData.projects.total) * 100),
-            color: "#e5e7eb", // light grey
-          },
-          {
-            name: "Known, non-EBA builder",
-            value: workerData.projects.knownNonEbaBuilders,
-            percentage: Math.round((workerData.projects.knownNonEbaBuilders / workerData.projects.total) * 100),
-            color: "hsl(221 83% 53%)", // blue
-          },
-          {
-            name: "EBA builder",
-            value: workerData.projects.ebaBuilders,
-            percentage: Math.round((workerData.projects.ebaBuilders / workerData.projects.total) * 100),
-            color: "hsl(142 71% 45%)", // green
-          },
-        ],
-        knownBuilders: workerData.projects.knownBuilders,
-        ebaBuilders: workerData.projects.ebaBuilders,
-        knownBuilderPercentage: workerData.projects.knownBuilderPercentage,
-        ebaOfKnownPercentage: workerData.projects.ebaOfKnownPercentage,
+    try {
+      if (workerData && workerData.projects) {
+        // Validate worker data structure and values
+        const total = isFinite(workerData.projects.total) ? workerData.projects.total : 0
+        const unknownBuilders = isFinite(workerData.projects.unknownBuilders) ? workerData.projects.unknownBuilders : 0
+        const knownNonEbaBuilders = isFinite(workerData.projects.knownNonEbaBuilders) ? workerData.projects.knownNonEbaBuilders : 0
+        const ebaBuilders = isFinite(workerData.projects.ebaBuilders) ? workerData.projects.ebaBuilders : 0
+        const knownBuilders = isFinite(workerData.projects.knownBuilders) ? workerData.projects.knownBuilders : 0
+        const knownBuilderPercentage = isFinite(workerData.projects.knownBuilderPercentage) ? workerData.projects.knownBuilderPercentage : 0
+        const ebaOfKnownPercentage = isFinite(workerData.projects.ebaOfKnownPercentage) ? workerData.projects.ebaOfKnownPercentage : 0
+
+        // Use data from Railway worker with validation
+        return {
+          total,
+          segments: [
+            {
+              name: "Unknown builder",
+              value: unknownBuilders,
+              percentage: total > 0 ? Math.round((unknownBuilders / total) * 100) : 0,
+              color: "#d1d5db", // medium grey for better contrast
+            },
+            {
+              name: "Known, non-EBA builder",
+              value: knownNonEbaBuilders,
+              percentage: total > 0 ? Math.round((knownNonEbaBuilders / total) * 100) : 0,
+              color: "hsl(221 83% 53%)", // blue
+            },
+            {
+              name: "EBA builder",
+              value: ebaBuilders,
+              percentage: total > 0 ? Math.round((ebaBuilders / total) * 100) : 0,
+              color: "hsl(142 71% 45%)", // green
+            },
+          ],
+          knownBuilders,
+          ebaBuilders,
+          knownBuilderPercentage,
+          ebaOfKnownPercentage,
+        }
       }
+    } catch (error) {
+      console.error('Error processing worker data for projects ladder:', error)
     }
 
     if (!metrics) return null
@@ -93,7 +106,7 @@ export function CoverageLadders({ patchIds = [] }: CoverageLaddersProps) {
           name: "Unknown builder",
           value: unknownBuilders,
           percentage: totalProjects > 0 ? Math.round((unknownBuilders / totalProjects) * 100) : 0,
-          color: "#e5e7eb", // light grey
+          color: "#d1d5db", // medium grey for better contrast
         },
         {
           name: "Known, non-EBA builder",
@@ -121,35 +134,48 @@ export function CoverageLadders({ patchIds = [] }: CoverageLaddersProps) {
 
   // Calculate Contractor Ladder data - use worker data if available
   const contractorLadderData = useMemo(() => {
-    if (workerData) {
-      // Use data from Railway worker
-      return {
-        total: workerData.contractors.total,
-        segments: [
-          {
-            name: "Unidentified slot",
-            value: workerData.contractors.unidentified,
-            percentage: workerData.contractors.identifiedPercentage === 100 ? 0 : Math.round((workerData.contractors.unidentified / workerData.contractors.total) * 100),
-            color: "#e5e7eb", // light grey
-          },
-          {
-            name: "Identified contractor, non-EBA",
-            value: workerData.contractors.identifiedNonEba,
-            percentage: Math.round((workerData.contractors.identifiedNonEba / workerData.contractors.total) * 100),
-            color: "hsl(221 83% 53%)", // blue
-          },
-          {
-            name: "Identified contractor, EBA",
-            value: workerData.contractors.eba,
-            percentage: Math.round((workerData.contractors.eba / workerData.contractors.total) * 100),
-            color: "hsl(142 71% 45%)", // green
-          },
-        ],
-        identified: workerData.contractors.identified,
-        eba: workerData.contractors.eba,
-        identifiedPercentage: workerData.contractors.identifiedPercentage,
-        ebaOfIdentifiedPercentage: workerData.contractors.ebaOfIdentifiedPercentage,
+    try {
+      if (workerData && workerData.contractors) {
+        // Validate worker contractor data structure and values
+        const total = isFinite(workerData.contractors.total) ? workerData.contractors.total : 0
+        const unidentified = isFinite(workerData.contractors.unidentified) ? workerData.contractors.unidentified : 0
+        const identifiedNonEba = isFinite(workerData.contractors.identifiedNonEba) ? workerData.contractors.identifiedNonEba : 0
+        const eba = isFinite(workerData.contractors.eba) ? workerData.contractors.eba : 0
+        const identified = isFinite(workerData.contractors.identified) ? workerData.contractors.identified : 0
+        const identifiedPercentage = isFinite(workerData.contractors.identifiedPercentage) ? workerData.contractors.identifiedPercentage : 0
+        const ebaOfIdentifiedPercentage = isFinite(workerData.contractors.ebaOfIdentifiedPercentage) ? workerData.contractors.ebaOfIdentifiedPercentage : 0
+
+        // Use data from Railway worker with validation
+        return {
+          total,
+          segments: [
+            {
+              name: "Unidentified slot",
+              value: unidentified,
+              percentage: total > 0 ? Math.round((unidentified / total) * 100) : 0,
+              color: "#d1d5db", // medium grey for better contrast
+            },
+            {
+              name: "Identified contractor, non-EBA",
+              value: identifiedNonEba,
+              percentage: total > 0 ? Math.round((identifiedNonEba / total) * 100) : 0,
+              color: "hsl(221 83% 53%)", // blue
+            },
+            {
+              name: "Identified contractor, EBA",
+              value: eba,
+              percentage: total > 0 ? Math.round((eba / total) * 100) : 0,
+              color: "hsl(142 71% 45%)", // green
+            },
+          ],
+          identified,
+          eba,
+          identifiedPercentage,
+          ebaOfIdentifiedPercentage,
+        }
       }
+    } catch (error) {
+      console.error('Error processing worker data for contractor ladder:', error)
     }
 
     if (!metrics) return null
@@ -168,7 +194,7 @@ export function CoverageLadders({ patchIds = [] }: CoverageLaddersProps) {
           name: "Unidentified slot",
           value: unidentified,
           percentage: totalSlots > 0 ? Math.round((unidentified / totalSlots) * 100) : 0,
-          color: "#e5e7eb", // light grey
+          color: "#d1d5db", // medium grey for better contrast
         },
         {
           name: "Identified contractor, non-EBA",
@@ -219,36 +245,46 @@ export function CoverageLadders({ patchIds = [] }: CoverageLaddersProps) {
   const CustomTooltip = ({ active, payload }: any) => {
     if (!active || !payload || payload.length === 0) return null
 
-    const data = payload[0].payload
-    const total = Object.values(data).reduce((sum: number, val: any) => {
-      if (typeof val === 'number' && val !== data.name) return sum + val
-      return sum
-    }, 0) as number
+    try {
+      const data = payload[0]?.payload
+      if (!data) return null
 
-    return (
-      <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3">
-        <p className="font-medium text-sm mb-2">{data.name}</p>
-        {payload.map((entry: any, index: number) => {
-          if (entry.dataKey === 'name') return null
-          const value = entry.value as number
-          const percentage = total > 0 ? Math.round((value / total) * 100) : 0
-          return (
-            <div key={index} className="flex items-center justify-between gap-4 text-xs">
-              <div className="flex items-center gap-2">
-                <div 
-                  className="w-3 h-3 rounded-sm" 
-                  style={{ backgroundColor: entry.color }}
-                />
-                <span>{entry.name}:</span>
+      const total = Object.values(data).reduce((sum: number, val: any) => {
+        if (typeof val === 'number' && val !== data.name && isFinite(val)) return sum + val
+        return sum
+      }, 0) as number
+
+      if (total === 0 || !isFinite(total)) return null
+
+      return (
+        <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3">
+          <p className="font-medium text-sm mb-2">{data.name || 'Unknown'}</p>
+          {payload.map((entry: any, index: number) => {
+            if (!entry || entry.dataKey === 'name') return null
+            const value = entry.value as number
+            if (!isFinite(value)) return null
+            const percentage = total > 0 ? Math.round((value / total) * 100) : 0
+            return (
+              <div key={index} className="flex items-center justify-between gap-4 text-xs">
+                <div className="flex items-center gap-2">
+                  <div
+                    className="w-3 h-3 rounded-sm"
+                    style={{ backgroundColor: entry.color || '#ccc' }}
+                  />
+                  <span>{entry.name || 'Unknown'}:</span>
+                </div>
+                <span className="font-medium tabular-nums">
+                  {value} / {total} ({percentage}%)
+                </span>
               </div>
-              <span className="font-medium tabular-nums">
-                {value} / {total} ({percentage}%)
-              </span>
-            </div>
-          )
-        })}
-      </div>
-    )
+            )
+          })}
+        </div>
+      )
+    } catch (error) {
+      console.error('Error in CoverageLadders CustomTooltip:', error)
+      return null
+    }
   }
 
   if (!metrics && !workerData) {
@@ -257,16 +293,21 @@ export function CoverageLadders({ patchIds = [] }: CoverageLaddersProps) {
         <CardHeader className="pb-3">
           <CardTitle className="text-lg flex items-center gap-2">
             Coverage Ladders
-            <FilterIndicatorBadge 
-              hasActiveFilters={hasActiveFilters} 
+            <FilterIndicatorBadge
+              hasActiveFilters={hasActiveFilters}
               activeFilters={activeFilters}
               variant="small"
             />
           </CardTitle>
-          <CardDescription>Loading coverage metrics...</CardDescription>
+          <CardDescription>
+            Loading coverage metrics{patchIds.length > 0 ? ` for ${patchIds.length} patch${patchIds.length > 1 ? 'es' : ''}` : ''}...
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="h-64 bg-gray-50 border border-gray-200 rounded animate-pulse" />
+          <div className="text-center text-xs text-gray-500 mt-2">
+            Fetching project and contractor coverage data
+          </div>
         </CardContent>
       </Card>
     )
@@ -312,7 +353,7 @@ export function CoverageLadders({ patchIds = [] }: CoverageLaddersProps) {
               </div>
               <ChartContainer
                 config={{
-                  "Unknown builder": { label: "Unknown builder", color: "#e5e7eb" },
+                  "Unknown builder": { label: "Unknown builder", color: "#d1d5db" },
                   "Known, non-EBA builder": { label: "Known, non-EBA builder", color: "hsl(221 83% 53%)" },
                   "EBA builder": { label: "EBA builder", color: "hsl(142 71% 45%)" },
                 }}
@@ -327,7 +368,7 @@ export function CoverageLadders({ patchIds = [] }: CoverageLaddersProps) {
                   <XAxis type="number" domain={[0, projectsLadderData.total]} hide />
                   <YAxis type="category" dataKey="name" width={80} tick={false} axisLine={false} />
                   <ChartTooltip content={<CustomTooltip />} />
-                  <Bar dataKey="Unknown builder" stackId="a" fill="#e5e7eb" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="Unknown builder" stackId="a" fill="#d1d5db" radius={[0, 4, 4, 0]} />
                   <Bar dataKey="Known, non-EBA builder" stackId="a" fill="hsl(221 83% 53%)" />
                   <Bar dataKey="EBA builder" stackId="a" fill="hsl(142 71% 45%)" radius={[4, 0, 0, 4]} />
                 </BarChart>
@@ -361,7 +402,7 @@ export function CoverageLadders({ patchIds = [] }: CoverageLaddersProps) {
               </div>
               <ChartContainer
                 config={{
-                  "Unidentified slot": { label: "Unidentified slot", color: "#e5e7eb" },
+                  "Unidentified slot": { label: "Unidentified slot", color: "#d1d5db" },
                   "Identified contractor, non-EBA": { label: "Identified contractor, non-EBA", color: "hsl(221 83% 53%)" },
                   "Identified contractor, EBA": { label: "Identified contractor, EBA", color: "hsl(142 71% 45%)" },
                 }}
@@ -376,7 +417,7 @@ export function CoverageLadders({ patchIds = [] }: CoverageLaddersProps) {
                   <XAxis type="number" domain={[0, contractorLadderData.total]} hide />
                   <YAxis type="category" dataKey="name" width={80} tick={false} axisLine={false} />
                   <ChartTooltip content={<CustomTooltip />} />
-                  <Bar dataKey="Unidentified slot" stackId="b" fill="#e5e7eb" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="Unidentified slot" stackId="b" fill="#d1d5db" radius={[0, 4, 4, 0]} />
                   <Bar dataKey="Identified contractor, non-EBA" stackId="b" fill="hsl(221 83% 53%)" />
                   <Bar dataKey="Identified contractor, EBA" stackId="b" fill="hsl(142 71% 45%)" radius={[4, 0, 0, 4]} />
                 </BarChart>

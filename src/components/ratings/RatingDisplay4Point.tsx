@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
+import { Label } from "@/components/ui/label"
 import {
   TrendingUp,
   TrendingDown,
@@ -25,7 +26,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { format } from "date-fns"
-import { EmployerRating4PointData } from "@/types/assessment"
+import { EmployerRating4PointData } from "@/types/assessments"
 
 interface RatingDisplay4PointProps {
   rating: EmployerRating4PointData

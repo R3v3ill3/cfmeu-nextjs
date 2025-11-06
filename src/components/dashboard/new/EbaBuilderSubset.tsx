@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, ResponsiveContainer } from "recharts"
@@ -47,7 +47,13 @@ export function EbaBuilderSubset({ patchIds = [] }: EbaBuilderSubsetProps) {
   const { data: metricsData, isLoading } = useQuery({
     queryKey: ['eba-employer-metrics', patchIds, normalizedStage, normalizedUniverse],
     queryFn: async (): Promise<EmployerMetricsData[]> => {
-      // First, get project IDs (with patch filtering if needed)
+      // Initialize Maps and ensure cleanup
+      const projectBuilderEbaMap = new Map<string, boolean>()
+      const projectHasBuilderMap = new Map<string, boolean>()
+      const projectEmployersMap = new Map<string, { known: Set<string>, eba: Set<string> }>()
+
+      try {
+        // First, get project IDs (with patch filtering if needed)
       let projectIds: string[] | null = null
       
       if (patchIds.length > 0) {
@@ -111,9 +117,7 @@ export function EbaBuilderSubset({ patchIds = [] }: EbaBuilderSubsetProps) {
         throw assignmentsError
       }
 
-      // Build map of project -> builder has EBA
-      const projectBuilderEbaMap = new Map<string, boolean>()
-      const projectHasBuilderMap = new Map<string, boolean>()
+      // Build map of project -> builder has EBA (Maps already initialized above)
 
       // Process assignments to identify builders with EBA
       const builderRoleCodes = new Set(['builder', 'head_contractor'])
@@ -166,8 +170,7 @@ export function EbaBuilderSubset({ patchIds = [] }: EbaBuilderSubsetProps) {
         }
       }
 
-      // Process each project - only count projects with known builders
-      const projectEmployersMap = new Map<string, { known: Set<string>, eba: Set<string> }>()
+      // Process each project - only count projects with known builders (Map already initialized above)
 
       // Aggregate employers by project
       assignments?.forEach((pa: any) => {
@@ -259,6 +262,16 @@ export function EbaBuilderSubset({ patchIds = [] }: EbaBuilderSubsetProps) {
       // Sort: Total first, then Tier 1, 2, 3
       const tierOrder = ['Total', 'Tier 1', 'Tier 2', 'Tier 3']
       return result.sort((a, b) => tierOrder.indexOf(a.tier) - tierOrder.indexOf(b.tier))
+
+      } catch (error) {
+        console.error('Error in EBA employer metrics query:', error)
+        throw error
+      } finally {
+        // Clean up Maps to prevent memory leaks
+        projectBuilderEbaMap.clear()
+        projectHasBuilderMap.clear()
+        projectEmployersMap.clear()
+      }
     },
     staleTime: 2 * 60 * 1000, // 2 minutes
     refetchOnWindowFocus: false,

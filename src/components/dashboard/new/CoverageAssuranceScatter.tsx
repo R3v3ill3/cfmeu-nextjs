@@ -179,7 +179,7 @@ export function CoverageAssuranceScatter({ patchIds = [] }: CoverageAssuranceSca
             coverage: { label: 'Coverage %', color: '#3b82f6' },
             assurance: { label: 'Audit Completion %', color: '#10b981' },
           }}
-          className="w-full h-[500px]"
+          className="w-full h-[300px] sm:h-[400px] md:h-[500px] lg:h-[500px]"
         >
             <ScatterChart
               margin={{ top: 20, right: 20, bottom: 60, left: 60 }}
@@ -200,49 +200,73 @@ export function CoverageAssuranceScatter({ patchIds = [] }: CoverageAssuranceSca
                 label={{ value: 'Audit Completion (%)', angle: -90, position: 'insideLeft' }}
                 tick={{ fontSize: 12 }}
               />
-              <ChartTooltip 
+              <ChartTooltip
                 content={({ active, payload }) => {
                   if (!active || !payload || payload.length === 0) return null
                   const data = payload[0].payload
                   return (
-                    <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3">
-                      <p className="font-medium text-sm mb-2">{data.project_name}</p>
-                      <div className="space-y-1 text-xs">
+                    <div className="bg-white border border-gray-200 rounded-lg shadow-xl p-4 min-w-[200px]">
+                      <p className="font-medium text-sm mb-3 text-gray-900">{data.project_name}</p>
+                      <div className="space-y-2 text-sm">
                         <div className="flex justify-between gap-4">
-                          <span>Coverage:</span>
-                          <span className="font-medium">{data.x}%</span>
+                          <span className="text-gray-600">Coverage:</span>
+                          <span className="font-medium text-gray-900">{data.x}%</span>
                         </div>
                         <div className="flex justify-between gap-4">
-                          <span>Audit Completion:</span>
-                          <span className="font-medium">{data.y}%</span>
+                          <span className="text-gray-600">Audit Completion:</span>
+                          <span className="font-medium text-gray-900">{data.y}%</span>
                         </div>
-                        <div className="flex justify-between gap-4">
-                          <span>Rating:</span>
-                          <Badge 
-                            variant="outline" 
-                            className="capitalize"
-                            style={{ borderColor: COLORS[data.rating as keyof typeof COLORS] }}
+                        <div className="flex justify-between gap-4 items-center">
+                          <span className="text-gray-600">Rating:</span>
+                          <Badge
+                            variant="outline"
+                            className="capitalize text-xs font-medium"
+                            style={{
+                              borderColor: COLORS[data.rating as keyof typeof COLORS],
+                              backgroundColor: `${COLORS[data.rating as keyof typeof COLORS]}10`
+                            }}
                           >
                             {data.rating}
                           </Badge>
                         </div>
                         <div className="flex justify-between gap-4">
-                          <span>Project Scale:</span>
-                          <span className="font-medium">{data.project_scale} slots</span>
+                          <span className="text-gray-600">Project Scale:</span>
+                          <span className="font-medium text-gray-900">{data.project_scale} slots</span>
                         </div>
                       </div>
                     </div>
                   )
                 }}
+                cursor={{ strokeDasharray: '3 3', strokeWidth: 2 }}
+                wrapperStyle={{
+                  pointerEvents: 'auto',
+                  zIndex: 1000
+                }}
               />
-              <Scatter dataKey="y" fill="#8884d8">
-                {chartData.map((entry, index) => (
-                  <Cell 
-                    key={`cell-${index}`} 
-                    fill={COLORS[entry.rating as keyof typeof COLORS]}
-                  />
-                ))}
-              </Scatter>
+              <Scatter
+                dataKey="y"
+                fill="#8884d8"
+                strokeWidth={2}
+                stroke="#fff"
+                shape={(props: any) => {
+                  const { cx, cy, payload } = props
+                  const radius = Math.max(8, Math.min(20, payload.project_scale * 1.5)) // Larger touch targets for mobile
+                  return (
+                    <circle
+                      cx={cx}
+                      cy={cy}
+                      r={radius}
+                      fill={COLORS[payload.rating as keyof typeof COLORS]}
+                      stroke="#fff"
+                      strokeWidth={2}
+                      style={{
+                        filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))',
+                        cursor: 'pointer'
+                      }}
+                    />
+                  )
+                }}
+              />
             </ScatterChart>
           </ChartContainer>
 

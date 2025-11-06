@@ -1,250 +1,415 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { z } from 'zod'
+import { withValidation, validateQueryParams } from '@/lib/validation/middleware'
+import { schemas, commonSchemas } from '@/lib/validation/schemas'
+import { businessValidation } from '@/lib/validation/middleware'
 
-// Validation schema for Safety Assessment (4-point system)
-const SafetyAssessmentSchema = z.object({
-  employer_id: z.string().uuid(),
-  project_id: z.string().uuid().optional(),
-  criteria: z.object({
-    site_safety: z.number().min(1).max(4), // 1=good, 4=terrible
-    safety_procedures: z.number().min(1).max(4),
-    incident_reporting: z.number().min(1).max(4),
-  }),
-  confidence_level: z.enum(['very_high', 'high', 'medium', 'low']).default('medium'),
-  assessment_method: z.enum(['site_visit', 'phone_call', 'safety_meeting', 'worker_interview', 'document_review', 'other']).default('site_visit'),
-  notes: z.string().optional(),
-  evidence_urls: z.array(z.string()).optional(),
-  follow_up_required: z.boolean().default(false),
-  follow_up_date: z.string().optional().transform(val => val ? new Date(val).toISOString() : null),
-})
-
-// POST - Create new Safety Assessment
-export async function POST(request: NextRequest) {
-  try {
+/**
+ * POST /api/assessments/safety-4-point-new
+ * Create a new safety assessment with comprehensive validation and business logic checks
+ */
+export const POST = withValidation(
+  async (request, { data, user }) => {
     const supabase = await createServerSupabase()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
 
-    if (!user) {
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-
-    const body = await request.json()
-    const validatedData = SafetyAssessmentSchema.parse(body)
-
-    // Check if employer exists
+    // Validate employer exists and user has access
     const { data: employer, error: employerError } = await supabase
       .from('employers')
-      .select('id, name')
-      .eq('id', validatedData.employer_id)
+      .select('id, name, abn, status')
+      .eq('id', data.employer_id)
       .single()
 
     if (employerError || !employer) {
-      return NextResponse.json(
-        { success: false, message: 'Employer not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({
+        success: false,
+        error: 'Employer not found',
+        hint: 'Please verify the employer ID and try again'
+      }, { status: 404 })
     }
 
-    // Check if project exists (if provided)
-    if (validatedData.project_id) {
+    // Check if employer is active
+    if (employer.status !== 'active') {
+      return NextResponse.json({
+        success: false,
+        error: 'Cannot create assessment for inactive employer',
+        details: { employerId: employer.id, status: employer.status },
+        hint: 'Contact administrator to activate this employer'
+      }, { status: 409 })
+    }
+
+    // Validate project exists and is in appropriate stage (if provided)
+    if (data.project_id) {
       const { data: project, error: projectError } = await supabase
         .from('projects')
-        .select('id, name')
-        .eq('id', validatedData.project_id)
+        .select('id, name, stage, status')
+        .eq('id', data.project_id)
         .single()
 
       if (projectError || !project) {
-        return NextResponse.json(
-          { success: false, message: 'Project not found' },
-          { status: 404 }
-        )
+        return NextResponse.json({
+          success: false,
+          error: 'Project not found',
+          hint: 'Please verify the project ID or remove it from the assessment'
+        }, { status: 404 })
+      }
+
+      // Business logic: Safety assessments should only be done for active construction projects
+      if (project.stage !== 'construction') {
+        return NextResponse.json({
+          success: false,
+          error: 'Safety assessments are typically only for active construction projects',
+          details: { projectStage: project.stage, projectId: project.id },
+          hint: 'Consider whether this assessment is appropriate for a project in stage: ' + project.stage
+        }, { status: 400 })
       }
     }
 
+    // Business logic validation for assessment criteria
+    const criteriaValidation = validateSafetyAssessmentCriteria(data.criteria)
+    if (!criteriaValidation.valid) {
+      return NextResponse.json({
+        success: false,
+        error: criteriaValidation.error,
+        details: criteriaValidation.details,
+        hint: criteriaValidation.hint
+      }, { status: 400 })
+    }
+
     // Calculate overall rating (average of 3 criteria)
-    const criteriaValues = Object.values(validatedData.criteria)
+    const criteriaValues = Object.values(data.criteria)
     const overallRating = Math.round(criteriaValues.reduce((sum, val) => sum + val, 0) / criteriaValues.length)
+
+    // Validate follow-up date logic
+    if (data.follow_up_required && !data.follow_up_date) {
+      return NextResponse.json({
+        success: false,
+        error: 'Follow-up date is required when follow-up is marked as required',
+        field: 'follow_up_date',
+        hint: 'Please specify a follow-up date or uncheck the follow-up required box'
+      }, { status: 400 })
+    }
+
+    if (data.follow_up_date && new Date(data.follow_up_date) <= new Date()) {
+      return NextResponse.json({
+        success: false,
+        error: 'Follow-up date must be in the future',
+        field: 'follow_up_date',
+        hint: 'Please select a future date for the follow-up'
+      }, { status: 400 })
+    }
 
     // Create the assessment using the new 4-point schema
     const assessmentData = {
-      employer_id: validatedData.employer_id,
-      project_id: validatedData.project_id || null,
+      employer_id: data.employer_id,
+      project_id: data.project_id || null,
       assessor_id: user.id,
       assessment_date: new Date().toISOString().split('T')[0],
-      site_safety_rating: validatedData.criteria.site_safety,
-      safety_procedures_rating: validatedData.criteria.safety_procedures,
-      incident_reporting_rating: validatedData.criteria.incident_reporting,
-      overall_safety_rating: overallRating, // Will be calculated by trigger
-      confidence_level: validatedData.confidence_level,
-      assessment_method: validatedData.assessment_method,
-      notes: validatedData.notes || null,
-      evidence_urls: validatedData.evidence_urls || [],
-      follow_up_required: validatedData.follow_up_required,
-      follow_up_date: validatedData.follow_up_date,
+      site_safety_rating: data.criteria.site_safety,
+      safety_procedures_rating: data.criteria.safety_procedures,
+      incident_reporting_rating: data.criteria.incident_reporting,
+      overall_safety_rating: overallRating,
+      confidence_level: data.confidence_level,
+      assessment_method: data.assessment_method,
+      notes: data.notes || null,
+      evidence_urls: data.evidence_urls || [],
+      follow_up_required: data.follow_up_required,
+      follow_up_date: data.follow_up_date,
     }
 
     const { data: assessment, error } = await supabase
       .from('safety_assessments_4point')
       .insert(assessmentData)
-      .select()
+      .select(`
+        *,
+        employers!inner(id, name, abn),
+        profiles!inner(id, full_name, email)
+      `)
       .single()
 
     if (error) {
       console.error('Error creating Safety assessment:', error)
-      return NextResponse.json(
-        { success: false, message: 'Failed to create assessment', error: error.message },
-        { status: 500 }
-      )
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to create assessment',
+        details: error.message,
+        hint: 'Please check your data and try again'
+      }, { status: 500 })
     }
 
-    // Trigger rating calculation for this employer
-    try {
-      await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/ratings/calculate-4-point-employer-rating-new`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          employer_id: validatedData.employer_id,
-          project_id: validatedData.project_id,
-          calculation_method: 'automatic_calculation',
-          trigger_type: 'new_assessment',
-        }),
-      })
-    } catch (ratingError) {
-      console.error('Error triggering rating calculation:', ratingError)
+    // Trigger rating calculation for this employer (async)
+    triggerRatingCalculation(data.employer_id, data.project_id).catch(error => {
+      console.error('Error triggering rating calculation:', error)
       // Don't fail the request if rating calculation fails
-    }
+    })
 
-    const response = {
-      data: assessment,
+    return NextResponse.json({
       success: true,
+      data: assessment,
       message: 'Safety assessment created successfully',
       metadata: {
         calculation_time: Date.now(),
         overall_rating: overallRating,
-        confidence_level: validatedData.confidence_level,
+        confidence_level: data.confidence_level,
+        assessment_interpretation: getRatingInterpretation(overallRating),
         created_at: assessment.created_at,
-      },
-    }
-
-    return NextResponse.json(response)
-  } catch (error) {
-    console.error('Error in Safety assessment POST:', error)
-
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { success: false, message: 'Validation error', errors: error.errors },
-        { status: 400 }
-      )
-    }
-
-    return NextResponse.json(
-      { success: false, message: 'Internal server error' },
-      { status: 500 }
-    )
+        employer_name: employer.name,
+        project_name: data.project_id ? 'Linked Project' : 'General Assessment'
+      }
+    })
+  },
+  schemas.assessment.safetyAssessment,
+  {
+    requireAuth: true,
+    requiredRoles: ['admin', 'lead_organiser', 'organiser', 'delegate'],
+    returnValidationErrors: process.env.NODE_ENV === 'development'
   }
-}
+)
 
-// GET - List Safety Assessments with filtering
+/**
+ * GET /api/assessments/safety-4-point-new
+ * List safety assessments with comprehensive filtering and validation
+ */
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createServerSupabase()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    const { searchParams } = new URL(request.url)
 
-    if (!user) {
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
-        { status: 401 }
-      )
+    // Validate query parameters
+    const queryValidation = validateQueryParams(searchParams, schemas.assessment.assessmentSearch, {
+      returnValidationErrors: process.env.NODE_ENV === 'development'
+    })
+
+    if (!queryValidation.success) {
+      return NextResponse.json({
+        success: false,
+        error: queryValidation.error,
+        field: queryValidation.field,
+        hint: 'Please check your search parameters'
+      }, { status: 400 })
     }
 
-    const { searchParams } = new URL(request.url)
-    const employerId = searchParams.get('employer_id')
-    const projectId = searchParams.get('project_id')
-    const assessorId = searchParams.get('assessor_id')
-    const confidenceLevel = searchParams.get('confidence_level')
-    const assessmentMethod = searchParams.get('assessment_method')
-    const minRating = searchParams.get('min_rating')
-    const maxRating = searchParams.get('max_rating')
-    const followUpRequired = searchParams.get('follow_up_required')
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '20')
-    const offset = (page - 1) * limit
+    const params = queryValidation.data!
 
+    // Check authentication and get user with patch restrictions
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return NextResponse.json({
+        success: false,
+        error: 'Authentication required'
+      }, { status: 401 })
+    }
+
+    // Get user profile with role and patch assignments
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role, organiser_patch_assignments!inner(patch_id)')
+      .eq('id', user.id)
+
+    if (profileError || !profile) {
+      return NextResponse.json({
+        success: false,
+        error: 'User profile not found'
+      }, { status: 404 })
+    }
+
+    // Build base query
     let query = supabase
       .from('safety_assessments_4point')
       .select(`
         *,
         employers!inner(id, name, abn),
-        profiles!inner(id, name, email)
+        profiles!inner(id, full_name, email),
+        projects!left_outer(id, name, stage)
       `, { count: 'exact' })
 
-    // Apply filters
-    if (employerId) {
-      query = query.eq('employer_id', employerId)
+    // Apply role-based data filtering
+    if (profile[0].role !== 'admin') {
+      const userPatchIds = profile.map(p => p.organiser_patch_assignments.patch_id)
+
+      // Filter assessments to only include employers/projects in user's patches
+      query = query.or(`employers.patch_id.in.(${userPatchIds.join(',')}),projects.patch_id.in.(${userPatchIds.join(',')})`)
     }
-    if (projectId) {
-      query = query.eq('project_id', projectId)
+
+    // Apply filters with validation
+    if (params.employerId) {
+      query = query.eq('employer_id', params.employerId)
     }
-    if (assessorId) {
-      query = query.eq('assessor_id', assessorId)
+    if (params.projectId) {
+      query = query.eq('project_id', params.projectId)
     }
-    if (confidenceLevel) {
-      query = query.eq('confidence_level', confidenceLevel)
+    if (params.assessorId) {
+      query = query.eq('assessor_id', params.assessorId)
     }
-    if (assessmentMethod) {
-      query = query.eq('assessment_method', assessmentMethod)
+    if (params.confidenceLevel) {
+      query = query.eq('confidence_level', params.confidenceLevel)
     }
-    if (minRating) {
-      query = query.gte('overall_safety_rating', parseInt(minRating))
+    if (params.assessmentMethod) {
+      query = query.eq('assessment_method', params.assessmentMethod)
     }
-    if (maxRating) {
-      query = query.lte('overall_safety_rating', parseInt(maxRating))
+    if (params.minRating !== undefined) {
+      query = query.gte('overall_safety_rating', params.minRating)
     }
-    if (followUpRequired) {
-      query = query.eq('follow_up_required', followUpRequired === 'true')
+    if (params.maxRating !== undefined) {
+      query = query.lte('overall_safety_rating', params.maxRating)
+    }
+    if (params.followUpRequired !== undefined) {
+      query = query.eq('follow_up_required', params.followUpRequired)
+    }
+    if (params.dateFrom) {
+      query = query.gte('assessment_date', params.dateFrom)
+    }
+    if (params.dateTo) {
+      query = query.lte('assessment_date', params.dateTo)
     }
 
     // Apply pagination and ordering
+    const offset = (params.page - 1) * params.pageSize
     const { data: assessments, error, count } = await query
       .order('assessment_date', { ascending: false })
       .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1)
+      .range(offset, offset + params.pageSize - 1)
 
     if (error) {
       console.error('Error fetching Safety assessments:', error)
-      return NextResponse.json(
-        { success: false, message: 'Failed to fetch assessments', error: error.message },
-        { status: 500 }
-      )
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to fetch assessments',
+        details: error.message
+      }, { status: 500 })
     }
 
-    const response = {
-      data: assessments || [],
+    // Enrich data with rating interpretations
+    const enrichedAssessments = (assessments || []).map(assessment => ({
+      ...assessment,
+      rating_interpretation: getRatingInterpretation(assessment.overall_safety_rating),
+      confidence_interpretation: getConfidenceInterpretation(assessment.confidence_level)
+    }))
+
+    return NextResponse.json({
       success: true,
+      data: enrichedAssessments,
       pagination: {
-        page,
-        limit,
+        page: params.page,
+        pageSize: params.pageSize,
         total: count || 0,
-        pages: Math.ceil((count || 0) / limit),
+        totalPages: Math.ceil((count || 0) / params.pageSize),
+        hasNext: offset + params.pageSize < (count || 0),
+        hasPrev: params.page > 1
       },
-    }
-
-    return NextResponse.json(response)
+      filters: {
+        applied: params,
+        available: {
+          confidenceLevels: ['very_high', 'high', 'medium', 'low'],
+          assessmentMethods: ['site_visit', 'phone_call', 'safety_meeting', 'worker_interview', 'document_review', 'other'],
+          ratingRange: { min: 1, max: 4 }
+        }
+      }
+    })
   } catch (error) {
     console.error('Error in Safety assessment GET:', error)
-    return NextResponse.json(
-      { success: false, message: 'Internal server error' },
-      { status: 500 }
-    )
+    return NextResponse.json({
+      success: false,
+      error: 'Internal server error',
+      hint: 'Please try again or contact support'
+    }, { status: 500 })
+  }
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Validates safety assessment criteria for logical consistency
+ */
+function validateSafetyAssessmentCriteria(criteria: any): { valid: boolean; error?: string; details?: any; hint?: string } {
+  const { site_safety, safety_procedures, incident_reporting } = criteria
+
+  // Check if all ratings are within valid range
+  const ratings = [site_safety, safety_procedures, incident_reporting]
+  if (ratings.some(rating => rating < 1 || rating > 4)) {
+    return {
+      valid: false,
+      error: 'All safety criteria ratings must be between 1 and 4',
+      details: { criteria },
+      hint: '1 = Excellent, 2 = Good, 3 = Needs Improvement, 4 = Poor'
+    }
+  }
+
+  // Business logic: Check for extreme rating disparities
+  const maxRating = Math.max(...ratings)
+  const minRating = Math.min(...ratings)
+  const ratingDifference = maxRating - minRating
+
+  if (ratingDifference >= 3) {
+    return {
+      valid: false,
+      error: 'Extreme rating disparities detected',
+      details: { maxRating, minRating, difference: ratingDifference },
+      hint: 'Please review your assessments - such large differences may indicate data entry errors'
+    }
+  }
+
+  return { valid: true }
+}
+
+/**
+ * Triggers rating calculation asynchronously
+ */
+async function triggerRatingCalculation(employerId: string, projectId?: string): Promise<void> {
+  try {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/ratings/calculate-4-point-employer-rating-new`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        employer_id: employerId,
+        project_id: projectId,
+        calculation_method: 'automatic_calculation',
+        trigger_type: 'new_assessment',
+      }),
+    })
+
+    if (!response.ok) {
+      throw new Error(`Rating calculation failed: ${response.statusText}`)
+    }
+  } catch (error) {
+    console.error('Error triggering rating calculation:', error)
+    throw error
+  }
+}
+
+/**
+ * Get human-readable interpretation of safety rating
+ */
+function getRatingInterpretation(rating: number): string {
+  switch (rating) {
+    case 1:
+      return 'Excellent safety standards'
+    case 2:
+      return 'Good safety standards'
+    case 3:
+      return 'Safety needs improvement'
+    case 4:
+      return 'Poor safety standards - immediate attention required'
+    default:
+      return 'Unknown rating'
+  }
+}
+
+/**
+ * Get human-readable interpretation of confidence level
+ */
+function getConfidenceInterpretation(level: string): string {
+  switch (level) {
+    case 'very_high':
+      return 'Very high confidence - comprehensive assessment'
+    case 'high':
+      return 'High confidence - thorough assessment'
+    case 'medium':
+      return 'Medium confidence - adequate assessment'
+    case 'low':
+      return 'Low confidence - limited information'
+    default:
+      return 'Unknown confidence level'
   }
 }

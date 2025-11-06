@@ -33,13 +33,15 @@ function BulletMetric({
   showTrend = false,
   indicatorClassName,
 }: BulletMetricProps) {
-  // Calculate percentages for display and progress bar
+  // Calculate percentages for display and progress bar with comprehensive zero checks
   const currentPct = denominator > 0 ? Math.round((numerator / denominator) * 100) : 0
-  const targetPct = targetPercentage
+  const targetPct = targetPercentage || 0
 
-  // Calculate trend using raw numbers
-  const trend = lastWeekNumerator !== undefined ? numerator - lastWeekNumerator : 0
-  const trendPct = lastWeekNumerator !== undefined && lastWeekNumerator > 0
+  // Calculate trend using raw numbers with additional zero checks
+  const trend = lastWeekNumerator !== undefined && lastWeekNumerator >= 0
+    ? numerator - lastWeekNumerator
+    : 0
+  const trendPct = lastWeekNumerator !== undefined && lastWeekNumerator > 0 && lastWeekNumerator !== Infinity
     ? Math.round(((numerator - lastWeekNumerator) / lastWeekNumerator) * 100)
     : 0
 
@@ -80,11 +82,11 @@ function BulletMetric({
           title={`Target: ${targetPct}%`}
         />
         {/* Last week value tick (thin line) */}
-        {showTrend && lastWeekNumerator !== undefined && (
+        {showTrend && lastWeekNumerator !== undefined && lastWeekNumerator >= 0 && denominator > 0 && (
           <div
             className="absolute inset-y-0 border-l border-gray-400 opacity-80"
-            style={{ left: `${denominator > 0 ? Math.round((lastWeekNumerator / denominator) * 100) : 0}%` }}
-            title={`Last week: ${denominator > 0 ? Math.round((lastWeekNumerator / denominator) * 100) : 0}%`}
+            style={{ left: `${Math.round((lastWeekNumerator / denominator) * 100)}%` }}
+            title={`Last week: ${Math.round((lastWeekNumerator / denominator) * 100)}%`}
           />
         )}
       </div>
@@ -112,11 +114,22 @@ export function PatchScorecards({ patchIds: _patchIds = [] }: PatchScorecardsPro
     return (
       <Card className="lg:bg-white lg:border-gray-300 lg:shadow-md">
         <CardHeader className="pb-3">
-          <CardTitle className="text-lg">Patch/Coordinator Scorecards</CardTitle>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Crown className="h-5 w-5 text-yellow-600" />
+            Patch/Coordinator Scorecards
+            <FilterIndicatorBadge
+              hasActiveFilters={hasActiveFilters}
+              activeFilters={activeFilters}
+              variant="small"
+            />
+          </CardTitle>
           <CardDescription>Loading coordinator data...</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="h-64 bg-gray-50 border border-gray-200 rounded animate-pulse" />
+          <div className="text-center text-xs text-gray-500 mt-2">
+            Fetching lead organizer summaries and metrics
+          </div>
         </CardContent>
       </Card>
     )
@@ -196,11 +209,11 @@ export function PatchScorecards({ patchIds: _patchIds = [] }: PatchScorecardsPro
           const identified = metrics.mappedKeyContractors || 0
           const eba = metrics.keyContractorsWithEba || 0
 
-          // Calculate percentages
-          const knownBuilderPct = totalProjects > 0 ? Math.round((knownBuilders / totalProjects) * 100) : 0
-          const ebaBuilderPct = knownBuilders > 0 ? Math.round((ebaBuilders / knownBuilders) * 100) : 0
-          const contractorIdPct = totalSlots > 0 ? Math.round((identified / totalSlots) * 100) : 0
-          const contractorEbaPct = identified > 0 ? Math.round((eba / identified) * 100) : 0
+          // Calculate percentages with comprehensive zero and valid number checks
+          const knownBuilderPct = totalProjects > 0 && totalProjects !== Infinity ? Math.round((knownBuilders / totalProjects) * 100) : 0
+          const ebaBuilderPct = knownBuilders > 0 && knownBuilders !== Infinity ? Math.round((ebaBuilders / knownBuilders) * 100) : 0
+          const contractorIdPct = totalSlots > 0 && totalSlots !== Infinity ? Math.round((identified / totalSlots) * 100) : 0
+          const contractorEbaPct = identified > 0 && identified !== Infinity ? Math.round((eba / identified) * 100) : 0
 
           // Targets (staged by project scale)
           const knownBuilderTarget = 100 // 100% target

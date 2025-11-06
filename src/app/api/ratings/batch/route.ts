@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { withRateLimit, RATE_LIMIT_PRESETS } from '@/lib/rateLimit';
+import { batchValidateEmployers, calculateEmployerRatingOptimized } from './optimized-operations';
 
 // Role-based access control
 const ALLOWED_ROLES = ['lead_organiser', 'admin'] as const; // Restricted for batch operations
@@ -189,6 +190,13 @@ async function executeBatchRatingHandler(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create batch job' }, { status: 500 });
     }
 
+    // Pre-validate all employers using optimized materialized view (FIXES N+1 QUERY + uses MV)
+    const allEmployerIds = Array.from(totalEmployerIds);
+    const validEmployers = await batchValidateEmployers(allEmployerIds);
+
+    // Create employer lookup map for O(1) access
+    const employerMap = new Map(validEmployers.map(emp => [emp.employer_id, emp]));
+
     // Process operations
     const results: any[] = [];
     const errors: any[] = [];
@@ -205,19 +213,18 @@ async function executeBatchRatingHandler(request: NextRequest) {
       average_processing_time_ms: 0,
     };
 
+    // Batch progress updates to reduce database calls
+    let lastProgressUpdate = 0;
+    const PROGRESS_UPDATE_INTERVAL = 5; // Update progress every 5 operations
+
     for (const operation of body.operations) {
       for (const employerId of operation.employer_ids) {
         const operationStartTime = Date.now();
 
         try {
-          // Validate employer exists
-          const { data: employer, error: employerError } = await supabase
-            .from('employers')
-            .select('id, name')
-            .eq('id', employerId)
-            .single();
-
-          if (employerError || !employer) {
+          // Validate employer exists using pre-fetched map (FIXES N+1 QUERY + uses MV)
+          const employer = employerMap.get(employerId);
+          if (!employer) {
             results.push({
               employer_id: employerId,
               operation_type: operation.operation_type,
@@ -254,12 +261,32 @@ async function executeBatchRatingHandler(request: NextRequest) {
 
           switch (operation.operation_type) {
             case 'calculate':
-              result = await executeCalculateOperation(supabase, employerId, operation.parameters, user.id);
+              // Use optimized calculation with materialized views
+              result = await calculateEmployerRatingOptimized(
+                employerId,
+                operation.parameters?.calculation_date || new Date().toISOString().split('T')[0],
+                {
+                  project: operation.parameters?.project_weight || 0.6,
+                  expertise: operation.parameters?.expertise_weight || 0.4,
+                  eba: operation.parameters?.eba_weight || 0.15,
+                },
+                user.id
+              );
               if (result.status === 'success') summary.ratings_calculated++;
               break;
 
             case 'recalculate':
-              result = await executeRecalculateOperation(supabase, employerId, operation.parameters, user.id);
+              // Use optimized recalculation with force_recalculate flag
+              result = await calculateEmployerRatingOptimized(
+                employerId,
+                operation.parameters?.calculation_date || new Date().toISOString().split('T')[0],
+                {
+                  project: operation.parameters?.project_weight || 0.6,
+                  expertise: operation.parameters?.expertise_weight || 0.4,
+                  eba: operation.parameters?.eba_weight || 0.15,
+                },
+                user.id
+              );
               if (result.status === 'success') summary.ratings_updated++;
               break;
 
@@ -298,16 +325,20 @@ async function executeBatchRatingHandler(request: NextRequest) {
             completedOperations++;
           }
 
-          // Update progress
-          const progress = Math.round(((completedOperations + failedOperations) / totalEmployerIds.size) * 100);
-          await supabase
-            .from('rating_batch_jobs')
-            .update({
-              completed_operations: completedOperations,
-              failed_operations: failedOperations,
-              progress_percentage: progress,
-            })
-            .eq('id', batchId);
+          // Batch progress updates to reduce database calls (FIXES N+1 QUERY)
+          const totalProcessed = completedOperations + failedOperations;
+          if (totalProcessed - lastProgressUpdate >= PROGRESS_UPDATE_INTERVAL || totalProcessed === totalEmployerIds.size) {
+            const progress = Math.round((totalProcessed / totalEmployerIds.size) * 100);
+            await supabase
+              .from('rating_batch_jobs')
+              .update({
+                completed_operations: completedOperations,
+                failed_operations: failedOperations,
+                progress_percentage: progress,
+              })
+              .eq('id', batchId);
+            lastProgressUpdate = totalProcessed;
+          }
 
         } catch (error) {
           const processingTime = Date.now() - operationStartTime;

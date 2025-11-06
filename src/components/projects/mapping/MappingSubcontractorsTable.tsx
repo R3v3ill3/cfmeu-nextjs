@@ -642,21 +642,22 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
             // Determine row background color based on EBA status
             let rowBgClass = "";
             if (row.employer_id && row.eba === true) {
-              rowBgClass = "bg-green-50/50"; // Light green for EBA active
+              rowBgClass = "bg-green-50/50 hover:bg-green-100/50"; // Light green for EBA active with hover
             } else if (row.employer_id && row.eba === false) {
-              rowBgClass = "bg-red-50/50"; // Light red for EBA false
+              rowBgClass = "bg-red-50/50 hover:bg-red-100/50"; // Light red for EBA false with hover
+            } else {
+              rowBgClass = "hover:bg-muted/30"; // Standard hover for other rows
             }
-            // For EBA unknown (null) or no employer, use default background
 
             return (
               <TableRow key={row.key} className={rowBgClass}>
-                <TableCell className={"w-56 " + (row.employer_id ? "bg-muted/20" : "")}>
-                  {index === 0 ? row.trade_label : ''}
+                <TableCell className={"p-2 sm:p-3 min-w-[140px] sm:min-w-[180px] " + (row.employer_id ? "bg-muted/20" : "")}>
+                  <span className="text-sm sm:text-base">{index === 0 ? row.trade_label : ''}</span>
                 </TableCell>
-                <TableCell>
+                <TableCell className="p-2 sm:p-3 min-w-[120px] sm:min-w-[160px]">
                   {companyCell(row)}
                 </TableCell>
-                <TableCell className="w-36">
+                <TableCell className="p-2 sm:p-3 min-w-[100px] sm:min-w-[120px]">
                   {row.isSkeleton || !row.employer_id ? (
                     <StatusBadge status="unknown" showLabel={false} size="sm" />
                   ) : (
@@ -667,11 +668,11 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
                     />
                   )}
                 </TableCell>
-                <TableCell className="w-40">{ebaCell(row)}</TableCell>
-                <TableCell className="w-32 text-center">{workerCountCell(row)}</TableCell>
-                <TableCell className="w-40">{workerBreakdownCell(row)}</TableCell>
-                <TableCell className="w-32">{membershipCell(row)}</TableCell>
-                <TableCell className="w-20 text-center">
+                <TableCell className="p-2 sm:p-3 min-w-[100px] sm:min-w-[120px]">{ebaCell(row)}</TableCell>
+                <TableCell className="p-2 sm:p-3 min-w-[100px] text-center">{workerCountCell(row)}</TableCell>
+                <TableCell className="p-2 sm:p-3 min-w-[120px] sm:min-w-[140px] text-center">{workerBreakdownCell(row)}</TableCell>
+                <TableCell className="p-2 sm:p-3 min-w-[120px] text-center">{membershipCell(row)}</TableCell>
+                <TableCell className="p-2 sm:p-3 min-w-[100px] text-center">
                   {row.employer_id && (
                     <ComplianceIndicator
                       projectId={projectId}
@@ -816,18 +817,18 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
           Loading subcontractors...
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
           <Table className="print-table print-border">
             <TableHeader>
               <TableRow>
-                <TableHead className="w-56">Trade</TableHead>
-                <TableHead>Company</TableHead>
-                <TableHead className="w-36">Status</TableHead>
-                <TableHead className="w-40">EBA (Y/N)</TableHead>
-                <TableHead className="w-32 text-center">Est. Workers</TableHead>
-                <TableHead className="w-40 text-center">Worker Breakdown</TableHead>
-                <TableHead className="w-32 text-center">Membership</TableHead>
-                <TableHead className="w-20 text-center">Compliance</TableHead>
+                <TableHead className="min-w-[140px] sm:min-w-[180px]">Trade</TableHead>
+                <TableHead className="min-w-[120px] sm:min-w-[160px]">Company</TableHead>
+                <TableHead className="min-w-[100px] sm:min-w-[120px]">Status</TableHead>
+                <TableHead className="min-w-[100px] sm:min-w-[120px]">EBA (Y/N)</TableHead>
+                <TableHead className="min-w-[100px] text-center">Est. Workers</TableHead>
+                <TableHead className="min-w-[120px] sm:min-w-[140px] text-center">Worker Breakdown</TableHead>
+                <TableHead className="min-w-[120px] text-center">Membership</TableHead>
+                <TableHead className="min-w-[100px] text-center">Compliance</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

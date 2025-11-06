@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -57,7 +57,19 @@ export default function SiteContactsEditor({ projectId, siteIds }: { projectId: 
   });
 
   const [rows, setRows] = useState<ContactRow[]>([]);
-  useEffect(() => { setRows(contacts as any); }, [contacts]);
+
+  // Memoize the contacts data to prevent unnecessary re-renders
+  const memoizedContacts = useMemo(() => contacts as ContactRow[], [contacts]);
+
+  // Function to load stage data - memoized to prevent recreation on every render
+  const loadStageData = useCallback((contactData: ContactRow[]) => {
+    setRows(contactData);
+  }, []);
+
+  // Properly sync rows with contacts data
+  useEffect(() => {
+    loadStageData(memoizedContacts);
+  }, [memoizedContacts, loadStageData]);
 
   const roleOptions: Array<{ value: SiteContactRole; label: string }> = useMemo(() => ([
     { value: "project_manager", label: "Project Manager" },
@@ -128,24 +140,24 @@ export default function SiteContactsEditor({ projectId, siteIds }: { projectId: 
         <div className="mb-3">
           <Button size="sm" onClick={addRow}><Plus className="h-4 w-4 mr-1" /> Add contact</Button>
         </div>
-        <div className="overflow-auto">
+        <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-40">Site</TableHead>
-                <TableHead className="w-40">Role</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead className="w-64">Email</TableHead>
-                <TableHead className="w-40">Phone</TableHead>
-                <TableHead className="w-28 text-right">Actions</TableHead>
+                <TableHead className="min-w-[120px] sm:min-w-[140px]">Site</TableHead>
+                <TableHead className="min-w-[120px] sm:min-w-[140px]">Role</TableHead>
+                <TableHead className="min-w-[100px]">Name</TableHead>
+                <TableHead className="min-w-[140px] sm:min-w-[160px]">Email</TableHead>
+                <TableHead className="min-w-[120px] sm:min-w-[140px]">Phone</TableHead>
+                <TableHead className="min-w-[120px] text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {(rows || []).map((r, idx) => (
                 <TableRow key={r.id || `new-${idx}`}>
-                  <TableCell>
+                  <TableCell className="p-2 sm:p-3">
                     <Select value={r.job_site_id} onValueChange={(v: string) => updateRow(idx, { job_site_id: v })}>
-                      <SelectTrigger>
+                      <SelectTrigger className="min-h-[44px]">
                         <SelectValue placeholder="Select site" />
                       </SelectTrigger>
                       <SelectContent>
@@ -155,9 +167,9 @@ export default function SiteContactsEditor({ projectId, siteIds }: { projectId: 
                       </SelectContent>
                     </Select>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="p-2 sm:p-3">
                     <Select value={r.role} onValueChange={(v: SiteContactRole) => updateRow(idx, { role: v })}>
-                      <SelectTrigger>
+                      <SelectTrigger className="min-h-[44px]">
                         <SelectValue placeholder="Select role" />
                       </SelectTrigger>
                       <SelectContent>
@@ -167,27 +179,44 @@ export default function SiteContactsEditor({ projectId, siteIds }: { projectId: 
                       </SelectContent>
                     </Select>
                   </TableCell>
-                  <TableCell>
-                    <Input value={r.name} onChange={(e) => updateRow(idx, { name: e.target.value })} placeholder="Full name" />
+                  <TableCell className="p-2 sm:p-3">
+                    <Input
+                      value={r.name}
+                      onChange={(e) => updateRow(idx, { name: e.target.value })}
+                      placeholder="Full name"
+                      className="min-h-[44px]"
+                    />
                   </TableCell>
-                  <TableCell>
-                    <Input type="email" value={r.email || ""} onChange={(e) => updateRow(idx, { email: e.target.value || null })} placeholder="Email" />
+                  <TableCell className="p-2 sm:p-3">
+                    <Input
+                      type="email"
+                      value={r.email || ""}
+                      onChange={(e) => updateRow(idx, { email: e.target.value || null })}
+                      placeholder="Email"
+                      className="min-h-[44px]"
+                    />
                   </TableCell>
-                  <TableCell>
-                    <Input value={r.phone || ""} onChange={(e) => updateRow(idx, { phone: e.target.value || null })} placeholder="Phone" />
+                  <TableCell className="p-2 sm:p-3">
+                    <Input
+                      type="tel"
+                      value={r.phone || ""}
+                      onChange={(e) => updateRow(idx, { phone: e.target.value || null })}
+                      placeholder="Phone"
+                      className="min-h-[44px]"
+                    />
                   </TableCell>
-                  <TableCell className="text-right">
-                    <div className="inline-flex items-center gap-2">
+                  <TableCell className="text-right p-2 sm:p-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-2">
                       <Button size="sm" variant="outline" onClick={async () => {
                         const id = await saveMutation.mutateAsync(r);
                         setRows((prev) => prev.map((row, i) => i === idx ? { ...row, id, _dirty: false } : row));
-                      }} disabled={saveMutation.isPending || !r._dirty}>
+                      }} disabled={saveMutation.isPending || !r._dirty} className="min-h-[44px] px-3">
                         <Save className="h-4 w-4 mr-1" /> Save
                       </Button>
                       <Button size="sm" variant="destructive" onClick={() => {
                         if (r.id) removeMutation.mutate(r.id);
                         setRows((prev) => prev.filter((_, i) => i !== idx));
-                      }}>
+                      }} className="min-h-[44px] px-3">
                         <Trash2 className="h-4 w-4 mr-1" /> Delete
                       </Button>
                     </div>

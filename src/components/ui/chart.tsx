@@ -72,23 +72,36 @@ const ChartContainer = forwardRef<
       return
     }
 
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0]
-      if (!entry) return
+    let observer: ResizeObserver | null = null
 
-      const { width, height } = entry.contentRect
-      setContainerSize((prev) => {
-        if (prev.width === width && prev.height === height) {
-          return prev
-        }
-        return { width, height }
+    try {
+      observer = new ResizeObserver((entries) => {
+        const entry = entries[0]
+        if (!entry) return
+
+        const { width, height } = entry.contentRect
+        setContainerSize((prev) => {
+          if (prev.width === width && prev.height === height) {
+            return prev
+          }
+          return { width, height }
+        })
       })
-    })
 
-    observer.observe(node)
+      observer.observe(node)
+    } catch (error) {
+      console.warn('[chart-container] ResizeObserver initialization failed:', error)
+    }
 
     return () => {
-      observer.disconnect()
+      try {
+        if (observer) {
+          observer.disconnect()
+          observer = null
+        }
+      } catch (error) {
+        console.warn('[chart-container] ResizeObserver cleanup failed:', error)
+      }
     }
   }, [])
 
@@ -123,8 +136,13 @@ const ChartContainer = forwardRef<
     }
   }, [chartId, containerSize.height, containerSize.width, hasValidSize])
   
-  // Check if explicit height is provided (h-full, h-[300px], etc.) to override aspect-video
-  const hasExplicitHeight = className?.includes('h-') || className?.includes('height')
+  // Check if explicit height is provided (h-full, h-[300px], h-[200px] md:h-[300px], etc.) to override aspect-video
+  const hasExplicitHeight = useMemo(() => {
+    if (!className) return false
+    // Use regex to detect height classes including responsive ones like h-[200px] md:h-[300px]
+    const heightClassRegex = /\b(h-\S+|height-\S+|(sm|md|lg|xl|2xl):h-\S+)/i
+    return heightClassRegex.test(className)
+  }, [className])
   const baseClasses = hasExplicitHeight 
     ? "block text-xs" 
     : "flex aspect-video justify-center text-xs min-h-[200px] min-w-[300px]"

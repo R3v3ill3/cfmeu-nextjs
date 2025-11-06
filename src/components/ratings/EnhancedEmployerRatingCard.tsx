@@ -31,6 +31,7 @@ import {
   MiniTrendIndicator
 } from "@/components/ui/FourPointRatingDisplay"
 import { useHapticFeedback } from "@/components/mobile/shared/HapticFeedback"
+import { cn } from "@/lib/utils"
 import { format } from "date-fns"
 import {
   FourPointRating,

@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useQuery } from "@tanstack/react-query"
 import { useSearchParams } from "next/navigation"
@@ -95,8 +95,8 @@ export function WaffleTiles({ patchIds = [] }: WaffleTilesProps) {
 
   const isLoading = tier1Loading || tier2Loading || tier3Loading
 
-  // Helper function to generate waffle grid for a given data set
-  const generateWaffleGrid = (data: WaffleTileData | undefined) => {
+  // Helper function to generate waffle grid for a given data set - memoized for performance
+  const generateWaffleGrid = useCallback((data: WaffleTileData | undefined) => {
     if (!data) return null
 
     const total = data.total_projects
@@ -106,12 +106,17 @@ export function WaffleTiles({ patchIds = [] }: WaffleTilesProps) {
     const tilesPerGrid = gridSize * gridSize // 100 tiles
     const numGrids = Math.ceil(total / tilesPerGrid)
 
-    const grids = []
+    // Pre-calculate thresholds for better performance
+    const assuredThreshold = data.fully_assured
+    const mappedThreshold = assuredThreshold + data.fully_mapped
+    const ebaThreshold = mappedThreshold + data.eba_builder
+
+    const grids: Array<Array<{ type: 'fully_mapped' | 'eba_builder' | 'fully_assured' | 'unmapped' | 'empty' }>> = []
     let currentIndex = 0
 
     for (let gridIndex = 0; gridIndex < numGrids; gridIndex++) {
       const grid: Array<{ type: 'fully_mapped' | 'eba_builder' | 'fully_assured' | 'unmapped' | 'empty' }> = []
-      
+
       for (let i = 0; i < tilesPerGrid; i++) {
         if (currentIndex >= total) {
           grid.push({ type: 'empty' })
@@ -121,11 +126,11 @@ export function WaffleTiles({ patchIds = [] }: WaffleTilesProps) {
         let tileType: 'fully_mapped' | 'eba_builder' | 'fully_assured' | 'unmapped' | 'empty' = 'unmapped'
 
         // Prioritize: fully_assured > fully_mapped > eba_builder > unmapped
-        if (currentIndex < data.fully_assured) {
+        if (currentIndex < assuredThreshold) {
           tileType = 'fully_assured'
-        } else if (currentIndex < data.fully_assured + data.fully_mapped) {
+        } else if (currentIndex < mappedThreshold) {
           tileType = 'fully_mapped'
-        } else if (currentIndex < data.fully_assured + data.fully_mapped + data.eba_builder) {
+        } else if (currentIndex < ebaThreshold) {
           tileType = 'eba_builder'
         }
 
@@ -137,12 +142,12 @@ export function WaffleTiles({ patchIds = [] }: WaffleTilesProps) {
     }
 
     return grids
-  }
+  }, [])
 
-  // Generate grids for each tier
-  const tier1Grid = useMemo(() => generateWaffleGrid(tier1Data), [tier1Data])
-  const tier2Grid = useMemo(() => generateWaffleGrid(tier2Data), [tier2Data])
-  const tier3Grid = useMemo(() => generateWaffleGrid(tier3Data), [tier3Data])
+  // Generate grids for each tier - properly memoized with dependencies
+  const tier1Grid = useMemo(() => generateWaffleGrid(tier1Data), [tier1Data, generateWaffleGrid])
+  const tier2Grid = useMemo(() => generateWaffleGrid(tier2Data), [tier2Data, generateWaffleGrid])
+  const tier3Grid = useMemo(() => generateWaffleGrid(tier3Data), [tier3Data, generateWaffleGrid])
 
   // Calculate total stats across all tiers
   const totalStats = useMemo(() => {

@@ -263,7 +263,7 @@ export function GoogleAddressInput({
     } finally {
       setIsGettingLocation(false);
     }
-  }, [enableGeolocation, dismissKeyboard]);
+  }, [enableGeolocation, dismissKeyboard, performValidation]);
 
   // Handle input focus with mobile keyboard optimization
   const handleInputFocus = useCallback((event: React.FocusEvent<HTMLInputElement>) => {
@@ -283,7 +283,7 @@ export function GoogleAddressInput({
       const error = performValidation(addr);
       onChangeRef.current?.(addr, error);
     }
-  }, []);
+  }, [performValidation]);
 
   // Handle input blur with mobile optimization
   const handleInputBlur = useCallback(() => {
@@ -293,7 +293,7 @@ export function GoogleAddressInput({
       const error = performValidation(addr);
       onChangeRef.current?.(addr, error);
     }
-  }, [touched, text]);
+  }, [touched, text, performValidation]);
 
   useEffect(() => {
     setText(value || "");
@@ -367,14 +367,29 @@ export function GoogleAddressInput({
       });
     }
 
+    // Proper cleanup function for Google Maps autocomplete
     return () => {
-      if (placeListenerRef.current?.remove) {
-        placeListenerRef.current.remove();
-        placeListenerRef.current = null;
+      try {
+        // Remove the event listener properly
+        if (placeListenerRef.current) {
+          if (typeof placeListenerRef.current.remove === 'function') {
+            placeListenerRef.current.remove();
+          } else if (window.google && window.google.maps && window.google.maps.event) {
+            // Fallback for older Google Maps API versions
+            window.google.maps.event.removeListener(placeListenerRef.current);
+          }
+          placeListenerRef.current = null;
+        }
+
+        // Clear the autocomplete instance
+        if (autocompleteRef.current) {
+          autocompleteRef.current = null;
+        }
+      } catch (error) {
+        console.warn("Error cleaning up Google Maps autocomplete:", error);
       }
-      autocompleteRef.current = null;
     };
-  }, [isLoaded]);
+  }, [isLoaded, performValidation]);
 
   useEffect(() => {
     if (!isLoaded) return;

@@ -98,26 +98,27 @@ export function ProjectTable({
   const router = useRouter()
   
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Project</TableHead>
-          <TableHead>Primary Contractor</TableHead>
-          <TableHead>Tier</TableHead>
-          <TableHead>Classifications</TableHead>
-          <TableHead>Patch</TableHead>
-          <TableHead>Organiser</TableHead>
-          <TableHead className="text-right">Employers</TableHead>
-          <TableHead className="text-right">Workers</TableHead>
-          <TableHead className="text-right">Members</TableHead>
-          <TableHead>Delegate</TableHead>
-          <TableHead className="text-right">EBA Coverage</TableHead>
-          <TableHead className="text-right">Key EBA</TableHead>
-          <TableHead>Mapping</TableHead>
-          <TableHead>Audit</TableHead>
-          <TableHead>Last Visit</TableHead>
-        </TableRow>
-      </TableHeader>
+    <div className="w-full overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="min-w-[140px] sm:min-w-[160px]">Project</TableHead>
+            <TableHead className="min-w-[120px] sm:min-w-[140px]">Primary Contractor</TableHead>
+            <TableHead className="min-w-[60px]">Tier</TableHead>
+            <TableHead className="min-w-[100px] sm:min-w-[120px]">Classifications</TableHead>
+            <TableHead className="min-w-[80px]">Patch</TableHead>
+            <TableHead className="min-w-[100px] sm:min-w-[120px]">Organiser</TableHead>
+            <TableHead className="text-right min-w-[70px]">Employers</TableHead>
+            <TableHead className="text-right min-w-[70px]">Workers</TableHead>
+            <TableHead className="text-right min-w-[70px]">Members</TableHead>
+            <TableHead className="min-w-[80px]">Delegate</TableHead>
+            <TableHead className="text-right min-w-[90px]">EBA Coverage</TableHead>
+            <TableHead className="text-right min-w-[90px]">Key EBA</TableHead>
+            <TableHead className="min-w-[80px]">Mapping</TableHead>
+            <TableHead className="min-w-[60px]">Audit</TableHead>
+            <TableHead className="min-w-[80px]">Last Visit</TableHead>
+          </TableRow>
+        </TableHeader>
       <TableBody>
         {rows.map((project) => {
           const summary = summaries[project.id]
@@ -147,12 +148,12 @@ export function ProjectTable({
           const ebaPercentage = engaged > 0 ? Math.round((ebaActive / engaged) * 100) : 0
 
           return (
-            <TableRow key={project.id} className={`cursor-pointer hover:bg-muted/50 ${isNew ? 'bg-yellow-50' : ''}`} onClick={() => onRowClick(project.id)}>
-              <TableCell>
+            <TableRow key={project.id} className={`cursor-pointer hover:bg-muted/50 ${isNew ? 'bg-yellow-50' : ''} active:bg-muted/70`} onClick={() => onRowClick(project.id)}>
+              <TableCell className="p-2 sm:p-3">
                 <div className="flex flex-col">
-                  <Link 
-                    href={`/projects/${project.id}`} 
-                    className="font-medium hover:underline text-primary"
+                  <Link
+                    href={`/projects/${project.id}`}
+                    className="font-medium hover:underline text-primary text-sm sm:text-base"
                     onClick={(e) => {
                       e.stopPropagation()
                       startNavigation(`/projects/${project.id}`)
@@ -167,11 +168,11 @@ export function ProjectTable({
                   )}
                 </div>
               </TableCell>
-              <TableCell>
+              <TableCell className="p-2 sm:p-3">
                 {primary ? (
-                  <button 
-                    type="button" 
-                    className="text-primary hover:underline text-left" 
+                  <button
+                    type="button"
+                    className="text-primary hover:underline text-left text-sm sm:text-base min-h-[44px] py-1 px-1 rounded -mx-1"
                     onClick={(e) => {
                       e.stopPropagation()
                       onOpenEmployer(primary.id)
@@ -180,23 +181,23 @@ export function ProjectTable({
                     {primary.name}
                   </button>
                 ) : (
-                  <span className="text-muted-foreground">—</span>
+                  <span className="text-muted-foreground text-sm sm:text-base">—</span>
                 )}
               </TableCell>
-              <TableCell>
+              <TableCell className="p-2 sm:p-3">
                 {project.tier ? (
                   <ProjectTierBadge tier={project.tier as any} />
                 ) : (
-                  <span className="text-muted-foreground">—</span>
+                  <span className="text-muted-foreground text-sm sm:text-base">—</span>
                 )}
               </TableCell>
-              <TableCell>
-                <div className="flex items-center gap-2">
+              <TableCell className="p-2 sm:p-3">
+                <div className="flex flex-wrap items-center gap-1 sm:gap-2">
                   {(() => {
                     const ebaStatus = getProjectEbaStatus(project)
                     return (
-                      <CfmeuEbaBadge 
-                        hasActiveEba={ebaStatus.hasActiveEba} 
+                      <CfmeuEbaBadge
+                        hasActiveEba={ebaStatus.hasActiveEba}
                         builderName={ebaStatus.builderName}
                         size="sm"
                         showText={false}
@@ -215,66 +216,66 @@ export function ProjectTable({
                   )}
                 </div>
               </TableCell>
-              <TableCell>
-                <span className="text-sm">{patchName}</span>
+              <TableCell className="p-2 sm:p-3">
+                <span className="text-sm sm:text-base">{patchName}</span>
               </TableCell>
-              <TableCell>
-                <div className="text-sm truncate">
+              <TableCell className="p-2 sm:p-3">
+                <div className="text-sm sm:text-base truncate">
                   <ProjectOrganiserNames projectId={project.id} />
                 </div>
               </TableCell>
-              <TableCell className="text-right">
+              <TableCell className="text-right p-2 sm:p-3">
                 <Badge variant="outline" className="text-xs border-gray-800 text-black bg-white">
                   {engaged}
                 </Badge>
               </TableCell>
-              <TableCell className="text-right">
+              <TableCell className="text-right p-2 sm:p-3">
                 {totalWorkers > 0 ? (
                   <Badge variant="secondary" className="text-xs">{totalWorkers}</Badge>
                 ) : (
-                  <span className="text-muted-foreground">0</span>
+                  <span className="text-muted-foreground text-sm sm:text-base">0</span>
                 )}
               </TableCell>
-              <TableCell className="text-right">
+              <TableCell className="text-right p-2 sm:p-3">
                 {totalMembers > 0 ? (
                   <Badge variant="default" className="text-xs bg-red-600 hover:bg-red-700">{totalMembers}</Badge>
                 ) : (
-                  <span className="text-muted-foreground">0</span>
+                  <span className="text-muted-foreground text-sm sm:text-base">0</span>
                 )}
               </TableCell>
-              <TableCell>
-                <span className="text-sm">
+              <TableCell className="p-2 sm:p-3">
+                <span className="text-sm sm:text-base">
                   {delegateName || <span className="text-muted-foreground">—</span>}
                 </span>
               </TableCell>
-              <TableCell className="text-right">
+              <TableCell className="text-right p-2 sm:p-3">
                 {engaged > 0 ? (
-                  <div className="flex items-center justify-end gap-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-1 sm:gap-2">
                     <span className="text-xs text-muted-foreground">{ebaActive}/{engaged}</span>
-                    <Badge 
-                      variant={ebaPercentage > 50 ? "default" : "destructive"} 
+                    <Badge
+                      variant={ebaPercentage > 50 ? "default" : "destructive"}
                       className="text-xs"
                     >
                       {ebaPercentage}%
                     </Badge>
                   </div>
                 ) : (
-                  <span className="text-muted-foreground">—</span>
+                  <span className="text-muted-foreground text-sm sm:text-base">—</span>
                 )}
               </TableCell>
-              <TableCell className="text-right">
+              <TableCell className="text-right p-2 sm:p-3">
                 {(() => {
                   const projectSubsetStats = subsetStats[project.id]
                   if (!projectSubsetStats || projectSubsetStats.known_employer_count === 0) {
-                    return <span className="text-muted-foreground">—</span>
+                    return <span className="text-muted-foreground text-sm sm:text-base">—</span>
                   }
-                  
+
                   const { known_employer_count, eba_active_count, eba_percentage } = projectSubsetStats
                   return (
-                    <div className="flex items-center justify-end gap-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-1 sm:gap-2">
                       <span className="text-xs text-muted-foreground">{eba_active_count}/{known_employer_count}</span>
-                      <Badge 
-                        variant={eba_percentage > 50 ? "default" : "destructive"} 
+                      <Badge
+                        variant={eba_percentage > 50 ? "default" : "destructive"}
                         className="text-xs"
                       >
                         {eba_percentage}%
@@ -283,22 +284,22 @@ export function ProjectTable({
                   )
                 })()}
               </TableCell>
-              <TableCell>
-                <MappingStatusBadge 
-                  projectId={project.id} 
+              <TableCell className="p-2 sm:p-3">
+                <MappingStatusBadge
+                  projectId={project.id}
                   mappingStatus={(project as any).mapping_status}
                   variant="compact"
                 />
               </TableCell>
-              <TableCell>
-                <AuditStatusBadge 
-                  projectId={project.id} 
+              <TableCell className="p-2 sm:p-3">
+                <AuditStatusBadge
+                  projectId={project.id}
                   hasComplianceChecks={(project as any).has_compliance_checks}
                   lastComplianceCheckDate={(project as any).last_compliance_check_date}
                   variant="compact"
                 />
               </TableCell>
-              <TableCell>
+              <TableCell className="p-2 sm:p-3">
                 <LastVisitBadge projectId={project.id} variant="compact" />
               </TableCell>
             </TableRow>
@@ -306,5 +307,6 @@ export function ProjectTable({
         })}
       </TableBody>
     </Table>
+    </div>
   )
 }

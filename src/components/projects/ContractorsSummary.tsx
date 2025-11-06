@@ -66,21 +66,22 @@ export default function ContractorsSummary({
   const hasMultipleGroups = groupBySite && groups.length > 1;
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Employer</TableHead>
-          <TableHead>Membership</TableHead>
-          <TableHead>Trade</TableHead>
-          <TableHead>EBA</TableHead>
-        </TableRow>
-      </TableHeader>
+    <div className="w-full overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="min-w-[140px] sm:min-w-[160px]">Employer</TableHead>
+            <TableHead className="min-w-[120px] sm:min-w-[140px]">Membership</TableHead>
+            <TableHead className="min-w-[100px] sm:min-w-[120px]">Trade</TableHead>
+            <TableHead className="min-w-[80px]">EBA</TableHead>
+          </TableRow>
+        </TableHeader>
       <TableBody>
         {groups.map((g) => (
           <>
             {hasMultipleGroups && (
               <TableRow key={`hdr-${g.key}`}>
-                <TableCell colSpan={4} className="text-xs text-muted-foreground font-medium">
+                <TableCell colSpan={4} className="text-xs text-muted-foreground font-medium p-2 sm:p-3">
                   {g.name || "Project"}
                 </TableCell>
               </TableRow>
@@ -97,27 +98,29 @@ export default function ContractorsSummary({
               const ebaVariant = ebaInfo ? ebaInfo.variant : (hasEba ? 'default' : 'destructive');
 
               return (
-                <TableRow key={row.id}>
-                  <TableCell className="font-medium">
+                <TableRow key={row.id} className="hover:bg-muted/30">
+                  <TableCell className="font-medium p-2 sm:p-3">
                     <button
                       type="button"
-                      className="text-primary hover:underline"
+                      className="text-primary hover:underline text-sm sm:text-base min-h-[44px] py-1 px-1 rounded -mx-1 text-left w-full"
                       onClick={() => onEmployerClick(row.employerId)}
                     >
                       {row.employerName}
                     </button>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="p-2 sm:p-3">
                     <div className="min-w-[140px]">
                       <GradientBar percent={pct} baseRgb={memberRedRgb} />
                       <div className="mt-1 text-[10px] text-muted-foreground">{mem.members}/{mem.total}</div>
                     </div>
                   </TableCell>
-                  <TableCell>{row.tradeLabel}</TableCell>
-                  <TableCell>
+                  <TableCell className="p-2 sm:p-3">
+                    <span className="text-sm sm:text-base">{row.tradeLabel}</span>
+                  </TableCell>
+                  <TableCell className="p-2 sm:p-3">
                     <button
                       type="button"
-                      className={`cursor-pointer ${hasEba ? '' : 'opacity-60 cursor-not-allowed'}`}
+                      className={`cursor-pointer min-h-[44px] py-1 px-1 rounded -mx-1 ${hasEba ? '' : 'opacity-60 cursor-not-allowed'}`}
                       onClick={() => { if (hasEba) onEbaClick(row.employerId) }}
                       aria-label="View EBA details"
                       disabled={!hasEba}
@@ -132,12 +135,13 @@ export default function ContractorsSummary({
         ))}
         {rows.length === 0 && (
           <TableRow>
-            <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
+            <TableCell colSpan={4} className="text-center text-sm text-muted-foreground p-4">
               No contractors recorded for this project yet.
             </TableCell>
           </TableRow>
         )}
       </TableBody>
     </Table>
+    </div>
   );
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { withRateLimit, RATE_LIMIT_PRESETS } from '@/lib/rateLimit';
+import { getEmployerRatingFast, getEmployerProjectCompliance, getEmployerExpertiseRatings } from '@/app/api/ratings/batch/optimized-operations';
 
 // Role-based access control
 const ALLOWED_ROLES = ['lead_organiser', 'admin'] as const; // More restricted for recalculation
@@ -133,15 +134,9 @@ async function recalculateRatingHandler(request: NextRequest, { params }: { para
 
     const calculationDate = body.calculation_date || new Date().toISOString().split('T')[0];
 
-    // Get previous rating for comparison
-    const { data: previousRating, error: previousError } = await supabase
-      .from('employer_final_ratings')
-      .select('id, final_rating, final_score, rating_date, updated_at')
-      .eq('employer_id', employerId)
-      .eq('is_active', true)
-      .order('rating_date', { ascending: false })
-      .limit(1)
-      .single();
+    // Get previous rating for comparison using optimized materialized view
+    const previousRating = await getEmployerRatingFast(employerId);
+    const previousError = previousRating ? null : { message: 'Previous rating not found' };
 
     // Check if rating already exists for this date
     if (!body.force_recalculate) {
@@ -167,7 +162,13 @@ async function recalculateRatingHandler(request: NextRequest, { params }: { para
       }
     }
 
-    // Calculate new rating
+    // Get pre-computed data from materialized views for validation
+    const [projectCompliance, expertiseRatings] = await Promise.all([
+      getEmployerProjectCompliance(employerId),
+      getEmployerExpertiseRatings(employerId)
+    ]);
+
+    // Calculate new rating (still use RPC for calculation, but with pre-validated data)
     const { data: calculationResult, error: calculationError } = await supabase
       .rpc('calculate_final_employer_rating', {
         p_employer_id: employerId,
@@ -176,11 +177,22 @@ async function recalculateRatingHandler(request: NextRequest, { params }: { para
         p_expertise_weight: expertiseWeight,
         p_eba_weight: ebaWeight,
         p_calculation_method: body.calculation_method || 'hybrid_method',
+        p_use_precomputed_data: true, // Hint that we have pre-computed data
       });
 
     if (calculationError) {
       console.error('Failed to calculate final rating:', calculationError);
       return NextResponse.json({ error: 'Failed to calculate final rating' }, { status: 500 });
+    }
+
+    // Enrich calculation result with materialized view data
+    if (calculationResult && projectCompliance && expertiseRatings) {
+      calculationResult.project_data_age_days = projectCompliance.latest_assessment_date ?
+        Math.floor((Date.now() - new Date(projectCompliance.latest_assessment_date).getTime()) / (1000 * 60 * 60 * 24)) : null;
+      calculationResult.expertise_data_age_days = expertiseRatings.latest_expertise_date ?
+        Math.floor((Date.now() - new Date(expertiseRatings.latest_expertise_date).getTime()) / (1000 * 60 * 60 * 24)) : null;
+      calculationResult.data_completeness = (projectCompliance.total_assessments > 0 ? 50 : 0) +
+                                           (expertiseRatings.total_expertise_assessments > 0 ? 50 : 0);
     }
 
     // Create new rating record

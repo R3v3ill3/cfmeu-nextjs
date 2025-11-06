@@ -4,6 +4,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 export const dynamic = 'force-dynamic'
 import { normalizeProjectType, ProjectTypeValue } from '@/utils/projectType'
 import { normalizeSiteContactRole } from '@/utils/siteContactRole'
+import { ScanContactDecision, NormalizedContact, CreateProjectFromScanResult, OrganisingUniverseResult } from '@/types/api'
 
 export async function POST(request: NextRequest) {
   try {
@@ -50,35 +51,25 @@ export async function POST(request: NextRequest) {
     }
 
     const normalizedContacts = (contactsDecisions || [])
-      .map((contact: any) => ({
+      .map((contact: ScanContactDecision): NormalizedContact => ({
         role: normalizeSiteContactRole(contact.role),
         existingId: contact.existingId,
         name: contact.name ?? null,
         email: contact.email ?? null,
         phone: contact.phone ?? null,
-        action: contact.action,
       }))
-      .filter((contact) => {
+      .filter((contact: NormalizedContact) => {
         // Only include contacts that have:
-        // 1. action === 'update'
-        // 2. Either an existingId OR a role
-        // 3. A valid name (not null, not empty, not "Nil")
-        if (contact.action !== 'update') return false
+        // 1. Either an existingId OR a role
+        // 2. A valid name (not null, not empty, not "Nil")
         if (!contact.existingId && !contact.role) return false
-        
+
         // Skip contacts without a valid name (handles "Nil" or empty values from scans)
         const name = contact.name?.trim()
         if (!name || name.toLowerCase() === 'nil') return false
-        
+
         return true
       })
-      .map((contact) => ({
-        role: contact.role,
-        existingId: contact.existingId,
-        name: contact.name,
-        email: contact.email,
-        phone: contact.phone,
-      }))
 
     const projectData = {
       name: projectDecisions?.name,
@@ -106,10 +97,10 @@ export async function POST(request: NextRequest) {
     const { data: result, error: rpcError } = await supabase.rpc('create_project_from_scan', {
       p_user_id: user.id,
       p_scan_id: scanId,
-      p_project_data: projectData as any,
-      p_contacts: normalizedContacts as any,
-      p_subcontractors: (subcontractorDecisions || []) as any,
-      p_employer_creations: (employerCreations || []) as any,
+      p_project_data: projectData,
+      p_contacts: normalizedContacts,
+      p_subcontractors: (subcontractorDecisions || []),
+      p_employer_creations: (employerCreations || []),
       p_require_approval: true,  // NEW - always require approval for scan uploads
     })
 
@@ -121,18 +112,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (result?.error) {
+    const createResult = result as CreateProjectFromScanResult
+    if (createResult?.error) {
       return NextResponse.json(
-        { error: result.error },
-        { status: result.status || 500 }
+        { error: createResult.error },
+        { status: createResult.status || 500 }
       )
     }
 
     let organisingUniverseUpdated = false
 
-    if (result?.projectId) {
+    if (createResult?.projectId) {
       const { data: ouResult, error: ouError } = await supabase.rpc('set_organising_universe_manual', {
-        p_project_id: result.projectId,
+        p_project_id: createResult.projectId,
         p_universe: 'active',
         p_user_id: user.id,
         p_reason: 'Set to active via mapping sheet upload',
@@ -146,8 +138,9 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      if (!(ouResult as any)?.success) {
-        const details = (ouResult as any)?.error
+      const orgResult = ouResult as OrganisingUniverseResult
+      if (!orgResult?.success) {
+        const details = orgResult?.error
         console.error('Failed to set organising universe to active:', details)
         return NextResponse.json(
           { error: details || 'Failed to set organising universe to active' },
@@ -159,9 +152,9 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      success: result.success,
-      projectId: result.projectId,
-      jobSiteId: result.jobSiteId,
+      success: createResult.success,
+      projectId: createResult.projectId,
+      jobSiteId: createResult.jobSiteId,
       organisingUniverseUpdated,
     })
 
