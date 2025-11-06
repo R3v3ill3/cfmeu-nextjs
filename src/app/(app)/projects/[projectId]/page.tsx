@@ -96,17 +96,16 @@ export default function ProjectDetailPage() {
   // Get user's accessible patches for access control
   const { patches: accessiblePatches, isLoading: accessiblePatchesLoading, role } = useAccessiblePatches()
 
-  // Early return if no projectId
-  if (!projectId) {
-    return (
-      <div className="p-6">
-        <p className="text-muted-foreground">Invalid project ID</p>
-        <Button variant="outline" onClick={() => router.push('/projects')} className="mt-4">
-          Back to Projects
-        </Button>
-      </div>
-    )
-  }
+  // All hooks must be called before any early returns (Rules of Hooks)
+  // State hooks
+  const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null)
+  const [showEbaForEmployerId, setShowEbaForEmployerId] = useState<string | null>(null)
+  const [chartEmployer, setChartEmployer] = useState<{ id: string; name: string } | null>(null)
+  const [chartOpen, setChartOpen] = useState(false)
+  const [estPrompt, setEstPrompt] = useState<{ employerId: string; employerName: string } | null>(null)
+  const [estValue, setEstValue] = useState<string>("")
+  const [estSaving, setEstSaving] = useState(false)
+  const [showContractorAssignment, setShowContractorAssignment] = useState(false)
 
   // Access control: Check if user can access this project
   // Admins can access all projects, organisers and lead_organisers can only access projects in their assigned patches
@@ -128,6 +127,18 @@ export default function ProjectDetailPage() {
       return Array.from(new Set((data || []).map((row: any) => row.patch_id)))
     }
   })
+
+  // Early return if no projectId
+  if (!projectId) {
+    return (
+      <div className="p-6">
+        <p className="text-muted-foreground">Invalid project ID</p>
+        <Button variant="outline" onClick={() => router.push('/projects')} className="mt-4">
+          Back to Projects
+        </Button>
+      </div>
+    )
+  }
 
   // Show access control loading state
   if (accessiblePatchesLoading || accessControlPatchesLoading) {
@@ -161,14 +172,6 @@ export default function ProjectDetailPage() {
       </div>
     )
   }
-  const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null)
-  const [showEbaForEmployerId, setShowEbaForEmployerId] = useState<string | null>(null)
-  const [chartEmployer, setChartEmployer] = useState<{ id: string; name: string } | null>(null)
-  const [chartOpen, setChartOpen] = useState(false)
-  const [estPrompt, setEstPrompt] = useState<{ employerId: string; employerName: string } | null>(null)
-  const [estValue, setEstValue] = useState<string>("")
-  const [estSaving, setEstSaving] = useState(false)
-  const [showContractorAssignment, setShowContractorAssignment] = useState(false)
 
   const { data: project, isLoading: projectLoading, isFetching: projectFetching, error: projectError } = useQuery({
     queryKey: ["project-detail", projectId],

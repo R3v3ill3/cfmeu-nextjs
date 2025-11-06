@@ -923,8 +923,10 @@ app.get('/v1/coverage-ladders', async (req, res) => {
       const { data: assignments } = await sb
         .from('project_assignments')
         .select(`
+          project_id,
           employer_id,
           assignment_type,
+          is_primary_for_role,
           contractor_role_types ( code ),
           employers!inner (
             id,
@@ -934,23 +936,32 @@ app.get('/v1/coverage-ladders', async (req, res) => {
         .in('project_id', projectIds)
 
       if (assignments) {
-        // Process builders (contractor_role = 'builder')
-        const builderAssignments = assignments.filter(a =>
-          Array.isArray(a.contractor_role_types) && a.contractor_role_types.some(rt => rt.code === 'builder')
-        )
-        const uniqueBuilderIds = new Set(builderAssignments.map(a => a.employer_id))
-        knownBuilders = uniqueBuilderIds.size
+        // Process builders: filter by assignment_type='contractor_role' and is_primary_for_role=true
+        // Match the logic used in useOrganizingUniverseMetrics.ts
+        const builderAssignments = assignments.filter(a => {
+          if (a.assignment_type !== 'contractor_role') return false
+          if (a.is_primary_for_role !== true) return false
+          const roleTypes = Array.isArray(a.contractor_role_types) ? a.contractor_role_types : [a.contractor_role_types]
+          return roleTypes.some((rt: any) => rt?.code === 'builder')
+        })
 
-        // Count EBA builders
+        // Count unique projects with builders (not unique builder IDs)
+        const projectsWithBuilders = new Set(builderAssignments.map(a => a.project_id))
+        knownBuilders = projectsWithBuilders.size
+
+        // Count projects where the primary builder has an active EBA
+        // One builder per project, so count unique projects
+        const projectsWithEbaBuilders = new Set<string>()
         builderAssignments.forEach(assignment => {
           const employer = Array.isArray(assignment.employers) ? assignment.employers[0] : assignment.employers
           const hasEba = employer?.company_eba_records &&
             Array.isArray(employer.company_eba_records) &&
             employer.company_eba_records.some((eba: any) => eba.fwc_certified_date)
-          if (hasEba) {
-            ebaBuilders++
+          if (hasEba && assignment.project_id) {
+            projectsWithEbaBuilders.add(assignment.project_id)
           }
         })
+        ebaBuilders = projectsWithEbaBuilders.size
 
         // Process key contractors (trade_work assignments)
         const tradeAssignments = assignments.filter(a => a.assignment_type === 'trade_work')

@@ -202,70 +202,43 @@ export function RatingProvider({ children }: RatingProviderProps) {
   const [state, dispatch] = useReducer(ratingReducer, initialState)
   const queryClient = useQueryClient()
 
-  // Wrap hooks in try-catch for better error handling
-  let user = null
-  let userRole = null
-  let stats = null
-  let alerts = null
-  let isStatsLoading = false
-  let isAlertsLoading = false
-  let statsError = null
-  let alertsError = null
+  // Hooks must be called unconditionally at the top level (Rules of Hooks)
+  // Handle errors through hook results and useEffect instead of try-catch
+  const authResult = useAuth()
+  const user = authResult?.user ?? null
+  
+  const roleResult = useUserRole()
+  const userRole = roleResult?.role ?? null
+  
+  // Fetch rating stats with error handling via onError callback
+  const statsResult = useRatingStats({
+    onError: (error) => {
+      console.error('Rating stats error:', error)
+      dispatch({ type: "SET_ERROR", payload: `Stats error: ${error?.message || 'Unknown error'}` })
+    },
+  })
+  const stats = statsResult?.data ?? null
+  const isStatsLoading = statsResult?.isLoading ?? false
+  const statsError = statsResult?.error ?? null
 
-  try {
-    const authResult = useAuth()
-    user = authResult.user
-  } catch (error) {
-    console.error('Auth hook error:', error)
-    dispatch({ type: "SET_ERROR", payload: "Authentication error" })
-  }
+  // Fetch rating alerts with error handling via onError callback
+  const alertsResult = useRatingAlerts({
+    onError: (error) => {
+      console.error('Rating alerts error:', error)
+      dispatch({ type: "SET_ERROR", payload: `Alerts error: ${error?.message || 'Unknown error'}` })
+    },
+  })
+  const alerts = alertsResult?.data ?? null
+  const isAlertsLoading = alertsResult?.isLoading ?? false
+  const alertsError = alertsResult?.error ?? null
 
-  try {
-    const roleResult = useUserRole()
-    userRole = roleResult.role
-    if (roleResult.error) {
+  // Handle errors from auth and role hooks via useEffect
+  useEffect(() => {
+    if (roleResult?.error) {
       console.error('UserRole hook error:', roleResult.error)
+      dispatch({ type: "SET_ERROR", payload: "User role error" })
     }
-  } catch (error) {
-    console.error('UserRole hook error:', error)
-    dispatch({ type: "SET_ERROR", payload: "User role error" })
-  }
-
-  // Fetch rating stats with error handling
-  try {
-    const statsResult = useRatingStats({
-      onError: (error) => {
-        console.error('Rating stats error:', error)
-        statsError = error
-        dispatch({ type: "SET_ERROR", payload: `Stats error: ${error.message}` })
-      },
-    })
-    stats = statsResult.data
-    isStatsLoading = statsResult.isLoading
-    statsError = statsResult.error
-  } catch (error) {
-    console.error('Rating stats hook error:', error)
-    statsError = error
-    dispatch({ type: "SET_ERROR", payload: `Stats loading failed: ${error.message}` })
-  }
-
-  // Fetch rating alerts with error handling
-  try {
-    const alertsResult = useRatingAlerts({
-      onError: (error) => {
-        console.error('Rating alerts error:', error)
-        alertsError = error
-        dispatch({ type: "SET_ERROR", payload: `Alerts error: ${error.message}` })
-      },
-    })
-    alerts = alertsResult.data
-    isAlertsLoading = alertsResult.isLoading
-    alertsError = alertsResult.error
-  } catch (error) {
-    console.error('Rating alerts hook error:', error)
-    alertsError = error
-    dispatch({ type: "SET_ERROR", payload: `Alerts loading failed: ${error.message}` })
-  }
+  }, [roleResult?.error])
 
   // Set role context based on user role
   useEffect(() => {
