@@ -5,6 +5,7 @@ import {
   useContext,
   useReducer,
   useEffect,
+  useCallback,
   ReactNode,
  } from 'react'
 import { useQuery, useQueryClient } from "@tanstack/react-query"
@@ -210,12 +211,22 @@ export function RatingProvider({ children }: RatingProviderProps) {
   const roleResult = useUserRole()
   const userRole = roleResult?.role ?? null
   
+  // Stable error handlers to prevent hook order issues
+  const handleStatsError = useCallback((error: unknown) => {
+    console.error('Rating stats error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    dispatch({ type: "SET_ERROR", payload: `Stats error: ${errorMessage}` })
+  }, [])
+  
+  const handleAlertsError = useCallback((error: unknown) => {
+    console.error('Rating alerts error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    dispatch({ type: "SET_ERROR", payload: `Alerts error: ${errorMessage}` })
+  }, [])
+  
   // Fetch rating stats with error handling via onError callback
   const statsResult = useRatingStats({
-    onError: (error) => {
-      console.error('Rating stats error:', error)
-      dispatch({ type: "SET_ERROR", payload: `Stats error: ${error?.message || 'Unknown error'}` })
-    },
+    onError: handleStatsError,
   })
   const stats = statsResult?.data ?? null
   const isStatsLoading = statsResult?.isLoading ?? false
@@ -223,22 +234,21 @@ export function RatingProvider({ children }: RatingProviderProps) {
 
   // Fetch rating alerts with error handling via onError callback
   const alertsResult = useRatingAlerts({
-    onError: (error) => {
-      console.error('Rating alerts error:', error)
-      dispatch({ type: "SET_ERROR", payload: `Alerts error: ${error?.message || 'Unknown error'}` })
-    },
+    onError: handleAlertsError,
   })
   const alerts = alertsResult?.data ?? null
   const isAlertsLoading = alertsResult?.isLoading ?? false
   const alertsError = alertsResult?.error ?? null
 
   // Handle errors from auth and role hooks via useEffect
+  // Use stable error reference to avoid dependency issues
+  const roleError = roleResult?.error ?? null
   useEffect(() => {
-    if (roleResult?.error) {
-      console.error('UserRole hook error:', roleResult.error)
+    if (roleError) {
+      console.error('UserRole hook error:', roleError)
       dispatch({ type: "SET_ERROR", payload: "User role error" })
     }
-  }, [roleResult?.error])
+  }, [roleError])
 
   // Set role context based on user role
   useEffect(() => {
