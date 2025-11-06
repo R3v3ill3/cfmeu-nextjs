@@ -12,6 +12,7 @@ import { useAuth } from "@/hooks/useAuth"
 import { useOrganizingUniverseMetrics } from "@/hooks/useOrganizingUniverseMetrics"
 import { usePatchProjects } from "@/hooks/usePatchProjects"
 import { PatchProjectsFilterBar, PatchProjectFilters } from "@/components/patch/PatchProjectsFilterBar"
+import { usePatchOrganiserLabels } from "@/hooks/usePatchOrganiserLabels"
 import { PatchOverviewHeader } from "@/components/patch/PatchOverviewHeader"
 import { PatchProjectsTable } from "@/components/patch/PatchProjectsTable"
 import { Card } from "@/components/ui/card"
@@ -81,9 +82,20 @@ export default function PatchPage() {
     }
   }, [patchParam, selectedPatchId, setParams])
 
+  // Get organiser names for all patches
+  const patchIds = useMemo(() => patches.map(p => p.id), [patches])
+  const { byPatchId: organiserNamesByPatch } = usePatchOrganiserLabels(patchIds)
+
   const patchOptions = useMemo(
-    () => patches.map((patch) => ({ value: patch.id, label: patch.name })),
-    [patches]
+    () => patches.map((patch) => {
+      const organiserNames = organiserNamesByPatch[patch.id] || []
+      const organiserText = organiserNames.length > 0 ? ` (${organiserNames.join(", ")})` : ""
+      return { 
+        value: patch.id, 
+        label: `${patch.name}${organiserText}` 
+      }
+    }),
+    [patches, organiserNamesByPatch]
   )
 
   const filters: PatchProjectFilters = {

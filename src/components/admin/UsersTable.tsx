@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,6 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
+import { isTestingEmail } from "@/utils/emailConversion"
+import { Shield, Key, Copy, CheckCircle2 } from "lucide-react"
 
 type Profile = { id: string; email: string | null; full_name: string | null; role: string | null; is_active: boolean | null }
 
@@ -43,6 +47,11 @@ export function UsersTable() {
     onError: (e) => toast({ title: "Failed to update role", description: (e as Error).message, variant: "destructive" })
   })
 
+  const [resetDialogOpen, setResetDialogOpen] = useState(false)
+  const [resetEmail, setResetEmail] = useState<string | null>(null)
+  const [newPassword, setNewPassword] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+
   const resetPassword = useMutation({
     mutationFn: async ({ email }: { email: string }) => {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
@@ -62,6 +71,59 @@ export function UsersTable() {
       variant: "destructive" 
     })
   })
+
+  const resetTestingPassword = useMutation({
+    mutationFn: async ({ email }: { email: string }) => {
+      const response = await fetch('/api/admin/reset-testing-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to reset password')
+      }
+
+      return result.data
+    },
+    onSuccess: (data) => {
+      setNewPassword(data.new_password)
+      setResetDialogOpen(true)
+      toast({
+        title: "Password reset successful",
+        description: "New password generated. It will be displayed in the dialog."
+      })
+    },
+    onError: (e) => {
+      toast({
+        title: "Failed to reset password",
+        description: (e as Error).message,
+        variant: "destructive"
+      })
+    }
+  })
+
+  const handleResetTestingPassword = (email: string) => {
+    setResetEmail(email)
+    setNewPassword(null)
+    resetTestingPassword.mutate({ email })
+  }
+
+  const copyPassword = () => {
+    if (newPassword) {
+      navigator.clipboard.writeText(newPassword)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+      toast({
+        title: "Password copied",
+        description: "Password copied to clipboard"
+      })
+    }
+  }
 
   return (
     <Card>
@@ -102,14 +164,26 @@ export function UsersTable() {
                     </Select>
                   </TableCell>
                   <TableCell>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => u.email && resetPassword.mutate({ email: u.email })}
-                      disabled={!u.email || resetPassword.isPending}
-                    >
-                      {resetPassword.isPending ? "Sending..." : "Reset Password"}
-                    </Button>
+                    {u.email && isTestingEmail(u.email) ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleResetTestingPassword(u.email!)}
+                        disabled={resetTestingPassword.isPending}
+                      >
+                        <Key className="h-4 w-4 mr-2" />
+                        {resetTestingPassword.isPending ? "Resetting..." : "Reset Testing Password"}
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => u.email && resetPassword.mutate({ email: u.email })}
+                        disabled={!u.email || resetPassword.isPending}
+                      >
+                        {resetPassword.isPending ? "Sending..." : "Reset Password"}
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -122,6 +196,69 @@ export function UsersTable() {
           </Table>
         </div>
       </CardContent>
+
+      {/* Password Reset Dialog */}
+      <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Testing Password Reset</DialogTitle>
+            <DialogDescription>
+              A new password has been generated for this testing account.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {newPassword && (
+            <div className="space-y-4 py-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Shield className="h-5 w-5 text-blue-600" />
+                  <span className="font-medium text-blue-800">New Login Credentials</span>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div>
+                    <span className="font-medium">Email:</span> {resetEmail}
+                  </div>
+                  <div>
+                    <span className="font-medium">New Password:</span>
+                    <div className="flex items-center gap-2 mt-1">
+                      <code className="bg-white px-3 py-2 rounded border border-blue-300 font-mono text-blue-800 flex-1">
+                        {newPassword}
+                      </code>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={copyPassword}
+                        className="shrink-0"
+                      >
+                        {copied ? (
+                          <>
+                            <CheckCircle2 className="h-4 w-4 mr-2" />
+                            Copied
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-4 w-4 mr-2" />
+                            Copy
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="text-blue-700 mt-3 text-xs">
+                    <strong>Important:</strong> Share this password securely with the user. They can login immediately with these credentials.
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button onClick={() => setResetDialogOpen(false)} className="w-full">
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   )
 }

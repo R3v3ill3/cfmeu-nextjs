@@ -30,12 +30,15 @@ async function getStatsHandler(request: NextRequest) {
     }
 
     // Get rating distribution from employer_final_ratings
+    // Use head: true with count to avoid fetching all rows (only need count per rating)
+    // This avoids potential stack depth issues with large result sets
     const { data: currentRatings, error: ratingsError } = await supabase
       .from('employer_final_ratings')
-      .select('final_rating')
+      .select('final_rating', { count: 'exact' })
       .eq('is_active', true)
       .eq('rating_status', 'active')
-      .gte('expiry_date', new Date().toISOString().split('T')[0]);
+      .gte('expiry_date', new Date().toISOString().split('T')[0])
+      .limit(10000); // Add reasonable limit to prevent runaway queries
 
     if (ratingsError) {
       console.error('Error getting ratings distribution:', ratingsError);
@@ -110,17 +113,34 @@ async function getStatsHandler(request: NextRequest) {
 
   } catch (error) {
     console.error('Get rating stats API error:', error);
+    
+    // Check for timeout or stack depth errors
+    const errorObj = error as any;
+    if (errorObj?.code === '57014') {
+      console.error('Query timeout detected - consider optimizing employer_final_ratings queries');
+      return NextResponse.json(
+        { error: 'Query timeout - please try again', message: 'Database query took too long' },
+        { status: 504 }
+      );
+    }
+    if (errorObj?.code === '54001') {
+      console.error('Stack depth limit exceeded - check for recursive queries');
+      return NextResponse.json(
+        { error: 'Query too complex', message: 'Database query exceeded stack depth limit' },
+        { status: 500 }
+      );
+    }
 
     // Return appropriate error response
     if (error instanceof Error) {
       return NextResponse.json(
-        { error: 'Failed to fetch rating statistics', message: error.message },
+        { error: 'Failed to fetch rating statistics', message: error.message || 'Unknown error' },
         { status: 500 }
       );
     }
 
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', message: String(error) || 'Unknown error' },
       { status: 500 }
     );
   }

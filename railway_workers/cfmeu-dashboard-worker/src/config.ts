@@ -20,6 +20,7 @@ export const config = {
   supabaseAnonKey: process.env.SUPABASE_ANON_KEY!,
   databaseUrl: process.env.DATABASE_URL ?? null,
   refreshCron: process.env.REFRESH_CRON ?? '*/10 * * * *',
+  dashboardSnapshotCron: process.env.DASHBOARD_SNAPSHOT_CRON ?? '0 2 * * 1', // Every Monday at 2 AM
   port: Number(process.env.PORT ?? 3000),
   requestTimeoutMs: Number(process.env.REQUEST_TIMEOUT_MS ?? 15000),
   corsOrigin: process.env.CORS_ORIGIN || '*',

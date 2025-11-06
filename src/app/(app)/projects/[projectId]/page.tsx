@@ -33,6 +33,7 @@ import { SubsetEbaStats } from "@/components/projects/SubsetEbaStats"
 import SelectiveEbaSearchManager from "@/components/projects/SelectiveEbaSearchManager"
 import { OrganizingUniverseBadge } from "@/components/ui/OrganizingUniverseBadge"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { useAccessiblePatches } from "@/hooks/useAccessiblePatches"
 import { ComplianceDesktopView } from "@/components/projects/compliance/ComplianceDesktopView"
 import { ComplianceMobileView } from "@/components/projects/compliance/ComplianceMobileView"
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner"
@@ -92,6 +93,9 @@ export default function ProjectDetailPage() {
   const isMobile = useIsMobile()
   const [tab, setTab] = useState(sp.get("tab") || "mappingsheets")
 
+  // Get user's accessible patches for access control
+  const { patches: accessiblePatches, isLoading: accessiblePatchesLoading, role } = useAccessiblePatches()
+
   // Early return if no projectId
   if (!projectId) {
     return (
@@ -100,6 +104,60 @@ export default function ProjectDetailPage() {
         <Button variant="outline" onClick={() => router.push('/projects')} className="mt-4">
           Back to Projects
         </Button>
+      </div>
+    )
+  }
+
+  // Access control: Check if user can access this project
+  // Admins can access all projects, organisers and lead_organisers can only access projects in their assigned patches
+  const { data: projectPatches, isLoading: projectPatchesLoading } = useQuery({
+    queryKey: ["project-patches-access", projectId],
+    enabled: !!projectId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("patch_job_sites")
+        .select("patch_id")
+        .in("job_site_id", (
+          await supabase
+            .from("job_sites")
+            .select("id")
+            .eq("project_id", projectId)
+        ).data?.map((site: any) => site.id) || [])
+
+      if (error) throw error
+      return Array.from(new Set((data || []).map((row: any) => row.patch_id)))
+    }
+  })
+
+  // Show access control loading state
+  if (accessiblePatchesLoading || projectPatchesLoading) {
+    return (
+      <div className="p-6">
+        <div className="flex items-center justify-center py-12">
+          <LoadingSpinner />
+          <span className="ml-3 text-muted-foreground">Checking access permissions...</span>
+        </div>
+      </div>
+    )
+  }
+
+  // Check access control
+  const hasAccess = role === 'admin' || (projectPatches && projectPatches.some(patchId =>
+    accessiblePatches.some(accessiblePatch => accessiblePatch.id === patchId)
+  ))
+
+  if (!hasAccess) {
+    return (
+      <div className="p-6">
+        <div className="text-center py-12">
+          <h2 className="text-xl font-semibold text-red-600 mb-4">Access Denied</h2>
+          <p className="text-muted-foreground mb-6">
+            You don't have permission to view this project. Projects are only accessible to users assigned to their geographic patches.
+          </p>
+          <Button onClick={() => router.push('/projects')}>
+            Back to Projects
+          </Button>
+        </div>
       </div>
     )
   }
@@ -206,7 +264,7 @@ export default function ProjectDetailPage() {
   )
 
   // Patch and organiser info for this project (via linked job sites)
-  const { data: projectPatches = [], isLoading: patchesLoading, isFetching: patchesFetching } = useQuery({
+  const { data: projectPatches = [], isLoading: projectPatchesLoading, isFetching: patchesFetching } = useQuery({
     queryKey: ["project-patches", projectId, sortedSiteIds],
     enabled: !!projectId && sortedSiteIds.length > 0,
     staleTime: 30000,

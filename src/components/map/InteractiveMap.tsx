@@ -10,6 +10,7 @@ import { MapPin, Building, Users, ExternalLink, AlertCircle } from "lucide-react
 import Link from "next/link"
 import dynamic from "next/dynamic"
 import { usePatchOrganiserLabels } from "@/hooks/usePatchOrganiserLabels"
+import { useAccessiblePatches } from "@/hooks/useAccessiblePatches"
 import { getProjectColor } from "@/utils/projectColors"
 import { useNavigationLoading } from "@/hooks/useNavigationLoading"
 import { useGoogleMaps } from "@/providers/GoogleMapsProvider"
@@ -105,6 +106,13 @@ export default function InteractiveMap({
   const [selectedJobSite, setSelectedJobSite] = useState<JobSiteData | null>(null)
   const [infoWindowPosition, setInfoWindowPosition] = useState<{ lat: number, lng: number } | null>(null)
   const [hoveredPatchId, setHoveredPatchId] = useState<string | null>(null)
+
+  // Get user's accessible patches for auto-focus functionality
+  const { patches: accessiblePatches, isLoading: accessiblePatchesLoading, role } = useAccessiblePatches()
+
+  // Determine patches to focus on: user patches for auto-focus mode (unless admin)
+  const shouldAutoFocusOnUserPatches = autoFocusPatches && role !== 'admin' && !selectedPatchIds.length && accessiblePatches.length > 0
+  const autoFocusPatchIds = shouldAutoFocusOnUserPatches ? accessiblePatches.map(p => p.id) : selectedPatchIds
 
   // Debug authentication and environment
   useEffect(() => {
@@ -239,15 +247,15 @@ export default function InteractiveMap({
   // Filter patches (only geographic patches are loaded)
   const filteredPatches = useMemo(() => {
     if (!showPatches) return []
-    
-    // If specific patches are selected via FiltersBar, filter to only those
-    if (selectedPatchIds.length > 0) {
-      return patches.filter(patch => selectedPatchIds.includes(patch.id))
+
+    // If specific patches are selected via FiltersBar or auto-focus is active, filter to only those
+    if (autoFocusPatchIds.length > 0) {
+      return patches.filter(patch => autoFocusPatchIds.includes(patch.id))
     }
-    
+
     // Otherwise show all patches (already filtered to geographic and active)
     return patches
-  }, [patches, showPatches, selectedPatchIds])
+  }, [patches, showPatches, autoFocusPatchIds])
 
   // Convert GeoJSON to Google Maps Polygon paths
   // Extract polygons from GeoJSON. Returns an array of polygons; each polygon is an array of rings; each ring is an array of LatLng points
@@ -343,12 +351,12 @@ export default function InteractiveMap({
   useEffect(() => {
     if (!map) return
 
-    // For auto-focus mode (batch printing), only focus on selected patches
-    if (autoFocusPatches && selectedPatchIds.length > 0 && filteredPatches.length > 0) {
+    // For auto-focus mode (batch printing or user patch auto-focus), only focus on relevant patches
+    if ((autoFocusPatches || shouldAutoFocusOnUserPatches) && autoFocusPatchIds.length > 0 && filteredPatches.length > 0) {
       const bounds = new google.maps.LatLngBounds()
       let hasPoints = false
 
-      // Add only the selected patch bounds
+      // Add only the relevant patch bounds
       filteredPatches.forEach(patch => {
         if (patch.geom_geojson) {
           const polys = extractPolygonsFromGeoJSON(patch.geom_geojson)
@@ -400,7 +408,7 @@ export default function InteractiveMap({
     if (hasPoints) {
       map.fitBounds(bounds)
     }
-  }, [map, filteredPatches, jobSites, showJobSites, extractPolygonsFromGeoJSON, autoFocusPatches, selectedPatchIds])
+  }, [map, filteredPatches, jobSites, showJobSites, extractPolygonsFromGeoJSON, autoFocusPatches, shouldAutoFocusOnUserPatches, autoFocusPatchIds])
   // Build organiser labels per patch
   const patchIdsForLabels = useMemo(() => (showOrganisers ? filteredPatches.map(p => p.id) : []), [filteredPatches, showOrganisers])
   const { byPatchId: organiserNamesByPatch } = usePatchOrganiserLabels(patchIdsForLabels)

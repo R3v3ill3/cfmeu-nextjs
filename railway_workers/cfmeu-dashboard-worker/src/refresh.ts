@@ -102,4 +102,40 @@ export async function warmOrganizingMetricsCache(logger: Logger) {
   await callOrganizingMetricsWarmEndpoint(logger)
 }
 
+/**
+ * Schedule weekly dashboard snapshots
+ * Runs every Monday at 2 AM
+ */
+export function scheduleWeeklyDashboardSnapshots(logger: Logger) {
+  // Cron: Every Monday at 2 AM (0 2 * * 1)
+  const cron = config.dashboardSnapshotCron ?? '0 2 * * 1'
+
+  nodeCron.schedule(cron, async () => {
+    const start = Date.now()
+    const svc = getServiceRoleClient()
+    
+    try {
+      logger.info('Creating weekly dashboard snapshot...')
+      
+      // Call the create_dashboard_snapshot function
+      const { data: snapshotId, error } = await svc.rpc('create_dashboard_snapshot', {
+        p_snapshot_date: new Date().toISOString().split('T')[0], // Today's date as YYYY-MM-DD
+        p_snapshot_type: 'weekly',
+      })
+
+      if (error) {
+        logger.error({ err: error }, 'Failed to create dashboard snapshot')
+        return
+      }
+
+      const ms = Date.now() - start
+      logger.info({ snapshotId, ms }, '✅ Created weekly dashboard snapshot')
+    } catch (err) {
+      logger.error({ err }, 'Failed to create dashboard snapshot')
+    }
+  })
+
+  logger.info({ cron }, 'Scheduled weekly dashboard snapshots')
+}
+
 

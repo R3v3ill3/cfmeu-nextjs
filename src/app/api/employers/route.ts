@@ -180,6 +180,56 @@ async function fetchEnhancedEmployerData(supabase: Awaited<ReturnType<typeof cre
   return enhancedData;
 }
 
+// Helper function to get employers by patch assignments
+async function getEmployersByPatches(supabase: Awaited<ReturnType<typeof createServerSupabase>>, patchIds: string[]) {
+  if (patchIds.length === 0) return { employerIds: [], employerMap: new Map() };
+
+  try {
+    // Get employers that have job sites in the specified patches
+    const { data: siteEmployers, error: siteError } = await supabase
+      .from('site_employers')
+      .select('employer_id, job_sites!inner(patch_id)')
+      .in('job_sites.patch_id', patchIds);
+
+    if (siteError) {
+      console.warn('Warning: Failed to fetch site employers for patch filtering:', siteError);
+      return { employerIds: [], employerMap: new Map() };
+    }
+
+    // Get employers assigned to projects in the specified patches
+    const { data: projectEmployers, error: projectError } = await supabase
+      .from('project_assignments')
+      .select('employer_id, projects!inner(job_sites!inner(patch_id))')
+      .in('projects.job_sites.patch_id', patchIds);
+
+    if (projectError) {
+      console.warn('Warning: Failed to fetch project employers for patch filtering:', projectError);
+      return { employerIds: [], employerMap: new Map() };
+    }
+
+    // Combine and deduplicate employer IDs
+    const employerIdsSet = new Set<string>();
+
+    (siteEmployers || []).forEach((row: any) => {
+      if (row.employer_id) employerIdsSet.add(row.employer_id);
+    });
+
+    (projectEmployers || []).forEach((row: any) => {
+      if (row.employer_id) employerIdsSet.add(row.employer_id);
+    });
+
+    const employerIds = Array.from(employerIdsSet);
+    const employerMap = new Map(employerIds.map(id => [id, true]));
+
+    console.log(`🔍 Employers API: Patch filtering found ${employerIds.length} employers in ${patchIds.length} patches`);
+
+    return { employerIds, employerMap };
+  } catch (error) {
+    console.error('Error in getEmployersByPatches:', error);
+    return { employerIds: [], employerMap: new Map() };
+  }
+}
+
 // Request/Response types matching the existing client-side interface
 export interface EmployersRequest {
   page: number;
@@ -193,6 +243,8 @@ export interface EmployersRequest {
   categoryType?: 'contractor_role' | 'trade' | 'all';
   categoryCode?: string;
   projectTier?: 'all' | 'tier_1' | 'tier_2' | 'tier_3';
+  // Patch filtering for default geographic restrictions
+  patch?: string; // Comma-separated patch IDs
   // New alias search parameters
   includeAliases?: boolean;
   aliasMatchMode?: 'any' | 'authoritative' | 'canonical';
@@ -320,13 +372,17 @@ async function getEmployersHandler(request: NextRequest) {
     const categoryType = (searchParams.get('categoryType') || 'all') as 'contractor_role' | 'trade' | 'all';
     const categoryCode = searchParams.get('categoryCode') || undefined;
     const projectTier = (searchParams.get('projectTier') || 'all') as 'all' | 'tier_1' | 'tier_2' | 'tier_3';
-    
+    const patchParam = searchParams.get('patch') || undefined;
+
     // New alias search parameters
     const includeAliases = searchParams.get('includeAliases') === 'true';
     const aliasMatchMode = (searchParams.get('aliasMatchMode') || 'any') as 'any' | 'authoritative' | 'canonical';
 
     // Add parameter to control whether to include enhanced data (projects, organisers)
     const includeEnhanced = searchParams.get('enhanced') === 'true';
+
+    // Parse patch IDs for geographic filtering
+    const patchIds = patchParam ? patchParam.split(',').map(s => s.trim()).filter(Boolean) : [];
 
     // If there's a search query and aliases are requested, use the alias-aware search RPC
     let data: any[] | null;
@@ -436,6 +492,32 @@ async function getEmployersHandler(request: NextRequest) {
           most_recent_eba_date,
           view_refreshed_at
         `, { count: 'exact' });
+
+      // Apply patch filtering (if specified)
+      let patchFilteringEmployerIds: string[] = [];
+      if (patchIds.length > 0) {
+        const { employerIds } = await getEmployersByPatches(supabase, patchIds);
+        patchFilteringEmployerIds = employerIds;
+
+        if (employerIds.length === 0) {
+          // No employers found in specified patches - return empty result
+          const response: EmployersResponse = {
+            employers: [],
+            pagination: { page, pageSize, totalCount: 0, totalPages: 0 },
+            debug: {
+              queryTime: Date.now() - startTime,
+              cacheHit: false,
+              appliedFilters: { q, patchIds, patchFilteringUsed: true, patchFilteringMethod: 'employers_by_patches' },
+              patchFilteringUsed: true,
+              patchFilteringMethod: 'employers_by_patches'
+            }
+          };
+          return NextResponse.json(response);
+        }
+
+        // Apply patch filter to materialized view query
+        matViewQuery = matViewQuery.in('id', employerIds);
+      }
 
       // Apply text search filter
       if (q) {
@@ -866,6 +948,8 @@ async function getEmployersHandler(request: NextRequest) {
           categoryType,
           categoryCode,
           projectTier,
+          patchIds,
+          patchFilteringUsed: patchIds.length > 0,
           sort,
           dir,
           includeAliases,

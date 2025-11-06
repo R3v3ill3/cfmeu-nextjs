@@ -5,7 +5,8 @@ import { useState, useEffect, useCallback } from "react"
 import { useSearchParams, usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Search, Plus, RefreshCw } from "lucide-react"
+import { Toggle } from "@/components/ui/toggle"
+import { Search, Plus, RefreshCw, MapPin } from "lucide-react"
 import { useEmployersServerSideCompatible } from "@/hooks/useEmployersServerSide"
 import { EmployerCard, EmployerCardData } from "./EmployerCard"
 import { EmployerDetailModal } from "./EmployerDetailModal"
@@ -14,6 +15,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { refreshSupabaseClient } from "@/integrations/supabase/client"
 import { AddEmployerDialog } from "./AddEmployerDialog"
 import { useDebounce, useLocalStorage, useInterval } from "react-use"
+import { useAccessiblePatches } from "@/hooks/useAccessiblePatches"
 
 const EMPLOYERS_STATE_KEY = 'employers-page-state-mobile'
 
@@ -44,6 +46,35 @@ export function EmployersMobileView() {
   const q = (sp.get("q") || "").toLowerCase()
   const page = Math.max(1, parseInt(sp.get('page') || '1', 10) || 1)
   const PAGE_SIZE = 10
+  const patchParam = sp.get("patch")
+  const isGeographicallyFiltered = !!patchParam
+
+  // Get user's accessible patches for geographic filtering
+  const { patches: accessiblePatches, isLoading: patchesLoading, role } = useAccessiblePatches()
+
+  // Apply default patch filtering when no patch parameter exists
+  useEffect(() => {
+    // Skip if still loading patches or if user is admin (admin sees all)
+    if (patchesLoading || role === 'admin') {
+      return
+    }
+
+    const existingPatchParam = sp.get('patch')
+
+    // Only apply default filtering if no patch parameter is already set
+    if (!existingPatchParam && accessiblePatches.length > 0) {
+      const defaultPatchIds = accessiblePatches.map(p => p.id)
+      const params = new URLSearchParams(sp.toString())
+
+      // Set default patch filter
+      params.set('patch', defaultPatchIds.join(','))
+
+      // Update URL without triggering navigation reload
+      const newUrl = `${pathname}?${params.toString()}`
+      router.replace(newUrl)
+    }
+  }, [patchesLoading, role, accessiblePatches, sp, router, pathname])
+
   const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [isAddEmployerOpen, setIsAddEmployerOpen] = useState(false)
@@ -119,6 +150,7 @@ export function EmployersMobileView() {
     sort: 'name',
     dir: 'asc',
     q: q || undefined,
+    patch: patchParam || undefined,
     enhanced: true, // Enable enhanced data for projects, organisers, incolink
     includeAliases: true, // Enable alias search for better employer matching
     aliasMatchMode: 'any', // Match any type of alias
@@ -272,6 +304,33 @@ export function EmployersMobileView() {
           className="pl-10"
         />
       </div>
+
+      {/* Geographic filter toggle for non-admin users */}
+      {role !== 'admin' && (
+        <div className="flex items-center justify-between bg-muted/30 rounded-lg p-3">
+          <div className="flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm">Geographic Filter</span>
+          </div>
+          <Toggle
+            pressed={isGeographicallyFiltered}
+            onPressedChange={(v) => {
+              if (v) {
+                // Apply geographic filter using user's accessible patches
+                const defaultPatchIds = accessiblePatches.map(p => p.id)
+                setParam("patch", defaultPatchIds.join(','))
+              } else {
+                // Remove geographic filter
+                setParam("patch")
+              }
+            }}
+            aria-label="Geographic filter"
+            size="sm"
+          >
+            {isGeographicallyFiltered ? "My Patches" : "All Areas"}
+          </Toggle>
+        </div>
+      )}
 
       {/* Results count */}
       <div className="text-sm text-muted-foreground">

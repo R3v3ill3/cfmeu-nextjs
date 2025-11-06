@@ -198,7 +198,6 @@ export default defineConfig({
     {
       name: 'setup',
       testMatch: '**/*.setup.spec.ts',
-      teardown: 'cleanup',
     },
   ],
 
@@ -207,10 +206,9 @@ export default defineConfig({
   globalTeardown: require.resolve('./tests/global-teardown.ts'),
 
   /* Run your local dev server before starting the tests */
-  webServer: {
+  webServer: process.env.SKIP_WEB_SERVER ? undefined : {
     command: 'npm run dev',
     url: 'http://localhost:3000',
-    port: 3000,
     reuseExistingServer: !process.env.CI,
     timeout: 120000,
     stdout: 'pipe',

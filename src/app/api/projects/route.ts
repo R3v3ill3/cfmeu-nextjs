@@ -145,6 +145,8 @@ async function getProjectsHandler(request: NextRequest) {
     let patchProjectCount = 0;
     let patchFilteringMethod = 'none';
     if (patchIds.length > 0) {
+      // Log patch filtering for debugging
+      console.log(`🔍 Projects API: Applying patch filter for ${patchIds.length} patches:`, patchIds);
       // Primary: Use the patch mapping view for efficient filtering
       let { data: patchProjects, error: viewError } = await supabase
         .from('patch_project_mapping_view')

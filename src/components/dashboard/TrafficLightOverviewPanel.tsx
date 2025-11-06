@@ -1,5 +1,5 @@
 "use client"
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
@@ -33,17 +33,56 @@ interface TrafficLightDistributionResponse {
   }
 }
 
-export function TrafficLightOverviewPanel() {
+interface TrafficLightOverviewPanelProps {
+  patchIds?: string[]
+  stage?: string
+  universe?: string
+}
+
+function isProjectStatus(value: string | undefined | null): value is ProjectStatusFilter {
+  return value === 'construction' || value === 'pre_construction' || value === 'future' || value === 'archived'
+}
+
+export function TrafficLightOverviewPanel({
+  patchIds = [],
+  stage = 'construction',
+  universe = 'active',
+}: TrafficLightOverviewPanelProps) {
+  const normalizedPatchIds = useMemo(() => patchIds.filter(Boolean), [patchIds])
   const [ebaStatus, setEbaStatus] = useState<EbaStatusFilter>('all')
   const [projectTier, setProjectTier] = useState<ProjectTier | 'all'>('all')
-  const [projectStatus, setProjectStatus] = useState<ProjectStatusFilter>('all')
+  const [projectStatus, setProjectStatus] = useState<ProjectStatusFilter | 'all'>(() =>
+    isProjectStatus(stage) ? stage : 'all'
+  )
   const [timeFrame, setTimeFrame] = useState<'6_weeks' | '3_months' | '6_months' | '12_months' | 'ever'>('3_months')
+
+  useEffect(() => {
+    if (isProjectStatus(stage)) {
+      setProjectStatus(stage)
+    } else if (stage === 'all') {
+      setProjectStatus('all')
+    }
+  }, [stage])
+
+  const patchIdsKey = useMemo(() => normalizedPatchIds.join(','), [normalizedPatchIds])
 
   // Fetch rating completion data
   const { data: ratingCompletionData, isLoading: ratingLoading } = useQuery({
-    queryKey: ['rating-completion', timeFrame],
+    queryKey: ['rating-completion', timeFrame, patchIdsKey, stage, universe],
     queryFn: async () => {
-      const response = await fetch(`/api/dashboard/rating-completion?timeFrame=${timeFrame}`)
+      const params = new URLSearchParams()
+      params.set('timeFrame', timeFrame)
+      if (normalizedPatchIds.length > 0) {
+        params.set('patchIds', normalizedPatchIds.join(','))
+      }
+      if (universe) {
+        params.set('universe', universe)
+      }
+      if (stage) {
+        params.set('stage', stage)
+      }
+
+      const response = await fetch(`/api/dashboard/rating-completion?${params.toString()}`)
       if (!response.ok) throw new Error('Failed to fetch rating completion data')
       return response.json()
     },
@@ -51,12 +90,15 @@ export function TrafficLightOverviewPanel() {
   })
 
   const { data, isLoading, error } = useQuery<TrafficLightDistributionResponse>({
-    queryKey: ['traffic-light-distribution', ebaStatus, projectTier, projectStatus],
+    queryKey: ['traffic-light-distribution', ebaStatus, projectTier, projectStatus, patchIdsKey, universe, stage],
     queryFn: async () => {
       const params = new URLSearchParams()
       if (ebaStatus !== 'all') params.set('ebaStatus', ebaStatus)
       if (projectTier !== 'all') params.set('projectTier', projectTier)
       if (projectStatus !== 'all') params.set('projectStatus', projectStatus)
+      if (normalizedPatchIds.length > 0) params.set('patchIds', normalizedPatchIds.join(','))
+      if (universe) params.set('universe', universe)
+      if (stage) params.set('stage', stage)
       
       const response = await fetch(`/api/dashboard/traffic-light-distribution?${params.toString()}`)
       if (!response.ok) throw new Error('Failed to fetch traffic light distribution')

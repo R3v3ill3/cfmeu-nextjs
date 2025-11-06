@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef, forwardRef, createContext, useContext, useId, type ComponentType, type ComponentProps, type CSSProperties } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef, forwardRef, createContext, useContext, useId, type ComponentType, type ComponentProps, type CSSProperties, type MutableRefObject } from 'react'
 import type { ReactNode } from 'react'
 import * as RechartsPrimitive from "recharts"
 
@@ -44,18 +44,98 @@ const ChartContainer = forwardRef<
 >(({ id, className, children, config, ...props }, ref) => {
   const uniqueId = useId()
   const chartId = `chart-${id || uniqueId.replace(/:/g, "")}`
+  const internalRef = useRef<HTMLDivElement | null>(null)
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
+  const awaitingSizeLogRef = useRef(false)
+  const readyLogRef = useRef(false)
+
+  const mergedRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      internalRef.current = node
+
+      if (typeof ref === "function") {
+        ref(node)
+      } else if (ref) {
+        (ref as MutableRefObject<HTMLDivElement | null>).current = node
+      }
+    },
+    [ref]
+  )
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof ResizeObserver === "undefined") {
+      return
+    }
+
+    const node = internalRef.current
+    if (!node) {
+      return
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      if (!entry) return
+
+      const { width, height } = entry.contentRect
+      setContainerSize((prev) => {
+        if (prev.width === width && prev.height === height) {
+          return prev
+        }
+        return { width, height }
+      })
+    })
+
+    observer.observe(node)
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [])
+
+  const hasValidSize = containerSize.width > 0 && containerSize.height > 0
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") {
+      return
+    }
+
+    if (!hasValidSize) {
+      if (!awaitingSizeLogRef.current) {
+        console.warn("[chart-container] awaiting valid size", {
+          chartId,
+          width: containerSize.width,
+          height: containerSize.height,
+        })
+        awaitingSizeLogRef.current = true
+      }
+      return
+    }
+
+    awaitingSizeLogRef.current = false
+
+    if (!readyLogRef.current) {
+      console.info("[chart-container] size resolved", {
+        chartId,
+        width: containerSize.width,
+        height: containerSize.height,
+      })
+      readyLogRef.current = true
+    }
+  }, [chartId, containerSize.height, containerSize.width, hasValidSize])
   
   // Check if explicit height is provided (h-full, h-[300px], etc.) to override aspect-video
   const hasExplicitHeight = className?.includes('h-') || className?.includes('height')
   const baseClasses = hasExplicitHeight 
-    ? "flex justify-center text-xs min-h-[200px] min-w-[300px]" 
+    ? "block text-xs" 
     : "flex aspect-video justify-center text-xs min-h-[200px] min-w-[300px]"
+  const responsiveMinHeight = hasExplicitHeight ? undefined : 200
+  const responsiveMinWidth = hasExplicitHeight ? undefined : 300
 
   return (
     <ChartContext.Provider value={{ config }}>
       <div
         data-chart={chartId}
-        ref={ref}
+        ref={mergedRef}
         className={cn(
           baseClasses,
           "[&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-none [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-sector]:outline-none [&_.recharts-surface]:outline-none",
@@ -69,15 +149,21 @@ const ChartContainer = forwardRef<
         {...props}
       >
         <ChartStyle id={chartId} config={config} />
-        <RechartsPrimitive.ResponsiveContainer 
-          width="100%" 
-          height="100%" 
-          minHeight={200} 
-          minWidth={300}
-          aspect={undefined}
-        >
-          {children}
-        </RechartsPrimitive.ResponsiveContainer>
+        {hasValidSize ? (
+          <RechartsPrimitive.ResponsiveContainer 
+            width={containerSize.width}
+            height={containerSize.height}
+            minHeight={responsiveMinHeight}
+            minWidth={responsiveMinWidth}
+            aspect={undefined}
+          >
+            {children}
+          </RechartsPrimitive.ResponsiveContainer>
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-muted-foreground/80">
+            <span className="text-[0.7rem] uppercase tracking-wide">Measuring chart container…</span>
+          </div>
+        )}
       </div>
     </ChartContext.Provider>
   )

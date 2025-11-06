@@ -2,8 +2,10 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useNavigationVisibility, NavigationVisibility } from "@/hooks/useNavigationVisibility"
+import { useAdminDashboardSettings } from "@/hooks/useDashboardPreference"
 import { Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 interface PageConfig {
   key: keyof NavigationVisibility
@@ -24,6 +26,7 @@ const HIDEABLE_PAGES: PageConfig[] = [
 
 export function NavigationVisibilityManager() {
   const { visibility, isLoading, updateVisibility, isUpdating } = useNavigationVisibility()
+  const { settings: dashboardSettings, updateDefaultDashboard, isUpdating: dashboardUpdating } = useAdminDashboardSettings()
 
   const handleToggle = (page: keyof NavigationVisibility) => {
     const newVisibility = {
@@ -31,6 +34,10 @@ export function NavigationVisibilityManager() {
       [page]: !visibility[page],
     }
     updateVisibility(newVisibility)
+  }
+
+  const handleDashboardChange = (value: string) => {
+    updateDefaultDashboard(value as 'legacy' | 'new')
   }
 
   if (isLoading) {
@@ -44,15 +51,50 @@ export function NavigationVisibilityManager() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Navigation Settings</CardTitle>
-        <CardDescription>
-          Configure which pages appear in the navigation menu for all users. 
-          Dashboard, Projects, and Administration pages are always visible.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
+    <div className="space-y-6">
+      {/* Dashboard Selection */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Dashboard Selection</CardTitle>
+          <CardDescription>
+            Set the default dashboard for all users. Users can override this preference in their profile settings.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">Default Dashboard</label>
+              <Select
+                value={dashboardSettings.default_dashboard}
+                onValueChange={handleDashboardChange}
+                disabled={dashboardUpdating}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="legacy">Legacy Dashboard (Current)</SelectItem>
+                  <SelectItem value="new">New Dashboard (Improved UX)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-2">
+                Users with "auto" preference will see the selected dashboard. Users can change this in their profile settings.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Navigation Visibility */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Navigation Settings</CardTitle>
+          <CardDescription>
+            Configure which pages appear in the navigation menu for all users. 
+            Dashboard, Projects, and Administration pages are always visible.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
         {HIDEABLE_PAGES.map((page) => {
           const value = visibility[page.key]
           const labelId = `nav-${page.key}-label`
@@ -113,5 +155,6 @@ export function NavigationVisibilityManager() {
         })}
       </CardContent>
     </Card>
+    </div>
   )
 }

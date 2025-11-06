@@ -11,6 +11,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Check, ChevronDown, Search, Users } from "lucide-react"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { toast } from "sonner"
+import { usePatchOrganiserLabels } from "@/hooks/usePatchOrganiserLabels"
 
 interface PatchOption { id: string; name: string }
 interface LeadOption { id: string; label: string; kind: "live" | "draft" }
@@ -51,6 +52,10 @@ export default function AdminPatchSelector() {
 		}
 		load()
 	}, [])
+
+	// Load organiser names for all patches
+	const patchIds = useMemo(() => allPatches.map(p => p.id), [allPatches])
+	const { byPatchId: organiserNamesByPatch } = usePatchOrganiserLabels(patchIds)
 
 	// Load live and draft co-ordinators (lead organisers) and admins for the special selection
 	useEffect(() => {
@@ -260,13 +265,18 @@ export default function AdminPatchSelector() {
 								<div className="max-h-60 overflow-auto rounded border border-gray-300 p-2 space-y-1 bg-gray-50">
 									{filteredPatches.map(p => {
 										const checked = selectedPatchIds.includes(p.id)
+										const organiserNames = organiserNamesByPatch[p.id] || []
+										const organiserText = organiserNames.length > 0 ? ` (${organiserNames.join(", ")})` : ""
 										return (
 											<button key={p.id} onClick={() => togglePatch(p.id)} className={`w-full text-left px-3 py-2 rounded hover:bg-gray-200 transition text-sm ${checked ? "bg-blue-100 border border-blue-300" : ""}`}>
 												<span className="inline-flex items-center gap-2">
 													<span className={`inline-flex items-center justify-center h-4 w-4 rounded border ${checked ? 'bg-blue-600 text-white' : 'bg-white border-gray-400'}`}>
 														{checked ? <Check className="h-3 w-3" /> : null}
 													</span>
-													<span className={checked ? "text-blue-900 font-medium" : "text-gray-700"}>{p.name}</span>
+													<span className={checked ? "text-blue-900 font-medium" : "text-gray-700"}>
+														{p.name}
+														{organiserText && <span className="text-xs text-gray-500 font-normal">{organiserText}</span>}
+													</span>
 												</span>
 											</button>
 										)
@@ -320,13 +330,18 @@ export default function AdminPatchSelector() {
 								<div className="max-h-72 overflow-auto rounded border border-gray-300 p-3 space-y-1 bg-gray-50">
 									{filteredPatches.map(p => {
 										const checked = selectedPatchIds.includes(p.id)
+										const organiserNames = organiserNamesByPatch[p.id] || []
+										const organiserText = organiserNames.length > 0 ? ` (${organiserNames.join(", ")})` : ""
 										return (
 											<button key={p.id} onClick={() => togglePatch(p.id)} className={`w-full text-left px-3 py-2.5 rounded hover:bg-gray-200 transition ${checked ? "bg-blue-100 border border-blue-300" : ""}`}>
 												<span className="inline-flex items-center gap-2">
 													<span className={`inline-flex items-center justify-center h-4 w-4 rounded border ${checked ? 'bg-blue-600 text-white' : 'bg-white border-gray-400'}`}>
 														{checked ? <Check className="h-3 w-3" /> : null}
 													</span>
-													<span className={checked ? "text-blue-900 font-medium" : "text-gray-700"}>{p.name}</span>
+													<span className={checked ? "text-blue-900 font-medium" : "text-gray-700"}>
+														{p.name}
+														{organiserText && <span className="text-xs text-gray-500 font-normal ml-1">{organiserText}</span>}
+													</span>
 												</span>
 											</button>
 										)

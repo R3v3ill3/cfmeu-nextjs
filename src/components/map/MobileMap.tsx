@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { usePatchOrganiserLabels } from '@/hooks/usePatchOrganiserLabels';
+import { useAccessiblePatches } from '@/hooks/useAccessiblePatches';
 import { getProjectColor } from '@/utils/projectColors';
 import { MapErrorBoundary } from '@/components/map/MapErrorBoundary';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
@@ -68,6 +69,13 @@ function MobileMap({
 
   const [hoveredPatchId, setHoveredPatchId] = useState<string | null>(null);
   const [map, setMap] = useState<google.maps.Map | null>(null);
+
+  // Get user's accessible patches for auto-focus functionality
+  const { patches: accessiblePatches, isLoading: patchesLoading, role } = useAccessiblePatches();
+
+  // Determine patches to focus on: user patches for auto-focus mode (unless admin)
+  const shouldAutoFocusOnUserPatches = autoFocusPatches && role !== 'admin' && !selectedPatchIds.length && accessiblePatches.length > 0;
+  const autoFocusPatchIds = shouldAutoFocusOnUserPatches ? accessiblePatches.map(p => p.id) : selectedPatchIds;
 
   // Refs for marker clustering
   const clustererRef = useRef<MarkerClusterer | null>(null);
@@ -151,16 +159,16 @@ function MobileMap({
   }, [])
 
 
-  // Filter patches based on selected patch IDs from FiltersBar
+  // Filter patches based on selected patch IDs from FiltersBar or auto-focus
   const filteredPatches = useMemo(() => {
-    // If specific patches are selected via FiltersBar, filter to only those
-    if (selectedPatchIds.length > 0) {
-      return patches.filter(patch => selectedPatchIds.includes(patch.id));
+    // If specific patches are selected via FiltersBar or auto-focus is active, filter to only those
+    if (autoFocusPatchIds.length > 0) {
+      return patches.filter(patch => autoFocusPatchIds.includes(patch.id));
     }
-    
+
     // Otherwise show all patches
     return patches;
-  }, [patches, selectedPatchIds]);
+  }, [patches, autoFocusPatchIds]);
 
   // Get organiser labels for filtered patches
   const patchIdsForLabels = showOrganisers ? filteredPatches.map(p => p.id) : [];
@@ -326,9 +334,9 @@ function MobileMap({
     };
   }, [map, isLoaded, showJobSites, jobSites, projectColorBy, deriveBuilderStatus]);
 
-  // Auto-focus on selected patches for batch printing
+  // Auto-focus on selected patches for batch printing or user patch auto-focus
   useEffect(() => {
-    if (!map || !autoFocusPatches || selectedPatchIds.length === 0 || filteredPatches.length === 0) return;
+    if (!map || (!autoFocusPatches && !shouldAutoFocusOnUserPatches) || autoFocusPatchIds.length === 0 || filteredPatches.length === 0) return;
 
     const bounds = new google.maps.LatLngBounds();
     let hasPoints = false;
@@ -372,7 +380,7 @@ function MobileMap({
         }
       }, 100);
     }
-  }, [map, autoFocusPatches, selectedPatchIds, filteredPatches]);
+  }, [map, autoFocusPatches, shouldAutoFocusOnUserPatches, autoFocusPatchIds, filteredPatches]);
 
   // Compute label for patch
   const labelForPatch = useCallback((patch: PatchData, organiserNames: string[] | undefined) => {

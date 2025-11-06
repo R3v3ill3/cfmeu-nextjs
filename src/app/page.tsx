@@ -21,6 +21,43 @@ async function getUserRole(userId: string): Promise<AppRole | null> {
   return (data.role as AppRole) ?? null
 }
 
+async function getDashboardPreference(userId: string, supabase: any): Promise<'legacy' | 'new'> {
+  // Get user preference
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('dashboard_preference')
+    .eq('id', userId)
+    .maybeSingle()
+  
+  const userPreference = profile?.dashboard_preference
+  
+  // If user has explicit preference (not 'auto' or null), use it
+  if (userPreference === 'legacy' || userPreference === 'new') {
+    return userPreference
+  }
+  
+  // Get admin default
+  const { data: settings } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'default_dashboard')
+    .maybeSingle()
+  
+  if (settings?.value) {
+    try {
+      const parsed = JSON.parse(settings.value)
+      if (parsed === 'legacy' || parsed === 'new') {
+        return parsed
+      }
+    } catch {
+      // Ignore parse errors
+    }
+  }
+  
+  // Default to legacy
+  return 'legacy'
+}
+
 // Root page that handles authentication and renders dashboard
 // This ensures Next.js recognizes the route properly
 // Uses the same layout structure as (app)/layout.tsx to maintain consistency
@@ -47,13 +84,19 @@ export default async function RootPage() {
   }
   
   const role = user ? await getUserRole(user.id) : null
+  const dashboardPreference = user ? await getDashboardPreference(user.id, supabase) : 'legacy'
   const hdrs = await headers()
   const userAgent = hdrs.get('user-agent') || undefined
   const isMobile = isMobileOrTablet(userAgent)
   const currentPath = hdrs.get('x-pathname') || '/'
   
   if (process.env.NODE_ENV === 'development') {
-    console.log('[RootPage] User authenticated, rendering dashboard with mobile:', isMobile)
+    console.log('[RootPage] User authenticated, dashboard preference:', dashboardPreference, 'mobile:', isMobile)
+  }
+  
+  // Route to new dashboard if preference is 'new'
+  if (dashboardPreference === 'new') {
+    redirect('/dashboard-new')
   }
   
   // Use the same provider structure as (app)/layout.tsx

@@ -399,33 +399,11 @@ body {
     min-width: 44px;
   }
   
-  /* Fix chart rendering on mobile */
-  .recharts-responsive-container {
-    min-height: 200px !important;
-    min-width: 280px !important;
-  }
-  
-  /* Ensure chart containers have proper dimensions */
-  [data-chart] {
-    min-height: 200px;
-    min-width: 280px;
-    width: 100%;
-  }
-  
   /* iPhone 16/17 Pro Max specific optimizations */
   @media screen and (min-width: 430px) {
     /* Larger iPhone models - more breathing room */
     .space-y-4 > * + * {
       margin-top: 1.25rem;
-    }
-    
-    /* Better chart sizing on larger iPhones */
-    .recharts-responsive-container {
-      min-width: 320px !important;
-    }
-    
-    [data-chart] {
-      min-width: 320px;
     }
   }
 }

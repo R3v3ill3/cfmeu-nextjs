@@ -23,6 +23,7 @@ import { Plus } from "lucide-react"
 import { useDebounce, useLocalStorage, useInterval } from "react-use"
 import { RatingFiltersComponent, ActiveRatingFilters } from "@/components/ratings/RatingFilters"
 import { RatingFilters } from "@/types/rating"
+import { useAccessiblePatches } from "@/hooks/useAccessiblePatches"
 
 export function EmployersDesktopView() {
   const queryClient = useQueryClient()
@@ -37,9 +38,37 @@ export function EmployersDesktopView() {
   const dir = sp.get("dir") || "asc"
   const view = sp.get("view") || "card"
   const page = parseInt(sp.get("page") || "1")
+  const patchParam = sp.get("patch")
+  const isGeographicallyFiltered = !!patchParam
 
   // Feature flag for server-side processing
   const USE_SERVER_SIDE = process.env.NEXT_PUBLIC_USE_SERVER_SIDE_EMPLOYERS === 'true'
+
+  // Get user's accessible patches for default filtering
+  const { patches: accessiblePatches, isLoading: patchesLoading, role } = useAccessiblePatches()
+
+  // Apply default patch filtering when no patch parameter exists
+  useEffect(() => {
+    // Skip if still loading patches or if user is admin (admin sees all)
+    if (patchesLoading || role === 'admin') {
+      return
+    }
+
+    const existingPatchParam = sp.get('patch')
+
+    // Only apply default filtering if no patch parameter is already set
+    if (!existingPatchParam && accessiblePatches.length > 0) {
+      const defaultPatchIds = accessiblePatches.map(p => p.id)
+      const params = new URLSearchParams(sp.toString())
+
+      // Set default patch filter
+      params.set('patch', defaultPatchIds.join(','))
+
+      // Update URL without triggering navigation reload
+      const newUrl = `${pathname}?${params.toString()}`
+      router.replace(newUrl)
+    }
+  }, [patchesLoading, role, accessiblePatches, sp, router, pathname])
 
   // ============================================================================
   // LOCALSTORAGE: Remember user preferences
@@ -135,6 +164,7 @@ export function EmployersDesktopView() {
     engaged,
     eba: eba as any,
     type: type as any,
+    patch: patchParam || undefined,
     enhanced: true, // Enable enhanced data for projects, organisers, incolink
     includeAliases: true, // Enable alias search for better employer matching
     aliasMatchMode: 'any', // Match any type of alias
@@ -379,6 +409,27 @@ export function EmployersDesktopView() {
               {engaged ? "Engaged" : "All"}
             </Toggle>
           </div>
+          {role !== 'admin' && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Geographic</span>
+              <Toggle
+                pressed={isGeographicallyFiltered}
+                onPressedChange={(v) => {
+                  if (v) {
+                    // Apply geographic filter using user's accessible patches
+                    const defaultPatchIds = accessiblePatches.map(p => p.id)
+                    setParam("patch", defaultPatchIds.join(','))
+                  } else {
+                    // Remove geographic filter
+                    setParam("patch")
+                  }
+                }}
+                aria-label="Geographic filter"
+              >
+                {isGeographicallyFiltered ? "My Patches" : "All Areas"}
+              </Toggle>
+            </div>
+          )}
           <div className="w-44">
             <div className="text-xs text-muted-foreground mb-1">EBA Status</div>
             <Select value={eba} onValueChange={(v) => setParam("eba", v)}>

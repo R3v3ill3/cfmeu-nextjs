@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
+import { getProjectIdsForPatches } from '@/lib/patch-filtering';
 
 export const dynamic = 'force-dynamic';
 
@@ -68,12 +69,19 @@ function calculatePercentages(distribution: RatingDistribution, total: number): 
   };
 }
 
+function isProjectStatusFilter(value: string | null | undefined): value is ProjectStatusFilter {
+  return value === 'construction' || value === 'pre_construction' || value === 'future' || value === 'archived';
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const ebaStatus = (searchParams.get('ebaStatus') || 'all') as EbaStatusFilter;
     const projectTier = (searchParams.get('projectTier') || 'all') as ProjectTier;
-    const projectStatus = (searchParams.get('projectStatus') || 'all') as ProjectStatusFilter;
+    const projectStatusParam = (searchParams.get('projectStatus') || 'all') as ProjectStatusFilter | 'all';
+    const patchIds = searchParams.get('patchIds')?.split(',').map(id => id.trim()).filter(Boolean) ?? [];
+    const universe = searchParams.get('universe') || 'active';
+    const stageParam = searchParams.get('stage') || 'construction';
 
     let supabase;
     try {
@@ -83,11 +91,32 @@ export async function GET(request: NextRequest) {
       throw new Error(`Failed to initialize Supabase client: ${supabaseError instanceof Error ? supabaseError.message : 'Unknown error'}`);
     }
 
-    // Start with base query for projects - only active projects
+    const emptyResponse: RatingDistributionResponse = {
+      projects: {
+        distribution: { red: 0, amber: 0, yellow: 0, green: 0 },
+        percentages: { red: 0, amber: 0, yellow: 0, green: 0 },
+        total: 0,
+      },
+      employers: {
+        distribution: { red: 0, amber: 0, yellow: 0, green: 0 },
+        percentages: { red: 0, amber: 0, yellow: 0, green: 0 },
+        total: 0,
+      },
+    };
+
+    const effectiveProjectStatus =
+      projectStatusParam !== 'all'
+        ? projectStatusParam
+        : (isProjectStatusFilter(stageParam) ? stageParam : undefined);
+
+    // Start with base query for projects applying universe, stage, and patch filters
     let projectsQuery = supabase
       .from('projects')
-      .select('id, tier, stage_class')
-      .eq('organising_universe', 'active');
+      .select('id, tier, stage_class, organising_universe, main_job_site_id');
+
+    if (universe !== 'all') {
+      projectsQuery = projectsQuery.eq('organising_universe', universe);
+    }
 
     // Apply project tier filter
     if (projectTier !== 'all') {
@@ -95,8 +124,19 @@ export async function GET(request: NextRequest) {
     }
 
     // Apply project status filter
-    if (projectStatus !== 'all') {
-      projectsQuery = projectsQuery.eq('stage_class', projectStatus);
+    if (effectiveProjectStatus) {
+      projectsQuery = projectsQuery.eq('stage_class', effectiveProjectStatus);
+    }
+
+    // Apply patch filtering if specified
+    if (patchIds.length > 0) {
+      const projectIds = await getProjectIdsForPatches(supabase, patchIds);
+
+      if (projectIds.length === 0) {
+        return NextResponse.json(emptyResponse);
+      }
+
+      projectsQuery = projectsQuery.in('id', projectIds);
     }
 
     const { data: filteredProjects, error: projectsError } = await projectsQuery;
@@ -106,21 +146,10 @@ export async function GET(request: NextRequest) {
       throw projectsError;
     }
 
-    const projectIds = filteredProjects?.map(p => p.id) || [];
+    const projectIds = filteredProjects?.map((p: any) => p.id) || [];
 
     if (projectIds.length === 0) {
-      return NextResponse.json({
-        projects: {
-          distribution: { red: 0, amber: 0, yellow: 0, green: 0 },
-          percentages: { red: 0, amber: 0, yellow: 0, green: 0 },
-          total: 0
-        },
-        employers: {
-          distribution: { red: 0, amber: 0, yellow: 0, green: 0 },
-          percentages: { red: 0, amber: 0, yellow: 0, green: 0 },
-          total: 0
-        }
-      } as RatingDistributionResponse);
+      return NextResponse.json(emptyResponse);
     }
 
     // Get employers associated with these projects via project_assignments
@@ -151,18 +180,7 @@ export async function GET(request: NextRequest) {
     const employerIdArray = Array.from(employerIds);
 
     if (employerIdArray.length === 0) {
-      return NextResponse.json({
-        projects: {
-          distribution: { red: 0, amber: 0, yellow: 0, green: 0 },
-          percentages: { red: 0, amber: 0, yellow: 0, green: 0 },
-          total: 0
-        },
-        employers: {
-          distribution: { red: 0, amber: 0, yellow: 0, green: 0 },
-          percentages: { red: 0, amber: 0, yellow: 0, green: 0 },
-          total: 0
-        }
-      } as RatingDistributionResponse);
+      return NextResponse.json(emptyResponse);
     }
 
     // Get the latest rating for each employer with EBA status
@@ -309,10 +327,14 @@ export async function GET(request: NextRequest) {
           // Priority: red > amber > yellow > green
           if (color === 'red') {
             projectRating = 'red';
-            break;
-          } else if (color === 'amber' && projectRating !== 'red') {
-            projectRating = 'amber';
+            break; // Red is highest priority, no need to check further
+          } else if (color === 'amber') {
+            // Amber overrides yellow and green, but not red (checked above)
+            if (projectRating === 'green' || projectRating === 'yellow') {
+              projectRating = 'amber';
+            }
           } else if (color === 'yellow' && projectRating === 'green') {
+            // Yellow only if still green (amber overrides it above)
             projectRating = 'yellow';
           }
         }

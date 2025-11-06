@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, CheckCircle2, Loader2, User, Mail, Shield, MapPin } from "lucide-react"
-import { convertTestingToProductionEmail } from "@/utils/emailConversion"
+import { convertTestingToProductionEmail, isTestingEmail } from "@/utils/emailConversion"
 
 interface PendingUser {
   id: string
@@ -40,6 +40,9 @@ interface ActivationResult {
   }
   patches_migrated: number
   invalid_patches_cleaned: number
+  temporary_password?: string
+  auth_user_created?: boolean
+  testing_account?: boolean
 }
 
 export default function ActivatePendingUserDialog({
@@ -56,7 +59,9 @@ export default function ActivatePendingUserDialog({
   // Reset state when dialog opens/closes
   const handleOpenChange = (newOpen: boolean) => {
     if (newOpen && pendingUser) {
-      setActivatedEmail(convertTestingToProductionEmail(pendingUser.email))
+      // For testing emails, keep the same; for production, convert to @cfmeu.org
+      const isTestingEmail = isTestingEmail(pendingUser.email)
+      setActivatedEmail(isTestingEmail ? pendingUser.email : convertTestingToProductionEmail(pendingUser.email))
       setError(null)
       setSuccess(null)
     } else if (!newOpen) {
@@ -128,12 +133,26 @@ export default function ActivatePendingUserDialog({
 
         {success ? (
           <div className="space-y-4 py-4">
-            <Alert className="border-green-200 bg-green-50">
-              <CheckCircle2 className="h-4 w-4 text-green-600" />
-              <AlertDescription className="text-green-800">
-                User successfully activated and all data migrated.
-              </AlertDescription>
-            </Alert>
+            {/* Testing Account Success Alert */}
+            {success.testing_account && success.auth_user_created && (
+              <Alert className="border-blue-200 bg-blue-50">
+                <CheckCircle2 className="h-4 w-4 text-blue-600" />
+                <AlertDescription className="text-blue-800">
+                  <strong>Testing Account Created!</strong><br/>
+                  The user can now login with the temporary password below.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* Production Account Success Alert */}
+            {!success.testing_account && (
+              <Alert className="border-green-200 bg-green-50">
+                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                <AlertDescription className="text-green-800">
+                  User successfully activated and all data migrated.
+                </AlertDescription>
+              </Alert>
+            )}
 
             <div className="space-y-3 text-sm">
               <div className="flex items-start gap-2">
@@ -141,8 +160,45 @@ export default function ActivatePendingUserDialog({
                 <div>
                   <div className="font-medium">{success.full_name}</div>
                   <div className="text-muted-foreground">{success.activated_email}</div>
+                  {success.testing_account && (
+                    <div className="text-xs text-blue-600 mt-1">Testing Account</div>
+                  )}
                 </div>
               </div>
+
+              {/* Temporary Password for Testing Accounts */}
+              {success.testing_account && success.auth_user_created && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Shield className="h-4 w-4 text-blue-600" />
+                    <span className="font-medium text-blue-800">Login Credentials</span>
+                  </div>
+                  <div className="space-y-1 text-xs">
+                    <div>
+                      <span className="font-medium">Email:</span> {success.activated_email}
+                    </div>
+                    {success.temporary_password ? (
+                      <>
+                        <div>
+                          <span className="font-medium">Temporary Password:</span>{' '}
+                          <code className="bg-white px-2 py-1 rounded border border-blue-300 font-mono text-blue-800">
+                            {success.temporary_password}
+                          </code>
+                        </div>
+                        <div className="text-blue-700 mt-2">
+                          <strong>Important:</strong> Share this password securely with the user for testing.
+                          They can login immediately with these credentials.
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-amber-700 mt-2 border border-amber-300 bg-amber-50 rounded p-2">
+                        <strong>⚠️ Password Not Generated:</strong> The account was created but no temporary password was provided.
+                        Check server logs for the password, or the user will need to use password reset.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="flex items-center gap-2">
                 <Shield className="h-4 w-4 text-muted-foreground" />
@@ -240,7 +296,10 @@ export default function ActivatePendingUserDialog({
                 disabled={loading}
               />
               <p className="text-xs text-muted-foreground">
-                The user must have already signed in with this email to create their profile.
+                {isTestingEmail(pendingUser.email)
+                  ? "This will create a testing account with a temporary password that the user can use to login immediately."
+                  : "The user must have already signed in with this email to create their profile."
+                }
               </p>
             </div>
 
@@ -259,6 +318,9 @@ export default function ActivatePendingUserDialog({
                   <li>Transfer the role to the activated user</li>
                   <li>Migrate all hierarchy relationships</li>
                   <li>Migrate all patch assignments</li>
+                  {isTestingEmail(pendingUser.email) && (
+                    <li>Create authentication credentials with temporary password</li>
+                  )}
                   <li>Archive the pending user record</li>
                 </ul>
                 <p className="mt-2 text-sm font-medium">This action cannot be undone.</p>

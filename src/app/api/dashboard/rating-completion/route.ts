@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
+import { getProjectIdsForPatches } from '@/lib/patch-filtering';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,6 +46,9 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const timeFrame = (searchParams.get('timeFrame') || '3_months') as TimeFrame;
+    const patchIds = searchParams.get('patchIds')?.split(',').map((id) => id.trim()).filter(Boolean) ?? [];
+    const universe = searchParams.get('universe') || 'active';
+    const stage = searchParams.get('stage') || 'construction';
 
     // Validate timeFrame
     if (!['6_weeks', '3_months', '6_months', '12_months', 'ever'].includes(timeFrame)) {
@@ -65,19 +69,46 @@ export async function GET(request: NextRequest) {
     const cutoffDate = getCutoffDate(timeFrame);
     const cutoffDateStr = cutoffDate ? cutoffDate.toISOString().split('T')[0] : null;
 
-    // Get all active project IDs
-    const { data: activeProjects, error: projectsError } = await supabase
+    // Get filtered project IDs based on universe, stage, and patch selections
+    let projectsQuery = supabase
       .from('projects')
-      .select('id')
-      .eq('organising_universe', 'active');
+      .select('id, main_job_site_id, organising_universe, stage_class');
+
+    if (universe !== 'all') {
+      projectsQuery = projectsQuery.eq('organising_universe', universe);
+    }
+
+    if (stage !== 'all') {
+      projectsQuery = projectsQuery.eq('stage_class', stage);
+    }
+
+    if (patchIds.length > 0) {
+      const projectIds = await getProjectIdsForPatches(supabase, patchIds);
+
+      if (projectIds.length === 0) {
+        return NextResponse.json({
+          projectsRatedPercentage: 0,
+          employersRatedPercentage: 0,
+          projectsRatedCount: 0,
+          totalProjects: 0,
+          employersRatedCount: 0,
+          totalEmployers: 0,
+          timeFrame
+        } as RatingCompletionResponse);
+      }
+
+      projectsQuery = projectsQuery.in('id', projectIds);
+    }
+
+    const { data: filteredProjects, error: projectsError } = await projectsQuery;
 
     if (projectsError) {
-      console.error('Error fetching active projects:', projectsError);
+      console.error('Error fetching projects:', projectsError);
       throw projectsError;
     }
 
-    const totalProjects = activeProjects?.length || 0;
-    const activeProjectIds = activeProjects?.map(p => p.id) || [];
+    const totalProjects = filteredProjects?.length || 0;
+    const projectIds = filteredProjects?.map(p => p.id) || [];
 
     if (totalProjects === 0) {
       return NextResponse.json({
@@ -95,11 +126,11 @@ export async function GET(request: NextRequest) {
     let projectAssignments: any[] = [];
     let paError: any = null;
     
-    if (activeProjectIds.length > 0) {
+    if (projectIds.length > 0) {
       const result = await supabase
         .from('project_assignments')
         .select('employer_id')
-        .in('project_id', activeProjectIds);
+        .in('project_id', projectIds);
       projectAssignments = result.data || [];
       paError = result.error;
     }
@@ -208,7 +239,7 @@ export async function GET(request: NextRequest) {
           supabase
             .from('project_assignments')
             .select('project_id')
-            .in('project_id', activeProjectIds)
+            .in('project_id', projectIds)
             .in('employer_id', chunk)
         );
 

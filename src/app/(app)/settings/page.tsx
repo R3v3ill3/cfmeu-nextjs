@@ -5,8 +5,11 @@ import { supabase } from "@/integrations/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { GeofencingSetup } from "@/components/siteVisits/GeofencingSetup"
 import { Badge } from "@/components/ui/badge"
-import { User, Bell, Shield } from "lucide-react"
+import { User, Bell, Shield, LayoutDashboard } from "lucide-react"
 import { Separator } from "@/components/ui/separator"
+import { useDashboardPreference } from "@/hooks/useDashboardPreference"
+import { Label } from "@/components/ui/label"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 
 export default function SettingsPage() {
   // Get current user info
@@ -112,6 +115,31 @@ export default function SettingsPage() {
               </div>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      <Separator />
+
+      {/* Dashboard Preference Section */}
+      <div>
+        <h2 className="text-2xl font-bold flex items-center gap-2">
+          <LayoutDashboard className="h-6 w-6" />
+          Dashboard Preferences
+        </h2>
+        <p className="text-muted-foreground mt-1">
+          Choose which dashboard version to use
+        </p>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Dashboard Selection</CardTitle>
+          <CardDescription>
+            Select your preferred dashboard view. You can override the admin default or use automatic selection.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <DashboardPreferenceSelector />
         </CardContent>
       </Card>
 
@@ -246,6 +274,76 @@ export default function SettingsPage() {
         <p className="mt-1">
           Version 1.0 · October 2025
         </p>
+      </div>
+    </div>
+  )
+}
+
+function DashboardPreferenceSelector() {
+  const { 
+    resolvedPreference, 
+    userPreference, 
+    adminDefault, 
+    isLoading, 
+    updatePreference, 
+    isUpdating 
+  } = useDashboardPreference()
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-3">
+        <Label className="text-base font-medium">Your Dashboard Preference</Label>
+        <RadioGroup
+          value={userPreference || 'auto'}
+          onValueChange={(value) => {
+            updatePreference(value as 'legacy' | 'new' | 'auto')
+          }}
+          disabled={isLoading || isUpdating}
+        >
+          <div className="flex items-center space-x-2">
+            <RadioGroupItem value="auto" id="auto" />
+            <Label htmlFor="auto" className="font-normal cursor-pointer">
+              <div>
+                <div className="font-medium">Use Admin Default</div>
+                <div className="text-sm text-muted-foreground">
+                  Currently: {adminDefault === 'new' ? 'New Dashboard' : 'Legacy Dashboard'}
+                </div>
+              </div>
+            </Label>
+          </div>
+          <div className="flex items-center space-x-2">
+            <RadioGroupItem value="legacy" id="legacy" />
+            <Label htmlFor="legacy" className="font-normal cursor-pointer">
+              <div>
+                <div className="font-medium">Legacy Dashboard</div>
+                <div className="text-sm text-muted-foreground">
+                  Use the original dashboard view
+                </div>
+              </div>
+            </Label>
+          </div>
+          <div className="flex items-center space-x-2">
+            <RadioGroupItem value="new" id="new" />
+            <Label htmlFor="new" className="font-normal cursor-pointer">
+              <div>
+                <div className="font-medium">New Dashboard</div>
+                <div className="text-sm text-muted-foreground">
+                  Use the enhanced dashboard with improved visualizations
+                </div>
+              </div>
+            </Label>
+          </div>
+        </RadioGroup>
+      </div>
+
+      <div className="pt-2 border-t">
+        <div className="text-sm text-muted-foreground">
+          <p className="font-medium mb-1">Current Selection:</p>
+          <p>
+            {resolvedPreference === 'new' ? 'New Dashboard' : 'Legacy Dashboard'}
+            {userPreference === 'auto' && ` (using admin default: ${adminDefault})`}
+          </p>
+        </div>
       </div>
     </div>
   )
