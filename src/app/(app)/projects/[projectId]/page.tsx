@@ -128,51 +128,11 @@ export default function ProjectDetailPage() {
     }
   })
 
-  // Early return if no projectId
-  if (!projectId) {
-    return (
-      <div className="p-6">
-        <p className="text-muted-foreground">Invalid project ID</p>
-        <Button variant="outline" onClick={() => router.push('/projects')} className="mt-4">
-          Back to Projects
-        </Button>
-      </div>
-    )
-  }
+  // ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS (Rules of Hooks)
+  // All useQuery, useMemo, and custom hooks must be called unconditionally
+  // Use the 'enabled' option in useQuery to control when queries actually run
 
-  // Show access control loading state
-  if (accessiblePatchesLoading || accessControlPatchesLoading) {
-    return (
-      <div className="p-6">
-        <div className="flex items-center justify-center py-12">
-          <LoadingSpinner />
-          <span className="ml-3 text-muted-foreground">Checking access permissions...</span>
-        </div>
-      </div>
-    )
-  }
-
-  // Check access control
-  const hasAccess = role === 'admin' || (accessControlPatches && accessControlPatches.some(patchId =>
-    accessiblePatches.some(accessiblePatch => accessiblePatch.id === patchId)
-  ))
-
-  if (!hasAccess) {
-    return (
-      <div className="p-6">
-        <div className="text-center py-12">
-          <h2 className="text-xl font-semibold text-red-600 mb-4">Access Denied</h2>
-          <p className="text-muted-foreground mb-6">
-            You don't have permission to view this project. Projects are only accessible to users assigned to their geographic patches.
-          </p>
-          <Button onClick={() => router.push('/projects')}>
-            Back to Projects
-          </Button>
-        </div>
-      </div>
-    )
-  }
-
+  // Project data query
   const { data: project, isLoading: projectLoading, isFetching: projectFetching, error: projectError } = useQuery({
     queryKey: ["project-detail", projectId],
     enabled: !!projectId,
@@ -244,6 +204,7 @@ export default function ProjectDetailPage() {
     },
   })
 
+  // Sites query
   const { data: sites = [], isLoading: sitesLoading, isFetching: sitesFetching } = useQuery({
     queryKey: ["project-sites", projectId],
     enabled: !!projectId,
@@ -260,6 +221,7 @@ export default function ProjectDetailPage() {
     }
   })
 
+  // Memoized site data
   const siteOptions = useMemo(() => (sites as any[]).map(s => ({ id: s.id as string, name: s.name as string })), [sites])
   const sortedSiteIds = useMemo(
     () => Array.from(new Set(((sites as any[]) || []).map((s: any) => String(s.id)).filter(Boolean))).sort(),
@@ -514,9 +476,8 @@ export default function ProjectDetailPage() {
     () => Array.from(new Set(((contractorSummary as string[]) || []).filter(Boolean))).sort(),
     [contractorSummary]
   )
-  // ebaStats will be computed after contractorRows is available lower in the file
 
-  const { data: lastVisit } = useQuery({
+  const { data: lastVisitData } = useQuery({
     queryKey: ["project-last-visit", projectId],
     enabled: !!projectId,
     staleTime: 30000,
@@ -531,7 +492,7 @@ export default function ProjectDetailPage() {
           .order("scheduled_at", { ascending: false, nullsFirst: false })
           .order("created_at", { ascending: false, nullsFirst: false })
           .limit(1)
-        
+
         if (error) {
           console.warn('site_visit_list_view query failed, trying fallback:', error);
           // Fallback: query via job_sites relationship
@@ -541,13 +502,13 @@ export default function ProjectDetailPage() {
             .eq("job_sites.project_id", projectId)
             .order("date", { ascending: false })
             .limit(1)
-          
-          const visitDate = fallbackData && fallbackData[0] ? 
+
+          const visitDate = fallbackData && fallbackData[0] ?
             (fallbackData[0].scheduled_at || fallbackData[0].date) : null;
           return visitDate ? format(new Date(visitDate), "dd/MM/yyyy") : "—";
         }
-        
-        const visitDate = data && data[0] ? 
+
+        const visitDate = data && data[0] ?
           (data[0].scheduled_at || data[0].created_at) : null;
         return visitDate ? format(new Date(visitDate), "dd/MM/yyyy") : "—";
       } catch (err) {
@@ -556,6 +517,9 @@ export default function ProjectDetailPage() {
       }
     }
   })
+
+  // Convert the visit data to a string for display
+  const lastVisit = typeof lastVisitData === 'string' ? lastVisitData : "—"
 
   const { data: contractorNames = [] } = useQuery({
     queryKey: ["project-contractor-names", stableEmployerIds],
@@ -740,6 +704,70 @@ export default function ProjectDetailPage() {
     }
   })
 
+  // Derive per-site EBA counts from contractorRows and ebaEmployers
+  const ebaBySite = useMemo(() => {
+    const map = new Map<string, { active: number; total: number }>()
+    const bySiteToEmployers = new Map<string, Set<string>>()
+    ;((contractorRows as any[]) || []).forEach((r: any) => {
+      if (!r.siteId) return
+      const sid = String(r.siteId)
+      if (!bySiteToEmployers.has(sid)) bySiteToEmployers.set(sid, new Set<string>())
+      bySiteToEmployers.get(sid)!.add(String(r.employerId))
+    })
+    Array.from(bySiteToEmployers.entries()).forEach(([sid, set]) => {
+      const total = set.size
+      let active = 0
+      set.forEach((eid) => { if (ebaEmployers.has(eid)) active += 1 })
+      map.set(sid, { active, total })
+    })
+    return map
+  }, [contractorRows, ebaEmployers])
+
+  // Early return if no projectId
+  if (!projectId) {
+    return (
+      <div className="p-6">
+        <p className="text-muted-foreground">Invalid project ID</p>
+        <Button variant="outline" onClick={() => router.push('/projects')} className="mt-4">
+          Back to Projects
+        </Button>
+      </div>
+    )
+  }
+
+  // Show access control loading state
+  if (accessiblePatchesLoading || accessControlPatchesLoading) {
+    return (
+      <div className="p-6">
+        <div className="flex items-center justify-center py-12">
+          <LoadingSpinner />
+          <span className="ml-3 text-muted-foreground">Checking access permissions...</span>
+        </div>
+      </div>
+    )
+  }
+
+  // Check access control
+  const hasAccess = role === 'admin' || (accessControlPatches && accessControlPatches.some(patchId =>
+    accessiblePatches.some(accessiblePatch => accessiblePatch.id === patchId)
+  ))
+
+  if (!hasAccess) {
+    return (
+      <div className="p-6">
+        <div className="text-center py-12">
+          <h2 className="text-xl font-semibold text-red-600 mb-4">Access Denied</h2>
+          <p className="text-muted-foreground mb-6">
+            You don't have permission to view this project. Projects are only accessible to users assigned to their geographic patches.
+          </p>
+          <Button onClick={() => router.push('/projects')}>
+            Back to Projects
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   // Helper components for overview bars (slightly larger)
   function GradientBar({ percent, baseRgb, heightClass = "h-2" }: { percent: number; baseRgb: string; heightClass?: string }) {
     const pct = Math.max(0, Math.min(100, Math.round(percent)))
@@ -769,25 +797,6 @@ export default function ProjectDetailPage() {
     )
   }
   const memberRedRgb = '222,27,18'
-
-  // Derive per-site EBA counts from contractorRows and ebaEmployers
-  const ebaBySite = useMemo(() => {
-    const map = new Map<string, { active: number; total: number }>()
-    const bySiteToEmployers = new Map<string, Set<string>>()
-    ;((contractorRows as any[]) || []).forEach((r: any) => {
-      if (!r.siteId) return
-      const sid = String(r.siteId)
-      if (!bySiteToEmployers.has(sid)) bySiteToEmployers.set(sid, new Set<string>())
-      bySiteToEmployers.get(sid)!.add(String(r.employerId))
-    })
-    Array.from(bySiteToEmployers.entries()).forEach(([sid, set]) => {
-      const total = set.size
-      let active = 0
-      set.forEach((eid) => { if (ebaEmployers.has(eid)) active += 1 })
-      map.set(sid, { active, total })
-    })
-    return map
-  }, [contractorRows, ebaEmployers])
 
   return (
     <div className="p-6 space-y-6">

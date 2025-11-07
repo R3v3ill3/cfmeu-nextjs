@@ -212,17 +212,18 @@ export function RatingProvider({ children }: RatingProviderProps) {
   const userRole = roleResult?.role ?? null
   
   // Stable error handlers to prevent hook order issues
+  // Include dispatch in deps for completeness (it's stable from useReducer but included for clarity)
   const handleStatsError = useCallback((error: unknown) => {
     console.error('Rating stats error:', error)
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     dispatch({ type: "SET_ERROR", payload: `Stats error: ${errorMessage}` })
-  }, [])
+  }, [dispatch])
   
   const handleAlertsError = useCallback((error: unknown) => {
     console.error('Rating alerts error:', error)
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     dispatch({ type: "SET_ERROR", payload: `Alerts error: ${errorMessage}` })
-  }, [])
+  }, [dispatch])
   
   // Fetch rating stats with error handling via onError callback
   const statsResult = useRatingStats({
@@ -248,13 +249,14 @@ export function RatingProvider({ children }: RatingProviderProps) {
       console.error('UserRole hook error:', roleError)
       dispatch({ type: "SET_ERROR", payload: "User role error" })
     }
-  }, [roleError])
+  }, [roleError, dispatch])
 
   // Set role context based on user role
+  // Always run this effect to ensure consistent hook execution order
   useEffect(() => {
-    if (userRole) {
-      let roleContext: RoleType = "trade" // default
+    let roleContext: RoleType = "trade" // default
 
+    if (userRole) {
       switch (userRole) {
         case "admin":
           roleContext = "admin"
@@ -266,17 +268,17 @@ export function RatingProvider({ children }: RatingProviderProps) {
         default:
           roleContext = "trade"
       }
-
-      dispatch({ type: "SET_ROLE_CONTEXT", payload: roleContext })
     }
-  }, [userRole])
+
+    dispatch({ type: "SET_ROLE_CONTEXT", payload: roleContext })
+  }, [userRole, dispatch])
 
   // Handle refresh completion
   useEffect(() => {
     if (state.isRefreshing && !isStatsLoading && !isAlertsLoading) {
       dispatch({ type: "SET_REFRESHING", payload: false })
     }
-  }, [state.isRefreshing, isStatsLoading, isAlertsLoading])
+  }, [state.isRefreshing, isStatsLoading, isAlertsLoading, dispatch])
 
   // Action functions
   const setFilters = (filters: Partial<RatingFilters>) => {
@@ -377,10 +379,12 @@ export function RatingProvider({ children }: RatingProviderProps) {
   // Handle combined error state
   useEffect(() => {
     if (statsError || alertsError) {
-      const errorMessage = statsError?.message || alertsError?.message || "Unknown error"
+      const errorMessage = (statsError instanceof Error ? statsError.message : null) || 
+                           (alertsError instanceof Error ? alertsError.message : null) || 
+                           "Unknown error"
       dispatch({ type: "SET_ERROR", payload: errorMessage })
     }
-  }, [statsError, alertsError])
+  }, [statsError, alertsError, dispatch])
 
   const value: RatingContextValue = {
     // State
