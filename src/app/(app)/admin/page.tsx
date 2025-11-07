@@ -1,39 +1,51 @@
 "use client"
 export const dynamic = 'force-dynamic'
 
-import { PendingUsersTable } from "@/components/admin/PendingUsersTable"
-import { InviteUserDialog } from "@/components/admin/InviteUserDialog"
-import { AddDraftUserDialog } from "@/components/admin/AddDraftUserDialog"
-import { PendingProjectsTable } from "@/components/admin/PendingProjectsTable"
-import { PendingEmployersTable } from "@/components/admin/PendingEmployersTable"
-import { PendingEmployerDuplicateDetector } from "@/components/admin/PendingEmployerDuplicateDetector"
-import { PendingProjectDuplicateDetector } from "@/components/admin/PendingProjectDuplicateDetector"
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense, lazy } from "react"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import UsersTable from "@/components/admin/UsersTable"
 import RoleGuard from "@/components/guards/RoleGuard"
 import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
-import { RoleHierarchyManager } from "@/components/admin/RoleHierarchyManager"
-import { OrganiserScopeManager } from "@/components/admin/OrganiserScopeManager"
-import PatchManager from "@/components/admin/PatchManager"
-import SpatialAssignmentTool from "@/components/admin/SpatialAssignmentTool"
-import AddressLookupDialog from "@/components/AddressLookupDialog"
-import DuplicateEmployerManager from "@/components/admin/DuplicateEmployerManager"
-import DataUploadTab from "@/components/admin/DataUploadTab"
-import { BatchesManagement } from "@/components/admin/BatchesManagement"
-import { NavigationVisibilityManager } from "@/components/admin/NavigationVisibilityManager"
-import { SystemHealthDashboard } from "@/components/admin/SystemHealthDashboard"
-import CanonicalPromotionConsole from "@/components/admin/CanonicalPromotionConsole"
-import AliasAnalyticsDashboard from "@/components/admin/AliasAnalyticsDashboard"
 import { useAuth } from "@/hooks/useAuth"
 import { useSearchParams } from "next/navigation"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { ChevronDown, ChevronUp } from "lucide-react"
+import { ChevronDown } from "lucide-react"
 import { toast } from "sonner"
+import { Loader2 } from "lucide-react"
+
+// Lazy load heavy components - only loaded when tab is active
+const PendingUsersTable = lazy(() => import("@/components/admin/PendingUsersTable").then(m => ({ default: m.PendingUsersTable })))
+const InviteUserDialog = lazy(() => import("@/components/admin/InviteUserDialog").then(m => ({ default: m.InviteUserDialog })))
+const AddDraftUserDialog = lazy(() => import("@/components/admin/AddDraftUserDialog").then(m => ({ default: m.AddDraftUserDialog })))
+const PendingProjectsTable = lazy(() => import("@/components/admin/PendingProjectsTable").then(m => ({ default: m.PendingProjectsTable })))
+const PendingEmployersTable = lazy(() => import("@/components/admin/PendingEmployersTable").then(m => ({ default: m.PendingEmployersTable })))
+const PendingEmployerDuplicateDetector = lazy(() => import("@/components/admin/PendingEmployerDuplicateDetector").then(m => ({ default: m.PendingEmployerDuplicateDetector })))
+const PendingProjectDuplicateDetector = lazy(() => import("@/components/admin/PendingProjectDuplicateDetector").then(m => ({ default: m.PendingProjectDuplicateDetector })))
+const UsersTable = lazy(() => import("@/components/admin/UsersTable"))
+const RoleHierarchyManager = lazy(() => import("@/components/admin/RoleHierarchyManager").then(m => ({ default: m.RoleHierarchyManager })))
+const OrganiserScopeManager = lazy(() => import("@/components/admin/OrganiserScopeManager").then(m => ({ default: m.OrganiserScopeManager })))
+const PatchManager = lazy(() => import("@/components/admin/PatchManager"))
+const SpatialAssignmentTool = lazy(() => import("@/components/admin/SpatialAssignmentTool"))
+const AddressLookupDialog = lazy(() => import("@/components/AddressLookupDialog"))
+const DuplicateEmployerManager = lazy(() => import("@/components/admin/DuplicateEmployerManager"))
+const DataUploadTab = lazy(() => import("@/components/admin/DataUploadTab"))
+const BatchesManagement = lazy(() => import("@/components/admin/BatchesManagement").then(m => ({ default: m.BatchesManagement })))
+const NavigationVisibilityManager = lazy(() => import("@/components/admin/NavigationVisibilityManager").then(m => ({ default: m.NavigationVisibilityManager })))
+const SystemHealthDashboard = lazy(() => import("@/components/admin/SystemHealthDashboard").then(m => ({ default: m.SystemHealthDashboard })))
+const CanonicalPromotionConsole = lazy(() => import("@/components/admin/CanonicalPromotionConsole"))
+const AliasAnalyticsDashboard = lazy(() => import("@/components/admin/AliasAnalyticsDashboard"))
+
+// Loading fallback component
+function TabLoadingState() {
+  return (
+    <div className="flex items-center justify-center py-12">
+      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+    </div>
+  )
+}
 
 export default function AdminPage() {
   const [open, setOpen] = useState(false)
@@ -497,7 +509,7 @@ export default function AdminPage() {
             </div>
           </div>
         ) : (
-          /* Desktop layout - grouped tabs */
+          /* Desktop layout - grouped tabs with lazy loading */
           <Tabs value={parentTab} onValueChange={setParentTab}>
           <TabsList>
             <TabsTrigger value="user-management">User Management</TabsTrigger>
@@ -517,147 +529,161 @@ export default function AdminPage() {
 
           {/* User Management Group */}
           <TabsContent value="user-management" className="space-y-8">
-            {isAdmin && (
+            <Suspense fallback={<TabLoadingState />}>
+              {isAdmin && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">Users</h3>
+                  <UsersTable />
+                </div>
+              )}
               <div>
-                <h3 className="text-lg font-semibold mb-4">Users</h3>
-                <UsersTable />
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold">Invites</h3>
+                  <Button variant="outline" onClick={() => setAddDraftOpen(true)}>Add draft organiser</Button>
+                </div>
+                <PendingUsersTable />
               </div>
-            )}
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold">Invites</h3>
-                <Button variant="outline" onClick={() => setAddDraftOpen(true)}>Add draft organiser</Button>
-              </div>
-              <PendingUsersTable />
-            </div>
-            {isAdmin && (
-              <div>
-                <h3 className="text-lg font-semibold mb-4">Hierarchy</h3>
-                <RoleHierarchyManager users={users} />
-              </div>
-            )}
+              {isAdmin && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">Hierarchy</h3>
+                  <RoleHierarchyManager users={users} />
+                </div>
+              )}
+            </Suspense>
           </TabsContent>
 
           {/* Data Integrity Group */}
           <TabsContent value="data-integrity" className="space-y-8">
-            {isAdmin && (
-              <div>
-                <h3 className="text-lg font-semibold mb-4">Alias Analytics</h3>
-                <AliasAnalyticsDashboard />
-              </div>
-            )}
-            {isAdmin && (
-              <div>
-                <h3 className="text-lg font-semibold mb-4">Canonical Names</h3>
-                <CanonicalPromotionConsole />
-              </div>
-            )}
-            <div>
-              <div className="flex items-center gap-2 mb-4">
-                <h3 className="text-lg font-semibold">Pending Approvals</h3>
-                {totalPendingCount > 0 && (
-                  <Badge variant="destructive">
-                    {totalPendingCount}
-                  </Badge>
-                )}
-              </div>
-              <div className="space-y-8">
-                <div className="space-y-4">
-                  <h4 className="text-base font-semibold">
-                    Pending Projects ({pendingProjects.length})
-                  </h4>
-
-                  {/* Duplicate Detection */}
-                  <PendingProjectDuplicateDetector
-                    pendingCount={pendingProjects.length}
-                    onMergeComplete={fetchPendingItems}
-                  />
-
-                  {/* Pending Projects Table */}
-                  <PendingProjectsTable
-                    projects={pendingProjects}
-                    onApprove={handleApproveProject}
-                    onReject={handleRejectProject}
-                    onRefresh={fetchPendingItems}
-                  />
+            <Suspense fallback={<TabLoadingState />}>
+              {isAdmin && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">Alias Analytics</h3>
+                  <AliasAnalyticsDashboard />
                 </div>
+              )}
+              {isAdmin && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">Canonical Names</h3>
+                  <CanonicalPromotionConsole />
+                </div>
+              )}
+              <div>
+                <div className="flex items-center gap-2 mb-4">
+                  <h3 className="text-lg font-semibold">Pending Approvals</h3>
+                  {totalPendingCount > 0 && (
+                    <Badge variant="destructive">
+                      {totalPendingCount}
+                    </Badge>
+                  )}
+                </div>
+                <div className="space-y-8">
+                  <div className="space-y-4">
+                    <h4 className="text-base font-semibold">
+                      Pending Projects ({pendingProjects.length})
+                    </h4>
 
-                <div className="space-y-4">
-                  <h4 className="text-base font-semibold">
-                    Pending Employers ({pendingEmployers.length})
-                  </h4>
-                  
-                  {/* Duplicate Detection */}
-                  <PendingEmployerDuplicateDetector
-                    pendingCount={pendingEmployers.length}
-                    onMergeComplete={fetchPendingItems}
-                  />
-                  
-                  {/* Enhanced Pending Employers Table */}
-                  <PendingEmployersTable
-                    employers={pendingEmployers}
-                    onRefresh={fetchPendingItems}
-                  />
+                    {/* Duplicate Detection */}
+                    <PendingProjectDuplicateDetector
+                      pendingCount={pendingProjects.length}
+                      onMergeComplete={fetchPendingItems}
+                    />
+
+                    {/* Pending Projects Table */}
+                    <PendingProjectsTable
+                      projects={pendingProjects}
+                      onApprove={handleApproveProject}
+                      onReject={handleRejectProject}
+                      onRefresh={fetchPendingItems}
+                    />
+                  </div>
+
+                  <div className="space-y-4">
+                    <h4 className="text-base font-semibold">
+                      Pending Employers ({pendingEmployers.length})
+                    </h4>
+                    
+                    {/* Duplicate Detection */}
+                    <PendingEmployerDuplicateDetector
+                      pendingCount={pendingEmployers.length}
+                      onMergeComplete={fetchPendingItems}
+                    />
+                    
+                    {/* Enhanced Pending Employers Table */}
+                    <PendingEmployersTable
+                      employers={pendingEmployers}
+                      onRefresh={fetchPendingItems}
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
+            </Suspense>
           </TabsContent>
 
           {/* Patch Management Group */}
           <TabsContent value="patch-management" className="space-y-8">
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Patches</h3>
-              <PatchManager />
-            </div>
-            {isAdmin && (
+            <Suspense fallback={<TabLoadingState />}>
               <div>
-                <h3 className="text-lg font-semibold mb-4">Spatial Assignment</h3>
-                <SpatialAssignmentTool />
+                <h3 className="text-lg font-semibold mb-4">Patches</h3>
+                <PatchManager />
               </div>
-            )}
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Scoping</h3>
-              <OrganiserScopeManager />
-            </div>
+              {isAdmin && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">Spatial Assignment</h3>
+                  <SpatialAssignmentTool />
+                </div>
+              )}
+              <div>
+                <h3 className="text-lg font-semibold mb-4">Scoping</h3>
+                <OrganiserScopeManager />
+              </div>
+            </Suspense>
           </TabsContent>
 
           {/* Standalone Tabs */}
           <TabsContent value="data-management" className="space-y-8">
-            <DataUploadTab />
-            <BatchesManagement />
-            <DuplicateEmployerManager />
-            {isAdmin && (
-              <div>
-                <h3 className="text-lg font-semibold mb-4">Key Contractor Trades</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Manage which trades are prioritized across the system.{' '}
-                  <Button
-                    variant="link"
-                    className="p-0 h-auto"
-                    onClick={() => window.location.href = '/admin/key-trades'}
-                  >
-                    Open Key Trades Manager →
-                  </Button>
-                </p>
-              </div>
-            )}
+            <Suspense fallback={<TabLoadingState />}>
+              <DataUploadTab />
+              <BatchesManagement />
+              <DuplicateEmployerManager />
+              {isAdmin && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">Key Contractor Trades</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Manage which trades are prioritized across the system.{' '}
+                    <Button
+                      variant="link"
+                      className="p-0 h-auto"
+                      onClick={() => window.location.href = '/admin/key-trades'}
+                    >
+                      Open Key Trades Manager →
+                    </Button>
+                  </p>
+                </div>
+              )}
+            </Suspense>
           </TabsContent>
           {isAdmin && (
             <>
               <TabsContent value="navigation">
-                <NavigationVisibilityManager />
+                <Suspense fallback={<TabLoadingState />}>
+                  <NavigationVisibilityManager />
+                </Suspense>
               </TabsContent>
               <TabsContent value="system-health">
-                <SystemHealthDashboard />
+                <Suspense fallback={<TabLoadingState />}>
+                  <SystemHealthDashboard />
+                </Suspense>
               </TabsContent>
             </>
           )}
           </Tabs>
         )}
 
-        <InviteUserDialog open={open} onOpenChange={setOpen} onSuccess={() => {}} />
-        {isAdmin && <AddressLookupDialog open={lookupOpen} onOpenChange={setLookupOpen} />}
-        <AddDraftUserDialog open={addDraftOpen} onOpenChange={setAddDraftOpen} onSuccess={() => {}} />
+        <Suspense fallback={null}>
+          <InviteUserDialog open={open} onOpenChange={setOpen} onSuccess={() => {}} />
+          {isAdmin && <AddressLookupDialog open={lookupOpen} onOpenChange={setLookupOpen} />}
+          <AddDraftUserDialog open={addDraftOpen} onOpenChange={setAddDraftOpen} onSuccess={() => {}} />
+        </Suspense>
       </div>
     </RoleGuard>
   )

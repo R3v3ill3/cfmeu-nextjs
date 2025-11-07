@@ -5,6 +5,7 @@ import { withTimeout, isDatabaseTimeoutError } from '@/lib/query-timeout';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 20; // Vercel timeout limit
+export const revalidate = 60; // Cache for 60 seconds
 
 type TrafficLightRating = 'red' | 'amber' | 'yellow' | 'green';
 type EbaStatusFilter = 'all' | 'active' | 'inactive' | 'unknown';

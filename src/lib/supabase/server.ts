@@ -43,7 +43,14 @@ export async function createServerSupabase(): Promise<SupabaseClient<Database>> 
         },
         set(name: string, value: string, options: CookieOptions) {
           try {
-            cookieStore.set({ name, value, ...options, path: '/' })
+            cookieStore.set({ 
+              name, 
+              value, 
+              ...options, 
+              path: '/',
+              sameSite: 'lax',
+              secure: process.env.NODE_ENV === 'production',
+            })
           } catch {}
         },
         remove(name: string, options: CookieOptions) {

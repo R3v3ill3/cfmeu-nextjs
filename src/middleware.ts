@@ -6,6 +6,47 @@ export async function middleware(req: NextRequest) {
     request: req,
   })
 
+  // Skip auth check for public routes to improve performance
+  const publicPaths = ['/auth', '/auth/reset-password', '/auth/confirm', '/manifest.json', '/favicon.ico']
+  const isPublicPath = publicPaths.some(path => req.nextUrl.pathname.startsWith(path))
+  
+  if (isPublicPath) {
+    // Still need to set up Supabase client for cookie handling, but skip auth check
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return req.cookies.getAll()
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value }) => req.cookies.set(name, value))
+            supabaseResponse = NextResponse.next({
+              request: req,
+            })
+            cookiesToSet.forEach(({ name, value, options }) =>
+              supabaseResponse.cookies.set(name, value, {
+                ...options,
+                path: '/',
+                sameSite: 'lax',
+                secure: process.env.NODE_ENV === 'production',
+              })
+            )
+          },
+        },
+      }
+    )
+    // Generate nonce and set CSP even for public routes
+    const nonce = Buffer.from(crypto.randomUUID()).toString('base64')
+    const requestHeaders = new Headers(req.headers)
+    requestHeaders.set('x-nonce', nonce)
+    supabaseResponse.headers.set('x-nonce', nonce)
+    const csp = buildCSP(nonce)
+    supabaseResponse.headers.set('Content-Security-Policy', csp)
+    return supabaseResponse
+  }
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -20,7 +61,12 @@ export async function middleware(req: NextRequest) {
             request: req,
           })
           cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
+            supabaseResponse.cookies.set(name, value, {
+              ...options,
+              path: '/',
+              sameSite: 'lax',
+              secure: process.env.NODE_ENV === 'production',
+            })
           )
         },
       },
@@ -35,27 +81,23 @@ export async function middleware(req: NextRequest) {
   } = await supabase.auth.getUser()
   const authDuration = Date.now() - authStartTime;
 
-  const timestamp = new Date().toISOString();
-  const logData = {
-    path: req.nextUrl.pathname,
-    userId: user?.id || null,
-    hasSession: !!user,
-    authDuration,
-    timestamp,
-    method: req.method,
-  };
-
+  // Only log errors and slow auth checks (>200ms) to reduce noise
   if (authError) {
     console.error('[Middleware] Auth error:', {
-      ...logData,
+      path: req.nextUrl.pathname,
       error: authError,
       errorMessage: authError.message,
       errorCode: authError.status,
+      authDuration,
+      timestamp: new Date().toISOString(),
     });
-  } else if (!user) {
-    console.warn('[Middleware] No authenticated user', logData);
-  } else {
-    console.log('[Middleware] Auth user:', `User ${user.id}`, logData);
+  } else if (authDuration > 200) {
+    console.warn('[Middleware] Slow auth check:', {
+      path: req.nextUrl.pathname,
+      userId: user?.id || null,
+      authDuration,
+      timestamp: new Date().toISOString(),
+    });
   }
   
   // Generate a cryptographically secure nonce for CSP
