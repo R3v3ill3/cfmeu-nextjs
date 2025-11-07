@@ -19,7 +19,8 @@ export interface AccessiblePatchesResult {
 /**
  * Resolve the set of patches the current viewer can access based on role.
  *
- * - organisers: patches directly assigned to them
+ * - organisers: patches directly assigned to them *and* patches assigned to other organisers
+ *   under the same lead organiser (including draft/pending organisers)
  * - lead organisers: patches directly assigned *and* patches assigned to their organisers
  * - admins: all active geo/fallback patches
  */
@@ -69,21 +70,144 @@ export function useAccessiblePatches(): AccessiblePatchesResult {
       }
 
       if (role === "organiser") {
-        const { data: assignments, error } = await (supabase as any)
+        const patchMap = new Map<string, string>()
+
+        // 1. Get organiser's own patches
+        const { data: ownAssignments, error: ownError } = await (supabase as any)
           .from("organiser_patch_assignments")
           .select("patches:patch_id(id,name)")
           .eq("organiser_id", userId)
           .is("effective_to", null)
 
-        if (error) throw error
+        if (ownError) {
+          console.error("Error fetching organiser's own patches:", ownError)
+          // Return empty patches rather than throwing to prevent page crash
+          return { role, patches: [] }
+        }
 
-        const patches = ((assignments as any[]) || [])
-          .map((row: any) => row.patches)
+        const pushPatch = (patch: any) => {
+          if (!patch) return
+          const id = String(patch.id)
+          if (!patchMap.has(id)) {
+            patchMap.set(id, patch.name || id)
+          }
+        }
+
+        // Add organiser's own patches
+        ((ownAssignments as any[]) || []).forEach((row: any) => pushPatch(row.patches))
+
+        // 2. Find lead organiser(s) indirectly via lead_organiser_patch_assignments
+        // Get patches assigned to this organiser, then find which lead organisers manage those patches
+        const organiserPatchIds = ((ownAssignments as any[]) || [])
+          .map((row: any) => row.patches?.id)
           .filter(Boolean)
-          .map((patch: any) => ({
-            id: String(patch.id),
-            name: patch.name || String(patch.id)
-          }))
+          .map((id: any) => String(id))
+
+        let leadOrganiserIds: string[] = []
+
+        if (organiserPatchIds.length > 0) {
+          // Find lead organisers who manage these patches
+          const { data: leadPatchAssignments, error: leadPatchError } = await (supabase as any)
+            .from("lead_organiser_patch_assignments")
+            .select("lead_organiser_id")
+            .in("patch_id", organiserPatchIds)
+            .is("effective_to", null)
+
+          if (leadPatchError) {
+            // Don't throw - might not have access or no lead organisers assigned
+            console.warn("Could not fetch lead organiser patch assignments:", leadPatchError)
+          } else {
+            leadOrganiserIds = ((leadPatchAssignments as any[]) || [])
+              .map((row: any) => row.lead_organiser_id)
+              .filter(Boolean)
+              .map((id: any) => String(id))
+            leadOrganiserIds = [...new Set(leadOrganiserIds)] // Remove duplicates
+          }
+        }
+
+        if (leadOrganiserIds.length > 0) {
+          // 3. Get all patches managed by these lead organisers (includes team patches)
+          const { data: leadPatches, error: leadPatchesError } = await (supabase as any)
+            .from("lead_organiser_patch_assignments")
+            .select("patches:patch_id(id,name)")
+            .in("lead_organiser_id", leadOrganiserIds)
+            .is("effective_to", null)
+
+          if (leadPatchesError) {
+            console.warn("Could not fetch lead organiser patches:", leadPatchesError)
+          } else {
+            // Add all patches managed by the lead organisers (this includes team patches)
+            ((leadPatches as any[]) || []).forEach((row: any) => pushPatch(row.patches))
+          }
+
+          // 4. Also try to get draft/pending organisers' patches via lead_draft_organiser_links
+          // Note: This might fail due to RLS, but we'll handle it gracefully
+          try {
+            const { data: draftLinks, error: draftLinksError } = await (supabase as any)
+              .from("lead_draft_organiser_links")
+              .select("pending_user_id")
+              .in("lead_user_id", leadOrganiserIds)
+              .eq("is_active", true)
+
+            if (!draftLinksError && draftLinks) {
+              const draftOrganiserIds = ((draftLinks as any[]) || [])
+                .map((row: any) => row.pending_user_id)
+                .filter(Boolean)
+                .map((id: any) => String(id))
+
+              if (draftOrganiserIds.length > 0) {
+                // Get patches from pending_users assigned_patch_ids
+                const { data: pendingUsers, error: pendingUsersError } = await (supabase as any)
+                  .from("pending_users")
+                  .select("assigned_patch_ids")
+                  .in("id", draftOrganiserIds)
+                  .in("status", ["draft", "invited"])
+
+                if (!pendingUsersError && pendingUsers) {
+                  const pendingPatchIds = ((pendingUsers as any[]) || [])
+                    .flatMap((user: any) => {
+                      const assigned = Array.isArray(user.assigned_patch_ids) ? user.assigned_patch_ids : []
+                      return assigned.map(String).filter(Boolean)
+                    })
+
+                  if (pendingPatchIds.length > 0) {
+                    const { data: pendingPatches, error: pendingPatchesError } = await (supabase as any)
+                      .from("patches")
+                      .select("id, name")
+                      .in("id", pendingPatchIds)
+
+                    if (!pendingPatchesError && pendingPatches) {
+                      ((pendingPatches as any[]) || []).forEach((patch: any) => pushPatch(patch))
+                    }
+                  }
+                }
+              }
+            }
+          } catch (error) {
+            // Silently fail - draft links might not be accessible due to RLS
+            console.warn("Could not fetch draft organiser links:", error)
+          }
+        }
+
+        // Get organiser's own patch IDs to prioritize them
+        const ownPatchIds = new Set(
+          (Array.isArray(ownAssignments) ? ownAssignments : [])
+            .map((row: any) => row?.patches?.id)
+            .filter(Boolean)
+            .map((id: any) => String(id))
+        )
+
+        // Sort patches: own patches first, then team patches, both alphabetically
+        const patches = Array.from(patchMap.entries())
+          .map(([id, name]) => ({ id, name, isOwn: ownPatchIds.has(id) }))
+          .sort((a, b) => {
+            // Own patches first
+            if (a.isOwn && !b.isOwn) return -1
+            if (!a.isOwn && b.isOwn) return 1
+            // Then alphabetically
+            return a.name.localeCompare(b.name)
+          })
+          .map(({ id, name }) => ({ id, name }))
 
         return { role, patches }
       }

@@ -277,23 +277,37 @@ export function GoogleAddressInput({
     setText(newText);
     lastFromAutocomplete.current = false;
 
-    // For immediate feedback on manual entry (when not selecting from autocomplete)
+    // For search contexts (requireSelection=false), don't call onChange on typing
+    // Only trigger onChange when user selects from autocomplete dropdown
+    // This prevents errors about missing coordinates while typing
+    if (requireSelection === false) {
+      // Don't call onChange on every keystroke for search - only on selection
+      return;
+    }
+
+    // For form contexts (requireSelection=true), provide immediate feedback
     if (!selectingFromList.current) {
       const addr: GoogleAddress = { formatted: newText };
       const error = performValidation(addr);
       onChangeRef.current?.(addr, error);
     }
-  }, [performValidation]);
+  }, [requireSelection, performValidation]);
 
   // Handle input blur with mobile optimization
   const handleInputBlur = useCallback(() => {
-    // Trigger validation on blur if touched
+    // For search contexts (requireSelection=false), don't trigger onChange on blur
+    // Only trigger onChange when user explicitly selects from autocomplete
+    if (!requireSelection) {
+      return;
+    }
+    
+    // For form contexts, trigger validation on blur if touched
     if (touched && text) {
       const addr: GoogleAddress = { formatted: text };
       const error = performValidation(addr);
       onChangeRef.current?.(addr, error);
     }
-  }, [touched, text, performValidation]);
+  }, [touched, text, performValidation, requireSelection]);
 
   useEffect(() => {
     setText(value || "");
@@ -327,12 +341,22 @@ export function GoogleAddressInput({
       });
 
       placeListenerRef.current = autocompleteRef.current.addListener("place_changed", () => {
+        console.log('[GoogleAddressInput] place_changed event fired');
         const ac = autocompleteRef.current;
-        if (!ac) return;
+        if (!ac) {
+          console.log('[GoogleAddressInput] No autocomplete ref');
+          return;
+        }
         const place = ac.getPlace();
+        console.log('[GoogleAddressInput] Place data:', { 
+          has_place_id: !!place.place_id, 
+          has_geometry: !!place.geometry,
+          formatted_address: place.formatted_address 
+        });
 
         // Check if a valid place was selected
         if (!place.place_id) {
+          console.log('[GoogleAddressInput] No place_id, using current value');
           const currentValue = inputRef.current?.value || "";
           const addr: GoogleAddress = { formatted: currentValue };
           const error = performValidation(addr);
@@ -348,6 +372,8 @@ export function GoogleAddressInput({
         const lat = place.geometry?.location?.lat?.();
         const lng = place.geometry?.location?.lng?.();
 
+        console.log('[GoogleAddressInput] Extracted coordinates:', { lat, lng, formatted });
+
         lastFromAutocomplete.current = true;
         setTouched(true);
 
@@ -359,7 +385,10 @@ export function GoogleAddressInput({
 
         const addr: GoogleAddress = { formatted, components, place_id: place.place_id, lat, lng };
 
-        console.debug?.("GoogleAddressInput place_changed", { formatted, place_id: place.place_id, lat, lng });
+        console.log('[GoogleAddressInput] Calling onChange with:', { 
+          hasCoordinates: !!(lat && lng), 
+          place_id: place.place_id 
+        });
 
         // Perform validation and pass result to onChange
         const error = performValidation(addr);

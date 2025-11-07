@@ -8,6 +8,9 @@ import { FilterIndicatorBadge } from "@/components/dashboard/FilterIndicatorBadg
 import { useActiveFilters } from "@/hooks/useActiveFilters"
 import { Crown, TrendingUp, TrendingDown, CheckCircle, AlertTriangle } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/hooks/useAuth"
+import { useQuery } from "@tanstack/react-query"
+import { supabase } from "@/integrations/supabase/client"
 
 interface PatchScorecardsProps {
   patchIds?: string[]
@@ -101,7 +104,32 @@ function BulletMetric({
 
 export function PatchScorecards({ patchIds: _patchIds = [] }: PatchScorecardsProps) {
   const { hasActiveFilters, activeFilters } = useActiveFilters()
+  const { user } = useAuth()
+
+  // Get user role to determine if they can access lead organizer summaries
+  const { data: userRole } = useQuery({
+    queryKey: ["user-role", user?.id],
+    enabled: !!user?.id,
+    staleTime: 60_000,
+    queryFn: async () => {
+      if (!user?.id) return null
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single()
+      return profile?.role as string | null
+    }
+  })
+
+  // Only fetch lead summaries for admin and lead_organiser roles
+  const shouldFetchSummaries = userRole === "admin" || userRole === "lead_organiser"
   const { data: allLeadSummaries, isLoading, error } = useAllLeadOrganizerSummaries()
+
+  // If user is not admin or lead_organiser, don't render this component
+  if (!shouldFetchSummaries) {
+    return null
+  }
 
   const metricIndicatorClasses = {
     knownBuilders: "bg-blue-600",

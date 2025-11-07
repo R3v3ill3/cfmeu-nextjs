@@ -35,12 +35,25 @@ export function useAddressSearch({
   maxResults = 10,
   maxDistanceKm = 100
 }: UseAddressSearchParams) {
+  console.log('[useAddressSearch] Hook called with:', { lat, lng, address, enabled, maxResults, maxDistanceKm })
+  
   return useQuery<NearbyProject[]>({
     queryKey: ['address-search', lat, lng, address, maxResults, maxDistanceKm],
     queryFn: async () => {
+      console.log('[useAddressSearch] Query function executing...')
+      
       if (lat === null || lng === null) {
+        console.error('[useAddressSearch] Missing coordinates', { lat, lng })
         throw new Error('Coordinates are required')
       }
+
+      console.log('[useAddressSearch] Calling find_nearby_projects RPC', {
+        search_lat: lat,
+        search_lng: lng,
+        search_address: address,
+        max_results: maxResults,
+        max_distance_km: maxDistanceKm
+      })
 
       const { data, error } = await (supabase.rpc as any)('find_nearby_projects', {
         search_lat: lat,
@@ -51,10 +64,11 @@ export function useAddressSearch({
       })
 
       if (error) {
-        console.error('Address search error:', error)
+        console.error('[useAddressSearch] RPC error:', error)
         throw error
       }
 
+      console.log('[useAddressSearch] RPC success, results:', data?.length || 0, 'projects')
       return (data || []) as NearbyProject[]
     },
     enabled: enabled && lat !== null && lng !== null,

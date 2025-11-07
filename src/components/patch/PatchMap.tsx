@@ -47,46 +47,109 @@ export function PatchMap({ patchId, height = '400px' }: PatchMapProps) {
   });
 
   // Fetch job sites within this patch
-  const { data: jobSites = [] } = useQuery({
+  // Use a simpler approach: query job_sites directly filtered by patch_id to avoid RLS issues with nested selects
+  const { data: jobSites = [], error: jobSitesError } = useQuery({
     queryKey: ['patch-job-sites', patchId],
+    enabled: !!patchId,
     queryFn: async () => {
-      const { data, error } = await supabase
+      // First, try to get job sites via patch_job_sites (simpler query without nested selects)
+      const { data: patchJobSites, error: patchError } = await supabase
         .from('patch_job_sites')
-        .select(`
-          job_site_id,
-          job_sites:job_site_id (
-            id,
-            name,
-            latitude,
-            longitude,
-            project_id,
-            projects:project_id (
-              id,
-              name
-            )
-          )
-        `)
+        .select('job_site_id')
         .eq('patch_id', patchId)
         .is('effective_to', null);
 
-      if (error) throw error;
-      
-      return (data || [])
-        .map((item: any) => {
-          const site = item.job_sites;
-          const project = site?.projects;
-          if (!site || !site.latitude || !site.longitude) return null;
+      if (patchError) {
+        console.warn('Could not fetch patch_job_sites:', patchError);
+        // Fallback: try querying job_sites directly by patch_id
+        const { data: directSites, error: directError } = await supabase
+          .from('job_sites')
+          .select('id, name, latitude, longitude, project_id')
+          .eq('patch_id', patchId)
+          .not('latitude', 'is', null)
+          .not('longitude', 'is', null);
+
+        if (directError) {
+          console.warn('Could not fetch job sites directly:', directError);
+          return [];
+        }
+
+        // Get project names for these sites
+        const projectIds = (directSites || [])
+          .map((s: any) => s.project_id)
+          .filter(Boolean);
+        
+        let projectMap = new Map<string, string>();
+        if (projectIds.length > 0) {
+          const { data: projects } = await supabase
+            .from('projects')
+            .select('id, name')
+            .in('id', projectIds);
           
-          return {
-            id: site.id,
-            name: site.name,
-            lat: site.latitude,
-            lng: site.longitude,
-            project_id: project?.id || '',
-            project_name: project?.name || 'Unknown Project'
-          } as JobSiteMarker;
-        })
-        .filter(Boolean) as JobSiteMarker[];
+          if (projects) {
+            projects.forEach((p: any) => {
+              projectMap.set(String(p.id), p.name || 'Unknown Project');
+            });
+          }
+        }
+
+        return (directSites || []).map((site: any) => ({
+          id: site.id,
+          name: site.name,
+          lat: site.latitude,
+          lng: site.longitude,
+          project_id: site.project_id || '',
+          project_name: projectMap.get(String(site.project_id)) || 'Unknown Project'
+        })) as JobSiteMarker[];
+      }
+
+      // If patch_job_sites query succeeded, get the job site IDs
+      const jobSiteIds = (patchJobSites || [])
+        .map((item: any) => item.job_site_id)
+        .filter(Boolean);
+
+      if (jobSiteIds.length === 0) return [];
+
+      // Query job_sites directly (simpler, avoids nested RLS issues)
+      const { data: sites, error: sitesError } = await supabase
+        .from('job_sites')
+        .select('id, name, latitude, longitude, project_id')
+        .in('id', jobSiteIds)
+        .not('latitude', 'is', null)
+        .not('longitude', 'is', null);
+
+      if (sitesError) {
+        console.warn('Could not fetch job sites:', sitesError);
+        return [];
+      }
+
+      // Get project names separately to avoid nested select RLS issues
+      const projectIds = (sites || [])
+        .map((s: any) => s.project_id)
+        .filter(Boolean);
+      
+      let projectMap = new Map<string, string>();
+      if (projectIds.length > 0) {
+        const { data: projects } = await supabase
+          .from('projects')
+          .select('id, name')
+          .in('id', projectIds);
+        
+        if (projects) {
+          projects.forEach((p: any) => {
+            projectMap.set(String(p.id), p.name || 'Unknown Project');
+          });
+        }
+      }
+
+      return (sites || []).map((site: any) => ({
+        id: site.id,
+        name: site.name,
+        lat: site.latitude,
+        lng: site.longitude,
+        project_id: site.project_id || '',
+        project_name: projectMap.get(String(site.project_id)) || 'Unknown Project'
+      })) as JobSiteMarker[];
     }
   });
 
@@ -108,9 +171,19 @@ export function PatchMap({ patchId, height = '400px' }: PatchMapProps) {
       <Card>
         <CardContent className="p-6 text-center">
           <p className="text-red-600">Failed to load patch map</p>
+          {error && (
+            <p className="text-sm text-muted-foreground mt-2">
+              {error instanceof Error ? error.message : 'Unknown error'}
+            </p>
+          )}
         </CardContent>
       </Card>
     );
+  }
+
+  // Log job sites error but don't block rendering
+  if (jobSitesError) {
+    console.warn('Could not load job sites for map:', jobSitesError);
   }
 
   if (!patch.geom) {
@@ -145,7 +218,8 @@ export function PatchMap({ patchId, height = '400px' }: PatchMapProps) {
     id: site.project_id,
     name: `${site.project_name} - ${site.name}`,
     lat: site.lat,
-    lng: site.lng
+    lng: site.lng,
+    color: '#3B82F6' // Blue color for project markers to ensure visibility
   }));
 
   const handleProjectClick = (projectId: string) => {

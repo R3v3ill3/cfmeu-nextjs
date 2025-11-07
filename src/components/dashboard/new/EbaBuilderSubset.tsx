@@ -10,6 +10,7 @@ import { useActiveFilters } from "@/hooks/useActiveFilters"
 import { Shield } from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
+import { getProjectIdsForPatches } from "@/lib/patch-filtering"
 
 interface EbaBuilderSubsetProps {
   patchIds?: string[]
@@ -54,20 +55,16 @@ export function EbaBuilderSubset({ patchIds = [] }: EbaBuilderSubsetProps) {
 
       try {
         // First, get project IDs (with patch filtering if needed)
-      let projectIds: string[] | null = null
+        // Use the patch filtering helper to avoid RLS recursion issues
+        let projectIds: string[] | null = null
       
-      if (patchIds.length > 0) {
-        const { data: jobSites } = await supabase
-          .from('job_sites')
-          .select('project_id')
-          .in('patch_id', patchIds)
-
-        if (jobSites && jobSites.length > 0) {
-          projectIds = [...new Set(jobSites.map(js => js.project_id))]
-        } else {
-          return []
+        if (patchIds.length > 0) {
+          projectIds = await getProjectIdsForPatches(supabase, patchIds)
+          
+          if (!projectIds || projectIds.length === 0) {
+            return []
+          }
         }
-      }
 
       // Get projects with their tier
       let projectsQuery = supabase

@@ -42,7 +42,8 @@ export default function PatchPage() {
 
   const defaultPatchId = useMemo(() => {
     if (patchIdFromQuery) return patchIdFromQuery
-    if (patches.length === 1) return patches[0].id
+    // Auto-select first patch if available (for organisers, this will be their primary patch)
+    if (patches.length > 0) return patches[0].id
     return null
   }, [patchIdFromQuery, patches])
 
@@ -109,7 +110,7 @@ export default function PatchPage() {
     dir
   }
 
-  const disablePatchSelect = role === "organiser" || patchOptions.length <= 1
+  const disablePatchSelect = patchOptions.length <= 1
 
   const { data: patchInfo } = usePatchInfo(selectedPatchId ?? undefined)
 

@@ -33,7 +33,7 @@ import { LoadingSpinner } from "@/components/ui/LoadingSpinner"
 import { OrganizingUniverseBadge } from "@/components/ui/OrganizingUniverseBadge"
 import Link from "next/link"
 import { useNavigationLoading } from "@/hooks/useNavigationLoading"
-import { GoogleAddressInput, GoogleAddress } from "@/components/projects/GoogleAddressInput"
+import { GoogleAddressInput, GoogleAddress, AddressValidationError } from "@/components/projects/GoogleAddressInput"
 import { useAddressSearch } from "@/hooks/useAddressSearch"
 import { AddressSearchResults } from "@/components/projects/AddressSearchResults"
 import { toast } from "sonner"
@@ -295,8 +295,10 @@ export function ProjectsMobileView() {
     router.replace(qs ? `${pathname}?${qs}` : pathname)
   }, [pathname, router, sp])
 
-  const handleAddressSelect = useCallback((address: GoogleAddress) => {
+  const handleAddressSelect = useCallback((address: GoogleAddress, error?: AddressValidationError | null) => {
+    console.log('[Address Search Mobile] handleAddressSelect called', { address, error, hasCoordinates: !!(address.lat && address.lng) })
     if (address.lat && address.lng) {
+      console.log('[Address Search Mobile] Setting URL params', { lat: address.lat, lng: address.lng, formatted: address.formatted })
       const params = new URLSearchParams(sp.toString())
       params.set("searchMode", "address")
       params.set("addressLat", address.lat.toString())
@@ -306,6 +308,8 @@ export function ProjectsMobileView() {
       params.delete('page')
       const qs = params.toString()
       router.replace(qs ? `${pathname}?${qs}` : pathname)
+    } else {
+      console.log('[Address Search Mobile] No coordinates available, search will not execute')
     }
   }, [pathname, router, sp])
 
@@ -531,6 +535,7 @@ export function ProjectsMobileView() {
             onChange={handleAddressSelect}
             placeholder="Enter an address..."
             showLabel={false}
+            requireSelection={false}
           />
         </TabsContent>
       </Tabs>

@@ -226,6 +226,12 @@ export function useAllLeadOrganizerSummaries() {
 
       const viewerRole = viewerProfile?.role || 'admin'
 
+      // Only admin and lead_organiser can view all lead organizer summaries
+      // Organisers don't have permission to query all lead organisers
+      if (viewerRole !== 'admin' && viewerRole !== 'lead_organiser') {
+        return []
+      }
+
       // Get both confirmed and draft lead organizers
       const [confirmedLeadsResult, draftLeadsResult] = await Promise.all([
         supabase
