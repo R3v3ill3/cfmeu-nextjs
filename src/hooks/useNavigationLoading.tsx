@@ -18,6 +18,8 @@ export function NavigationLoadingProvider({ children }: { children: ReactNode })
   const [targetPath, setTargetPath] = useState<string | null>(null)
   const pathname = usePathname()
   const cancelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const navigationStartTimeRef = useRef<number | null>(null)
+  const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Clear navigation loading when pathname changes
   useEffect(() => {
@@ -27,21 +29,48 @@ export function NavigationLoadingProvider({ children }: { children: ReactNode })
       
       // Check if the current pathname matches the target (with or without query params)
       if (pathname === targetBasePath || pathname === targetPath) {
-        // Add small delay to ensure smooth transition
-        const timer = setTimeout(() => {
+        // Clear any existing clear timer
+        if (clearTimerRef.current) {
+          clearTimeout(clearTimerRef.current)
+        }
+
+        // Calculate how long we've been navigating
+        const navigationDuration = navigationStartTimeRef.current 
+          ? Date.now() - navigationStartTimeRef.current 
+          : 0
+        
+        // Minimum display time to ensure smooth transition (800ms)
+        // This ensures the overlay stays visible long enough for the page to actually render
+        const MIN_DISPLAY_TIME = 800
+        const remainingTime = Math.max(0, MIN_DISPLAY_TIME - navigationDuration)
+        
+        // Add a small additional delay to allow React to render the new page content
+        const RENDER_DELAY = 200
+        const totalDelay = remainingTime + RENDER_DELAY
+
+        // Set timer to clear loading state after minimum display time + render delay
+        clearTimerRef.current = setTimeout(() => {
           setIsNavigating(false)
           setTargetPath(null)
+          navigationStartTimeRef.current = null
           if (cancelTimerRef.current) {
             clearTimeout(cancelTimerRef.current)
             cancelTimerRef.current = null
           }
-        }, 150)
+          clearTimerRef.current = null
+        }, totalDelay)
         
-        return () => clearTimeout(timer)
+        return () => {
+          if (clearTimerRef.current) {
+            clearTimeout(clearTimerRef.current)
+            clearTimerRef.current = null
+          }
+        }
       }
     }
   }, [pathname, isNavigating, targetPath])
 
+  // Safety timeout: clear loading state after 8 seconds to prevent infinite loading
   useEffect(() => {
     if (isNavigating) {
       if (cancelTimerRef.current) {
@@ -50,7 +79,12 @@ export function NavigationLoadingProvider({ children }: { children: ReactNode })
       cancelTimerRef.current = setTimeout(() => {
         setIsNavigating(false)
         setTargetPath(null)
+        navigationStartTimeRef.current = null
         cancelTimerRef.current = null
+        if (clearTimerRef.current) {
+          clearTimeout(clearTimerRef.current)
+          clearTimerRef.current = null
+        }
       }, 8000)
       return () => {
         if (cancelTimerRef.current) {
@@ -58,12 +92,23 @@ export function NavigationLoadingProvider({ children }: { children: ReactNode })
           cancelTimerRef.current = null
         }
       }
+    } else {
+      // Reset navigation start time when not navigating
+      navigationStartTimeRef.current = null
+      if (clearTimerRef.current) {
+        clearTimeout(clearTimerRef.current)
+        clearTimerRef.current = null
+      }
     }
 
     return () => {
       if (cancelTimerRef.current) {
         clearTimeout(cancelTimerRef.current)
         cancelTimerRef.current = null
+      }
+      if (clearTimerRef.current) {
+        clearTimeout(clearTimerRef.current)
+        clearTimerRef.current = null
       }
     }
   }, [isNavigating])
@@ -75,6 +120,8 @@ export function NavigationLoadingProvider({ children }: { children: ReactNode })
 
     // Only start navigation if actually changing pages (ignore query param changes on same page)
     if (currentBasePath !== targetBasePath) {
+      // Track when navigation starts for minimum display time calculation
+      navigationStartTimeRef.current = Date.now()
       setTargetPath(path)
       setIsNavigating(true)
     }
@@ -83,12 +130,23 @@ export function NavigationLoadingProvider({ children }: { children: ReactNode })
   // Direct method to set loading state (for page-level loading that bypasses navigation logic)
   const setNavigationLoading = (loading: boolean, path?: string) => {
     setIsNavigating(loading)
+    if (loading) {
+      navigationStartTimeRef.current = Date.now()
+    } else {
+      navigationStartTimeRef.current = null
+    }
     if (path) {
       setTargetPath(path)
     }
-    if (!loading && cancelTimerRef.current) {
-      clearTimeout(cancelTimerRef.current)
-      cancelTimerRef.current = null
+    if (!loading) {
+      if (cancelTimerRef.current) {
+        clearTimeout(cancelTimerRef.current)
+        cancelTimerRef.current = null
+      }
+      if (clearTimerRef.current) {
+        clearTimeout(clearTimerRef.current)
+        clearTimerRef.current = null
+      }
     }
   }
 

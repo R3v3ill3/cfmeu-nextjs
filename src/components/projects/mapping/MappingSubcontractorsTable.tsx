@@ -620,7 +620,9 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
     if (isLoading) {
       return (
         <>
-          <tr><td colSpan={4} className="font-semibold pt-3">{title}</td></tr>
+          <TableRow>
+            <TableCell colSpan={4} className="font-semibold pt-3">{title}</TableCell>
+          </TableRow>
           <TableRow>
             <TableCell colSpan={4} className="text-center py-4 text-muted-foreground">
               Loading {title.toLowerCase()} assignments...
@@ -632,7 +634,9 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
     
     return (
       <>
-        <tr><td colSpan={5} className="font-semibold pt-3">{title}</td></tr>
+        <TableRow>
+          <TableCell colSpan={5} className="font-semibold pt-3">{title}</TableCell>
+        </TableRow>
         {tradesForStage.map(trade => {
           const assignments = filteredRowsByTrade[trade.value] || [];
           if (assignments.length === 0) return null;
@@ -832,7 +836,11 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
               </TableRow>
             </TableHeader>
             <TableBody>
-              {getAllStages().map(stage => renderSection(getStageLabel(stage), stage))}
+              {getAllStages().map(stage => (
+                <React.Fragment key={stage}>
+                  {renderSection(getStageLabel(stage), stage)}
+                </React.Fragment>
+              ))}
             </TableBody>
           </Table>
         </div>
