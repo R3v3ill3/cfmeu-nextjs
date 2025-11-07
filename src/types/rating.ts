@@ -107,6 +107,10 @@ export interface RatingCalculationResult {
     weighting_used: string
   }
   calculated_at: string
+  // Sham contracting hard block
+  sham_contracting_block?: boolean
+  sham_contracting_reason?: string
+  original_rating?: TrafficLightRating // Rating before sham contracting cap applied
 }
 
 // Factor breakdown for detailed rating explanation

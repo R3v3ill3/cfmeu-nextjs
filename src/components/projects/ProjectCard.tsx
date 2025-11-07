@@ -11,6 +11,10 @@ import { Button } from "@/components/ui/button"
 import { useNavigationLoading } from "@/hooks/useNavigationLoading"
 import { useRouter } from "next/navigation"
 import { RatingDisplay } from "@/components/ratings/RatingDisplay"
+import { ProjectKeyContractorMetrics } from "./ProjectKeyContractorMetrics"
+import { useProjectKeyContractorMetrics } from "@/hooks/useProjectKeyContractorMetrics"
+import { useProjectAuditTarget } from "@/hooks/useProjectAuditTarget"
+import { useMemo } from "react"
 
 export type ProjectCardData = {
   id: string;
@@ -27,6 +31,16 @@ export type ProjectCardData = {
     id: string;
     name: string;
     assignment_type: string;
+    enterprise_agreement_status?: boolean | null;
+  }>;
+  // Optional project assignments for target calculation
+  project_assignments?: Array<{
+    assignment_type: string;
+    employer_id: string;
+    contractor_role_types?: { code: string } | null;
+    employers?: { 
+      enterprise_agreement_status?: boolean | null
+    } | null
   }>;
 };
 
@@ -144,6 +158,31 @@ export function ProjectCard({
 function MobileProjectCard({ project }: { project: ProjectCardData }) {
   const { startNavigation } = useNavigationLoading()
   const router = useRouter()
+  
+  // Fetch key contractor metrics
+  const { data: keyContractorMetrics, isLoading: metricsLoading } = useProjectKeyContractorMetrics(project.id)
+  
+  // Check if builder has EBA
+  const builderHasEba = useMemo(() => {
+    if (!project.project_assignments) return false
+    const builder = project.project_assignments.find((a) => 
+      a.assignment_type === 'contractor_role' && 
+      a.contractor_role_types?.code === 'builder'
+    )
+    return builder?.employers?.enterprise_agreement_status === true
+  }, [project.project_assignments])
+
+  // Calculate target rates based on conditions
+  const identificationTarget = useMemo(() => {
+    return project.organising_universe === 'active' ? 100 : null
+  }, [project.organising_universe])
+
+  const ebaTarget = useMemo(() => {
+    return project.organising_universe === 'active' && builderHasEba ? 100 : null
+  }, [project.organising_universe, builderHasEba])
+
+  // Get user-defined audit target
+  const { auditTarget: auditsTarget } = useProjectAuditTarget()
 
   const handleCardClick = () => {
     startNavigation(`/projects/${project.id}`)
@@ -219,6 +258,43 @@ function MobileProjectCard({ project }: { project: ProjectCardData }) {
           />
         )}
       </div>
+
+      {/* Key Contractor Metrics */}
+      {metricsLoading ? (
+        <div className="space-y-2 mb-3">
+          <div className="h-10 bg-gray-100 rounded animate-pulse" />
+          <div className="h-10 bg-gray-100 rounded animate-pulse" />
+        </div>
+      ) : keyContractorMetrics ? (
+        <div className="mb-3 space-y-2">
+          <ProjectKeyContractorMetrics
+            identifiedCount={keyContractorMetrics.identifiedCount}
+            totalSlots={keyContractorMetrics.totalSlots}
+            identificationTarget={identificationTarget}
+            ebaCount={keyContractorMetrics.ebaCount}
+            ebaTarget={ebaTarget}
+            auditsCount={keyContractorMetrics.auditsCount}
+            auditsTarget={auditsTarget}
+            trafficLightRatings={keyContractorMetrics.trafficLightRatings}
+            onIdentificationClick={() => { 
+              startNavigation(`/projects/${project.id}?tab=mappingsheets`)
+              setTimeout(() => router.push(`/projects/${project.id}?tab=mappingsheets`), 50)
+            }}
+            onEbaClick={() => { 
+              startNavigation(`/projects/${project.id}?tab=eba-search`)
+              setTimeout(() => router.push(`/projects/${project.id}?tab=eba-search`), 50)
+            }}
+            onAuditsClick={() => { 
+              startNavigation(`/projects/${project.id}?tab=compliance`)
+              setTimeout(() => router.push(`/projects/${project.id}?tab=compliance`), 50)
+            }}
+            onTrafficLightClick={() => { 
+              startNavigation(`/projects/${project.id}?tab=compliance`)
+              setTimeout(() => router.push(`/projects/${project.id}?tab=compliance`), 50)
+            }}
+          />
+        </div>
+      ) : null}
 
       {/* Builder rating */}
       {(project.builderId || (project.employers && project.employers.length > 0)) && (

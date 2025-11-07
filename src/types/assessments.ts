@@ -89,7 +89,7 @@ export interface Safety4PointAssessment extends BaseAssessment {
   safety_confidence_level: number // 0-100
 }
 
-// Subcontractor Use Assessment
+// Subcontractor Use Assessment (renamed to Contracting Assessment)
 export interface SubcontractorUseAssessment extends BaseAssessment {
   assessment_type: 'subcontractor_use'
   subcontracting_criteria: {
@@ -111,6 +111,14 @@ export interface SubcontractorUseAssessment extends BaseAssessment {
     licences_current: boolean
     payment_history_clean: boolean
   }
+  // Sham contracting detection
+  sham_contracting_detected: boolean
+  sham_contracting_detected_date?: string
+  sham_contracting_detected_by?: string
+  sham_contracting_detection_notes?: string
+  sham_contracting_cleared_date?: string
+  sham_contracting_cleared_by?: string
+  sham_contracting_clearing_reason?: string
   overall_subcontractor_score: FourPointRating
   confidence_level: number // 0-100
 }

@@ -15,7 +15,7 @@ interface MappingStatusBadgeProps {
 
 const STATUS_CONFIG = {
   no_roles: {
-    label: 'No Roles',
+    label: 'Not mapped',
     color: 'bg-gray-100 text-gray-700 border-gray-300',
     description: 'No employers mapped to contractor roles'
   },
@@ -56,8 +56,20 @@ export function MappingStatusBadge({
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation()
-    startNavigation(`/projects/${projectId}/mapping`)
-    setTimeout(() => router.push(`/projects/${projectId}/mapping`), 50)
+    try {
+      const ua = navigator.userAgent.toLowerCase()
+      const isMobile = /iphone|ipad|ipod|android/.test(ua)
+      const href = isMobile 
+        ? `/projects/${projectId}/mappingsheets-mobile` 
+        : `/projects/${projectId}?tab=mappingsheets`
+      startNavigation(href)
+      setTimeout(() => router.push(href), 50)
+    } catch {
+      // Fallback to desktop route if user agent check fails
+      const href = `/projects/${projectId}?tab=mappingsheets`
+      startNavigation(href)
+      setTimeout(() => router.push(href), 50)
+    }
   }
 
   if (variant === 'compact') {

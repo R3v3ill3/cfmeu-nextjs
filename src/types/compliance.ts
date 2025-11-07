@@ -88,6 +88,15 @@ export interface EmployerComplianceCheck {
   // Site visit integration
   site_visit_id: string | null;
   
+  // Sham contracting detection
+  sham_contracting_detected: boolean;
+  sham_contracting_detected_date: string | null;
+  sham_contracting_detected_by: string | null;
+  sham_contracting_detection_notes: string | null;
+  sham_contracting_cleared_date: string | null;
+  sham_contracting_cleared_by: string | null;
+  sham_contracting_clearing_reason: string | null;
+  
   // History tracking
   version: number;
   is_current: boolean;
@@ -129,3 +138,30 @@ export type PaymentTiming = 'on_time' | 'late' | 'uncertain';
 export type WorkerCountStatus = 'correct' | 'incorrect';
 export type DelegateSiteAccess = 'none' | 'hammertech' | 'other';
 export type ReportingFrequency = 'weekly' | 'fortnightly' | 'monthly' | 'six_weekly' | 'quarterly' | 'ad_hoc';
+
+// Sham contracting audit log
+export interface ShamContractingAuditLog {
+  id: string;
+  employer_id: string;
+  project_id: string | null;
+  action_type: 'flagged' | 'cleared' | 'reflagged';
+  action_by: string;
+  action_timestamp: string;
+  notes: string;
+  clearing_reason: string | null;
+  source_table: 'employer_compliance_checks' | 'subcontractor_assessments_4point' | 'organiser_overall_expertise_ratings' | null;
+  source_record_id: string | null;
+  created_at: string;
+}
+
+// Sham contracting status aggregation
+export interface ShamContractingStatus {
+  has_active_flags: boolean;
+  total_flags: number;
+  active_flags: number;
+  cleared_flags: number;
+  latest_flag_date: string | null;
+  latest_flag_notes: string | null;
+  latest_clear_date: string | null;
+  flagged_projects: string[];
+}

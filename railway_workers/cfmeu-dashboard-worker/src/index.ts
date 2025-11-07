@@ -289,7 +289,7 @@ app.get('/v1/projects', async (req, res) => {
             patchFilteringMethod,
           },
         }
-        cache.set(cacheKey, response, 30_000)
+        cache.set(cacheKey, response, 45_000) // Moderate 45-second cache (good balance)
         return res
           .status(200)
           .set({ 'Cache-Control': 'public, max-age=30', 'X-Cache': 'MISS' })
@@ -414,7 +414,7 @@ app.get('/v1/projects', async (req, res) => {
       },
     }
 
-    cache.set(cacheKey, response, 30_000)
+    cache.set(cacheKey, response, 45_000) // Moderate 45-second cache (good balance)
 
     res
       .status(200)
@@ -827,7 +827,7 @@ app.get('/v1/dashboard', async (req, res) => {
       debug: { queryTime: Date.now() - startTime },
     }
 
-    cache.set(cacheKey, response, 30_000)
+    cache.set(cacheKey, response, 45_000) // Moderate 45-second cache (good balance)
     res.status(200).set({ 'Cache-Control': 'public, max-age=30', 'X-Cache': 'MISS' }).json(response)
   } catch (err: any) {
     if (err?.message === 'Unauthorized') {
@@ -1027,7 +1027,7 @@ app.get('/v1/coverage-ladders', async (req, res) => {
       }
     }
 
-    cache.set(cacheKey, response, 30_000) // 30 second cache
+    cache.set(cacheKey, response, 45_000) // Moderate 45-second cache (good balance) // 30 second cache
     res.status(200).set({ 'Cache-Control': 'public, max-age=30', 'X-Cache': 'MISS' }).json(response)
   } catch (err: any) {
     if (err?.message === 'Unauthorized') {
@@ -1196,7 +1196,7 @@ app.get('/v1/employers', async (req, res) => {
     }
 
     // Cache for 30 seconds
-    cache.set(cacheKey, response, 30_000)
+    cache.set(cacheKey, response, 45_000) // Moderate 45-second cache (good balance)
 
     res
       .status(200)
@@ -1228,6 +1228,37 @@ server = app.listen(config.port, () => {
   // Schedule weekly dashboard snapshots
   scheduleWeeklyDashboardSnapshots(logger)
   void warmOrganizingMetricsCache(logger)
+
+  // Log memory usage every 15 seconds and enforce limits
+  setInterval(() => {
+    const memUsage = process.memoryUsage()
+    const cacheStats = cache.getStats()
+    const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024)
+    const rssMB = Math.round(memUsage.rss / 1024 / 1024)
+
+    logger.info({
+      rss: rssMB + 'MB',
+      heapUsed: heapUsedMB + 'MB',
+      heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024) + 'MB',
+      external: Math.round(memUsage.external / 1024 / 1024) + 'MB',
+      cacheSize: cacheStats.size,
+      cacheKeys: cacheStats.keys.length
+    }, 'Memory usage')
+
+    // CRITICAL: Force cache cleanup if memory usage is high
+    if (heapUsedMB > 2048) { // 2GB threshold
+      logger.error({ heapUsedMB, cacheSize: cacheStats.size }, 'High memory usage detected - forcing cache cleanup')
+      // Force immediate cleanup by clearing all cache entries
+      cache.clear()
+      // This is aggressive but necessary for 32GB instances
+      logger.error('Emergency: Reset cache due to memory pressure')
+    }
+
+    // Warning if approaching limits
+    if (heapUsedMB > 4096) { // 4GB warning
+      logger.warn({ heapUsedMB }, 'Memory usage getting high')
+    }
+  }, 15_000) // Increased frequency to every 15 seconds
 })
 
 // Graceful shutdown handler for HTTP worker

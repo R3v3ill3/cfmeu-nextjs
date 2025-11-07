@@ -36,6 +36,7 @@ import { FourPointRatingDisplay } from "@/components/ui/FourPointScaleSelector";
 import { UnionRespectAssessment } from "@/components/assessments/UnionRespectAssessment";
 import { SafetyAssessment4Point } from "@/components/assessments/SafetyAssessment4Point";
 import { SubcontractorAssessmentForm4Point } from "@/components/assessments/SubcontractorAssessmentForm4Point";
+import { ClearShamContractingDialog } from "@/components/compliance/ClearShamContractingDialog";
 import { toast } from "sonner";
 import {
   FourPointRating,
@@ -64,6 +65,7 @@ export function EmployerComplianceDetail({
   const [activeTab, setActiveTab] = useState('compliance');
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [overallRating, setOverallRating] = useState<FourPointRating | null>(null);
+  const [showClearDialog, setShowClearDialog] = useState(false);
 
   // Current compliance record (most recent)
   const currentCompliance = compliance[0] || {
@@ -86,7 +88,15 @@ export function EmployerComplianceDetail({
     incolink_worker_count_status: null,
     incolink_check_date: null,
     incolink_checked_by: [],
-    incolink_notes: null
+    incolink_notes: null,
+    // Sham contracting detection
+    sham_contracting_detected: false,
+    sham_contracting_detected_date: null,
+    sham_contracting_detected_by: null,
+    sham_contracting_detection_notes: null,
+    sham_contracting_cleared_date: null,
+    sham_contracting_cleared_by: null,
+    sham_contracting_clearing_reason: null
   };
 
   const [formData, setFormData] = useState(currentCompliance);
@@ -342,13 +352,39 @@ export function EmployerComplianceDetail({
         </div>
       </div>
 
+      {/* Sham Contracting Warning Banner */}
+      {formData.sham_contracting_detected && !formData.sham_contracting_cleared_date && (
+        <Alert variant="destructive" className="border-2">
+          <AlertTriangle className="h-5 w-5" />
+          <div className="flex-1">
+            <div className="font-semibold">Sham Contracting Detected</div>
+            <AlertDescription className="mt-1">
+              This employer has been flagged for sham contracting. They are blocked from receiving a green rating (maximum yellow/amber).
+              {formData.sham_contracting_detection_notes && (
+                <div className="mt-2 text-sm">
+                  <strong>Notes:</strong> {formData.sham_contracting_detection_notes}
+                </div>
+              )}
+            </AlertDescription>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowClearDialog(true)}
+            className="ml-2"
+          >
+            Clear Flag
+          </Button>
+        </Alert>
+      )}
+
       {/* Enhanced Assessment Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="compliance">Compliance</TabsTrigger>
           <TabsTrigger value="union-respect">Union Respect</TabsTrigger>
           <TabsTrigger value="safety">Safety</TabsTrigger>
-          <TabsTrigger value="subcontractors">Subcontractors</TabsTrigger>
+          <TabsTrigger value="contracting">Contracting</TabsTrigger>
           <TabsTrigger value="overview">Overview</TabsTrigger>
         </TabsList>
 
@@ -879,7 +915,88 @@ export function EmployerComplianceDetail({
         </TabsContent>
 
         {/* Tab 4: Subcontractor Use Assessment (4-Point Scale) */}
-        <TabsContent value="subcontractors">
+        <TabsContent value="contracting" className="space-y-4">
+          {/* Sham Contracting Detection Card */}
+          <Card className="border-2 border-amber-200 bg-amber-50/50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-amber-600" />
+                Sham Contracting Detection
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  Evidence of sham contracting is a <strong>hard block</strong> to green ratings. 
+                  Employers flagged for sham contracting can receive a maximum rating of yellow/amber.
+                </AlertDescription>
+              </Alert>
+
+              <div className="flex items-center justify-between p-4 bg-white rounded-lg border">
+                <div className="space-y-1">
+                  <Label htmlFor="sham-contracting-toggle" className="text-base font-semibold">
+                    Evidence of Sham Contracting Detected
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Flag this employer for sham contracting practices
+                  </p>
+                </div>
+                <Switch
+                  id="sham-contracting-toggle"
+                  checked={formData.sham_contracting_detected}
+                  onCheckedChange={(checked) => {
+                    handleFieldChange('sham_contracting_detected', checked)
+                    if (checked) {
+                      handleFieldChange('sham_contracting_detected_date', new Date().toISOString())
+                      // Clear the cleared fields if re-flagging
+                      handleFieldChange('sham_contracting_cleared_date', null)
+                      handleFieldChange('sham_contracting_cleared_by', null)
+                      handleFieldChange('sham_contracting_clearing_reason', null)
+                    }
+                  }}
+                  disabled={upsertCompliance.isPending}
+                />
+              </div>
+
+              {formData.sham_contracting_detected && (
+                <div className="space-y-3 p-4 bg-white rounded-lg border">
+                  <div>
+                    <Label htmlFor="sham-contracting-notes">
+                      Detection Notes <span className="text-red-500">*</span>
+                    </Label>
+                    <Textarea
+                      id="sham-contracting-notes"
+                      placeholder="Provide details about the evidence of sham contracting..."
+                      value={formData.sham_contracting_detection_notes || ''}
+                      onChange={(e) => handleFieldChange('sham_contracting_detection_notes', e.target.value)}
+                      rows={4}
+                      className="mt-1"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Required when flagging sham contracting. Be specific about the evidence.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {formData.sham_contracting_cleared_date && (
+                <Alert className="bg-green-50 border-green-200">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  <AlertDescription>
+                    <strong>Previously flagged - Cleared on {format(new Date(formData.sham_contracting_cleared_date), 'PPP')}</strong>
+                    {formData.sham_contracting_clearing_reason && (
+                      <div className="mt-2 text-sm">
+                        Reason: {formData.sham_contracting_clearing_reason}
+                      </div>
+                    )}
+                  </AlertDescription>
+                </Alert>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Subcontractor Assessment Form */}
           <SubcontractorAssessmentForm4Point
             employerId={employerId}
             employerName={employerName}
@@ -962,6 +1079,19 @@ export function EmployerComplianceDetail({
           </CardContent>
         </Card>
       )}
+
+      {/* Clear Sham Contracting Dialog */}
+      <ClearShamContractingDialog
+        open={showClearDialog}
+        onOpenChange={setShowClearDialog}
+        employerId={employerId}
+        employerName={employerName}
+        projectId={projectId}
+        onSuccess={() => {
+          // Refetch compliance data
+          window.location.reload() // Simple refetch for now
+        }}
+      />
     </div>
   );
 }

@@ -38,6 +38,9 @@ import { useAddressSearch } from "@/hooks/useAddressSearch"
 import { AddressSearchResults } from "@/components/projects/AddressSearchResults"
 import { toast } from "sonner"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ProjectKeyContractorMetrics } from "@/components/projects/ProjectKeyContractorMetrics"
+import { useProjectKeyContractorMetrics } from "@/hooks/useProjectKeyContractorMetrics"
+import { useProjectAuditTarget } from "@/hooks/useProjectAuditTarget"
 
 type MapProjectData = {
   id: string
@@ -56,6 +59,7 @@ type ProjectWithRoles = {
   main_job_site_id: string | null
   value: number | null
   tier: string | null
+  organising_universe?: string | null
   project_assignments?: Array<{
     assignment_type: string
     employer_id: string
@@ -149,6 +153,9 @@ function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: Proje
   const { startNavigation } = useNavigationLoading()
   const router = useRouter()
   
+  // Fetch key contractor metrics
+  const { data: keyContractorMetrics, isLoading: metricsLoading } = useProjectKeyContractorMetrics(p.id)
+  
   // Fetch key trades dynamically from database (needed for metrics calculation)
   const { tradeSet: KEY_CONTRACTOR_TRADES_SET } = useKeyContractorTradesSet()
   
@@ -176,59 +183,26 @@ function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: Proje
     return trades.map((a) => ({ id: a.employer_id, name: a.employers?.name || `Employer ${a.employer_id.slice(0, 8)}` }))
   }, [p.project_assignments])
 
-  // Calculate key contractor mapping metrics
-  // Key contractors are critical roles and trades that significantly impact project success
-  const keyContractorMetrics = useMemo(() => {
-    // Use dynamic key trades from database
-    const KEY_CONTRACTOR_TRADES = KEY_CONTRACTOR_TRADES_SET;
-    const KEY_CONTRACTOR_ROLES = new Set(['builder', 'project_manager']);
-    
-    // Total key categories (dynamic key trades + 2 key roles)
-    const totalKeyCategories = KEY_CONTRACTOR_TRADES.size + KEY_CONTRACTOR_ROLES.size;
-    
-    // Count mapped key contractor categories
-    const mappedKeyRoles = new Set();
-    const mappedKeyTrades = new Set();
-    let keyContractorsWithEba = 0;
-    let totalKeyContractors = 0;
+  // Check if builder has EBA
+  const builderHasEba = useMemo(() => {
+    const builder = (p.project_assignments || []).find((a) => 
+      a.assignment_type === 'contractor_role' && 
+      a.contractor_role_types?.code === 'builder'
+    )
+    return builder?.employers?.enterprise_agreement_status === true
+  }, [p.project_assignments])
 
-    (p.project_assignments || []).forEach((assignment) => {
-      if (assignment.assignment_type === 'contractor_role' && assignment.contractor_role_types) {
-        const roleCode = assignment.contractor_role_types.code;
-        if (KEY_CONTRACTOR_ROLES.has(roleCode)) {
-          mappedKeyRoles.add(roleCode);
-          totalKeyContractors++;
-          if (assignment.employers?.enterprise_agreement_status === true) {
-            keyContractorsWithEba++;
-          }
-        }
-      }
-      
-      if (assignment.assignment_type === 'trade_work' && assignment.trade_types) {
-        const tradeCode = assignment.trade_types.code;
-        if (KEY_CONTRACTOR_TRADES.has(tradeCode)) {
-          mappedKeyTrades.add(tradeCode);
-          totalKeyContractors++;
-          if (assignment.employers?.enterprise_agreement_status === true) {
-            keyContractorsWithEba++;
-          }
-        }
-      }
-    });
+  // Calculate target rates based on conditions
+  const identificationTarget = useMemo(() => {
+    return p.organising_universe === 'active' ? 100 : null
+  }, [p.organising_universe])
 
-    const mappedCategories = mappedKeyRoles.size + mappedKeyTrades.size;
-    const mappingPercentage = totalKeyCategories > 0 ? Math.round((mappedCategories / totalKeyCategories) * 100) : 0;
-    const ebaPercentage = totalKeyContractors > 0 ? Math.round((keyContractorsWithEba / totalKeyContractors) * 100) : 0;
+  const ebaTarget = useMemo(() => {
+    return p.organising_universe === 'active' && builderHasEba ? 100 : null
+  }, [p.organising_universe, builderHasEba])
 
-    return {
-      mappedCategories,
-      totalKeyCategories,
-      mappingPercentage,
-      keyContractorsWithEba,
-      totalKeyContractors,
-      ebaPercentage
-    };
-  }, [p.project_assignments, KEY_CONTRACTOR_TRADES_SET]);
+  // Get user-defined audit target
+  const { auditTarget: auditsTarget } = useProjectAuditTarget()
 
   const primary = builderNames[0] || head
   const secondary = head && primary && head.id !== primary.id ? head : null
@@ -345,46 +319,43 @@ function ProjectListCard({ p, summary, subsetStats, onOpenEmployer }: { p: Proje
         </div>
       </CardHeader>
       <CardContent className="px-4 pb-4 pt-0 space-y-2 flex-1 flex flex-col">
-        <div className="space-y-2">
-          <CompactStatBar
-            label="Key Contractor Coverage"
-            value={keyContractorMetrics.mappedCategories}
-            of={keyContractorMetrics.totalKeyCategories}
-            color="59,130,246" // Blue for mapping coverage
-            onClick={() => { 
-              startNavigation(`/projects/${p.id}?tab=contractors`)
-              setTimeout(() => router.push(`/projects/${p.id}?tab=contractors`), 50)
+        {metricsLoading ? (
+          <div className="space-y-2 py-4">
+            <div className="h-12 bg-gray-100 rounded animate-pulse" />
+            <div className="h-12 bg-gray-100 rounded animate-pulse" />
+            <div className="h-12 bg-gray-100 rounded animate-pulse" />
+            <div className="h-12 bg-gray-100 rounded animate-pulse" />
+          </div>
+        ) : keyContractorMetrics ? (
+          <ProjectKeyContractorMetrics
+            identifiedCount={keyContractorMetrics.identifiedCount}
+            totalSlots={keyContractorMetrics.totalSlots}
+            identificationTarget={identificationTarget}
+            ebaCount={keyContractorMetrics.ebaCount}
+            ebaTarget={ebaTarget}
+            auditsCount={keyContractorMetrics.auditsCount}
+            auditsTarget={auditsTarget}
+            trafficLightRatings={keyContractorMetrics.trafficLightRatings}
+            onIdentificationClick={() => { 
+              startNavigation(`/projects/${p.id}?tab=mappingsheets`)
+              setTimeout(() => router.push(`/projects/${p.id}?tab=mappingsheets`), 50)
+            }}
+            onEbaClick={() => { 
+              startNavigation(`/projects/${p.id}?tab=eba-search`)
+              setTimeout(() => router.push(`/projects/${p.id}?tab=eba-search`), 50)
+            }}
+            onAuditsClick={() => { 
+              startNavigation(`/projects/${p.id}?tab=compliance`)
+              setTimeout(() => router.push(`/projects/${p.id}?tab=compliance`), 50)
+            }}
+            onTrafficLightClick={() => { 
+              startNavigation(`/projects/${p.id}?tab=compliance`)
+              setTimeout(() => router.push(`/projects/${p.id}?tab=compliance`), 50)
             }}
           />
-          <CompactStatBar
-            label="Key Contractor EBA Active"
-            value={keyContractorMetrics.keyContractorsWithEba}
-            of={keyContractorMetrics.totalKeyContractors}
-            color="34,197,94" // Green for EBA status
-            onClick={() => { 
-              startNavigation(`/projects/${p.id}?tab=contractors`)
-              setTimeout(() => router.push(`/projects/${p.id}?tab=contractors`), 50)
-            }}
-          />
-          <EbaPercentBar
-            active={ebaActive}
-            total={engaged}
-            onClick={() => { 
-              startNavigation(`/projects/${p.id}?tab=contractors`)
-              setTimeout(() => router.push(`/projects/${p.id}?tab=contractors`), 50)
-            }}
-          />
-          {subsetStats && (
-            <SubsetEbaStats
-              stats={subsetStats}
-              variant="compact"
-              onClick={() => { 
-                startNavigation(`/projects/${p.id}?tab=contractors`)
-                setTimeout(() => router.push(`/projects/${p.id}?tab=contractors`), 50)
-              }}
-            />
-          )}
-        </div>
+        ) : (
+          <div className="text-xs text-muted-foreground py-2">No key contractor data available</div>
+        )}
         
         {/* Employer Count Display */}
         <div className="flex items-center justify-between text-xs">

@@ -1,5 +1,6 @@
 "use client"
 
+import React from "react"
 import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,8 +9,11 @@ import { Badge } from "@/components/ui/badge"
 import { User, Bell, Shield, LayoutDashboard } from "lucide-react"
 import { Separator } from "@/components/ui/separator"
 import { useDashboardPreference } from "@/hooks/useDashboardPreference"
+import { useProjectAuditTarget } from "@/hooks/useProjectAuditTarget"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Input } from "@/components/ui/input"
+import { Slider } from "@/components/ui/slider"
 
 export default function SettingsPage() {
   // Get current user info
@@ -140,6 +144,32 @@ export default function SettingsPage() {
         </CardHeader>
         <CardContent>
           <DashboardPreferenceSelector />
+        </CardContent>
+      </Card>
+
+      <Separator />
+
+      {/* Project Audit Target Section */}
+      <div>
+        <h2 className="text-2xl font-bold flex items-center gap-2">
+          <LayoutDashboard className="h-6 w-6" />
+          Project Metrics Preferences
+        </h2>
+        <p className="text-muted-foreground mt-1">
+          Configure target percentages for project metrics
+        </p>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Audit Target Percentage</CardTitle>
+          <CardDescription>
+            Set your target percentage for key contractors with audits. This target will be displayed on project cards.
+            Default: 75%
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AuditTargetSelector />
         </CardContent>
       </Card>
 
@@ -349,4 +379,76 @@ function DashboardPreferenceSelector() {
   )
 }
 
+function AuditTargetSelector() {
+  const { 
+    auditTarget, 
+    isLoading, 
+    updateAuditTarget, 
+    isUpdating 
+  } = useProjectAuditTarget()
+
+  const [localValue, setLocalValue] = React.useState(auditTarget)
+
+  React.useEffect(() => {
+    setLocalValue(auditTarget)
+  }, [auditTarget])
+
+  const handleSliderChange = (value: number[]) => {
+    const newValue = value[0]
+    setLocalValue(newValue)
+    updateAuditTarget(newValue)
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseInt(e.target.value, 10)
+    if (!isNaN(value) && value >= 0 && value <= 100) {
+      setLocalValue(value)
+      updateAuditTarget(value)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-3">
+        <Label className="text-base font-medium">Target Percentage</Label>
+        <div className="space-y-4">
+          <div className="px-2">
+            <Slider
+              value={[localValue]}
+              onValueChange={handleSliderChange}
+              min={0}
+              max={100}
+              step={5}
+              disabled={isLoading || isUpdating}
+              className="w-full"
+            />
+          </div>
+          <div className="flex items-center gap-4">
+            <Label htmlFor="audit-target-input" className="text-sm">
+              Target:
+            </Label>
+            <Input
+              id="audit-target-input"
+              type="number"
+              min={0}
+              max={100}
+              value={localValue}
+              onChange={handleInputChange}
+              disabled={isLoading || isUpdating}
+              className="w-24"
+            />
+            <span className="text-sm text-muted-foreground">%</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="pt-2 border-t">
+        <div className="text-sm text-muted-foreground">
+          <p className="font-medium mb-1">Current Setting:</p>
+          <p>{auditTarget}% of key contractors should have audits</p>
+        </div>
+      </div>
+    </div>
+  )
+}
 

@@ -262,9 +262,9 @@ export function useProjectsServerSide(params: ProjectsParams) {
       // Log performance metrics for monitoring handled inside fetch paths
     },
     
-    // Aggressive caching for better performance (projects change less frequently)
-    staleTime: 3 * 60 * 1000, // 3 minutes - data is fresh
-    gcTime: 15 * 60 * 1000, // 15 minutes - keep in memory longer
+    // Reduced caching to detect worker failures faster
+    staleTime: 60 * 1000, // 1 minute - reduced from 3 minutes
+    gcTime: 5 * 60 * 1000, // 5 minutes - reduced from 15 minutes
     
     // Retry failed requests
     retry: (failureCount, error) => {
