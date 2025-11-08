@@ -2,6 +2,7 @@
 
 import { useSearchParams } from "next/navigation"
 import { CoverageLadders } from "./CoverageLadders"
+import { KeyContractorStackedBars } from "./KeyContractorStackedBars"
 import { EbaBuilderSubset } from "./EbaBuilderSubset"
 import { PatchScorecards } from "./PatchScorecards"
 import { ContractorTypeHeatmap } from "./ContractorTypeHeatmap"
@@ -88,6 +89,9 @@ export function NewDashboardPage() {
 
       {/* Coverage Ladders */}
       <CoverageLadders patchIds={patchIds} />
+
+      {/* Key Contractor Stacked Bars */}
+      <KeyContractorStackedBars patchIds={patchIds} />
 
       {/* EBA-Builder Subset Comparison */}
       <EbaBuilderSubset 

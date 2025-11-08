@@ -181,3 +181,4 @@ NEXT_PUBLIC_APP_URL=https://cfmeu.uconstruct.app
 - [Supabase Environment Variables Guide](https://supabase.com/docs/guides/getting-started/local-development#environment-variables)
 - See `docs/ENV_MATRIX.md` for complete environment variable matrix
 
+

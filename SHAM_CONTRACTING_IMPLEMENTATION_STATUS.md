@@ -204,3 +204,4 @@ supabase db reset
 - Audit log tracks every flag/clear action with user, timestamp, and notes
 - Both Track 1 (project compliance) and Track 2 (organiser expertise) respect hard block
 
+

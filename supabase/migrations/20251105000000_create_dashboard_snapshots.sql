@@ -223,3 +223,4 @@ COMMENT ON TABLE dashboard_snapshots IS 'Weekly/monthly snapshots of dashboard m
 COMMENT ON FUNCTION create_dashboard_snapshot IS 'Creates a snapshot of current dashboard metrics with frozen key contractor list and patch assignments';
 
 
+

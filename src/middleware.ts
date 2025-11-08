@@ -7,7 +7,7 @@ export async function middleware(req: NextRequest) {
   })
 
   // Skip auth check for public routes to improve performance
-  const publicPaths = ['/auth', '/auth/reset-password', '/auth/confirm', '/manifest.json', '/favicon.ico']
+  const publicPaths = ['/auth', '/auth/reset-password', '/auth/confirm', '/manifest.json', '/favicon.ico', '/apple-touch-icon.png']
   const isPublicPath = publicPaths.some(path => req.nextUrl.pathname.startsWith(path))
   
   if (isPublicPath) {

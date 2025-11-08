@@ -84,3 +84,4 @@ The code accepts either:
 
 Both work, but `NEXT_PUBLIC_SUPABASE_ANON_KEY` is recommended since it's also used by client-side code.
 
+

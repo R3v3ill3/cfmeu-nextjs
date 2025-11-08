@@ -237,3 +237,4 @@ If you have a previous working deployment:
 - No Supabase client errors
 - Application functions normally
 
+
