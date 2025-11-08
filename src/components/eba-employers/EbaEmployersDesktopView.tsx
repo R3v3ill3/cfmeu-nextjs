@@ -14,6 +14,7 @@ import { useLocalStorage } from "react-use"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { EyeOff, Eye, FileText, ChevronDown, ChevronUp } from "lucide-react"
 import { ProjectDisplayCell } from "./ProjectDisplayCell"
+import { PatchOrganiserDisplayCell } from "./PatchOrganiserDisplayCell"
 import { EbaEmployerRatingCell } from "./EbaEmployerRatingCell"
 import { EbaEmployerActions } from "./EbaEmployerActions"
 import { CorrelationAnalytics } from "./CorrelationAnalytics"
@@ -26,6 +27,12 @@ type CategoryRow = {
   total_employers: number
 }
 
+type PatchAssignment = {
+  patch_id: string
+  patch_name: string
+  organiser_names: string[]
+}
+
 export type EmployerRow = {
   employer_id: string
   employer_name: string
@@ -36,9 +43,11 @@ export type EmployerRow = {
     full_address?: string | null
     builder_name?: string | null
   }>
+  patch_assignments?: PatchAssignment[]
 }
 
 export type ProjectDisplayMode = 'hide' | 'show' | 'detail'
+type PatchDisplayMode = 'hide' | 'show'
 
 export function EbaEmployersDesktopView() {
   const [type, setType] = useState<'contractor_role' | 'trade'>('contractor_role')
@@ -55,6 +64,10 @@ export function EbaEmployersDesktopView() {
   const [projectDisplayMode, setProjectDisplayMode] = useLocalStorage<ProjectDisplayMode>(
     'eba-employers-project-view',
     'show'
+  )
+  const [patchDisplayMode, setPatchDisplayMode] = useLocalStorage<PatchDisplayMode>(
+    'eba-employers-patch-display',
+    'hide'
   )
   
   // Analytics section state
@@ -89,11 +102,15 @@ export function EbaEmployersDesktopView() {
   }, [categories])
 
   // Determine if we need extended data based on display mode
+  const effectivePatchDisplayMode = patchDisplayMode ?? 'hide'
+  const showPatchColumn = effectivePatchDisplayMode === 'show'
+
   const needsExtendedData = projectDisplayMode === 'detail'
+  const needsPatchData = showPatchColumn
 
   // Load employers for the selected category
   const { data: employers = [], isFetching } = useQuery({
-    queryKey: ['eba-employers', type, code, currentOnly, includeDerived, includeManual, keyOnly, needsExtendedData],
+    queryKey: ['eba-employers', type, code, currentOnly, includeDerived, includeManual, keyOnly, needsExtendedData, needsPatchData],
     enabled: !!code,
     queryFn: async () => {
       const params = new URLSearchParams()
@@ -104,6 +121,7 @@ export function EbaEmployersDesktopView() {
       if (!includeManual) params.set('includeManual', 'false')
       if (keyOnly) params.set('keyOnly', 'true')
       if (needsExtendedData) params.set('includeExtendedData', 'true')
+      if (needsPatchData) params.set('includePatchData', 'true')
       const res = await fetch(`/api/eba/employers?${params.toString()}`)
       if (!res.ok) throw new Error(await res.text())
       const json = await res.json()
@@ -133,6 +151,8 @@ export function EbaEmployersDesktopView() {
     const q = query.trim().toLowerCase()
     return (employers || []).filter((e) => !q || e.employer_name.toLowerCase().includes(q))
   }, [employers, query])
+
+  const totalColumns = 3 + (projectDisplayMode !== 'hide' ? 1 : 0) + (showPatchColumn ? 1 : 0)
 
   return (
     <div className="p-6 space-y-4">
@@ -225,6 +245,25 @@ export function EbaEmployersDesktopView() {
               </ToggleGroupItem>
             </ToggleGroup>
           </div>
+
+          <div className="pt-3 border-t">
+            <label className="text-sm font-medium text-muted-foreground mb-2 block">Patch &amp; Organiser Display</label>
+            <ToggleGroup
+              type="single"
+              value={effectivePatchDisplayMode}
+              onValueChange={(value) => value && setPatchDisplayMode(value as PatchDisplayMode)}
+              className="justify-start"
+            >
+              <ToggleGroupItem value="hide" aria-label="Hide patch assignments" className="gap-2">
+                <EyeOff className="h-4 w-4" />
+                Hide Column
+              </ToggleGroupItem>
+              <ToggleGroupItem value="show" aria-label="Show patch assignments" className="gap-2">
+                <Eye className="h-4 w-4" />
+                Show Column
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </div>
         </CardContent>
       </Card>
 
@@ -239,6 +278,9 @@ export function EbaEmployersDesktopView() {
                 <TableRow>
                   <TableHead className="w-[25%] max-w-[300px]">Employer</TableHead>
                   <TableHead className="w-[15%]">Rating</TableHead>
+                  {showPatchColumn && (
+                    <TableHead className="w-[20%] min-w-[220px]">Patches &amp; Organisers</TableHead>
+                  )}
                   {projectDisplayMode !== 'hide' && (
                     <TableHead className={projectDisplayMode === 'detail' ? 'w-[45%]' : 'w-[45%]'}>
                       Projects
@@ -268,6 +310,12 @@ export function EbaEmployersDesktopView() {
                         rating={ratingsData?.[row.employer_id]}
                       />
                     </TableCell>
+
+                    {showPatchColumn && (
+                      <TableCell>
+                        <PatchOrganiserDisplayCell assignments={row.patch_assignments ?? []} />
+                      </TableCell>
+                    )}
                     
                     {projectDisplayMode !== 'hide' && (
                       <TableCell>
@@ -290,7 +338,7 @@ export function EbaEmployersDesktopView() {
                 ))}
                 {filtered.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={projectDisplayMode === 'hide' ? 3 : 4} className="text-center text-sm text-muted-foreground py-8">
+                    <TableCell colSpan={totalColumns} className="text-center text-sm text-muted-foreground py-8">
                       {isFetching ? 'Loading…' : 'No employers found.'}
                     </TableCell>
                   </TableRow>
