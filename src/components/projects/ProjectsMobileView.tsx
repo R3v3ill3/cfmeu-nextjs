@@ -309,9 +309,20 @@ export function ProjectsMobileView() {
       const qs = params.toString()
       router.replace(qs ? `${pathname}?${qs}` : pathname)
     } else {
-      console.log('[Address Search Mobile] No coordinates available, search will not execute')
+      // User is typing a new address, clear previous search results
+      console.log('[Address Search Mobile] No coordinates - clearing previous search results')
+      const params = new URLSearchParams(sp.toString())
+      params.delete("addressLat")
+      params.delete("addressLng")
+      params.delete("addressQuery")
+      if (searchMode === "address") {
+        params.set("searchMode", "address")
+      }
+      params.delete('page')
+      const qs = params.toString()
+      router.replace(qs ? `${pathname}?${qs}` : pathname)
     }
-  }, [pathname, router, sp])
+  }, [pathname, router, sp, searchMode])
 
   useEffect(() => {
     const handler = window.setTimeout(() => {

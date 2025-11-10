@@ -65,7 +65,16 @@ export function ProjectSearchDialog({
   // Handle address selection from autocomplete
   const handleAddressChange = useCallback((address: GoogleAddress, error?: AddressValidationError | null) => {
     console.log('[ProjectSearchDialog] Address changed:', { address, error, hasCoords: !!(address.lat && address.lng) })
-    setSelectedAddress(address)
+    
+    // If user is typing (no coordinates), clear the previous selection
+    // This prevents showing stale results from a previous address search
+    if (!address.lat || !address.lng) {
+      console.log('[ProjectSearchDialog] Clearing previous address selection')
+      setSelectedAddress(null)
+    } else {
+      // User selected a valid address from autocomplete
+      setSelectedAddress(address)
+    }
   }, [])
 
   // Address search hook

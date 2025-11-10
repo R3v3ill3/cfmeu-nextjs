@@ -186,9 +186,10 @@ export async function executeWithRetry<T>(
           timestamp: new Date().toISOString(),
         })
         
-        // Reset client on timeout/network errors before retry
-        if (isTimeout) {
-          resetSupabaseBrowserClient()
+        // Only reset client on persistent timeouts, not first attempt
+        if (isTimeout && attempt >= 2) {
+          console.warn('[SupabaseClient] Multiple timeout failures, resetting client');
+          resetSupabaseBrowserClient();
         }
         
         await sleep(delay)

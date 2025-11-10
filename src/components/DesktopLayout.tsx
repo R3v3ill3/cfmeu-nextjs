@@ -117,11 +117,11 @@ function useVisibleNavItems(userRole: string | null, isLoadingRole: boolean, cac
     }
 
     // Administration - show for admins and lead organisers
-    // Use cached role to prevent flicker during refetch
+    // Use cached role to prevent flicker during refetch - Fixed race condition
     if (effectiveRole === "admin" || effectiveRole === "lead_organiser") {
       const label = effectiveRole === "admin" ? "Administration" : "Management"
-      const description = effectiveRole === "admin" 
-        ? "System administration and user management" 
+      const description = effectiveRole === "admin"
+        ? "System administration and user management"
         : "Co-ordinator management and data operations"
       items.push({ path: "/admin", label, icon: Shield, description })
     }

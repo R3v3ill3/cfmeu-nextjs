@@ -41,7 +41,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ProjectKeyContractorMetrics } from "@/components/projects/ProjectKeyContractorMetrics"
 import { useProjectKeyContractorMetrics } from "@/hooks/useProjectKeyContractorMetrics"
 import { useProjectAuditTarget } from "@/hooks/useProjectAuditTarget"
-import { AddressSearchDebug } from "@/components/projects/AddressSearchDebug"
 
 type MapProjectData = {
   id: string
@@ -591,27 +590,10 @@ export function ProjectsDesktopView() {
 
   // Handle address selection from Google autocomplete
   const handleAddressSelect = useCallback((address: GoogleAddress, error?: AddressValidationError | null) => {
-    console.log('[Address Search] ========================================')
-    console.log('[Address Search] handleAddressSelect called')
-    console.log('[Address Search] Address object:', address)
-    console.log('[Address Search] Error:', error)
-    console.log('[Address Search] Has coordinates:', !!(address.lat && address.lng))
-    console.log('[Address Search] Lat:', address.lat)
-    console.log('[Address Search] Lng:', address.lng)
-    console.log('[Address Search] Formatted:', address.formatted)
-    console.log('[Address Search] ========================================')
-    
-    // Visual indicator for debugging
-    toast.info(`Callback fired! Has coords: ${!!(address.lat && address.lng)}`, {
-      description: `Lat: ${address.lat}, Lng: ${address.lng}`
-    })
-    
     setSelectedAddress(address)
 
     // Only process if we have coordinates (means user selected from autocomplete)
     if (address.lat && address.lng) {
-      console.log('[Address Search] ✅ Coordinates found! Setting URL params...')
-      toast.success(`Searching for projects near: ${address.formatted}`)
       const params = new URLSearchParams(sp.toString())
       params.set("searchMode", "address")
       params.set("addressLat", address.lat.toString())
@@ -620,15 +602,23 @@ export function ProjectsDesktopView() {
       params.delete("q")
       params.delete('page')
       const qs = params.toString()
-      console.log('[Address Search] New URL query string:', qs)
       router.replace(qs ? `${pathname}?${qs}` : pathname)
-      console.log('[Address Search] router.replace() called')
     } else {
-      console.log('[Address Search] ❌ No coordinates available! Lat:', address.lat, 'Lng:', address.lng)
-      console.log('[Address Search] Search will NOT execute')
-      toast.error('No coordinates found in selected address')
+      // User is typing a new address, clear previous search results
+      const params = new URLSearchParams(sp.toString())
+      // Clear address search params to reset the search
+      params.delete("addressLat")
+      params.delete("addressLng")
+      params.delete("addressQuery")
+      // Keep searchMode=address so the tab stays active
+      if (searchMode === "address") {
+        params.set("searchMode", "address")
+      }
+      params.delete('page')
+      const qs = params.toString()
+      router.replace(qs ? `${pathname}?${qs}` : pathname)
     }
-  }, [pathname, router, sp])
+  }, [pathname, router, sp, searchMode])
 
   useEffect(() => {
     const handler = window.setTimeout(() => {
@@ -1394,9 +1384,6 @@ export function ProjectsDesktopView() {
         </>
       )}
 
-      {/* Debug panel for address search */}
-      {searchMode === "address" && <AddressSearchDebug />}
-      
       {/* Regular Project Views - Show map view always, or other views when NOT in address search */}
       {(view === 'map' || searchMode !== "address" || (!addressLat && !addressLng)) && (
         <>

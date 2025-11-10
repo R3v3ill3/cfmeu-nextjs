@@ -275,13 +275,25 @@ export function GoogleAddressInput({
   const handleInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const newText = event.target.value;
     setText(newText);
+    
+    // Don't process if this change came from autocomplete selection
+    if (lastFromAutocomplete.current) {
+      console.log('[GoogleAddressInput] Input change from autocomplete, skipping onChange call')
+      lastFromAutocomplete.current = false;
+      return;
+    }
+    
     lastFromAutocomplete.current = false;
 
-    // For search contexts (requireSelection=false), don't call onChange on typing
-    // Only trigger onChange when user selects from autocomplete dropdown
-    // This prevents errors about missing coordinates while typing
+    // For search contexts (requireSelection=false), clear previous selection when user types
+    // This ensures we don't show stale results from a previous search
     if (requireSelection === false) {
-      // Don't call onChange on every keystroke for search - only on selection
+      // Clear the previous address selection by sending an empty address
+      // This will clear search results from the previous address
+      if (newText !== value && !selectingFromList.current) {
+        console.log('[GoogleAddressInput] User typing new address, clearing previous selection')
+        onChangeRef.current?.({ formatted: newText }, null);
+      }
       return;
     }
 
@@ -291,7 +303,7 @@ export function GoogleAddressInput({
       const error = performValidation(addr);
       onChangeRef.current?.(addr, error);
     }
-  }, [requireSelection, performValidation]);
+  }, [requireSelection, performValidation, value]);
 
   // Handle input blur with mobile optimization
   const handleInputBlur = useCallback(() => {
@@ -327,36 +339,49 @@ export function GoogleAddressInput({
   }, [loadError]);
 
   useEffect(() => {
-    if (!isLoaded || !inputRef.current) return;
+    console.log('[GoogleAddressInput] Setup effect running', { 
+      isLoaded, 
+      hasInputRef: !!inputRef.current,
+      hasGoogle: !!(window.google && window.google.maps),
+      hasPlaces: !!(window.google && window.google.maps && window.google.maps.places),
+      hasAutocomplete: !!(window.google && window.google.maps && window.google.maps.places && window.google.maps.places.Autocomplete)
+    });
+    
+    if (!isLoaded || !inputRef.current) {
+      console.log('[GoogleAddressInput] Not ready - isLoaded:', isLoaded, 'hasInputRef:', !!inputRef.current);
+      return;
+    }
+    
     if (!(window.google && window.google.maps && window.google.maps.places && window.google.maps.places.Autocomplete)) {
-      // Places library not available; keep manual entry working
+      console.log('[GoogleAddressInput] Google Maps Places API not available');
       return;
     }
 
     if (!autocompleteRef.current) {
+      console.log('[GoogleAddressInput] Creating new Autocomplete instance');
       autocompleteRef.current = new window.google.maps.places.Autocomplete(inputRef.current, {
         types: ["address"],
         fields: ["formatted_address", "address_components", "geometry", "place_id"],
         componentRestrictions: { country: "au" }, // Restrict to Australia
       });
+      console.log('[GoogleAddressInput] Autocomplete created:', autocompleteRef.current);
 
       placeListenerRef.current = autocompleteRef.current.addListener("place_changed", () => {
-        console.log('[GoogleAddressInput] place_changed event fired');
+        console.log('[GoogleAddressInput] ⚡⚡⚡ place_changed event FIRED ⚡⚡⚡');
         const ac = autocompleteRef.current;
         if (!ac) {
           console.log('[GoogleAddressInput] No autocomplete ref');
           return;
         }
         const place = ac.getPlace();
-        console.log('[GoogleAddressInput] Place data:', { 
-          has_place_id: !!place.place_id, 
-          has_geometry: !!place.geometry,
-          formatted_address: place.formatted_address 
-        });
+        console.log('[GoogleAddressInput] Place data:', place);
+        console.log('[GoogleAddressInput] Has place_id:', !!place.place_id);
+        console.log('[GoogleAddressInput] Has geometry:', !!place.geometry);
+        console.log('[GoogleAddressInput] Formatted address:', place.formatted_address);
 
         // Check if a valid place was selected
         if (!place.place_id) {
-          console.log('[GoogleAddressInput] No place_id, using current value');
+          console.log('[GoogleAddressInput] ❌ No place_id, using current value');
           const currentValue = inputRef.current?.value || "";
           const addr: GoogleAddress = { formatted: currentValue };
           const error = performValidation(addr);
@@ -372,7 +397,7 @@ export function GoogleAddressInput({
         const lat = place.geometry?.location?.lat?.();
         const lng = place.geometry?.location?.lng?.();
 
-        console.log('[GoogleAddressInput] Extracted coordinates:', { lat, lng, formatted });
+        console.log('[GoogleAddressInput] ✅ Extracted coordinates:', { lat, lng, formatted });
 
         lastFromAutocomplete.current = true;
         setTouched(true);
@@ -385,15 +410,22 @@ export function GoogleAddressInput({
 
         const addr: GoogleAddress = { formatted, components, place_id: place.place_id, lat, lng };
 
-        console.log('[GoogleAddressInput] Calling onChange with:', { 
+        console.log('[GoogleAddressInput] 🚀 Calling onChange with:', { 
           hasCoordinates: !!(lat && lng), 
-          place_id: place.place_id 
+          place_id: place.place_id,
+          lat,
+          lng
         });
 
         // Perform validation and pass result to onChange
         const error = performValidation(addr);
+        console.log('[GoogleAddressInput] About to call onChangeRef.current with address and error');
         onChangeRef.current?.(addr, error);
+        console.log('[GoogleAddressInput] ✅ onChange called');
       });
+      console.log('[GoogleAddressInput] Event listener attached:', placeListenerRef.current);
+    } else {
+      console.log('[GoogleAddressInput] Autocomplete already exists, skipping creation');
     }
 
     // Proper cleanup function for Google Maps autocomplete
