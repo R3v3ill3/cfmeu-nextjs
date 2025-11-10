@@ -69,20 +69,23 @@ export function IndividualEmployerAssessment({
       return draft.data;
     }
 
+    // Get today's date in YYYY-MM-DD format
+    const today = new Date().toISOString().split('T')[0];
+
     // Otherwise, initialize from current data
     return {
       // CBUS/INCOLINK
       cbus_check_conducted: employer.currentCompliance?.cbus_check_conducted || false,
-      cbus_check_date: employer.currentCompliance?.cbus_check_date || null,
+      cbus_check_date: employer.currentCompliance?.cbus_check_date || today,
       cbus_payment_status: employer.currentCompliance?.cbus_payment_status || null,
       cbus_payment_timing: employer.currentCompliance?.cbus_payment_timing || null,
       cbus_worker_count_status: employer.currentCompliance?.cbus_worker_count_status || null,
       cbus_enforcement_flag: employer.currentCompliance?.cbus_enforcement_flag || false,
       cbus_followup_required: employer.currentCompliance?.cbus_followup_required || false,
       cbus_notes: employer.currentCompliance?.cbus_notes || null,
-      
+
       incolink_check_conducted: employer.currentCompliance?.incolink_check_conducted || false,
-      incolink_check_date: employer.currentCompliance?.incolink_check_date || null,
+      incolink_check_date: employer.currentCompliance?.incolink_check_date || today,
       incolink_payment_status: employer.currentCompliance?.incolink_payment_status || null,
       incolink_payment_timing: employer.currentCompliance?.incolink_payment_timing || null,
       incolink_worker_count_status: employer.currentCompliance?.incolink_worker_count_status || null,
