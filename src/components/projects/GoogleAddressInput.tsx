@@ -342,9 +342,8 @@ export function GoogleAddressInput({
     console.log('[GoogleAddressInput] Setup effect running', { 
       isLoaded, 
       hasInputRef: !!inputRef.current,
-      hasGoogle: !!(window.google && window.google.maps),
-      hasPlaces: !!(window.google && window.google.maps && window.google.maps.places),
-      hasAutocomplete: !!(window.google && window.google.maps && window.google.maps.places && window.google.maps.places.Autocomplete)
+      hasAutocompleteRef: !!autocompleteRef.current,
+      hasListenerRef: !!placeListenerRef.current
     });
     
     if (!isLoaded || !inputRef.current) {
@@ -357,15 +356,22 @@ export function GoogleAddressInput({
       return;
     }
 
-    if (!autocompleteRef.current) {
+    // Always re-attach the listener if it's missing, even if autocomplete exists
+    const needsAutocomplete = !autocompleteRef.current;
+    const needsListener = !placeListenerRef.current;
+    
+    if (needsAutocomplete) {
       console.log('[GoogleAddressInput] Creating new Autocomplete instance');
       autocompleteRef.current = new window.google.maps.places.Autocomplete(inputRef.current, {
         types: ["address"],
         fields: ["formatted_address", "address_components", "geometry", "place_id"],
-        componentRestrictions: { country: "au" }, // Restrict to Australia
+        componentRestrictions: { country: "au" },
       });
-      console.log('[GoogleAddressInput] Autocomplete created:', autocompleteRef.current);
-
+      console.log('[GoogleAddressInput] Autocomplete created');
+    }
+    
+    if (needsListener && autocompleteRef.current) {
+      console.log('[GoogleAddressInput] Attaching place_changed listener');
       placeListenerRef.current = autocompleteRef.current.addListener("place_changed", () => {
         console.log('[GoogleAddressInput] ⚡⚡⚡ place_changed event FIRED ⚡⚡⚡');
         const ac = autocompleteRef.current;
@@ -375,9 +381,6 @@ export function GoogleAddressInput({
         }
         const place = ac.getPlace();
         console.log('[GoogleAddressInput] Place data:', place);
-        console.log('[GoogleAddressInput] Has place_id:', !!place.place_id);
-        console.log('[GoogleAddressInput] Has geometry:', !!place.geometry);
-        console.log('[GoogleAddressInput] Formatted address:', place.formatted_address);
 
         // Check if a valid place was selected
         if (!place.place_id) {
@@ -419,35 +422,32 @@ export function GoogleAddressInput({
 
         // Perform validation and pass result to onChange
         const error = performValidation(addr);
-        console.log('[GoogleAddressInput] About to call onChangeRef.current with address and error');
+        console.log('[GoogleAddressInput] About to call onChangeRef.current');
         onChangeRef.current?.(addr, error);
         console.log('[GoogleAddressInput] ✅ onChange called');
       });
-      console.log('[GoogleAddressInput] Event listener attached:', placeListenerRef.current);
-    } else {
-      console.log('[GoogleAddressInput] Autocomplete already exists, skipping creation');
+      console.log('[GoogleAddressInput] Event listener attached');
+    }
+    
+    if (!needsAutocomplete && !needsListener) {
+      console.log('[GoogleAddressInput] Autocomplete and listener already exist');
     }
 
-    // Proper cleanup function for Google Maps autocomplete
+    // Cleanup: Only remove listener, keep autocomplete instance
     return () => {
-      try {
-        // Remove the event listener properly
-        if (placeListenerRef.current) {
+      console.log('[GoogleAddressInput] Cleanup running');
+      if (placeListenerRef.current) {
+        try {
           if (typeof placeListenerRef.current.remove === 'function') {
             placeListenerRef.current.remove();
           } else if (window.google && window.google.maps && window.google.maps.event) {
-            // Fallback for older Google Maps API versions
             window.google.maps.event.removeListener(placeListenerRef.current);
           }
+          console.log('[GoogleAddressInput] Listener removed');
           placeListenerRef.current = null;
+        } catch (error) {
+          console.warn("Error removing listener:", error);
         }
-
-        // Clear the autocomplete instance
-        if (autocompleteRef.current) {
-          autocompleteRef.current = null;
-        }
-      } catch (error) {
-        console.warn("Error cleaning up Google Maps autocomplete:", error);
       }
     };
   }, [isLoaded, performValidation]);
