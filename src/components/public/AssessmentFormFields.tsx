@@ -108,15 +108,13 @@ export function ComplianceFields({
                     : "Select date"}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="center" sideOffset={4}>
-                <div className="w-[280px]">
-                  <CalendarComponent
-                    mode="single"
-                    selected={formData.cbus_check_date ? new Date(formData.cbus_check_date) : undefined}
-                    onSelect={(date) => onUpdate('cbus_check_date', date?.toISOString().split('T')[0])}
-                    initialFocus
-                  />
-                </div>
+              <PopoverContent className="w-auto p-0" align="start" sideOffset={4}>
+                <CalendarComponent
+                  mode="single"
+                  selected={formData.cbus_check_date ? new Date(formData.cbus_check_date) : undefined}
+                  onSelect={(date) => onUpdate('cbus_check_date', date?.toISOString().split('T')[0])}
+                  initialFocus
+                />
               </PopoverContent>
             </Popover>
           </div>
@@ -202,15 +200,13 @@ export function ComplianceFields({
                     : "Select date"}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="center" sideOffset={4}>
-                <div className="w-[280px]">
-                  <CalendarComponent
-                    mode="single"
-                    selected={formData.incolink_check_date ? new Date(formData.incolink_check_date) : undefined}
-                    onSelect={(date) => onUpdate('incolink_check_date', date?.toISOString().split('T')[0])}
-                    initialFocus
-                  />
-                </div>
+              <PopoverContent className="w-auto p-0" align="start" sideOffset={4}>
+                <CalendarComponent
+                  mode="single"
+                  selected={formData.incolink_check_date ? new Date(formData.incolink_check_date) : undefined}
+                  onSelect={(date) => onUpdate('incolink_check_date', date?.toISOString().split('T')[0])}
+                  initialFocus
+                />
               </PopoverContent>
             </Popover>
           </div>
