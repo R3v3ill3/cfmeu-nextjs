@@ -12,7 +12,7 @@ import { useAuth } from "@/hooks/useAuth"
 import { useSearchParams } from "next/navigation"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { ChevronDown } from "lucide-react"
+import { ChevronDown, Users, ShieldCheck, Map, Database, Navigation, Activity } from "lucide-react"
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
 
@@ -511,20 +511,58 @@ export default function AdminPage() {
         ) : (
           /* Desktop layout - grouped tabs with lazy loading */
           <Tabs value={parentTab} onValueChange={setParentTab}>
-          <TabsList>
-            <TabsTrigger value="user-management">User Management</TabsTrigger>
-            <TabsTrigger value="data-integrity">
-              Data Integrity
+          <TabsList className="h-auto bg-transparent p-0 gap-2 w-full flex-wrap sm:flex-nowrap border-0">
+            <TabsTrigger 
+              value="user-management"
+              className="flex items-center gap-2 px-4 py-2.5 text-base font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20"
+            >
+              <Users className="h-4 w-4" />
+              <span className="whitespace-nowrap">User Management</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="data-integrity"
+              className="flex items-center gap-2 px-4 py-2.5 text-base font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20"
+            >
+              <ShieldCheck className="h-4 w-4" />
+              <span className="whitespace-nowrap">Data Integrity</span>
               {totalPendingCount > 0 && (
-                <Badge variant="destructive" className="ml-2">
+                <Badge variant="destructive" className="ml-1">
                   {totalPendingCount}
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="patch-management">Patch Management</TabsTrigger>
-            <TabsTrigger value="data-management">Data Management</TabsTrigger>
-            {isAdmin && <TabsTrigger value="navigation">Navigation</TabsTrigger>}
-            {isAdmin && <TabsTrigger value="system-health">System Health</TabsTrigger>}
+            <TabsTrigger 
+              value="patch-management"
+              className="flex items-center gap-2 px-4 py-2.5 text-base font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20"
+            >
+              <Map className="h-4 w-4" />
+              <span className="whitespace-nowrap">Patch Management</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="data-management"
+              className="flex items-center gap-2 px-4 py-2.5 text-base font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20"
+            >
+              <Database className="h-4 w-4" />
+              <span className="whitespace-nowrap">Data Management</span>
+            </TabsTrigger>
+            {isAdmin && (
+              <TabsTrigger 
+                value="navigation"
+                className="flex items-center gap-2 px-4 py-2.5 text-base font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20"
+              >
+                <Navigation className="h-4 w-4" />
+                <span className="whitespace-nowrap">Navigation</span>
+              </TabsTrigger>
+            )}
+            {isAdmin && (
+              <TabsTrigger 
+                value="system-health"
+                className="flex items-center gap-2 px-4 py-2.5 text-base font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20"
+              >
+                <Activity className="h-4 w-4" />
+                <span className="whitespace-nowrap">System Health</span>
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* User Management Group */}

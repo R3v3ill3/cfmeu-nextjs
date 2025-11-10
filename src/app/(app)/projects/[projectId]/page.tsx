@@ -29,8 +29,12 @@ import { usePatchOrganiserLabels } from "@/hooks/usePatchOrganiserLabels"
 import { ProjectTierBadge } from "@/components/ui/ProjectTierBadge"
 import { useUnifiedContractors } from "@/hooks/useUnifiedContractors"
 import { useProjectSubsetStats } from "@/hooks/useProjectSubsetStats"
-import { SubsetEbaStats } from "@/components/projects/SubsetEbaStats"
 import SelectiveEbaSearchManager from "@/components/projects/SelectiveEbaSearchManager"
+import { ProjectKeyContractorMetrics } from "@/components/projects/ProjectKeyContractorMetrics"
+import { useProjectKeyContractorMetrics } from "@/hooks/useProjectKeyContractorMetrics"
+import { useProjectAuditTarget } from "@/hooks/useProjectAuditTarget"
+import { Info, FileText, Calendar, BarChart3, Search, FileCheck } from "lucide-react"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { OrganizingUniverseBadge } from "@/components/ui/OrganizingUniverseBadge"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useAccessiblePatches } from "@/hooks/useAccessiblePatches"
@@ -580,6 +584,23 @@ export default function ProjectDetailPage() {
   // Get subset EBA stats for this project
   const { data: subsetStats } = useProjectSubsetStats(projectId)
 
+  // Get key contractor metrics for the three charts
+  const { data: keyContractorMetrics } = useProjectKeyContractorMetrics(projectId)
+
+  // Get user-defined audit target
+  const { auditTarget: auditsTarget } = useProjectAuditTarget()
+
+  // Calculate target percentages based on project conditions
+  const identificationTarget = useMemo(() => {
+    return project?.organising_universe === 'active' ? 100 : null
+  }, [project?.organising_universe])
+
+  const ebaTarget = useMemo(() => {
+    if (!project) return null
+    const ebaStatus = getProjectEbaStatus(project)
+    return project.organising_universe === 'active' && ebaStatus.hasActiveEba ? 100 : null
+  }, [project])
+
   // Fetch EBA employer ids for fast lookup and make EBA badge actionable
   const stableContractorEmployerIds = useMemo(
     () => Array.from(new Set(((contractorRows as any[]) || []).map((r: any) => r.employerId).filter(Boolean))).sort(),
@@ -849,29 +870,85 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* Key Contractor EBA Overview */}
-      {subsetStats && (
+      {keyContractorMetrics && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Key Contractor EBA Status</CardTitle>
+            <CardTitle className="text-lg flex items-center gap-2">
+              Key Contractor EBA Status
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <div className="space-y-1">
+                      <p className="font-medium">Covers key project roles and trades:</p>
+                      <p className="text-xs">• Builders and Project Managers</p>
+                      <p className="text-xs">• Demolition, Piling, Concrete</p>
+                      <p className="text-xs">• Scaffolding, Form Work, Cranes</p>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <SubsetEbaStats 
-              stats={subsetStats}
-              variant="detailed"
-              onClick={() => setTab('contractors')}
+            <ProjectKeyContractorMetrics
+              identifiedCount={keyContractorMetrics.identifiedCount}
+              totalSlots={keyContractorMetrics.totalSlots}
+              identificationTarget={identificationTarget}
+              ebaCount={keyContractorMetrics.ebaCount}
+              ebaTarget={ebaTarget}
+              auditsCount={keyContractorMetrics.auditsCount}
+              auditsTarget={auditsTarget}
+              trafficLightRatings={keyContractorMetrics.trafficLightRatings}
+              onIdentificationClick={() => setTab('mappingsheets')}
+              onEbaClick={() => setTab('eba-search')}
+              onAuditsClick={() => setTab('audit-compliance')}
+              onTrafficLightClick={() => setTab('audit-compliance')}
             />
           </CardContent>
         </Card>
       )}
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
+        <TabsList className="h-auto bg-transparent p-0 gap-2 w-full flex-wrap sm:flex-nowrap border-0">
           {/* Sites tab trigger hidden; accessible via Overview 'Sites' link */}
-          <TabsTrigger value="mappingsheets">Mapping Sheets</TabsTrigger>
-          <TabsTrigger value="site-visits">Site Visits</TabsTrigger>
-          <TabsTrigger value="wallcharts">Wallcharts</TabsTrigger>
-          <TabsTrigger value="eba-search">EBA Search</TabsTrigger>
-          <TabsTrigger value="audit-compliance">Audit & Compliance</TabsTrigger>
+          <TabsTrigger 
+            value="mappingsheets" 
+            className="flex items-center gap-2 px-4 py-2.5 text-base font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20"
+          >
+            <FileText className="h-4 w-4" />
+            <span className="whitespace-nowrap">Mapping Sheets</span>
+          </TabsTrigger>
+          <TabsTrigger 
+            value="site-visits"
+            className="flex items-center gap-2 px-4 py-2.5 text-base font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20"
+          >
+            <Calendar className="h-4 w-4" />
+            <span className="whitespace-nowrap">Site Visits</span>
+          </TabsTrigger>
+          <TabsTrigger 
+            value="wallcharts"
+            className="flex items-center gap-2 px-4 py-2.5 text-base font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20"
+          >
+            <BarChart3 className="h-4 w-4" />
+            <span className="whitespace-nowrap">Wallcharts</span>
+          </TabsTrigger>
+          <TabsTrigger 
+            value="eba-search"
+            className="flex items-center gap-2 px-4 py-2.5 text-base font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20"
+          >
+            <Search className="h-4 w-4" />
+            <span className="whitespace-nowrap">EBA Search</span>
+          </TabsTrigger>
+          <TabsTrigger 
+            value="audit-compliance"
+            className="flex items-center gap-2 px-4 py-2.5 text-base font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20"
+          >
+            <FileCheck className="h-4 w-4" />
+            <span className="whitespace-nowrap">Audit & Compliance</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="mappingsheets">

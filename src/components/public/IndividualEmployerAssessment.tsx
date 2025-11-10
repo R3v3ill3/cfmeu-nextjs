@@ -201,9 +201,8 @@ export function IndividualEmployerAssessment({
           {/* Breadcrumb Navigation */}
           <Button
             variant="ghost"
-            size="sm"
             onClick={handleBack}
-            className="w-fit -ml-2"
+            className="w-full sm:w-auto justify-start sm:justify-center -ml-2 sm:ml-0"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Employer List
@@ -316,6 +315,18 @@ export function IndividualEmployerAssessment({
                 <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
             )}
+          </div>
+
+          {/* Bottom Back Button */}
+          <div className="pt-4 border-t">
+            <Button
+              variant="ghost"
+              onClick={handleBack}
+              className="w-full sm:w-auto"
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Employer List
+            </Button>
           </div>
 
           {/* Help Text */}

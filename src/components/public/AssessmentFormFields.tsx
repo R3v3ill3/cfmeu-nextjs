@@ -108,7 +108,7 @@ export function ComplianceFields({
                     : "Select date"}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="center" sideOffset={4}>
+              <PopoverContent className="w-auto p-0" align="start" sideOffset={4}>
                 <CalendarComponent
                   mode="single"
                   selected={formData.cbus_check_date ? new Date(formData.cbus_check_date) : undefined}
@@ -140,22 +140,22 @@ export function ComplianceFields({
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="flex items-center space-x-2">
+            <Label htmlFor="cbus-enforcement" className="flex items-center space-x-2 cursor-pointer">
               <Checkbox
                 id="cbus-enforcement"
                 checked={formData.cbus_enforcement_flag}
                 onCheckedChange={(checked) => onUpdate('cbus_enforcement_flag', checked)}
               />
-              <Label htmlFor="cbus-enforcement" className="text-sm">Enforcement Required</Label>
-            </div>
-            <div className="flex items-center space-x-2">
+              <span className="text-sm">Enforcement Required</span>
+            </Label>
+            <Label htmlFor="cbus-followup" className="flex items-center space-x-2 cursor-pointer">
               <Checkbox
                 id="cbus-followup"
                 checked={formData.cbus_followup_required}
                 onCheckedChange={(checked) => onUpdate('cbus_followup_required', checked)}
               />
-              <Label htmlFor="cbus-followup" className="text-sm">Follow-up Required</Label>
-            </div>
+              <span className="text-sm">Follow-up Required</span>
+            </Label>
           </div>
 
           <div className="space-y-2">
@@ -200,7 +200,7 @@ export function ComplianceFields({
                     : "Select date"}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="center" sideOffset={4}>
+              <PopoverContent className="w-auto p-0" align="start" sideOffset={4}>
                 <CalendarComponent
                   mode="single"
                   selected={formData.incolink_check_date ? new Date(formData.incolink_check_date) : undefined}
@@ -241,22 +241,22 @@ export function ComplianceFields({
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="flex items-center space-x-2">
+            <Label htmlFor="incolink-enforcement" className="flex items-center space-x-2 cursor-pointer">
               <Checkbox
                 id="incolink-enforcement"
                 checked={formData.incolink_enforcement_flag}
                 onCheckedChange={(checked) => onUpdate('incolink_enforcement_flag', checked)}
               />
-              <Label htmlFor="incolink-enforcement" className="text-sm">Enforcement Required</Label>
-            </div>
-            <div className="flex items-center space-x-2">
+              <span className="text-sm">Enforcement Required</span>
+            </Label>
+            <Label htmlFor="incolink-followup" className="flex items-center space-x-2 cursor-pointer">
               <Checkbox
                 id="incolink-followup"
                 checked={formData.incolink_followup_required}
                 onCheckedChange={(checked) => onUpdate('incolink_followup_required', checked)}
               />
-              <Label htmlFor="incolink-followup" className="text-sm">Follow-up Required</Label>
-            </div>
+              <span className="text-sm">Follow-up Required</span>
+            </Label>
           </div>
 
           <div className="space-y-2">
@@ -297,6 +297,7 @@ export function UnionRespectFields({
           <FourPointSelector
             value={formData[criterion.id as keyof EmployerAssessmentData] as FourPointRating}
             onChange={(value) => onUpdate(criterion.id, value)}
+            fieldId={criterion.id}
           />
         </div>
       ))}
@@ -339,6 +340,7 @@ export function SafetyFields({
             <FourPointSelector
               value={formData[criterion.id as keyof EmployerAssessmentData] as FourPointRating}
               onChange={(value) => onUpdate(criterion.id, value)}
+              fieldId={criterion.id}
             />
           </div>
         ))}
@@ -420,6 +422,7 @@ export function SubcontractorFields({
           <FourPointSelector
             value={formData[criterion.id as keyof EmployerAssessmentData] as FourPointRating}
             onChange={(value) => onUpdate(criterion.id, value)}
+            fieldId={criterion.id}
           />
         </div>
       ))}
@@ -441,24 +444,26 @@ export function SubcontractorFields({
 export function FourPointSelector({
   value,
   onChange,
+  fieldId,
 }: {
   value: FourPointRating;
   onChange: (value: FourPointRating) => void;
+  fieldId?: string;
 }) {
+  const stableId = fieldId || 'default';
   return (
     <RadioGroup value={value?.toString()} onValueChange={(v) => onChange(parseInt(v) as FourPointRating)}>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {Object.entries(FOUR_POINT_SCALE).map(([key, rating]) => (
-          <div key={key} className="flex items-center space-x-2">
-            <RadioGroupItem value={key} id={`rating-${value}-${key}`} />
-            <Label 
-              htmlFor={`rating-${value}-${key}`}
-              className="flex items-center gap-2 cursor-pointer text-sm"
-            >
-              <div className={cn("w-3 h-3 rounded-full", rating.color)} />
-              {rating.label}
-            </Label>
-          </div>
+          <Label
+            key={key}
+            htmlFor={`rating-${stableId}-${key}`}
+            className="flex items-center space-x-2 cursor-pointer p-2 rounded-md hover:bg-gray-50 transition-colors"
+          >
+            <RadioGroupItem value={key} id={`rating-${stableId}-${key}`} />
+            <div className={cn("w-3 h-3 rounded-full", rating.color)} />
+            <span className="text-sm">{rating.label}</span>
+          </Label>
         ))}
       </div>
     </RadioGroup>
