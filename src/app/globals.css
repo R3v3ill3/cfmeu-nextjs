@@ -618,3 +618,28 @@ body {
 .dark .pac-item-query {
   color: hsl(var(--foreground)) !important;
 }
+
+/* React Day Picker Calendar Fix - Mobile Day Header Alignment */
+/* Force table rows to use flex layout for proper day header distribution */
+/* Target both react-day-picker's default classes and our custom classNames */
+table[role="grid"] thead tr,
+table[role="grid"] tbody tr,
+.rdp-table thead tr,
+.rdp-table tbody tr {
+  display: flex !important;
+  width: 100% !important;
+}
+
+table[role="grid"] thead th,
+table[role="grid"] tbody td,
+.rdp-table thead th,
+.rdp-table tbody td {
+  flex: 1 1 0% !important;
+  min-width: 0 !important;
+}
+
+/* Ensure day header cells are centered and evenly distributed */
+table[role="grid"] thead th,
+.rdp-table thead th {
+  text-align: center !important;
+}
