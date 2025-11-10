@@ -15,7 +15,7 @@ import { Search, Building2, MapPin, Hash, Navigation } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useDebounce } from '@/hooks/useDebounce'
-import { GoogleAddressInput, GoogleAddress } from '@/components/projects/GoogleAddressInput'
+import { GoogleAddressInput, GoogleAddress, AddressValidationError } from '@/components/projects/GoogleAddressInput'
 import { useAddressSearch, NearbyProject, formatDistance } from '@/hooks/useAddressSearch'
 
 interface ProjectFromRPC {
@@ -61,6 +61,12 @@ export function ProjectSearchDialog({
 
   // Address search state (new)
   const [selectedAddress, setSelectedAddress] = useState<GoogleAddress | null>(null)
+
+  // Handle address selection from autocomplete
+  const handleAddressChange = useCallback((address: GoogleAddress, error?: AddressValidationError | null) => {
+    console.log('[ProjectSearchDialog] Address changed:', { address, error, hasCoords: !!(address.lat && address.lng) })
+    setSelectedAddress(address)
+  }, [])
 
   // Address search hook
   const addressSearchQuery = useAddressSearch({
@@ -317,9 +323,10 @@ export function ProjectSearchDialog({
             <div className="px-3 pb-2">
               <GoogleAddressInput
                 value={selectedAddress?.formatted || ''}
-                onChange={setSelectedAddress}
+                onChange={handleAddressChange}
                 placeholder="Enter an address to find nearby projects..."
                 showLabel={false}
+                requireSelection={false}
               />
             </div>
 
