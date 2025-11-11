@@ -1,14 +1,10 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const config_1 = require("./config");
 const supabase_1 = require("./supabase");
 const jobs_1 = require("./jobs");
 const fwc_1 = require("./processors/fwc");
 const incolink_1 = require("./processors/incolink");
-const express_1 = __importDefault(require("express"));
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // Graceful shutdown state
 let isShuttingDown = false;
@@ -180,43 +176,6 @@ function registerShutdownHandlers() {
     process.on('SIGINT', gracefulShutdown);
     process.on('SIGTERM', gracefulShutdown);
 }
-// Health check HTTP server
-// Railway sets PORT dynamically, use that in production, fall back to 3200 for local dev
-const HEALTH_PORT = Number(process.env.PORT || process.env.HEALTH_PORT || 3200);
-const app = (0, express_1.default)();
-// Log all requests for debugging
-app.use((req, res, next) => {
-    console.log(`[health] Incoming request: ${req.method} ${req.path} from ${req.ip}`);
-    next();
-});
-app.get('/health', (req, res) => {
-    console.log(`[health] Health check requested`);
-    const uptimeSeconds = Math.floor(process.uptime());
-    const response = {
-        status: 'healthy',
-        currentJob: currentJobId || 'none',
-        isShuttingDown,
-        uptime: uptimeSeconds,
-        uptimeHuman: `${Math.floor(uptimeSeconds / 60)}m ${uptimeSeconds % 60}s`,
-        worker: 'cfmeu-scraper-worker',
-        config: {
-            gracefulShutdownTimeoutMs: config_1.config.gracefulShutdownTimeoutMs,
-            pollIntervalMs: config_1.config.pollIntervalMs,
-            retryMaxAttempts: config_1.config.retry.maxAttempts
-        }
-    };
-    console.log(`[health] Responding with:`, response);
-    res.status(200).json(response);
-});
-// Catch-all for other routes
-app.use((req, res) => {
-    console.log(`[health] 404 - Unknown route: ${req.method} ${req.path}`);
-    res.status(404).json({ error: 'Not found' });
-});
-app.listen(HEALTH_PORT, '0.0.0.0', () => {
-    console.log(`[health] Health check endpoint listening on 0.0.0.0:${HEALTH_PORT}`);
-    console.log(`[health] Health check URL: http://0.0.0.0:${HEALTH_PORT}/health`);
-});
 registerShutdownHandlers();
 workerLoop().catch((error) => {
     console.error('[worker] Fatal worker error:', error);
