@@ -493,15 +493,20 @@ export function BulkAliasOperations({
                                   >
                                     <div className="flex items-start justify-between">
                                       <div className="flex-1">
-                                        <div className="flex items-center gap-2 mb-2">
-                                          <input
-                                            type="checkbox"
-                                            checked={isSelected}
-                                            onChange={() => handleSelectSuggestion(getSuggestionId(suggestion), !isSelected)}
-                                            className="h-4 w-4"
-                                            onClick={(e) => e.stopPropagation()}
-                                          />
-                                          <span className="font-medium">"{suggestion.suggestedAlias}"</span>
+                                        <div className="flex items-center gap-3 mb-2">
+                                          <div className="flex items-center justify-center p-2 rounded-lg border-2 border-transparent hover:border-gray-300 focus-within:border-blue-500 min-h-[44px] min-w-[44px] touch-manipulation transition-colors">
+                                            <input
+                                              type="checkbox"
+                                              id={`suggestion-${suggestion.id}`}
+                                              checked={isSelected}
+                                              onChange={() => handleSelectSuggestion(getSuggestionId(suggestion), !isSelected)}
+                                              className="h-5 w-5 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+                                              onClick={(e) => e.stopPropagation()}
+                                            />
+                                          </div>
+                                          <Label htmlFor={`suggestion-${suggestion.id}`} className="font-medium cursor-pointer">
+                                            "{suggestion.suggestedAlias}"
+                                          </Label>
                                           <Badge
                                             variant="outline"
                                             className={`text-xs ${confidenceColors[suggestion.confidence]}`}

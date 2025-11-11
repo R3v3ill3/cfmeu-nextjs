@@ -151,23 +151,33 @@ export const PendingUsersTable = () => {
                   </TableCell>
                   <TableCell>{format(new Date(row.created_at), "dd/MM/yyyy")}</TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex flex-col sm:flex-row gap-2 min-w-[44px]">
                       {row.status === "draft" && (
-                        <Button size="sm" variant="outline" onClick={() => openEdit(row)}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openEdit(row)}
+                          className="min-h-[44px] min-w-[44px] touch-manipulation justify-start sm:justify-center"
+                        >
                           <Pencil className="h-4 w-4 mr-2" /> Edit
                         </Button>
                       )}
                       {canActivatePendingUser(row.email, row.status) && (
-                        <Button 
-                          size="sm" 
+                        <Button
+                          size="sm"
                           variant="default"
                           onClick={() => openActivate(row)}
-                          className="bg-green-600 hover:bg-green-700"
+                          className="bg-green-600 hover:bg-green-700 min-h-[44px] min-w-[44px] touch-manipulation justify-start sm:justify-center"
                         >
                           <UserCheck className="h-4 w-4 mr-2" /> Activate
                         </Button>
                       )}
-                      <Button size="sm" onClick={() => sendInvite(row)} disabled={invitingId === row.id}>
+                      <Button
+                        size="sm"
+                        onClick={() => sendInvite(row)}
+                        disabled={invitingId === row.id}
+                        className="min-h-[44px] min-w-[44px] touch-manipulation justify-start sm:justify-center"
+                      >
                         {invitingId === row.id ? (
                           <>
                             <img src="/spinner.gif" alt="Loading" className="h-4 w-4 mr-2" /> Sending
@@ -178,7 +188,12 @@ export const PendingUsersTable = () => {
                           </>
                         )}
                       </Button>
-                      <Button size="sm" variant="outline" onClick={() => removeDraft(row)}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => removeDraft(row)}
+                        className="min-h-[44px] min-w-[44px] touch-manipulation justify-start sm:justify-center text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                      >
                         <Trash2 className="h-4 w-4 mr-2" /> Delete
                       </Button>
                     </div>

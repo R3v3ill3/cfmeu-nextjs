@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Separator } from "@/components/ui/separator"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
@@ -28,7 +29,7 @@ import {
   ChevronDown,
   ChevronUp
 } from "lucide-react"
-import { MobileRatingSelector4Point } from "@/components/ui/MobileRatingSelector4Point"
+import { MobileRatingSelector4Point, MobileRatingSelector4PointCompact } from "@/components/ui/MobileRatingSelector4Point"
 import { useHapticFeedback } from "@/components/mobile/shared/HapticFeedback"
 import { toast } from "sonner"
 
@@ -365,7 +366,7 @@ export function UnionRespectAssessment4PointMobile({
                     {/* Mobile Rating Selector */}
                     <div>
                       <Label className="text-sm font-medium">Rating:</Label>
-                      <div className="mt-2">
+                      <div className="mt-2 px-2 py-1 -mx-2 -my-1">
                         <MobileRatingSelector4PointCompact
                           value={currentRating}
                           onChange={(value) => handleCriteriaChange(criterion.id, value)}
@@ -445,16 +446,16 @@ export function UnionRespectAssessment4PointMobile({
 
           {/* Follow-up */}
           <div className="space-y-3">
-            <div className="flex items-center space-x-2">
-              <input
-                type="checkbox"
+            <div className="flex items-center gap-3 p-3 rounded-lg border-2 border-transparent hover:border-gray-300 focus:border-blue-500 min-h-[56px] cursor-pointer transition-colors">
+              <Checkbox
                 id="follow_up_required"
                 checked={formData.follow_up_required}
-                onChange={(e) => setFormData(prev => ({ ...prev, follow_up_required: e.target.checked }))}
+                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, follow_up_required: checked }))}
                 disabled={readonly}
-                className="rounded"
               />
-              <Label htmlFor="follow_up_required" className="text-sm">Follow-up Required</Label>
+              <Label htmlFor="follow_up_required" className="flex-1 text-sm font-normal cursor-pointer select-none">
+                Follow-up Required
+              </Label>
             </div>
 
             {formData.follow_up_required && (

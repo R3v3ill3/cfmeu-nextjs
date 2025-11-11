@@ -436,13 +436,16 @@ export function MobileTableWithSearch<T extends Record<string, any>>({
           )}>
             <tr>
               {selectable && (
-                <th className="w-10 px-2 py-3">
-                  <input
-                    type="checkbox"
-                    checked={selectedRows.size === filteredData.length && filteredData.length > 0}
-                    onChange={handleSelectAll}
-                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                  />
+                <th className="w-12 px-2 py-3">
+                  <div className="flex items-center justify-center">
+                    <input
+                      type="checkbox"
+                      id="select-all-rows"
+                      checked={selectedRows.size === filteredData.length && filteredData.length > 0}
+                      onChange={handleSelectAll}
+                      className="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:ring-2 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+                    />
+                  </div>
                 </th>
               )}
               {columns.map((column) => (
@@ -506,12 +509,15 @@ export function MobileTableWithSearch<T extends Record<string, any>>({
               >
                 {selectable && (
                   <td className="px-2 py-3">
-                    <input
-                      type="checkbox"
-                      checked={selectedRows.has(index)}
-                      onChange={() => handleRowSelect(index)}
-                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                    />
+                    <div className="flex items-center justify-center min-h-[44px] min-w-[44px] touch-manipulation">
+                      <input
+                        type="checkbox"
+                        id={`select-row-${index}`}
+                        checked={selectedRows.has(index)}
+                        onChange={() => handleRowSelect(index)}
+                        className="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:ring-2 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+                      />
+                    </div>
                   </td>
                 )}
                 {columns.map((column) => (
@@ -578,15 +584,18 @@ export function MobileTableWithSearch<T extends Record<string, any>>({
               right: rowActions.filter(action => action.color === 'error').slice(0, 2),
             } : undefined}
           >
-            {/* Selection checkbox */}
+            {/* Enhanced selection checkbox */}
             {selectable && (
-              <div className="flex items-center justify-between mb-3">
-                <input
-                  type="checkbox"
-                  checked={selectedRows.has(index)}
-                  onChange={() => handleRowSelect(index)}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
+              <div className="mobile-card-selection flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3 p-2 rounded-lg border-2 border-transparent hover:border-gray-300 focus-within:border-blue-500 min-h-[44px] min-w-[44px] touch-manipulation transition-colors">
+                  <input
+                    type="checkbox"
+                    id={`card-select-${index}`}
+                    checked={selectedRows.has(index)}
+                    onChange={() => handleRowSelect(index)}
+                    className="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:ring-2 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+                  />
+                </div>
               </div>
             )}
 
@@ -709,14 +718,21 @@ export function MobileTableWithSearch<T extends Record<string, any>>({
         </div>
       )}
 
-      {/* Bulk actions bar */}
+      {/* Enhanced bulk actions bar */}
       {selectable && selectedRows.size > 0 && (
-        <div className="bg-blue-50 border-b border-blue-200 px-4 py-3">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-blue-900">
-              {selectedRows.size} selected
-            </span>
-            <div className="flex gap-2">
+        <div className="mobile-bulk-controls bg-blue-50 border-b border-blue-200 px-4 py-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-h-[44px]">
+              <div className="w-5 h-5 rounded-sm border-2 border-blue-600 bg-blue-600 flex items-center justify-center">
+                <svg className="h-3 w-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <span className="text-sm font-medium text-blue-900">
+                {selectedRows.size} selected
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
               {bulkActions.map(action => (
                 <Button
                   key={action.key}
@@ -724,7 +740,7 @@ export function MobileTableWithSearch<T extends Record<string, any>>({
                   size="sm"
                   onClick={() => handleBulkAction(action)}
                   disabled={action.disabled?.(Array.from(selectedRows).map(i => filteredData[i]))}
-                  className="min-h-[44px] min-w-[44px] touch-manipulation"
+                  className="min-h-[44px] min-w-[44px] touch-manipulation px-4"
                 >
                   <span className="flex items-center gap-2">
                     {action.icon}

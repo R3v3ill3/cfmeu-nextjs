@@ -744,14 +744,17 @@ export function EbaBackfillManager() {
                   return (
                     <div key={employer.id} className="border rounded-lg p-4">
                       <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="checkbox"
-                            checked={selectedEmployers.has(employer.id)}
-                            onChange={() => toggleEmployerSelection(employer.id)}
-                            className="w-4 h-4"
-                          />
-                          <div>
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className="flex items-center justify-center p-2 rounded-lg border-2 border-transparent hover:border-gray-300 focus-within:border-blue-500 min-h-[44px] min-w-[44px] touch-manipulation transition-colors">
+                            <input
+                              type="checkbox"
+                              id={`employer-${employer.id}`}
+                              checked={selectedEmployers.has(employer.id)}
+                              onChange={() => toggleEmployerSelection(employer.id)}
+                              className="h-5 w-5 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+                            />
+                          </div>
+                          <Label htmlFor={`employer-${employer.id}`} className="min-w-0 flex-1 cursor-pointer">
                             <div className="flex items-center gap-2">
                               <h4 className="font-medium">{employer.name}</h4>
                               {employer.is_builder && <Badge variant="secondary" className="text-xs">Builder</Badge>}
@@ -762,7 +765,7 @@ export function EbaBackfillManager() {
                               {employer.employer_type} • {employer.suburb}, {employer.state}
                               {employer.project_count && employer.project_count > 0 && ` • ${employer.project_count} projects`}
                             </p>
-                          </div>
+                          </Label>
                         </div>
                         <div className="flex items-center gap-2">
                           <Button

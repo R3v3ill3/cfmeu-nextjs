@@ -299,22 +299,40 @@ function RadioField({ field, value, onChange, error }: {
   onChange: (value: string) => void
   error?: string
 }) {
+  const uniqueIdPrefix = field.id
+  const currentIndex = field.options?.findIndex(opt => opt.value === value) ?? -1
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <Label className="text-sm font-medium">{field.label}</Label>
       {field.description && (
         <p className="text-xs text-muted-foreground">{field.description}</p>
       )}
-      <RadioGroup value={value} onValueChange={onChange}>
-        {field.options?.map((option) => (
-          <div key={option.value} className="flex items-center space-x-2">
-            <RadioGroupItem value={option.value} id={option.value} />
-            <Label htmlFor={option.value} className="text-sm">
-              {option.label}
-            </Label>
-            {option.description && (
-              <p className="text-xs text-muted-foreground">{option.description}</p>
-            )}
+      <RadioGroup value={value} onValueChange={onChange} className="space-y-2">
+        {field.options?.map((option, index) => (
+          <div
+            key={option.value}
+            className="flex items-center gap-3 p-3 rounded-lg border-2 border-transparent hover:border-gray-300 focus-within:border-blue-500 min-h-[56px] cursor-pointer transition-colors"
+            onClick={() => onChange(option.value)}
+          >
+            <RadioGroupItem
+              value={option.value}
+              id={`${uniqueIdPrefix}-${index}-${option.value}`}
+              className="w-5 h-5 flex-shrink-0"
+            />
+            <div className="flex-1 min-w-0">
+              <Label
+                htmlFor={`${uniqueIdPrefix}-${index}-${option.value}`}
+                className="text-sm font-normal cursor-pointer select-none w-full"
+              >
+                {option.label}
+              </Label>
+              {option.description && (
+                <p className="text-xs text-muted-foreground mt-1 leading-tight">
+                  {option.description}
+                </p>
+              )}
+            </div>
           </div>
         ))}
       </RadioGroup>

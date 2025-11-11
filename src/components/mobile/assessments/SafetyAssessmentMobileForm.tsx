@@ -320,10 +320,12 @@ export function SafetyAssessmentMobileForm({
             {/* Rating Selection */}
             <div className="space-y-3">
               <Label className="text-base font-medium">Rate this criterion:</Label>
-              <FourPointScaleMobile
-                value={safetyCriteria[currentCriterion.id]}
-                onChange={handleRatingChange}
-              />
+              <div className="px-2 py-1 -mx-2 -my-1">
+                <FourPointScaleMobile
+                  value={safetyCriteria[currentCriterion.id]}
+                  onChange={handleRatingChange}
+                />
+              </div>
             </div>
 
             {/* Navigation */}
@@ -453,10 +455,12 @@ export function SafetyAssessmentMobileForm({
 
               <div className="space-y-2">
                 <Label className="text-base font-medium">Audit Score (if available)</Label>
-                <FourPointScaleMobile
-                  value={auditCompliance.audit_score}
-                  onChange={(value) => handleAuditChange('audit_score', value)}
-                />
+                <div className="px-2 py-1 -mx-2 -my-1">
+                  <FourPointScaleMobile
+                    value={auditCompliance.audit_score}
+                    onChange={(value) => handleAuditChange('audit_score', value)}
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">

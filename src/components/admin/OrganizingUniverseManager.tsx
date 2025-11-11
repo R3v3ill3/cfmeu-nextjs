@@ -361,21 +361,26 @@ export default function OrganizingUniverseManager() {
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <input
-                      type="checkbox"
-                      checked={selectedProjects.has(project.id)}
-                      onChange={() => toggleProjectSelection(project.id)}
-                      className="rounded"
-                    />
-                    
-                    <div>
-                      <div className="font-medium">{project.name}</div>
-                      <div className="text-sm text-gray-600">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="flex items-center justify-center p-2 rounded-lg border-2 border-transparent hover:border-gray-300 focus-within:border-blue-500 min-h-[44px] min-w-[44px] touch-manipulation transition-colors">
+                      <input
+                        type="checkbox"
+                        id={`project-${project.id}`}
+                        checked={selectedProjects.has(project.id)}
+                        onChange={() => toggleProjectSelection(project.id)}
+                        className="h-5 w-5 rounded data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+                      />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <Label htmlFor={`project-${project.id}`} className="cursor-pointer">
+                        <div className="font-medium">{project.name}</div>
+                        <div className="text-sm text-gray-600">
                         {project.tier} • Builder: {project.builder_name || 'None'} 
                         {project.builder_has_eba && <span className="text-green-600"> (EBA)</span>}
                         {project.has_patch_assignment && <span className="text-blue-600"> (Patched)</span>}
                       </div>
+                      </Label>
                     </div>
                   </div>
                   

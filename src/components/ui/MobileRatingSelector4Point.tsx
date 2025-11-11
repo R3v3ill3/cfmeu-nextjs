@@ -144,16 +144,18 @@ export function MobileRatingSelector4PointCompact({
           onClick={() => handleRatingSelect(rating)}
           disabled={disabled}
           className={cn(
-            "flex-1 py-3 px-2 rounded-lg border text-center transition-all",
-            "focus:outline-none focus:ring-2 focus:ring-offset-1",
+            "flex-1 py-4 px-2 rounded-lg border text-center transition-all",
+            "min-h-[56px] min-w-[44px] touch-manipulation",
+            "focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500",
+            "hover:scale-105 active:scale-95",
             selectedValue === rating
-              ? `${ratingColors[rating as keyof typeof ratingColors]} border-current`
-              : "bg-white border-gray-200 hover:border-gray-300",
+              ? `${ratingColors[rating as keyof typeof ratingColors]} border-current shadow-md`
+              : "bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm",
             disabled && "opacity-50 cursor-not-allowed"
           )}
         >
           <div className="text-lg font-bold">{rating}</div>
-          <div className="text-xs">{labels[4 - rating]}</div>
+          <div className="text-xs leading-tight">{labels[4 - rating]}</div>
         </button>
       ))}
     </div>
@@ -190,15 +192,17 @@ export function MobileRatingSelector4PointScroll({
             disabled={disabled}
             className={cn(
               "py-4 px-6 rounded-lg border text-center transition-all whitespace-nowrap",
-              "min-w-[80px] focus:outline-none focus:ring-2 focus:ring-offset-2",
+              "min-h-[56px] min-w-[80px] touch-manipulation",
+              "focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500",
+              "hover:scale-105 active:scale-95",
               selectedValue === rating
-                ? `${ratingColors[rating as keyof typeof ratingColors]} border-current`
-                : "bg-white border-gray-200 hover:border-gray-300",
+                ? `${ratingColors[rating as keyof typeof ratingColors]} border-current shadow-md`
+                : "bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm",
               disabled && "opacity-50 cursor-not-allowed"
             )}
           >
             <div className="text-xl font-bold">{rating}</div>
-            <div className="text-sm">{labels[4 - rating]}</div>
+            <div className="text-sm leading-tight">{labels[4 - rating]}</div>
           </button>
         ))}
       </div>

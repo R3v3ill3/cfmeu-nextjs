@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { Building2, AlertCircle, Plus, Search, X, FileSearch, Tags, Users, Keyboard, HelpCircle, Zap, ChevronDown, Info, ArrowRight, Lightbulb, ChevronUp, ChevronLeft, ChevronRight, CheckCircle2 } from 'lucide-react'
+import { Building2, AlertCircle, Plus, Search, X, FileSearch, Tags, Users, Keyboard, HelpCircle, Zap, ChevronDown, Info, ArrowRight, Lightbulb, ChevronUp, ChevronLeft, ChevronRight, CheckCircle2, Check } from 'lucide-react'
 import { supabase } from '@/integrations/supabase/client'
 import { ConfidenceIndicator } from './ConfidenceIndicator'
 import { EmployerMatchDialog } from './EmployerMatchDialog'
@@ -820,37 +820,45 @@ export function SubcontractorsReview({
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3 flex-1 min-w-0">
-              {/* Mobile selection checkbox */}
+              {/* Enhanced mobile selection checkbox */}
               {bulkSelectionMode && (
-                <Checkbox
-                  checked={isSelected}
-                  onCheckedChange={() => toggleBulkSelection(index)}
-                  className="h-5 w-5 flex-shrink-0"
-                />
+                <div className="mobile-card-selection flex items-center gap-3 p-2 rounded-lg border-2 border-transparent hover:border-gray-300 focus-within:border-blue-500 min-h-[44px] min-w-[44px] touch-manipulation transition-colors">
+                  <Checkbox
+                    id={`mobile-select-${index}`}
+                    checked={isSelected}
+                    onCheckedChange={() => toggleBulkSelection(index)}
+                    className="h-5 w-5 flex-shrink-0 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+                  />
+                </div>
               )}
 
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-2">
-                  <Badge variant="outline" className="text-xs">
-                    {STAGE_LABELS[decision.stage] || decision.stage}
-                  </Badge>
-                  <Badge variant={decision.eba ? 'default' : 'secondary'} className="text-xs">
-                    EBA: {decision.eba ? 'Yes' : 'No'}
-                  </Badge>
-                  {decision.isNewEmployer && (
-                    <Badge variant="secondary" className="text-xs">New</Badge>
-                  )}
-                </div>
-
-                <div className="font-semibold text-base truncate">
-                  {decision.trade}
-                </div>
-
-                {decision.company && (
-                  <div className="text-sm text-gray-600 truncate">
-                    {decision.company}
+                <Label
+                  htmlFor={bulkSelectionMode ? `mobile-select-${index}` : undefined}
+                  className={bulkSelectionMode ? "cursor-pointer" : ""}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant="outline" className="text-xs">
+                      {STAGE_LABELS[decision.stage] || decision.stage}
+                    </Badge>
+                    <Badge variant={decision.eba ? 'default' : 'secondary'} className="text-xs">
+                      EBA: {decision.eba ? 'Yes' : 'No'}
+                    </Badge>
+                    {decision.isNewEmployer && (
+                      <Badge variant="secondary" className="text-xs">New</Badge>
+                    )}
                   </div>
-                )}
+
+                  <div className="font-semibold text-base truncate">
+                    {decision.trade}
+                  </div>
+
+                  {decision.company && (
+                    <div className="text-sm text-gray-600 truncate">
+                      {decision.company}
+                    </div>
+                  )}
+                </Label>
               </div>
             </div>
 
@@ -913,7 +921,7 @@ export function SubcontractorsReview({
                       <div key={emp.id} className="flex items-center gap-2 p-2 bg-green-50 rounded border">
                         <Building2 className="h-4 w-4 text-green-600 flex-shrink-0" />
                         <span className="text-green-800 font-medium flex-1 text-sm">{emp.name}</span>
-                        <div className="flex items-center space-x-1">
+                        <div className="mobile-card-selection flex items-center gap-2 p-2 rounded-lg border-2 border-transparent hover:border-green-300 focus-within:border-green-500 min-h-[44px] min-w-[44px] touch-manipulation transition-colors">
                           <Checkbox
                             id={`keep-${index}-${empIndex}`}
                             checked={emp.keepDecision}
@@ -924,9 +932,9 @@ export function SubcontractorsReview({
                                 return updated
                               })
                             }}
-                            className="h-4 w-4"
+                            className="h-5 w-5 data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
                           />
-                          <Label htmlFor={`keep-${index}-${empIndex}`} className="text-xs cursor-pointer">
+                          <Label htmlFor={`keep-${index}-${empIndex}`} className="text-xs font-medium cursor-pointer text-green-800 select-none">
                             Keep
                           </Label>
                         </div>
@@ -1483,18 +1491,23 @@ export function SubcontractorsReview({
               </Button>
             </div>
 
-            {/* Bulk Action Buttons */}
+            {/* Enhanced Bulk Action Buttons */}
             {bulkSelectionMode && bulkSelected.size > 0 && (
-              <div className="space-y-2 p-3 bg-white rounded-lg border">
-                <div className="text-sm font-medium text-gray-700">
-                  {bulkSelected.size} item{bulkSelected.size > 1 ? 's' : ''} selected
+              <div className="mobile-bulk-controls space-y-3 p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
+                <div className="flex items-center gap-3 min-h-[44px]">
+                  <div className="w-5 h-5 rounded-sm border-2 border-blue-600 bg-blue-600 flex items-center justify-center">
+                    <Check className="h-3 w-3 text-white" />
+                  </div>
+                  <span className="text-sm font-medium text-gray-900">
+                    {bulkSelected.size} item{bulkSelected.size > 1 ? 's' : ''} selected
+                  </span>
                 </div>
                 <div className="flex gap-3">
                   <Button
                     variant="default"
                     size="lg"
                     onClick={() => handleBulkAction('import')}
-                    className="flex-1 gap-2 h-12 bg-green-600 hover:bg-green-700"
+                    className="flex-1 gap-2 h-12 min-h-[44px] min-w-[44px] bg-green-600 hover:bg-green-700 touch-manipulation"
                   >
                     <CheckCircle2 className="h-5 w-5" />
                     Import All
@@ -1503,7 +1516,7 @@ export function SubcontractorsReview({
                     variant="outline"
                     size="lg"
                     onClick={() => handleBulkAction('skip')}
-                    className="flex-1 gap-2 h-12 border-red-200 hover:bg-red-50"
+                    className="flex-1 gap-2 h-12 min-h-[44px] min-w-[44px] border-red-200 hover:bg-red-50 touch-manipulation"
                   >
                     <X className="h-5 w-5" />
                     Skip All

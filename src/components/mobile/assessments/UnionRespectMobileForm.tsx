@@ -315,10 +315,12 @@ export function UnionRespectMobileForm({
           {/* Rating Selection */}
           <div className="space-y-3">
             <Label className="text-base font-medium">Rate this criterion:</Label>
-            <FourPointScaleMobile
-              value={criteria[currentCriterion.id]}
-              onChange={handleRatingChange}
-            />
+            <div className="px-2 py-1 -mx-2 -my-1">
+              <FourPointScaleMobile
+                value={criteria[currentCriterion.id]}
+                onChange={handleRatingChange}
+              />
+            </div>
           </div>
 
           {/* Comment Input */}

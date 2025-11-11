@@ -9,11 +9,12 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
-import { 
-  Search, 
-  AlertTriangle, 
-  CheckCircle, 
-  Building2, 
+import {
+  Search,
+  AlertTriangle,
+  CheckCircle,
+  Check,
+  Building2,
   ArrowRight,
   Loader2,
   Eye,
@@ -285,15 +286,24 @@ export default function EmployerDeduplication({
       >
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between">
-            <div className="flex items-start gap-3">
-              <Checkbox
-                checked={isSelected}
-                onCheckedChange={() => toggleEmployerSelection(employer.id)}
-                className="mt-1"
-              />
-              <div className="flex-1">
-                <CardTitle className="text-lg">{employer.name}</CardTitle>
-                <CardDescription>
+            <div className="flex items-start gap-3 min-w-0 flex-1">
+              {/* Enhanced mobile selection container */}
+              <div className="flex items-center justify-center min-h-[44px] min-w-[44px] touch-manipulation">
+                <Checkbox
+                  id={employer.id}
+                  checked={isSelected}
+                  onCheckedChange={() => toggleEmployerSelection(employer.id)}
+                  className="h-5 w-5 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <Label
+                  htmlFor={employer.id}
+                  className="cursor-pointer text-base font-medium text-gray-900 hover:text-blue-700 transition-colors"
+                >
+                  {employer.name}
+                </Label>
+                <CardDescription className="text-sm text-gray-600 mt-1">
                   {(() => {
                     const addrLike = (employer as any).address || (employer as any).address_line_1
                     return addrLike || 'No address on file'
@@ -430,35 +440,45 @@ export default function EmployerDeduplication({
               )}
 
               {selectedEmployers.size > 0 && (
-                <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
-                  <span className="text-sm font-medium">
-                    {selectedEmployers.size} employer{selectedEmployers.size !== 1 ? 's' : ''} selected
-                  </span>
-                  <div className="flex gap-2">
-                    {searchResults.hasExactMatch && (
+                <div className="mobile-bulk-controls p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 min-h-[44px]">
+                      <div className="w-5 h-5 rounded-sm border-2 border-blue-600 bg-blue-600 flex items-center justify-center">
+                        <Check className="h-3 w-3 text-white" />
+                      </div>
+                      <span className="text-sm font-medium text-blue-900">
+                        {selectedEmployers.size} employer{selectedEmployers.size !== 1 ? 's' : ''} selected
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {searchResults.hasExactMatch && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={selectAllExactMatches}
+                          className="min-h-[44px] min-w-[44px] touch-manipulation px-4"
+                        >
+                          Select All Exact Matches
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={selectAllExactMatches}
+                        onClick={clearSelection}
+                        className="min-h-[44px] min-w-[44px] touch-manipulation px-4"
                       >
-                        Select All Exact Matches
+                        Clear Selection
                       </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={clearSelection}
-                    >
-                      Clear Selection
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={initiateMerge}
-                      disabled={selectedEmployers.size < 2}
-                    >
-                      <Merge className="h-4 w-4 mr-2" />
-                      Merge Selected
-                    </Button>
+                      <Button
+                        size="sm"
+                        onClick={initiateMerge}
+                        disabled={selectedEmployers.size < 2}
+                        className="min-h-[44px] min-w-[44px] touch-manipulation px-4"
+                      >
+                        <Merge className="h-4 w-4 mr-2" />
+                        Merge Selected
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )}
