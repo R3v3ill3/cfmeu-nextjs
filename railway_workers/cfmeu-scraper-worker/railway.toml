@@ -4,10 +4,8 @@ restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
 # Health check configuration
-# Worker exposes HTTP health endpoint on port 3200
+# Railway will automatically use the PORT it assigns
 healthcheckPath = "/health"
 healthcheckTimeout = 30
-# Initial delay before first health check (seconds)
-# Give worker time to start up
 initialDelay = 30
 

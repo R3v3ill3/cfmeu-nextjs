@@ -132,7 +132,8 @@ function registerShutdownHandlers() {
     process.on('SIGTERM', gracefulShutdown);
 }
 // Health check HTTP server
-const HEALTH_PORT = Number(process.env.HEALTH_PORT || 3210);
+// Railway sets PORT dynamically, use that in production, fall back to 3210 for local dev
+const HEALTH_PORT = Number(process.env.PORT || process.env.HEALTH_PORT || 3210);
 const app = (0, express_1.default)();
 app.get('/health', (req, res) => {
     const uptimeSeconds = Math.floor(process.uptime());
