@@ -27,12 +27,12 @@ export default function ScanReviewPage({ params }: PageProps) {
   // removeQueries is more aggressive than invalidateQueries - ensures completely fresh fetch
   useEffect(() => {
     console.log('[scan-review] Page mounted with params:', { projectId, scanId, isValidProjectId })
-    console.log('[scan-review] Removing all scan and project cache entries')
-    queryClient.removeQueries({ queryKey: ['mapping_sheet_scan'] })
+    console.log('[scan-review] Invalidating scan and project cache entries')
+    queryClient.invalidateQueries({ queryKey: ['mapping_sheet_scan', scanId], exact: true })
     if (isValidProjectId) {
-      queryClient.removeQueries({ queryKey: ['project', projectId] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId], exact: true })
     }
-  }, [queryClient, projectId, isValidProjectId])
+  }, [queryClient, projectId, scanId, isValidProjectId])
 
   // Fetch scan data
   const { data: scanData, error: scanError, isLoading: scanLoading, isFetching: scanFetching } = useQuery({
