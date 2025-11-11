@@ -93,9 +93,11 @@ async function workerLoop() {
 async function gracefulShutdown() {
     console.log('[shutdown] Received shutdown signal, initiating graceful shutdown...');
     isShuttingDown = true;
-    // Wait for current job to complete (max 30 seconds)
-    const maxWait = 30000;
+    // Wait for current job to complete
+    // Timeout must be longer than Claude timeout + retries to allow job completion
+    const maxWait = config_1.config.gracefulShutdownTimeoutMs;
     const startTime = Date.now();
+    console.log(`[shutdown] Will wait up to ${maxWait}ms for current job to complete`);
     while (currentJobId && (Date.now() - startTime < maxWait)) {
         console.log(`[shutdown] Waiting for job ${currentJobId} to complete...`);
         await sleep(1000);
@@ -133,12 +135,19 @@ function registerShutdownHandlers() {
 const HEALTH_PORT = Number(process.env.HEALTH_PORT || 3210);
 const app = (0, express_1.default)();
 app.get('/health', (req, res) => {
+    const uptimeSeconds = Math.floor(process.uptime());
     res.json({
         status: 'healthy',
         currentJob: currentJobId || 'none',
         isShuttingDown,
-        uptime: process.uptime(),
-        worker: 'mapping-sheet-scanner-worker'
+        uptime: uptimeSeconds,
+        uptimeHuman: `${Math.floor(uptimeSeconds / 60)}m ${uptimeSeconds % 60}s`,
+        worker: 'mapping-sheet-scanner-worker',
+        config: {
+            claudeTimeoutMs: config_1.config.claudeTimeoutMs,
+            gracefulShutdownTimeoutMs: config_1.config.gracefulShutdownTimeoutMs,
+            pollIntervalMs: config_1.config.pollIntervalMs
+        }
     });
 });
 app.listen(HEALTH_PORT, () => {

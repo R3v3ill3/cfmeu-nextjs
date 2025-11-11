@@ -149,9 +149,12 @@ async function gracefulShutdown() {
   console.log('[shutdown] Received shutdown signal, initiating graceful shutdown...')
   isShuttingDown = true
 
-  // Wait for current job to complete (max 30 seconds)
-  const maxWait = 30000
+  // Wait for current job to complete
+  // FWC jobs can take up to 5 minutes with retries, so we need a longer timeout
+  const maxWait = config.gracefulShutdownTimeoutMs
   const startTime = Date.now()
+  
+  console.log(`[shutdown] Will wait up to ${maxWait}ms (${Math.floor(maxWait/1000)}s) for current job to complete`)
 
   while (currentJobId && (Date.now() - startTime < maxWait)) {
     console.log(`[shutdown] Waiting for job ${currentJobId} to complete...`)
@@ -194,12 +197,19 @@ const HEALTH_PORT = Number(process.env.HEALTH_PORT || 3200)
 const app = express()
 
 app.get('/health', (req, res) => {
+  const uptimeSeconds = Math.floor(process.uptime())
   res.json({
     status: 'healthy',
     currentJob: currentJobId || 'none',
     isShuttingDown,
-    uptime: process.uptime(),
-    worker: 'cfmeu-scraper-worker'
+    uptime: uptimeSeconds,
+    uptimeHuman: `${Math.floor(uptimeSeconds / 60)}m ${uptimeSeconds % 60}s`,
+    worker: 'cfmeu-scraper-worker',
+    config: {
+      gracefulShutdownTimeoutMs: config.gracefulShutdownTimeoutMs,
+      pollIntervalMs: config.pollIntervalMs,
+      retryMaxAttempts: config.retry.maxAttempts
+    }
   })
 })
 

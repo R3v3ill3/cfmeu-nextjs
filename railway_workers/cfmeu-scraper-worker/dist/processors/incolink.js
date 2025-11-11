@@ -85,6 +85,14 @@ async function processIncolinkJob(client, job) {
             });
             try {
                 const invoiceResult = await fetchMembersFromIncolink(browser, employerInfo.incolinkId, payload.invoiceNumber);
+                if ((invoiceResult.members?.length ?? 0) === 0) {
+                    await (0, jobs_1.appendEvent)(client, job.id, 'incolink_employer_empty_result', {
+                        employerId,
+                        invoiceNumber: invoiceResult.invoiceNumber,
+                        invoiceDate: invoiceResult.invoiceDate,
+                        debug: invoiceResult.debug ?? null,
+                    });
+                }
                 const processed = await persistMembers(client, employerId, invoiceResult);
                 succeeded += 1;
                 createdWorkers += processed.createdWorkers;
@@ -99,6 +107,7 @@ async function processIncolinkJob(client, job) {
                         ...processed,
                         totalParsed: invoiceResult.members.length,
                     },
+                    debug: invoiceResult.debug ?? null,
                 });
             }
             catch (error) {
@@ -152,6 +161,10 @@ async function getBrowser() {
     }
 }
 async function fetchMembersFromIncolink(browser, incolinkNumber, invoiceNumber) {
+    const startTime = Date.now();
+    const debug = {
+        totalMs: 0,
+    };
     const email = config_1.config.incolinkEmail;
     const password = config_1.config.incolinkPassword;
     const page = await browser.newPage();
@@ -167,6 +180,7 @@ async function fetchMembersFromIncolink(browser, incolinkNumber, invoiceNumber) 
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119 Safari/537.36');
         page.setDefaultNavigationTimeout(60000);
         await page.goto('https://compliancelink.incolink.org.au/', { waitUntil: 'networkidle2' });
+        debug.afterLoginMs = Date.now() - startTime;
         const emailInput = (await page.$('input[type="email"]')) || (await page.$('input[placeholder*="Email" i]'));
         if (!emailInput)
             throw new Error('Incolink email input not found');
@@ -208,6 +222,7 @@ async function fetchMembersFromIncolink(browser, incolinkNumber, invoiceNumber) 
         await searchInput.type(String(incolinkNumber), { delay: 25 });
         await page.keyboard.press('Enter');
         await sleep(1500);
+        debug.searchSubmitMs = Date.now() - startTime;
         let targetInvoice = invoiceNumber;
         if (!targetInvoice) {
             targetInvoice = await detectInvoiceSelection(page);
@@ -221,10 +236,26 @@ async function fetchMembersFromIncolink(browser, incolinkNumber, invoiceNumber) 
         try {
             await waitForSelectorAnyFrame(page, ['table tbody tr', 'div[role="grid"] div[role="row"]'], 20000);
         }
-        catch { }
+        catch {
+            debug.tableWaitTimedOut = true;
+        }
+        debug.invoiceClickMs = Date.now() - startTime;
         const invoiceDate = await extractInvoiceDate(page);
         const members = await extractMembers(page);
-        return { members, invoiceNumber: targetInvoice, invoiceDate };
+        debug.memberExtractionMs = Date.now() - startTime;
+        if (members.length === 0) {
+            try {
+                debug.pageTitle = await page.title();
+            }
+            catch { }
+            try {
+                const html = await page.content();
+                debug.htmlSnippet = html.slice(0, 2000);
+            }
+            catch { }
+        }
+        debug.totalMs = Date.now() - startTime;
+        return { members, invoiceNumber: targetInvoice, invoiceDate, debug };
     }
     finally {
         try {

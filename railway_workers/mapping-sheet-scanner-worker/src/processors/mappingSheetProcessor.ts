@@ -8,9 +8,11 @@ export async function processMappingSheetScan(
   job: MappingSheetScanJob
 ): Promise<{ succeeded: number; failed: number }> {
   const { scanId } = job.payload
+  const processingStartTime = Date.now()
 
   try {
-    console.log(`[processor] Processing scan ${scanId}`)
+    console.log(`[processor] ⏳ START Processing scan ${scanId} (job ${job.id})`)
+    console.log(`[processor] Attempt ${job.attempts}/${job.max_attempts}`)
 
     // Fetch scan record to get file URL
     const { data: scanRecord, error: scanFetchError } = await supabase
@@ -136,13 +138,17 @@ export async function processMappingSheetScan(
       throw new Error(`Failed to update scan ${scanId} with extraction results: ${completionUpdateError.message}`)
     }
 
+    const processingTime = Date.now() - processingStartTime
+    console.log(`[processor] ✅ SUCCESS Scan ${scanId} completed in ${processingTime}ms (${(processingTime/1000).toFixed(1)}s)`)
+
     return { succeeded: 1, failed: 0 }
   } catch (error) {
+    const processingTime = Date.now() - processingStartTime
     const message = error instanceof Error
       ? `${error.message}${error.stack ? `\n${error.stack}` : ''}`
       : 'Unknown error'
 
-    console.error(`[processor] Failed to process scan ${scanId}:`, message)
+    console.error(`[processor] ❌ FAILED Scan ${scanId} after ${processingTime}ms (${(processingTime/1000).toFixed(1)}s):`, message)
 
     // Update scan with error
     await supabase

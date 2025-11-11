@@ -47,6 +47,15 @@ export const config = {
   claudeTimeoutMs: parseInt(process.env.CLAUDE_TIMEOUT_MS || '60000', 10), // 60 seconds default
   claudeMaxRetries: parseInt(process.env.CLAUDE_MAX_RETRIES || '1', 10), // Retry once on timeout
 
+  // Graceful shutdown settings
+  // Must be longer than Claude timeout + retries to allow jobs to complete
+  // Formula: (claudeTimeoutMs * (1 + claudeMaxRetries)) + buffer
+  // Default: (60s * 2) + 30s buffer = 150 seconds
+  gracefulShutdownTimeoutMs: parseInt(
+    process.env.GRACEFUL_SHUTDOWN_TIMEOUT_MS || '150000',
+    10
+  ),
+
   // Worker scaling settings
   // Note: When scaling to 10+ workers, ensure:
   // - Supabase connection limits are not exceeded (JS client uses REST API, not persistent connections)

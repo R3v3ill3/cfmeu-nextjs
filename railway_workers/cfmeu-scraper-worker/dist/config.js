@@ -32,4 +32,10 @@ exports.config = {
         backoffMultiplier: Number(process.env.RETRY_BACKOFF_MULTIPLIER ?? 2),
         jitterMaxMs: Number(process.env.RETRY_JITTER_MAX_MS ?? 1000),
     },
+    // Graceful shutdown settings
+    // FWC jobs can take up to 5 minutes with retries (75s * 4 attempts)
+    // Incolink jobs are typically faster but can have network delays
+    // Formula: (maxJobTime * retries) + buffer
+    // Default: 5 minutes (300s) to accommodate worst-case FWC retries
+    gracefulShutdownTimeoutMs: Number(process.env.GRACEFUL_SHUTDOWN_TIMEOUT_MS ?? 300000),
 };
