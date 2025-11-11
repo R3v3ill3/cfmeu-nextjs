@@ -1404,6 +1404,7 @@ export type Database = {
           notes: string | null
           source_identifier: string | null
           source_system: string | null
+          updated_at: string | null
         }
         Insert: {
           alias: string
@@ -1418,6 +1419,7 @@ export type Database = {
           notes?: string | null
           source_identifier?: string | null
           source_system?: string | null
+          updated_at?: string | null
         }
         Update: {
           alias?: string
@@ -1432,6 +1434,7 @@ export type Database = {
           notes?: string | null
           source_identifier?: string | null
           source_system?: string | null
+          updated_at?: string | null
         }
         Relationships: [
           {

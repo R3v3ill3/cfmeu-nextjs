@@ -255,8 +255,7 @@ export function EmployerAliasManager({
           alias: formData.alias.trim(),
           alias_normalized: normalizedAlias,
           notes: formData.notes.trim() || null,
-          is_authoritative: formData.isAuthoritative,
-          updated_at: new Date().toISOString()
+          is_authoritative: formData.isAuthoritative
         }
 
         const { error } = await supabase

@@ -15,11 +15,13 @@ import { PatchProjectsFilterBar, PatchProjectFilters } from "@/components/patch/
 import { usePatchOrganiserLabels } from "@/hooks/usePatchOrganiserLabels"
 import { PatchOverviewHeader } from "@/components/patch/PatchOverviewHeader"
 import { PatchProjectsTable } from "@/components/patch/PatchProjectsTable"
+import { PatchScansTable } from "@/components/patch/PatchScansTable"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Loader2 } from "lucide-react"
 import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { usePatchScans } from "@/hooks/usePatchScans"
 
 const DEFAULT_PAGE_SIZE = 25
 
@@ -200,6 +202,10 @@ export default function PatchPage() {
   const summaries = projectsQuery.summaries || {}
   const isLoadingProjects = projectsQuery.isLoading || projectsQuery.isFetching
 
+  const scansQuery = usePatchScans(selectedPatchId)
+  const scans = scansQuery.data || []
+  const isLoadingScans = scansQuery.isLoading || scansQuery.isFetching
+
   return (
     <RoleGuard allow={["organiser", "lead_organiser", "admin"]}>
       <div className={`space-y-6 ${isMobile ? 'px-safe py-4 pb-safe-bottom' : 'p-6'}`}>
@@ -286,6 +292,9 @@ export default function PatchPage() {
                 />
               )}
             </div>
+
+            {/* Scanned Mapping Sheets Section */}
+            <PatchScansTable scans={scans} isLoading={isLoadingScans} />
           </>
         )}
       </div>

@@ -103,7 +103,7 @@ export async function createEmployerAlias(
         source_identifier: request.source_identifier || request.alias.trim(),
         collected_at: new Date().toISOString(),
         collected_by: request.created_by || null,
-        is_authoritative: request.is_authoritative || false,
+        is_authoritative: request.is_authoritative !== undefined ? request.is_authoritative : true,
         notes: request.notes || null,
         created_by: request.created_by || null
       })

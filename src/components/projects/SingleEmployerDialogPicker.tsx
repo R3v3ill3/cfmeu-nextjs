@@ -100,7 +100,7 @@ export function SingleEmployerDialogPicker({
         source_identifier: employerId,
         collected_at: collectedAt,
         collected_by: collectedBy,
-        is_authoritative: false,
+        is_authoritative: true,
         notes,
       } as const;
 

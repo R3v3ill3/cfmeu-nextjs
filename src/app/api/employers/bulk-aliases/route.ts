@@ -95,7 +95,7 @@ async function bulkCreateHandler(request: NextRequest) {
       employer_id: alias.employer_id,
       source_system: alias.source_system || 'bulk_import',
       source_identifier: alias.source_identifier || alias.alias.trim(),
-      is_authoritative: Boolean(alias.is_authoritative),
+      is_authoritative: alias.is_authoritative !== undefined ? Boolean(alias.is_authoritative) : true,
       notes: alias.notes || null,
       created_by: user.id
     }));

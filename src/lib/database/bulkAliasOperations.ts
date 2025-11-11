@@ -163,7 +163,7 @@ export async function bulkCreateAliases(
             source_identifier: req.source_identifier || req.alias,
             collected_at: req.collected_at,
             collected_by: req.collected_by,
-            is_authoritative: req.is_authoritative || false,
+            is_authoritative: req.is_authoritative !== undefined ? req.is_authoritative : true,
             notes: req.notes,
             created_by: req.created_by
           })))
@@ -194,7 +194,7 @@ export async function bulkCreateAliases(
             source_identifier: req.source_identifier || req.alias,
             collected_at: new Date().toISOString(),
             collected_by: req.collected_by,
-            is_authoritative: req.is_authoritative || false,
+            is_authoritative: req.is_authoritative !== undefined ? req.is_authoritative : true,
             notes: req.notes,
             created_by: userId || req.created_by
           })))
