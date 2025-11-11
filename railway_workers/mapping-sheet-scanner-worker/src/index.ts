@@ -169,7 +169,7 @@ app.get('/health', (req, res) => {
   })
 })
 
-app.listen(HEALTH_PORT, () => {
+app.listen(HEALTH_PORT, '0.0.0.0', () => {
   console.log(`[health] Health check endpoint listening on port ${HEALTH_PORT}`)
 })
 
