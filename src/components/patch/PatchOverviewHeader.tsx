@@ -16,6 +16,7 @@ interface PatchOverviewHeaderProps {
   totalProjects?: number
   onOpenAddressLookup: () => void
   onOpenWalls: () => void
+  hideActions?: boolean
 }
 
 export function PatchOverviewHeader({
@@ -27,7 +28,8 @@ export function PatchOverviewHeader({
   isMetricsLoading,
   totalProjects,
   onOpenAddressLookup,
-  onOpenWalls
+  onOpenWalls,
+  hideActions = false
 }: PatchOverviewHeaderProps) {
   const organiserList = organiserNames.length === 0
     ? "No organisers assigned"
@@ -36,10 +38,22 @@ export function PatchOverviewHeader({
   return (
     <Card className="border-0 shadow-none bg-transparent">
       <CardContent className="p-0">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex flex-col gap-4">
+          {/* Metrics section - full width on desktop */}
+          <div className="w-full">
+            {isMetricsLoading ? (
+              <div className="rounded-md border p-3 sm:p-4 text-sm text-muted-foreground">Loading metrics…</div>
+            ) : metrics ? (
+              <OrganizingUniverseMetricsComponent metrics={metrics} variant="compact" />
+            ) : (
+              <div className="rounded-md border p-3 sm:p-4 text-sm text-muted-foreground">Metrics unavailable</div>
+            )}
+          </div>
+
+          {/* Patch info section */}
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-semibold tracking-tight">{patchName}</h1>
+              <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">{patchName}</h1>
               {status && (
                 <Badge variant={status === "active" ? "default" : "secondary"} className="capitalize">
                   {status.replace(/_/g, " ")}
@@ -54,27 +68,19 @@ export function PatchOverviewHeader({
                 <Badge variant="secondary">{totalProjects} active project{totalProjects === 1 ? "" : "s"}</Badge>
               )}
             </div>
-            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-              <Users className="h-4 w-4" />
-              <span>{organiserList}</span>
+            <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-muted-foreground">
+              <Users className="h-4 w-4 flex-shrink-0" />
+              <span className="break-words">{organiserList}</span>
             </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={onOpenAddressLookup}>
-                <MapPin className="h-4 w-4 mr-1" /> Address lookup
-              </Button>
-              <Button variant="link" size="sm" onClick={onOpenWalls} className="px-0 text-primary">
-                Open Walls
-              </Button>
-            </div>
-          </div>
-
-          <div className="min-w-[280px] max-w-xl w-full lg:w-auto">
-            {isMetricsLoading ? (
-              <div className="rounded-md border p-4 text-sm text-muted-foreground">Loading metrics…</div>
-            ) : metrics ? (
-              <OrganizingUniverseMetricsComponent metrics={metrics} variant="compact" />
-            ) : (
-              <div className="rounded-md border p-4 text-sm text-muted-foreground">Metrics unavailable</div>
+            {!hideActions && (
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <Button variant="outline" size="sm" onClick={onOpenAddressLookup} className="w-full sm:w-auto min-h-[44px]">
+                  <MapPin className="h-4 w-4 mr-1" /> Address lookup
+                </Button>
+                <Button variant="link" size="sm" onClick={onOpenWalls} className="px-0 text-primary w-full sm:w-auto min-h-[44px] justify-start sm:justify-center">
+                  Open Walls
+                </Button>
+              </div>
             )}
           </div>
         </div>

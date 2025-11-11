@@ -208,7 +208,22 @@ export default function PatchPage() {
 
   return (
     <RoleGuard allow={["organiser", "lead_organiser", "admin"]}>
-      <div className={`space-y-6 ${isMobile ? 'px-safe py-4 pb-safe-bottom' : 'p-6'}`}>
+      <div className={`space-y-4 sm:space-y-6 ${isMobile ? 'px-safe py-4 pb-safe-bottom' : 'p-6'}`}>
+        {selectedPatchId && (
+          <PatchOverviewHeader
+            patchName={patchInfo?.name || "Patch"}
+            organiserNames={patchInfo?.organiserNames || []}
+            status={patchInfo?.status}
+            type={patchInfo?.type}
+            metrics={metricsQuery.data || undefined}
+            isMetricsLoading={metricsQuery.isLoading}
+            totalProjects={metricsQuery.data?.totalActiveProjects}
+            onOpenAddressLookup={() => setLookupOpen(true)}
+            onOpenWalls={goToWalls}
+            hideActions={true}
+          />
+        )}
+
         <PatchProjectsFilterBar
           patchOptions={patchOptions}
           filters={filters}
@@ -218,7 +233,7 @@ export default function PatchPage() {
         />
 
         {loadingPatches && (
-          <Card className="p-6 text-center text-sm text-muted-foreground">
+          <Card className="p-4 sm:p-6 text-center text-sm text-muted-foreground">
             <div className="flex items-center justify-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" />
               Loading patches…
@@ -227,33 +242,25 @@ export default function PatchPage() {
         )}
 
         {!loadingPatches && !selectedPatchId && (
-          <Card className="p-6 text-center text-sm text-muted-foreground">
+          <Card className="p-4 sm:p-6 text-center text-sm text-muted-foreground">
             Select a patch to view its overview.
           </Card>
         )}
 
         {selectedPatchId && (
           <>
-            <PatchOverviewHeader
-              patchName={patchInfo?.name || "Patch"}
-              organiserNames={patchInfo?.organiserNames || []}
-              status={patchInfo?.status}
-              type={patchInfo?.type}
-              metrics={metricsQuery.data || undefined}
-              isMetricsLoading={metricsQuery.isLoading}
-              totalProjects={metricsQuery.data?.totalActiveProjects}
-              onOpenAddressLookup={() => setLookupOpen(true)}
-              onOpenWalls={goToWalls}
-            />
 
             <PatchMap patchId={selectedPatchId} height={isMobile ? "300px" : "420px"} />
 
+            {/* Scanned Mapping Sheets Section */}
+            <PatchScansTable scans={scans} isLoading={isLoadingScans} />
+
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold">Projects in patch</h2>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <h2 className="text-lg sm:text-xl font-semibold">Projects in patch</h2>
                 {pagination && pagination.totalPages > 1 && (
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground">
+                    <span className="text-xs sm:text-sm text-muted-foreground">
                       Page {pagination.page} of {pagination.totalPages}
                     </span>
                     <Button
@@ -261,6 +268,7 @@ export default function PatchPage() {
                       size="sm"
                       disabled={pagination.page <= 1}
                       onClick={() => setParams({ page: String(pagination.page - 1) }, { resetPage: false })}
+                      className="min-h-[44px]"
                     >
                       Previous
                     </Button>
@@ -269,6 +277,7 @@ export default function PatchPage() {
                       size="sm"
                       disabled={!projectsQuery.hasNext}
                       onClick={() => setParams({ page: String(pagination.page + 1) }, { resetPage: false })}
+                      className="min-h-[44px]"
                     >
                       Next
                     </Button>
@@ -277,7 +286,7 @@ export default function PatchPage() {
               </div>
 
               {isLoadingProjects ? (
-                <Card className="p-6 text-center text-sm text-muted-foreground">
+                <Card className="p-4 sm:p-6 text-center text-sm text-muted-foreground">
                   <div className="flex items-center justify-center gap-2">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Loading projects…
@@ -292,9 +301,6 @@ export default function PatchPage() {
                 />
               )}
             </div>
-
-            {/* Scanned Mapping Sheets Section */}
-            <PatchScansTable scans={scans} isLoading={isLoadingScans} />
           </>
         )}
       </div>

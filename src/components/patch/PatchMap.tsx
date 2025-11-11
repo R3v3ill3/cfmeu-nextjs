@@ -1,7 +1,7 @@
 'use client';
 
 ;
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { MapPin, ExternalLink } from 'lucide-react';
@@ -229,18 +229,17 @@ export function PatchMap({ patchId, height = '400px' }: PatchMapProps) {
 
   return (
     <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center justify-between">
+      <CardHeader className="p-4 sm:p-6 pb-2 sm:pb-2">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div className="flex items-center gap-2">
             <MapPin className="h-5 w-5" />
-            Patch Map
             {jobSites.length > 0 && (
               <Badge variant="secondary" className="text-xs">
                 {jobSites.length} project{jobSites.length !== 1 ? 's' : ''}
               </Badge>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Badge variant={patch.status === 'active' ? 'default' : 'secondary'}>
               {patch.status}
             </Badge>
@@ -249,12 +248,12 @@ export function PatchMap({ patchId, height = '400px' }: PatchMapProps) {
               size="sm"
               variant="ghost"
               onClick={() => window.open(`/admin?tab=patches`, '_blank')}
-              className="h-8 w-8 p-0"
+              className="h-8 w-8 p-0 min-h-[44px] min-w-[44px]"
             >
               <ExternalLink className="h-4 w-4" />
             </Button>
           </div>
-        </CardTitle>
+        </div>
       </CardHeader>
       <CardContent className="p-0">
         <GoogleMap

@@ -3,10 +3,12 @@ import Link from "next/link"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
 import { CfmeuEbaBadge, getProjectEbaStatus } from "@/components/ui/CfmeuEbaBadge"
 import { OrganizingUniverseBadge } from "@/components/ui/OrganizingUniverseBadge"
 import { Building2, FileUp, List, ExternalLink } from "lucide-react"
 import { ProjectSummary, ProjectRecord } from "@/hooks/useProjectsServerSide"
+import { useIsMobile } from "@/hooks/use-mobile"
 
 export interface PatchProjectsTableProps {
   projects: ProjectRecord[]
@@ -39,6 +41,123 @@ const formatBuilderInfo = (project: ProjectRecord) => {
 }
 
 export function PatchProjectsTable({ projects, summaries, onAction, onOpenEmployer }: PatchProjectsTableProps) {
+  const isMobile = useIsMobile()
+
+  if (projects.length === 0) {
+    return (
+      <div className="py-8 text-center text-sm text-muted-foreground">No projects found for this patch.</div>
+    )
+  }
+
+  if (isMobile) {
+    return (
+      <div className="space-y-3">
+        {projects.map((project) => {
+          const summary = summaries[project.id]
+          const builder = formatBuilderInfo(project)
+          const ebaStatus = getProjectEbaStatus(project)
+          const organisingUniverse = project.organising_universe as string | null
+          const lastVisit: string | null = null
+
+          return (
+            <Card key={project.id}>
+              <CardContent className="p-4 space-y-3">
+                <div className="space-y-2">
+                  <Link href={`/projects/${project.id}`} className="font-semibold text-base text-primary hover:underline flex items-center gap-1.5">
+                    {project.name}
+                    <ExternalLink className="h-4 w-4" />
+                  </Link>
+                  {summary?.delegate_name && (
+                    <div className="text-xs text-muted-foreground">Delegate: {summary.delegate_name}</div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-muted-foreground">EBA Status:</span>
+                    <CfmeuEbaBadge hasActiveEba={ebaStatus.hasActiveEba} builderName={(builder?.name || ebaStatus.builderName) || undefined} size="sm" />
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-muted-foreground">Builder:</span>
+                    {builder ? (
+                      <div className="flex items-center gap-1.5 text-sm">
+                        <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
+                        {builder.id && onOpenEmployer ? (
+                          <button
+                            type="button"
+                            className="text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 rounded"
+                            onClick={() => onOpenEmployer(builder.id!)}
+                          >
+                            {builder.name}
+                          </button>
+                        ) : (
+                          <span>{builder.name}</span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">Unknown</span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-muted-foreground">Universe:</span>
+                    {organisingUniverse ? (
+                      <OrganizingUniverseBadge
+                        projectId={project.id}
+                        currentStatus={organisingUniverse as any}
+                        size="sm"
+                      />
+                    ) : (
+                      <span className="text-sm text-muted-foreground">—</span>
+                    )}
+                  </div>
+
+                  {lastVisit && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-muted-foreground">Last Visit:</span>
+                      <span className="text-sm">{new Date(lastVisit).toLocaleDateString()}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-2 pt-2 border-t">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!project.main_job_site_id}
+                    onClick={() => onAction("visit-sheet", project.id, project.main_job_site_id)}
+                    className="w-full min-h-[44px] justify-start"
+                  >
+                    <FileUp className="h-4 w-4 mr-2" /> Visit sheet
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!project.main_job_site_id}
+                    onClick={() => onAction("worker-list", project.id, project.main_job_site_id)}
+                    className="w-full min-h-[44px] justify-start"
+                  >
+                    <List className="h-4 w-4 mr-2" /> Worker list
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!project.main_job_site_id}
+                    onClick={() => onAction("employer-compliance", project.id, project.main_job_site_id)}
+                    className="w-full min-h-[44px] justify-start"
+                  >
+                    <Building2 className="h-4 w-4 mr-2" /> Employer view
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )
+        })}
+      </div>
+    )
+  }
+
   return (
     <div className="rounded-md border">
       <Table>
@@ -141,9 +260,6 @@ export function PatchProjectsTable({ projects, summaries, onAction, onOpenEmploy
           })}
         </TableBody>
       </Table>
-      {projects.length === 0 && (
-        <div className="py-8 text-center text-sm text-muted-foreground">No projects found for this patch.</div>
-      )}
     </div>
   )
 }

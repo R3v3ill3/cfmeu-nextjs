@@ -6,9 +6,6 @@
 -- Start transaction
 BEGIN;
 
--- Add migration logging
-INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20251108000000') ON CONFLICT DO NOTHING;
-
 -- Fix activities DELETE policy
 DROP POLICY IF EXISTS "activities_delete" ON "public"."activities";
 CREATE POLICY "activities_delete" ON "public"."activities"
@@ -138,39 +135,49 @@ WITH CHECK (
 );
 
 -- Fix patch_employer_roles UPDATE/DELETE policies (remove OR true)
-DROP POLICY IF EXISTS "per_update" ON "public"."patch_employer_roles";
-CREATE POLICY "per_update" ON "public"."patch_employer_roles"
-FOR UPDATE TO "authenticated"
-USING (
-    EXISTS (
-        SELECT 1 FROM "public"."profiles" "p"
-        WHERE ("p"."id" = auth.uid() AND "p"."role" = 'admin'::text)
-    )
-    OR
-    EXISTS (
-        SELECT 1 FROM "public"."profiles" "p"
-        WHERE ("p"."id" = auth.uid() AND "p"."role" = 'lead_organiser'::text)
-    )
-    OR
-    ("created_by" = auth.uid())
-    OR
-    "public"."is_admin"()
-)
-WITH CHECK (
-    EXISTS (
-        SELECT 1 FROM "public"."profiles" "p"
-        WHERE ("p"."id" = auth.uid() AND "p"."role" = 'admin'::text)
-    )
-    OR
-    EXISTS (
-        SELECT 1 FROM "public"."profiles" "p"
-        WHERE ("p"."id" = auth.uid() AND "p"."role" = 'lead_organiser'::text)
-    )
-    OR
-    ("created_by" = auth.uid())
-    OR
-    "public"."is_admin"()
-);
+-- Only apply if the table exists
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'patch_employer_roles'
+    ) THEN
+        DROP POLICY IF EXISTS "per_update" ON "public"."patch_employer_roles";
+        CREATE POLICY "per_update" ON "public"."patch_employer_roles"
+        FOR UPDATE TO "authenticated"
+        USING (
+            EXISTS (
+                SELECT 1 FROM "public"."profiles" "p"
+                WHERE ("p"."id" = auth.uid() AND "p"."role" = 'admin'::text)
+            )
+            OR
+            EXISTS (
+                SELECT 1 FROM "public"."profiles" "p"
+                WHERE ("p"."id" = auth.uid() AND "p"."role" = 'lead_organiser'::text)
+            )
+            OR
+            ("created_by" = auth.uid())
+            OR
+            "public"."is_admin"()
+        )
+        WITH CHECK (
+            EXISTS (
+                SELECT 1 FROM "public"."profiles" "p"
+                WHERE ("p"."id" = auth.uid() AND "p"."role" = 'admin'::text)
+            )
+            OR
+            EXISTS (
+                SELECT 1 FROM "public"."profiles" "p"
+                WHERE ("p"."id" = auth.uid() AND "p"."role" = 'lead_organiser'::text)
+            )
+            OR
+            ("created_by" = auth.uid())
+            OR
+            "public"."is_admin"()
+        );
+    END IF;
+END $$;
 
 -- Fix projects DELETE policy
 DROP POLICY IF EXISTS "projects_delete" ON "public"."projects";
@@ -186,9 +193,6 @@ USING ("public"."is_admin"() OR "public"."can_access_worker"("id"));
 
 -- Commit transaction
 COMMIT;
-
--- Add verification comments
-COMMENT ON COLUMN supabase_migrations.schema_migrations.version IS '20251108000000 - Applied migration to fix dangerous RLS OR true conditions';
 
 -- Log the migration completion
 DO $$

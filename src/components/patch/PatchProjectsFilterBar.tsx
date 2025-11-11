@@ -59,14 +59,14 @@ const sortOptions: Array<{ value: PatchProjectFilters["sort"]; label: string }> 
 
 export function PatchProjectsFilterBar({ patchOptions, filters, onFiltersChange, onClear, disablePatchSelect }: PatchProjectsFilterBarProps) {
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-md border bg-white/60 p-3">
-      <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+    <div className="flex flex-col sm:flex-row flex-wrap items-center gap-2 sm:gap-3 rounded-md border bg-white/60 p-3">
+      <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground w-full sm:w-auto">
         <Filter className="h-4 w-4" />
         Filters
       </div>
 
       {disablePatchSelect ? (
-        <div className="min-w-[180px] text-sm font-medium text-primary">
+        <div className="w-full sm:min-w-[180px] text-sm font-medium text-primary">
           {patchOptions.find((option) => option.value === filters.patchId)?.label || "Your patch"}
         </div>
       ) : (
@@ -74,7 +74,7 @@ export function PatchProjectsFilterBar({ patchOptions, filters, onFiltersChange,
           value={filters.patchId ?? ""}
           onValueChange={(value) => onFiltersChange({ patchId: value || null })}
         >
-          <SelectTrigger className="min-w-[180px]">
+          <SelectTrigger className="w-full sm:min-w-[180px]">
             <SelectValue placeholder="Select patch" />
           </SelectTrigger>
           <SelectContent>
@@ -87,13 +87,13 @@ export function PatchProjectsFilterBar({ patchOptions, filters, onFiltersChange,
 
       <Input
         placeholder="Search projects..."
-        className="w-60"
+        className="w-full sm:w-60"
         value={filters.q}
         onChange={(event) => onFiltersChange({ q: event.target.value })}
       />
 
       <Select value={filters.tier} onValueChange={(value) => onFiltersChange({ tier: value as PatchProjectFilters["tier"] })}>
-        <SelectTrigger className="w-44">
+        <SelectTrigger className="w-full sm:w-44">
           <SelectValue placeholder="Tier" />
         </SelectTrigger>
         <SelectContent>
@@ -105,7 +105,7 @@ export function PatchProjectsFilterBar({ patchOptions, filters, onFiltersChange,
       </Select>
 
       <Select value={filters.universe} onValueChange={(value) => onFiltersChange({ universe: value as PatchProjectFilters["universe"] })}>
-        <SelectTrigger className="w-40">
+        <SelectTrigger className="w-full sm:w-40">
           <SelectValue placeholder="Universe" />
         </SelectTrigger>
         <SelectContent>
@@ -116,7 +116,7 @@ export function PatchProjectsFilterBar({ patchOptions, filters, onFiltersChange,
       </Select>
 
       <Select value={filters.stage} onValueChange={(value) => onFiltersChange({ stage: value as PatchProjectFilters["stage"] })}>
-        <SelectTrigger className="w-48">
+        <SelectTrigger className="w-full sm:w-48">
           <SelectValue placeholder="Stage" />
         </SelectTrigger>
         <SelectContent>
@@ -127,7 +127,7 @@ export function PatchProjectsFilterBar({ patchOptions, filters, onFiltersChange,
       </Select>
 
       <Select value={filters.eba} onValueChange={(value) => onFiltersChange({ eba: value as PatchProjectFilters["eba"] })}>
-        <SelectTrigger className="w-48">
+        <SelectTrigger className="w-full sm:w-48">
           <SelectValue placeholder="EBA" />
         </SelectTrigger>
         <SelectContent>
@@ -138,7 +138,7 @@ export function PatchProjectsFilterBar({ patchOptions, filters, onFiltersChange,
       </Select>
 
       <Select value={filters.sort} onValueChange={(value) => onFiltersChange({ sort: value as PatchProjectFilters["sort"] })}>
-        <SelectTrigger className="w-44">
+        <SelectTrigger className="w-full sm:w-44">
           <SelectValue placeholder="Sort by" />
         </SelectTrigger>
         <SelectContent>
@@ -152,13 +152,14 @@ export function PatchProjectsFilterBar({ patchOptions, filters, onFiltersChange,
         variant="outline"
         size="sm"
         onClick={() => onFiltersChange({ dir: filters.dir === "asc" ? "desc" : "asc" })}
+        className="w-full sm:w-auto min-h-[44px]"
       >
         {filters.dir === "asc" ? <ArrowUpNarrowWide className="h-4 w-4 mr-1" /> : <ArrowDownNarrowWide className="h-4 w-4 mr-1" />}
         {filters.dir === "asc" ? "Asc" : "Desc"}
       </Button>
 
       {onClear && (
-        <Button variant="ghost" size="sm" onClick={onClear}>
+        <Button variant="ghost" size="sm" onClick={onClear} className="w-full sm:w-auto min-h-[44px]">
           Clear
         </Button>
       )}
