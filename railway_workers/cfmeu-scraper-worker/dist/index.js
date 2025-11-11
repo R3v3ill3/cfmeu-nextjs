@@ -184,9 +184,15 @@ function registerShutdownHandlers() {
 // Railway sets PORT dynamically, use that in production, fall back to 3200 for local dev
 const HEALTH_PORT = Number(process.env.PORT || process.env.HEALTH_PORT || 3200);
 const app = (0, express_1.default)();
+// Log all requests for debugging
+app.use((req, res, next) => {
+    console.log(`[health] Incoming request: ${req.method} ${req.path} from ${req.ip}`);
+    next();
+});
 app.get('/health', (req, res) => {
+    console.log(`[health] Health check requested`);
     const uptimeSeconds = Math.floor(process.uptime());
-    res.json({
+    const response = {
         status: 'healthy',
         currentJob: currentJobId || 'none',
         isShuttingDown,
@@ -198,10 +204,18 @@ app.get('/health', (req, res) => {
             pollIntervalMs: config_1.config.pollIntervalMs,
             retryMaxAttempts: config_1.config.retry.maxAttempts
         }
-    });
+    };
+    console.log(`[health] Responding with:`, response);
+    res.status(200).json(response);
+});
+// Catch-all for other routes
+app.use((req, res) => {
+    console.log(`[health] 404 - Unknown route: ${req.method} ${req.path}`);
+    res.status(404).json({ error: 'Not found' });
 });
 app.listen(HEALTH_PORT, '0.0.0.0', () => {
-    console.log(`[health] Health check endpoint listening on port ${HEALTH_PORT}`);
+    console.log(`[health] Health check endpoint listening on 0.0.0.0:${HEALTH_PORT}`);
+    console.log(`[health] Health check URL: http://0.0.0.0:${HEALTH_PORT}/health`);
 });
 registerShutdownHandlers();
 workerLoop().catch((error) => {
