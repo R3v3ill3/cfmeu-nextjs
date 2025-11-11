@@ -1,6 +1,7 @@
 import { PDFDocument } from 'pdf-lib'
 import { ProjectDefinition, SplitResult } from './splitPdfByProjects'
 import { createBatchedRequest, formatBytes, getMemoryWarning, PerformanceMonitor } from '@/lib/performance/adaptivePolling'
+import { uploadSplitPdfs } from './uploadSplitPdfs'
 
 export interface OptimizedSplitResult extends SplitResult {
   processingTime: number
@@ -282,9 +283,6 @@ export class OptimizedPdfUploader {
     userId: string,
     result: SplitResult
   ): Promise<any> {
-    // Import dynamically to avoid bundling issues
-    const { uploadSplitPdfs } = await import('./uploadSplitPdfs')
-
     // Create a temporary array with single result
     const uploadedFiles = await uploadSplitPdfs(batchId, userId, [result])
     return uploadedFiles[0]

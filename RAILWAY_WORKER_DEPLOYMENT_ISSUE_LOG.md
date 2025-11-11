@@ -253,9 +253,9 @@ Health checks are reaching the endpoint successfully and receiving 200 responses
 
 **Current state:** Code compiled successfully, ready for deployment
 
-## Changes Made - Attempt 7: Add Health Check Endpoint (SOLUTION)
+## Changes Made - Attempt 7: Add Health Check Endpoint
 
-**Root Cause Identified:**
+**Root Cause Hypothesis:**
 Railway requires background workers to expose a health check endpoint. Without it, Railway's health check system cannot verify the container is alive and kills it with SIGTERM. The `cfmeu-dashboard-worker` works because it has an Express server with a `/health` endpoint.
 
 **Files modified:**
@@ -265,9 +265,12 @@ Railway requires background workers to expose a health check endpoint. Without i
 
 **Changes:**
 1. **Added Express HTTP server** with `/health` endpoint:
-   - Lightweight database connectivity check
-   - Returns worker status, current job, uptime, and configuration
-   - Binds to `0.0.0.0` on Railway's dynamic PORT (or 3210 for local dev)
+   - Immediate 200 OK response (no database checks to avoid delays)
+   - Returns worker status, current job, uptime
+   - Binds to `0.0.0.0` on Railway's dynamic PORT (8080 in production)
+   - Added request logging to debug Railway's health checks
+   - Added root `/` endpoint for Railway's initial check
+   - Error handling ensures always returns 200 OK
    
 2. **Configured Railway health check** in `railway.toml`:
    ```toml
@@ -280,7 +283,26 @@ Railway requires background workers to expose a health check endpoint. Without i
 
 4. **Enhanced graceful shutdown** to close HTTP server before exit
 
-**Result:** Worker now exposes health endpoint that Railway can check, preventing premature container termination.
+5. **Server startup order**: Worker loop starts only after HTTP server is ready
+
+**Result:** Health endpoint is working perfectly - Railway successfully hits `/health` and receives 200 OK responses with `status: 'healthy'`. However, Railway is still killing containers with SIGTERM despite successful health checks.
+
+**Evidence from logs:**
+```
+[health] Incoming request: GET /health from 100.64.0.2
+[health] Health check requested
+[health] Responding with: {
+  status: 'healthy',
+  currentJob: 'none',
+  isShuttingDown: false,
+  uptime: 3.559423198,
+  uptimeHuman: '0m 3s',
+  worker: 'mapping-sheet-scanner-worker'
+}
+[Then Railway sends SIGTERM and kills container]
+```
+
+**Conclusion:** The health endpoint code is correct and working. Railway is successfully checking it and getting healthy responses. The issue appears to be with Railway's health check configuration not being applied, or Railway requires health check configuration to be set in the Railway Dashboard UI rather than (or in addition to) `railway.toml`.
 
 ## Current File States
 
@@ -341,13 +363,70 @@ restartPolicyMaxRetries = 10
 5. **Attempt 4:** Bind to 0.0.0.0 → Health endpoint started but container still killed
 6. **Attempt 5:** Added logging → Health checks successful (200 OK) but container still killed
 7. **Attempt 6:** Removed health endpoints entirely → Containers still killed (Railway requires health checks)
-8. **Attempt 7:** Added Express health check endpoint → **SOLUTION** (Railway needs HTTP endpoint to verify container is alive)
+8. **Attempt 7:** Added Express health check endpoint → Health checks working perfectly, but Railway still kills containers
+
+**Current Status:** Health endpoint code is correct and Railway successfully checks it. Issue appears to be Railway configuration not being applied from `railway.toml`, or requires Dashboard UI configuration.
 
 ## Key Observations
 
-1. Health checks were successfully responding with 200 OK and `status: 'healthy'`
-2. Railway was still sending SIGTERM to kill containers despite successful health checks
-3. Worker logs show normal startup sequence before being killed
-4. The `cfmeu-dashboard-worker` (which is an API server) runs successfully with health checks
-5. Both failing workers are pure background job processors (no API endpoints needed)
+1. ✅ Health checks are successfully responding with 200 OK and `status: 'healthy'`
+2. ❌ Railway is still sending SIGTERM to kill containers despite successful health checks
+3. ✅ Worker logs show normal startup sequence and successful health check responses
+4. ✅ The `cfmeu-dashboard-worker` (which is an API server) runs successfully with health checks
+5. ✅ Health endpoint is being hit by Railway (IP: 100.64.0.2) and responding correctly
+6. ❌ Railway's health check configuration in `railway.toml` may not be applied automatically
+7. ⚠️ Railway may require health check configuration to be set in Dashboard UI
+
+## Next Steps / Recommendations
+
+### Option 1: Configure Health Check in Railway Dashboard (RECOMMENDED)
+
+Railway's `railway.toml` health check configuration may not be automatically applied. Try configuring it in the Railway Dashboard:
+
+1. Go to Railway Dashboard → Your Service → Settings
+2. Find "Health Check" or "Deploy" section
+3. Set:
+   - **Health Check Path**: `/health`
+   - **Health Check Timeout**: 30 seconds
+   - **Initial Delay**: 30 seconds
+4. Save and redeploy
+
+### Option 2: Use railway.json Instead of railway.toml
+
+Railway may prefer `railway.json` format. Create `railway_workers/mapping-sheet-scanner-worker/railway.json`:
+
+```json
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "deploy": {
+    "startCommand": "npm start",
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10,
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 30,
+    "initialDelay": 30
+  }
+}
+```
+
+### Option 3: Check Railway Service Type
+
+Railway may treat background workers differently. Verify:
+- Service type is set to "Web Service" (not "Background Worker")
+- Service has proper resource allocation
+- No conflicting health check settings in Dashboard
+
+### Option 4: Contact Railway Support
+
+Since health checks are working but containers are still being killed, this may be a Railway platform issue. Contact Railway support with:
+- Service logs showing successful health checks
+- Railway service configuration
+- Question: "Why are containers being killed despite successful `/health` endpoint responses?"
+
+### Option 5: Alternative Architecture
+
+If Railway continues to kill background workers, consider:
+- Running worker as part of main Next.js app (serverless functions)
+- Using Railway's cron job feature instead of long-running workers
+- Using a different platform (e.g., Fly.io, Render) that better supports background workers
 

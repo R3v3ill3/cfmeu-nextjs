@@ -317,54 +317,71 @@ export class PerformanceMonitor {
 }
 
 // Network optimization utilities
-export function createBatchedRequest<T>(
+export function createBatchedRequest<T, R = void>(
   items: T[],
   batchSize: number,
-  processor: (batch: T[]) => Promise<void>,
+  processor: (batch: T[]) => Promise<R>,
   concurrency: number = 3
-): Promise<void> {
+): Promise<R[]> {
   return new Promise((resolve, reject) => {
-    const batches: T[][] = []
+    type BatchEntry = { index: number; items: T[] }
+
+    const queue: BatchEntry[] = []
     for (let i = 0; i < items.length; i += batchSize) {
-      batches.push(items.slice(i, i + batchSize))
+      queue.push({
+        index: queue.length,
+        items: items.slice(i, i + batchSize),
+      })
     }
 
-    let activeBatches = 0
+    const totalBatches = queue.length
+    if (totalBatches === 0) {
+      resolve([])
+      return
+    }
+
+    const results: R[] = new Array(totalBatches)
     let completedBatches = 0
     let hasError = false
-
-    const processBatch = async (batch: T[]): Promise<void> => {
-      try {
-        await processor(batch)
-        completedBatches++
-      } catch (error) {
-        if (!hasError) {
-          hasError = true
-          reject(error)
-        }
-      }
-    }
 
     const startNextBatch = () => {
       if (hasError) return
 
-      const batch = batches.shift()
-      if (!batch) {
-        if (completedBatches === batches.length) {
-          resolve()
-        }
+      if (completedBatches === totalBatches) {
+        resolve(results)
         return
       }
 
-      activeBatches++
-      processBatch(batch).finally(() => {
-        activeBatches--
-        startNextBatch()
-      })
+      if (queue.length === 0) {
+        return
+      }
+
+      const nextBatch = queue.shift()!
+
+      processor(nextBatch.items)
+        .then((value) => {
+          results[nextBatch.index] = value as R
+        })
+        .catch((error) => {
+          if (!hasError) {
+            hasError = true
+            reject(error)
+          }
+        })
+        .finally(() => {
+          completedBatches++
+          if (!hasError) {
+            if (completedBatches === totalBatches) {
+              resolve(results)
+            } else {
+              startNextBatch()
+            }
+          }
+        })
     }
 
     // Start initial batches based on concurrency
-    for (let i = 0; i < Math.min(concurrency, batches.length); i++) {
+    for (let i = 0; i < Math.min(concurrency, queue.length); i++) {
       startNextBatch()
     }
   })

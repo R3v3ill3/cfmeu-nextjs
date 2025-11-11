@@ -9,7 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 export interface ContractorAssignmentData {
   projectId: string;
   employerId: string;
-  role?: 'builder' | 'head_contractor' | 'project_manager' | 'site_manager';
+  role?: 'builder' | 'head_contractor' | 'project_manager' | 'contractor' | 'trade_subcontractor';
   tradeType?: string;
   stage?: 'early_works' | 'structure' | 'finishing' | 'other';
   estimatedWorkforce?: number | null;
@@ -49,14 +49,18 @@ export async function syncContractorAssignment(data: ContractorAssignmentData) {
         .eq("id", projectId);
     }
     
-    // 2. Upsert to project_employer_roles if role is specified
-    if (role) {
+    // 2. Upsert to project_employer_roles if role is specified and valid
+    // Filter out invalid roles (like 'site_manager' which is not in project_role enum)
+    const validProjectRoles: Array<'builder' | 'head_contractor' | 'project_manager' | 'contractor' | 'trade_subcontractor'> = 
+      ['builder', 'head_contractor', 'project_manager', 'contractor', 'trade_subcontractor'];
+    
+    if (role && validProjectRoles.includes(role as any)) {
       const { error: roleError } = await supabase
         .from("project_employer_roles")
         .upsert({
           project_id: projectId,
           employer_id: employerId,
-          role: role,
+          role: role as 'builder' | 'head_contractor' | 'project_manager' | 'contractor' | 'trade_subcontractor',
           start_date: new Date().toISOString().split('T')[0]
         }, {
           onConflict: 'project_id,employer_id,role'
@@ -94,15 +98,17 @@ export async function syncContractorAssignment(data: ContractorAssignmentData) {
     }
     
     // 4. Use the newer project_assignments system via RPC if available
-    if (role) {
+    // Only call RPC for valid project roles
+    if (role && validProjectRoles.includes(role as any)) {
       try {
         await supabase.rpc('assign_contractor_role', {
           p_project_id: projectId,
           p_employer_id: employerId,
           p_role_code: role,
-          p_company_name: null,
+          p_company_name: '', // Use empty string instead of null
           p_is_primary: role === 'builder',
-          p_estimated_workers: estimatedWorkforce
+          p_source: 'manual',
+          p_match_confidence: 1.0
         });
       } catch (rpcError) {
         // RPC might not exist in all environments, log but don't fail
@@ -130,15 +136,19 @@ export async function removeContractorAssignment(projectId: string, employerId: 
 } = {}) {
   const { removeFromRoles = true, removeFromTrades = true, tradeType, role } = options;
   
+  // Valid project_role enum values
+  const validProjectRoles: Array<'builder' | 'head_contractor' | 'project_manager' | 'contractor' | 'trade_subcontractor'> = 
+    ['builder', 'head_contractor', 'project_manager', 'contractor', 'trade_subcontractor'];
+  
   try {
-    // Remove from project_employer_roles if specified
-    if (removeFromRoles && role) {
+    // Remove from project_employer_roles if specified and role is valid
+    if (removeFromRoles && role && validProjectRoles.includes(role as any)) {
       await supabase
         .from("project_employer_roles")
         .delete()
         .eq("project_id", projectId)
         .eq("employer_id", employerId)
-        .eq("role", role);
+        .eq("role", role as 'builder' | 'head_contractor' | 'project_manager' | 'contractor' | 'trade_subcontractor');
     }
     
     // Remove from project_contractor_trades if specified
@@ -214,12 +224,13 @@ export async function auditContractorDataConsistency(projectId: string) {
     }
     
     // Get all contractor data
+    // Use project_assignments_detailed view which has contractor_role_code and employer_name
     const [rolesResult, assignmentsResult, tradesResult] = await Promise.all([
       supabase.from("project_employer_roles")
         .select("role, employer_id, employers(name)")
         .eq("project_id", projectId),
-      supabase.from("project_assignments")
-        .select("employer_id, role_details, employers(name)")
+      supabase.from("project_assignments_detailed")
+        .select("employer_id, contractor_role_code, employer_name")
         .eq("project_id", projectId)
         .eq("assignment_type", "contractor_role"),
       supabase.from("project_contractor_trades")
@@ -236,7 +247,7 @@ export async function auditContractorDataConsistency(projectId: string) {
       const hasBuilderRole = roles.some(r => r.employer_id === project.builder_id && r.role === 'builder');
       const hasBuilderAssignment = assignments.some(a => 
         a.employer_id === project.builder_id && 
-        (a.role_details as any)?.role_code === 'builder'
+        a.contractor_role_code === 'builder'
       );
       
       if (!hasBuilderRole && !hasBuilderAssignment) {
@@ -248,11 +259,12 @@ export async function auditContractorDataConsistency(projectId: string) {
     roles.forEach(role => {
       const hasAssignment = assignments.some(a => 
         a.employer_id === role.employer_id && 
-        (a.role_details as any)?.role_code === role.role
+        a.contractor_role_code === role.role
       );
       
       if (!hasAssignment) {
-        issues.push(`Role ${role.role} for ${(role.employers as any)?.name} missing from assignments table`);
+        const employerName = (role.employers as any)?.name || 'Unknown';
+        issues.push(`Role ${role.role} for ${employerName} missing from assignments table`);
       }
     });
     
@@ -260,13 +272,14 @@ export async function auditContractorDataConsistency(projectId: string) {
     const employersWithTrades = new Set(trades.map(t => t.employer_id));
     const employersWithRoles = new Set([
       ...roles.map(r => r.employer_id),
-      ...assignments.map(a => a.employer_id)
+      ...assignments.map(a => a.employer_id).filter((id): id is string => id !== null)
     ]);
     
     employersWithTrades.forEach(employerId => {
       if (!employersWithRoles.has(employerId)) {
         const tradeEmployer = trades.find(t => t.employer_id === employerId);
-        issues.push(`Trade assignments found for ${(tradeEmployer?.employers as any)?.name} without role assignment`);
+        const employerName = (tradeEmployer?.employers as any)?.name || 'Unknown';
+        issues.push(`Trade assignments found for ${employerName} without role assignment`);
       }
     });
     
@@ -307,7 +320,9 @@ export async function getContractorAssignmentSummary(projectId: string) {
         return acc;
       }, {} as Record<string, number>),
       stageBreakdown: trades.reduce((acc, trade) => {
-        acc[trade.stage] = (acc[trade.stage] || 0) + 1;
+        // Handle null stage values by using 'unknown' as default
+        const stage = trade.stage || 'unknown';
+        acc[stage] = (acc[stage] || 0) + 1;
         return acc;
       }, {} as Record<string, number>)
     };
