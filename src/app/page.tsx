@@ -84,6 +84,15 @@ export default async function RootPage() {
   }
   
   const role = user ? await getUserRole(user.id) : null
+  
+  // Redirect organisers to Patch page as their default landing page
+  if (role === 'organiser') {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[RootPage] Organiser detected, redirecting to /patch')
+    }
+    redirect('/patch')
+  }
+  
   const dashboardPreference = user ? await getDashboardPreference(user.id, supabase) : 'legacy'
   const hdrs = await headers()
   const userAgent = hdrs.get('user-agent') || undefined
