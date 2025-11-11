@@ -53,7 +53,17 @@ export async function GET(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    return NextResponse.json(batch)
+    // Count total scans for this batch (frontend expects total_scans)
+    const { count: totalScans } = await supabase
+      .from('mapping_sheet_scans')
+      .select('*', { count: 'exact', head: true })
+      .eq('batch_id', batchId)
+
+    // Return batch with total_scans added for frontend compatibility
+    return NextResponse.json({
+      ...batch,
+      total_scans: totalScans || batch.total_projects || 0,
+    })
   } catch (error) {
     console.error('Batch status fetch error:', error)
     return NextResponse.json(

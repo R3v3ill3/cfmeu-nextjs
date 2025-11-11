@@ -1,3 +1,4 @@
+import express from 'express'
 import { config } from './config'
 import { getAdminClient, closeAdminClient } from './supabase'
 import { reserveNextJob, releaseJobLock, markJobStatus, cleanupStaleLocks } from './jobs'
@@ -6,9 +7,54 @@ import { MappingSheetScanJob } from './types'
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-// Graceful shutdown state
+// Graceful shutdown state (declared early for health endpoint access)
 let isShuttingDown = false
 let currentJobId: string | null = null
+
+// Express app for health checks (Railway requires this)
+const app = express()
+app.use(express.json())
+
+// Health check endpoint - Railway needs this to know the container is alive
+app.get('/health', async (_req, res) => {
+  try {
+    // Lightweight check: ensure we can reach the database
+    const client = getAdminClient()
+    const { error } = await client
+      .from('scraper_jobs')
+      .select('id', { count: 'exact', head: true })
+      .limit(1)
+
+    if (error) throw error
+    
+    res.status(200).json({
+      status: 'healthy',
+      currentJob: currentJobId || 'none',
+      isShuttingDown,
+      uptime: process.uptime(),
+      uptimeHuman: `${Math.floor(process.uptime() / 60)}m ${Math.floor(process.uptime() % 60)}s`,
+      worker: 'mapping-sheet-scanner-worker',
+      config: {
+        claudeTimeoutMs: config.claudeTimeoutMs,
+        gracefulShutdownTimeoutMs: config.gracefulShutdownTimeoutMs,
+        pollIntervalMs: config.pollIntervalMs,
+      },
+    })
+  } catch (err) {
+    console.error('[health] Health check failed:', err)
+    res.status(503).json({
+      status: 'degraded',
+      error: err instanceof Error ? err.message : 'Unknown error',
+    })
+  }
+})
+
+// Start HTTP server for health checks
+// Railway provides PORT env var, fallback to 3210 for local dev
+const HEALTH_PORT = Number(process.env.PORT || process.env.HEALTH_PORT || 3210)
+const server = app.listen(HEALTH_PORT, '0.0.0.0', () => {
+  console.log(`[health] Health check endpoint listening on 0.0.0.0:${HEALTH_PORT}`)
+})
 
 async function handleJob(job: MappingSheetScanJob) {
   const client = getAdminClient()
@@ -137,8 +183,20 @@ async function gracefulShutdown() {
   }
 
   console.log('[shutdown] Graceful shutdown complete')
-  closeAdminClient()
-  process.exit(0)
+  
+  // Close HTTP server gracefully
+  server.close(() => {
+    console.log('[shutdown] HTTP server closed')
+    closeAdminClient()
+    process.exit(0)
+  })
+  
+  // Force exit after 5 seconds if server doesn't close
+  setTimeout(() => {
+    console.warn('[shutdown] Forcing exit after server close timeout')
+    closeAdminClient()
+    process.exit(0)
+  }, 5000)
 }
 
 function registerShutdownHandlers() {

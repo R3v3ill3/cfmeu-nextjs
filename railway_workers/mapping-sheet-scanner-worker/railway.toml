@@ -2,3 +2,9 @@
 startCommand = "npm start"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
+
+# Health check configuration
+# Railway will check /health endpoint to ensure container is alive
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+initialDelay = 30
