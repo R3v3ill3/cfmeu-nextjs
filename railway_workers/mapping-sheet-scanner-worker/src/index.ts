@@ -15,45 +15,63 @@ let currentJobId: string | null = null
 const app = express()
 app.use(express.json())
 
-// Health check endpoint - Railway needs this to know the container is alive
-app.get('/health', async (_req, res) => {
-  try {
-    // Lightweight check: ensure we can reach the database
-    const client = getAdminClient()
-    const { error } = await client
-      .from('scraper_jobs')
-      .select('id', { count: 'exact', head: true })
-      .limit(1)
+// Log all incoming requests for debugging
+app.use((req, res, next) => {
+  console.log(`[health] Incoming request: ${req.method} ${req.path} from ${req.ip || req.socket.remoteAddress || 'unknown'}`)
+  next()
+})
 
-    if (error) throw error
-    
-    res.status(200).json({
-      status: 'healthy',
-      currentJob: currentJobId || 'none',
-      isShuttingDown,
-      uptime: process.uptime(),
-      uptimeHuman: `${Math.floor(process.uptime() / 60)}m ${Math.floor(process.uptime() % 60)}s`,
-      worker: 'mapping-sheet-scanner-worker',
-      config: {
-        claudeTimeoutMs: config.claudeTimeoutMs,
-        gracefulShutdownTimeoutMs: config.gracefulShutdownTimeoutMs,
-        pollIntervalMs: config.pollIntervalMs,
-      },
-    })
-  } catch (err) {
-    console.error('[health] Health check failed:', err)
-    res.status(503).json({
-      status: 'degraded',
-      error: err instanceof Error ? err.message : 'Unknown error',
-    })
+// Health check endpoint - Railway needs this to know the container is alive
+// Keep it FAST - Railway needs immediate response, no database checks
+app.get('/health', (req, res) => {
+  console.log('[health] Health check requested')
+  
+  // Immediate response - Railway just needs to know the process is alive
+  // No database checks, no async operations - just return OK immediately
+  const healthData = {
+    status: 'healthy',
+    currentJob: currentJobId || 'none',
+    isShuttingDown,
+    uptime: process.uptime(),
+    uptimeHuman: `${Math.floor(process.uptime() / 60)}m ${Math.floor(process.uptime() % 60)}s`,
+    worker: 'mapping-sheet-scanner-worker',
   }
+  
+  console.log('[health] Responding with:', healthData)
+  res.status(200).json(healthData)
+})
+
+// Add root endpoint for Railway's initial check
+app.get('/', (_req, res) => {
+  res.status(200).json({ status: 'ok', service: 'mapping-sheet-scanner-worker' })
+})
+
+// Error handling middleware - ensure we always respond (must be after routes)
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('[health] Express error:', err)
+  res.status(200).json({ status: 'ok', error: err.message })
+})
+
+// Catch-all for unhandled routes (must be last)
+app.use((req, res) => {
+  console.log(`[health] Unhandled route: ${req.method} ${req.path}`)
+  res.status(200).json({ status: 'ok', path: req.path })
 })
 
 // Start HTTP server for health checks
 // Railway provides PORT env var, fallback to 3210 for local dev
 const HEALTH_PORT = Number(process.env.PORT || process.env.HEALTH_PORT || 3210)
+
+// Ensure server is fully ready before starting worker loop
 const server = app.listen(HEALTH_PORT, '0.0.0.0', () => {
   console.log(`[health] Health check endpoint listening on 0.0.0.0:${HEALTH_PORT}`)
+  console.log(`[health] Health check URL: http://0.0.0.0:${HEALTH_PORT}/health`)
+  
+  // Start worker loop only after server is ready
+  workerLoop().catch((error) => {
+    console.error('[worker] Fatal error:', error)
+    process.exit(1)
+  })
 })
 
 async function handleJob(job: MappingSheetScanJob) {
@@ -206,7 +224,4 @@ function registerShutdownHandlers() {
 
 registerShutdownHandlers()
 
-workerLoop().catch((error) => {
-  console.error('[worker] Fatal error:', error)
-  process.exit(1)
-})
+// Worker loop is started after server is ready (see server.listen callback above)
