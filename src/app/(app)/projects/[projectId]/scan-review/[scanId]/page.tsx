@@ -59,6 +59,7 @@ export default function ScanReviewPage({ params }: PageProps) {
   })
 
   // Fetch project data (only if we have a valid project ID)
+  // Use explicit field list to avoid RLS recursion from select('*') relationship expansions
   const { data: projectData, isLoading: projectLoading, error: projectError } = useQuery({
     queryKey: ['project', projectId],
     enabled: isValidProjectId,
@@ -66,7 +67,24 @@ export default function ScanReviewPage({ params }: PageProps) {
       console.log('[scan-review] Fetching project data for:', projectId)
       const { data, error } = await supabase
         .from('projects')
-        .select('*')
+        .select(`
+          id,
+          name,
+          value,
+          builder_id,
+          main_job_site_id,
+          proposed_start_date,
+          proposed_finish_date,
+          roe_email,
+          project_type,
+          state_funding,
+          federal_funding,
+          eba_with_cfmeu,
+          approval_status,
+          created_by,
+          organizing_universe,
+          stage_class
+        `)
         .eq('id', projectId)
         .single()
 
