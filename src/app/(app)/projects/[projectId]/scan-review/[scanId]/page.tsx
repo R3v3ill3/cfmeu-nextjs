@@ -58,40 +58,20 @@ export default function ScanReviewPage({ params }: PageProps) {
     retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
   })
 
-  // Fetch project data (only if we have a valid project ID)
-  // Use explicit field list to avoid RLS recursion from select('*') relationship expansions
+  // Fetch project data via API route to avoid RLS recursion issues
   const { data: projectData, isLoading: projectLoading, error: projectError } = useQuery({
     queryKey: ['project', projectId],
     enabled: isValidProjectId,
     queryFn: async () => {
       console.log('[scan-review] Fetching project data for:', projectId)
-      const { data, error } = await supabase
-        .from('projects')
-        .select(`
-          id,
-          name,
-          value,
-          builder_id,
-          main_job_site_id,
-          proposed_start_date,
-          proposed_finish_date,
-          roe_email,
-          project_type,
-          state_funding,
-          federal_funding,
-          eba_with_cfmeu,
-          approval_status,
-          created_by,
-          organizing_universe,
-          stage_class
-        `)
-        .eq('id', projectId)
-        .single()
-
-      if (error) {
-        console.error('[scan-review] Project fetch error:', error)
-        throw error
+      const response = await fetch(`/api/projects/${projectId}/scan-review`)
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to fetch project' }))
+        throw new Error(errorData.error || `HTTP ${response.status}`)
       }
+      
+      const data = await response.json()
       console.log('[scan-review] Project data fetched')
       return data
     },
@@ -143,6 +123,7 @@ export default function ScanReviewPage({ params }: PageProps) {
   const { mergedList: patchOrganisers = [] } = usePatchOrganiserLabels(patchIds)
 
   // Fetch builder name from builder_id (same as mobile mapping sheet)
+  // Use API route to avoid RLS recursion issues
   const { data: builderData } = useQuery({
     queryKey: ['builder-name', projectData?.builder_id],
     enabled: !!projectData?.builder_id,
@@ -153,19 +134,33 @@ export default function ScanReviewPage({ params }: PageProps) {
       }
       
       console.log('Fetching builder for ID:', projectData.builder_id)
-      const { data, error } = await supabase
-        .from('employers')
-        .select('name')
-        .eq('id', projectData.builder_id)
-        .single()
-      
-      if (error) {
-        console.error('Builder fetch error:', error)
-        throw error
+      try {
+        // Use API route to avoid RLS recursion
+        const response = await fetch(`/api/employers/${projectData.builder_id}?fields=name`)
+        
+        if (!response.ok) {
+          // If API route doesn't exist or fails, try direct query as fallback
+          const { data, error } = await supabase
+            .from('employers')
+            .select('name')
+            .eq('id', projectData.builder_id)
+            .single()
+          
+          if (error) {
+            console.warn('Builder fetch error (fallback):', error)
+            return null // Don't throw, just return null to avoid blocking UI
+          }
+          
+          return data
+        }
+        
+        const data = await response.json()
+        console.log('Builder data fetched:', data)
+        return data
+      } catch (error) {
+        console.warn('Builder fetch error:', error)
+        return null // Don't throw, just return null to avoid blocking UI
       }
-      
-      console.log('Builder data fetched:', data)
-      return data
     }
   })
 
@@ -211,6 +206,7 @@ export default function ScanReviewPage({ params }: PageProps) {
       organiser_names: (patchOrganisers as any[]).join(', ') || null,
       builder_name: builderName,
       address: addressData?.full_address || addressData?.location || null,
+      // eba_with_cfmeu is already included from the API route
     }
   }, [projectData, patchOrganisers, builderData, addressData, builderFromMapping])
 

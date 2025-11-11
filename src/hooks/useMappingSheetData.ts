@@ -81,11 +81,43 @@ export function useMappingSheetData(projectId: string) {
       const tradeContractors: TradeContractor[] = [];
 
       // 1. Get project basic info
-      const { data: project } = await supabase
-        .from("projects")
-        .select("id, name, builder_id") // Keep builder_id for legacy info if needed
-        .eq("id", projectId)
-        .single();
+      // Use RPC function to avoid RLS recursion issues
+      let project: { id: string; name: string; builder_id: string | null; main_job_site_id: string | null } | null = null;
+      let mainJobSiteId: string | null = null;
+      
+      try {
+        const { data: rpcData, error: rpcError } = await supabase
+          .rpc('get_project_for_scan_review', { p_project_id: projectId });
+        
+        if (!rpcError && rpcData && !rpcData.error) {
+          // RPC function returns full project data, extract what we need
+          project = {
+            id: rpcData.id,
+            name: rpcData.name,
+            builder_id: rpcData.builder_id || null,
+            main_job_site_id: rpcData.main_job_site_id || null,
+          };
+          mainJobSiteId = rpcData.main_job_site_id || null;
+        } else {
+          // Fallback to direct query if RPC fails (for backward compatibility)
+          const { data: directData, error: directError } = await supabase
+            .from("projects")
+            .select("id, name, builder_id, main_job_site_id")
+            .eq("id", projectId)
+            .single();
+          
+          if (directError) {
+            console.warn('[useMappingSheetData] Failed to fetch project:', directError);
+            throw new Error("Project not found");
+          }
+          
+          project = directData;
+          mainJobSiteId = directData?.main_job_site_id || null;
+        }
+      } catch (error) {
+        console.error('[useMappingSheetData] Error fetching project:', error);
+        throw new Error("Project not found");
+      }
 
       if (!project) throw new Error("Project not found");
 
@@ -305,17 +337,13 @@ export function useMappingSheetData(projectId: string) {
       });
 
       // 5. Get trade contractors from site_contractor_trades (legacy, if main site exists)
-      const { data: mainSite } = await supabase
-        .from("projects")
-        .select("main_job_site_id")
-        .eq("id", projectId)
-        .single();
+      // mainJobSiteId is already fetched above
 
-      if (mainSite?.main_job_site_id) {
+      if (mainJobSiteId) {
         const { data: siteTrades } = await supabase
           .from("site_contractor_trades")
           .select("id, employer_id, trade_type, employers(name, enterprise_agreement_status)")
-          .eq("job_site_id", mainSite.main_job_site_id);
+          .eq("job_site_id", mainJobSiteId);
 
         (siteTrades || []).forEach((st: any) => {
           if (!st.employer_id) return;
