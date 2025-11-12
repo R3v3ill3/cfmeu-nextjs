@@ -74,14 +74,46 @@ export async function middleware(req: NextRequest) {
   )
 
   // IMPORTANT: Refresh auth session - this handles PKCE code exchange when present
+  // Check for PKCE code in query params (Supabase auth redirects)
+  const hasAuthCode = req.nextUrl.searchParams.has('code') || req.nextUrl.searchParams.has('code_verifier')
   const authStartTime = Date.now();
+  
+  // Explicitly handle PKCE code exchange if present
+  if (hasAuthCode) {
+    try {
+      // Call getSession first to trigger code exchange
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      if (sessionError) {
+        console.error('[Middleware] Session error during PKCE exchange:', {
+          path: req.nextUrl.pathname,
+          error: sessionError,
+          errorMessage: sessionError.message,
+          timestamp: new Date().toISOString(),
+        });
+      } else if (session) {
+        console.log('[Middleware] PKCE code exchanged successfully:', {
+          path: req.nextUrl.pathname,
+          userId: session.user?.id,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch (err) {
+      console.error('[Middleware] Exception during PKCE exchange:', {
+        path: req.nextUrl.pathname,
+        error: err instanceof Error ? err.message : String(err),
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
+  // Get user after potential code exchange
   const {
     data: { user },
     error: authError,
   } = await supabase.auth.getUser()
   const authDuration = Date.now() - authStartTime;
 
-  // Only log errors and slow auth checks (>200ms) to reduce noise
+  // Enhanced logging for diagnostics
   if (authError) {
     console.error('[Middleware] Auth error:', {
       path: req.nextUrl.pathname,
@@ -89,13 +121,17 @@ export async function middleware(req: NextRequest) {
       errorMessage: authError.message,
       errorCode: authError.status,
       authDuration,
+      hasAuthCode,
       timestamp: new Date().toISOString(),
     });
-  } else if (authDuration > 200) {
-    console.warn('[Middleware] Slow auth check:', {
+  } else if (authDuration > 200 || hasAuthCode) {
+    // Log slow auth checks and all PKCE exchanges for debugging
+    console.log('[Middleware] Auth check:', {
       path: req.nextUrl.pathname,
       userId: user?.id || null,
       authDuration,
+      hasAuthCode,
+      hasUser: !!user,
       timestamp: new Date().toISOString(),
     });
   }

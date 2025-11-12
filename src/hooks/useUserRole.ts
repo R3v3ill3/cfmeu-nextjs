@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useAuth } from "@/hooks/useAuth"
+import { useHelpContext } from "@/context/HelpContext"
 import { supabase } from "@/integrations/supabase/client"
 
 interface UseUserRoleResult {
@@ -17,14 +18,36 @@ const STORAGE_KEY = "cfmeu:user-role"
  * Centralized hook for fetching and caching user role.
  * Uses React Query to ensure consistent role data across all components
  * and eliminate race conditions in navigation rendering.
+ * 
+ * Respects server-provided role from HelpContext initially to prevent
+ * race conditions on initial page load.
  */
 export function useUserRole(): UseUserRoleResult {
   const { user } = useAuth()
+  const { scope } = useHelpContext()
+  const serverProvidedRole = scope.role
+  
   const [cachedRole, setCachedRole] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null
+    if (typeof window === "undefined") return serverProvidedRole ?? null
     const stored = window.sessionStorage.getItem(STORAGE_KEY)
-    return stored ? stored : null
+    // Prefer server-provided role over cached if available
+    return serverProvidedRole ?? (stored ? stored : null)
   })
+
+  // Update cached role when server-provided role changes
+  useEffect(() => {
+    if (serverProvidedRole && serverProvidedRole !== cachedRole) {
+      console.log('[useUserRole] Updating from server-provided role:', {
+        previousRole: cachedRole,
+        newRole: serverProvidedRole,
+        timestamp: new Date().toISOString(),
+      });
+      setCachedRole(serverProvidedRole);
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem(STORAGE_KEY, serverProvidedRole);
+      }
+    }
+  }, [serverProvidedRole, cachedRole]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -41,22 +64,32 @@ export function useUserRole(): UseUserRoleResult {
     staleTime: 5 * 60 * 1000, // 5 minutes - role changes are rare
     gcTime: 10 * 60 * 1000, // 10 minutes
     refetchOnWindowFocus: false,
+    // Use server-provided role as initial data to prevent flash of wrong role
+    initialData: serverProvidedRole ?? undefined,
     retry: (failureCount, error) => {
-      // Retry up to 3 times for network/timeout errors
-      if (failureCount >= 3) return false;
+      // Retry up to 5 times for RLS/auth errors that might be transient
+      if (failureCount >= 5) return false;
       
-      const isRetryable = error instanceof Error && (
-        error.message.includes('timeout') ||
-        error.message.includes('network') ||
-        error.message.includes('fetch') ||
-        (error as any).code === 'ETIMEDOUT' ||
-        (error as any).code === 'PGRST116' // PostgREST connection error
-      );
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorCode = (error as any)?.code;
+      
+      const isRetryable = 
+        errorMessage.includes('timeout') ||
+        errorMessage.includes('network') ||
+        errorMessage.includes('fetch') ||
+        errorMessage.includes('permission denied') ||
+        errorMessage.includes('row-level security') ||
+        errorMessage.includes('RLS') ||
+        errorCode === 'ETIMEDOUT' ||
+        errorCode === 'PGRST116' || // PostgREST connection error
+        errorCode === 'PGRST301' || // PostgREST not found (might be RLS)
+        errorCode === '42501'; // PostgreSQL permission denied
       
       if (isRetryable) {
-        console.log(`[useUserRole] Retrying role fetch (attempt ${failureCount + 1}/3)`, {
+        console.log(`[useUserRole] Retrying role fetch (attempt ${failureCount + 1}/5)`, {
           userId: user?.id,
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMessage,
+          errorCode,
         });
         return true;
       }
@@ -64,8 +97,9 @@ export function useUserRole(): UseUserRoleResult {
       return false;
     },
     retryDelay: (attemptIndex) => {
-      // Exponential backoff: 1s, 2s, 4s
-      return Math.min(1000 * Math.pow(2, attemptIndex), 4000);
+      // Exponential backoff: 500ms, 1s, 2s, 4s, 8s
+      // Faster initial retries for transient RLS issues
+      return Math.min(500 * Math.pow(2, attemptIndex), 8000);
     },
     queryFn: async () => {
       if (!user?.id) {
@@ -150,8 +184,10 @@ export function useUserRole(): UseUserRoleResult {
     },
   })
 
-  const role = query.data ?? cachedRole ?? null
-  const isLoading = query.isLoading && !cachedRole
+  // Prefer query data, then cached role, then server-provided role
+  const role = query.data ?? cachedRole ?? serverProvidedRole ?? null
+  // Don't show loading if we have a cached or server-provided role
+  const isLoading = query.isLoading && !cachedRole && !serverProvidedRole
 
   return useMemo(() => ({
     role,

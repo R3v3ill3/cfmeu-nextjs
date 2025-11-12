@@ -152,18 +152,37 @@ export default function DesktopLayout({ children }: { children: ReactNode }) {
   
   const items = useVisibleNavItems(userRole ?? null, isLoadingRole, cachedRole)
   
-  // Log role loading failures
+  // Log role loading failures and handle gracefully
   useEffect(() => {
     if (roleError) {
+      const errorMessage = roleError instanceof Error ? roleError.message : String(roleError);
+      const isRLSError = 
+        errorMessage.includes('permission denied') ||
+        errorMessage.includes('row-level security') ||
+        errorMessage.includes('RLS') ||
+        (roleError as any)?.code === '42501' ||
+        (roleError as any)?.code === 'PGRST301';
+      
       console.error('[DesktopLayout] Role loading failed:', {
         userId: user?.id,
         error: roleError,
-        errorMessage: roleError instanceof Error ? roleError.message : String(roleError),
+        errorMessage,
+        isRLSError,
         pathname,
+        cachedRole,
         timestamp: new Date().toISOString(),
       });
+      
+      // If we have a cached role, continue using it even if query fails
+      // This prevents admin tab from disappearing due to transient RLS errors
+      if (cachedRole && isRLSError) {
+        console.warn('[DesktopLayout] Using cached role due to RLS error:', {
+          cachedRole,
+          timestamp: new Date().toISOString(),
+        });
+      }
     }
-  }, [roleError, user?.id, pathname]);
+  }, [roleError, user?.id, pathname, cachedRole]);
   
   // Log when Administration menu should appear/disappear
   useEffect(() => {

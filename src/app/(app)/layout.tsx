@@ -12,15 +12,49 @@ import { AppRole } from '@/constants/roles'
 import { ReactNode } from 'react'
 
 async function getUserRole(userId: string): Promise<AppRole | null> {
+  const startTime = Date.now()
   const supabase = await createServerSupabase()
-  const { data } = await supabase.from('profiles').select('role').eq('id', userId).maybeSingle()
-  if (!data) return null
-  return (data.role as AppRole) ?? null
+  try {
+    const { data, error } = await supabase.from('profiles').select('role').eq('id', userId).maybeSingle()
+    const duration = Date.now() - startTime
+    
+    if (error) {
+      console.error('[AppLayout] Error fetching user role:', {
+        userId,
+        error: error.message,
+        errorCode: error.code,
+        duration,
+        timestamp: new Date().toISOString(),
+      })
+      return null
+    }
+    
+    if (duration > 200) {
+      console.warn('[AppLayout] Slow role fetch:', {
+        userId,
+        duration,
+        hasRole: !!data?.role,
+        timestamp: new Date().toISOString(),
+      })
+    }
+    
+    return (data?.role as AppRole) ?? null
+  } catch (err) {
+    const duration = Date.now() - startTime
+    console.error('[AppLayout] Exception fetching user role:', {
+      userId,
+      error: err instanceof Error ? err.message : String(err),
+      duration,
+      timestamp: new Date().toISOString(),
+    })
+    return null
+  }
 }
 
 export const dynamic = 'force-dynamic'
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
+  const layoutStartTime = Date.now()
   if (process.env.NODE_ENV === 'development') {
     console.log('[AppLayout] Rendering layout for (app) route group')
   }
@@ -30,7 +64,10 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     const { data } = await supabase.auth.getUser()
     user = data.user
   } catch (err) {
-    // Ignore and treat as unauthenticated
+    console.error('[AppLayout] Auth getUser error:', {
+      error: err instanceof Error ? err.message : String(err),
+      timestamp: new Date().toISOString(),
+    })
   }
   if (!user) {
     if (process.env.NODE_ENV === 'development') {
@@ -43,8 +80,17 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const userAgent = hdrs.get('user-agent') || undefined
   const isMobile = isMobileOrTablet(userAgent)
   const currentPath = hdrs.get('x-pathname') || ''
-  if (process.env.NODE_ENV === 'development') {
-    console.log('[AppLayout] Rendering with mobile:', isMobile, 'path:', currentPath)
+  const layoutDuration = Date.now() - layoutStartTime
+  
+  if (process.env.NODE_ENV === 'development' || layoutDuration > 500) {
+    console.log('[AppLayout] Layout rendered:', {
+      userId: user.id,
+      role,
+      isMobile,
+      path: currentPath,
+      duration: layoutDuration,
+      timestamp: new Date().toISOString(),
+    })
   }
   return (
     <AuthProvider>
