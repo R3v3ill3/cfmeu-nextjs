@@ -5,7 +5,7 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
-  Menu, LogOut, Users, Building, MapPin, BarChart3, FolderOpen, FileCheck, Shield, AlertTriangle, QrCode, HelpCircle, Crown, Settings, TrendingUp, ArrowLeft, Home, Search
+  Menu, LogOut, Users, Building, MapPin, BarChart3, FolderOpen, FileCheck, Shield, AlertTriangle, QrCode, HelpCircle, Crown, Settings, TrendingUp, ArrowLeft, Home, Search, ClipboardList
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -193,6 +193,11 @@ const Layout = ({ children, onRefresh }: LayoutProps) => {
     // Rating System - show for organiser+ roles
     if (!isLoadingRole && userRole && (userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin")) {
       items.push({ path: "/mobile/ratings", label: "Ratings", icon: TrendingUp });
+    }
+    
+    // Delegated Tasks - show for organiser+ roles
+    if (!isLoadingRole && userRole && (userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin")) {
+      items.push({ path: "/delegated-tasks", label: "Delegated Tasks", icon: ClipboardList });
     }
     
     // Workers - check visibility

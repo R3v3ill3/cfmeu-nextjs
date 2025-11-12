@@ -50,6 +50,9 @@ export async function GET(
     // Use anon SSR client (no service-role key!)
     const supabase = await createServerSupabase();
 
+    // Track token view (increments view_count, sets viewed_at on first view)
+    await supabase.rpc('track_token_view', { p_token: token });
+
     // First, check if this is an audit compliance form
     const { data: tokenValidation } = await supabase
       .rpc('validate_public_token', { p_token: token });

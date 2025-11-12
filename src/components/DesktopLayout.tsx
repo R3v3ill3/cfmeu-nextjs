@@ -23,7 +23,7 @@ import {
   SidebarTrigger,
   SidebarInput,
 } from "@/components/ui/sidebar"
-import { LogOut, Users, Building, FolderOpen, FileCheck, Shield, BarChart3, Settings, Home, MapPin, Crown, QrCode, Search as SearchIcon, HelpCircle, AlertTriangle } from "lucide-react"
+import { LogOut, Users, Building, FolderOpen, FileCheck, Shield, BarChart3, Settings, Home, MapPin, Crown, QrCode, Search as SearchIcon, HelpCircle, AlertTriangle, ClipboardList } from "lucide-react"
 import AdminPatchSelector from "@/components/admin/AdminPatchSelector"
 import { useNavigationVisibility } from "@/hooks/useNavigationVisibility"
 import { useNavigationLoading } from "@/hooks/useNavigationLoading"
@@ -97,6 +97,11 @@ function useVisibleNavItems(userRole: string | null, isLoadingRole: boolean, cac
     // Campaigns - check role and visibility
     if ((effectiveRole === "organiser" || effectiveRole === "lead_organiser" || effectiveRole === "admin") && visibility.campaigns) {
       items.push({ path: "/campaigns", label: "Campaigns", icon: BarChart3, description: "Campaign activities and tracking" })
+    }
+    
+    // Delegated Tasks - show for organiser+ roles
+    if ((effectiveRole === "organiser" || effectiveRole === "lead_organiser" || effectiveRole === "admin")) {
+      items.push({ path: "/delegated-tasks", label: "Delegated Tasks", icon: ClipboardList, description: "Track webform links and submissions" })
     }
   }
   
