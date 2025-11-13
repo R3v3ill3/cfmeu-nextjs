@@ -127,26 +127,26 @@ export function LeadOrganiserSummaryView({
                 {data.teams.map((team) => (
                   <div
                     key={team.leadOrganiserId}
-                    className="flex items-center justify-between p-3 border rounded-lg"
+                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 border rounded-lg"
                   >
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <div className="font-medium">{team.leadOrganiserName}</div>
                       <div className="text-sm text-muted-foreground">
                         {team.organiserCount} organisers
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <div className="text-sm text-muted-foreground">Generated</div>
-                        <div className="font-bold">{team.generated}</div>
+                    <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
+                      <div className="text-left sm:text-right min-w-[70px]">
+                        <div className="text-xs sm:text-sm text-muted-foreground">Generated</div>
+                        <div className="font-bold text-base sm:text-lg">{team.generated}</div>
                       </div>
-                      <div className="text-right">
-                        <div className="text-sm text-muted-foreground">Submitted</div>
-                        <div className="font-bold text-green-600">{team.submitted}</div>
+                      <div className="text-left sm:text-right min-w-[70px]">
+                        <div className="text-xs sm:text-sm text-muted-foreground">Submitted</div>
+                        <div className="font-bold text-base sm:text-lg text-green-600">{team.submitted}</div>
                       </div>
-                      <div className="text-right">
-                        <div className="text-sm text-muted-foreground">Rate</div>
-                        <div className="font-bold">{team.submissionRate.toFixed(1)}%</div>
+                      <div className="text-left sm:text-right min-w-[70px]">
+                        <div className="text-xs sm:text-sm text-muted-foreground">Rate</div>
+                        <div className="font-bold text-base sm:text-lg">{team.submissionRate.toFixed(1)}%</div>
                       </div>
                     </div>
                   </div>
@@ -186,25 +186,27 @@ export function LeadOrganiserSummaryView({
               <div className="space-y-3">
                 {data.organisers.map((organiser) => (
                   <Fragment key={organiser.organiserId}>
-                    <div className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex-1">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 border rounded-lg">
+                      <div className="flex-1 min-w-0">
                         <div className="font-medium">{organiser.organiserName}</div>
                       </div>
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <div className="text-sm text-muted-foreground">Generated</div>
-                          <div className="font-bold">{organiser.generated}</div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-sm text-muted-foreground">Submitted</div>
-                          <div className="font-bold text-green-600">
-                            {organiser.submitted}
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                        <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
+                          <div className="text-left sm:text-right min-w-[70px]">
+                            <div className="text-xs sm:text-sm text-muted-foreground">Generated</div>
+                            <div className="font-bold text-base sm:text-lg">{organiser.generated}</div>
                           </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-sm text-muted-foreground">Rate</div>
-                          <div className="font-bold">
-                            {organiser.submissionRate.toFixed(1)}%
+                          <div className="text-left sm:text-right min-w-[70px]">
+                            <div className="text-xs sm:text-sm text-muted-foreground">Submitted</div>
+                            <div className="font-bold text-base sm:text-lg text-green-600">
+                              {organiser.submitted}
+                            </div>
+                          </div>
+                          <div className="text-left sm:text-right min-w-[70px]">
+                            <div className="text-xs sm:text-sm text-muted-foreground">Rate</div>
+                            <div className="font-bold text-base sm:text-lg">
+                              {organiser.submissionRate.toFixed(1)}%
+                            </div>
                           </div>
                         </div>
                         <Button
@@ -217,6 +219,7 @@ export function LeadOrganiserSummaryView({
                                 : organiser.organiserId
                             );
                           }}
+                          className="w-full sm:w-auto shrink-0"
                         >
                           {selectedOrganiserId === organiser.organiserId
                             ? "Hide Links"
