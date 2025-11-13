@@ -8,6 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LinksList } from "./LinksList";
+import { PurgeExpiredLinks } from "./PurgeExpiredLinks";
+import { useAuth } from "@/hooks/useAuth";
+import { useUserProfile } from "@/hooks/useUserProfile";
 import type { DelegatedTasksAnalyticsResponse } from "./DelegatedTasksDashboard";
 
 interface OrganiserSummaryViewProps {
@@ -19,6 +22,8 @@ interface OrganiserSummaryViewProps {
 export function OrganiserSummaryView({ data, period, resourceType }: OrganiserSummaryViewProps) {
   const [showLinks, setShowLinks] = useState(true);
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "submitted" | "expired">("all");
+  const { user } = useAuth();
+  const { profile } = useUserProfile();
 
   if (!data.personal) {
     return null;
@@ -119,22 +124,31 @@ export function OrganiserSummaryView({ data, period, resourceType }: OrganiserSu
                   </SelectContent>
                 </Select>
               )}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowLinks(!showLinks)}
-                className="gap-2 w-full sm:w-auto min-h-[44px]"
-              >
-                {showLinks ? (
-                  <>
-                    Hide <ChevronUp className="h-4 w-4" />
-                  </>
-                ) : (
-                  <>
-                    View Links <ChevronDown className="h-4 w-4" />
-                  </>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowLinks(!showLinks)}
+                  className="gap-2 w-full sm:w-auto min-h-[44px]"
+                >
+                  {showLinks ? (
+                    <>
+                      Hide <ChevronUp className="h-4 w-4" />
+                    </>
+                  ) : (
+                    <>
+                      View Links <ChevronDown className="h-4 w-4" />
+                    </>
+                  )}
+                </Button>
+                {user?.id && profile?.full_name && (
+                  <PurgeExpiredLinks
+                    organiserId={user.id}
+                    organiserName={profile.full_name}
+                    currentResourceType={resourceType}
+                  />
                 )}
-              </Button>
+              </div>
             </div>
           </div>
         </CardHeader>

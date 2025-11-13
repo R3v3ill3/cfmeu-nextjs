@@ -29,20 +29,28 @@ type ResourceType = "PROJECT_AUDIT_COMPLIANCE" | "PROJECT_MAPPING_SHEET" | "all"
 
 interface PurgeLinksRequest {
   purgeOption: PurgeOption;
+  organiserId: string;
   resourceType?: ResourceType;
 }
 
 interface PurgeLinksResponse {
   deletedCount: number;
   purgeOption: PurgeOption;
+  organiserId: string;
   resourceType?: string;
 }
 
 interface PurgeExpiredLinksProps {
+  organiserId: string;
+  organiserName: string;
   currentResourceType: "PROJECT_AUDIT_COMPLIANCE" | "PROJECT_MAPPING_SHEET";
 }
 
-export function PurgeExpiredLinks({ currentResourceType }: PurgeExpiredLinksProps) {
+export function PurgeExpiredLinks({ 
+  organiserId, 
+  organiserName, 
+  currentResourceType 
+}: PurgeExpiredLinksProps) {
   const [open, setOpen] = useState(false);
   const [purgeOption, setPurgeOption] = useState<PurgeOption>("1week");
   const [resourceTypeFilter, setResourceTypeFilter] = useState<ResourceType>("all");
@@ -58,6 +66,7 @@ export function PurgeExpiredLinks({ currentResourceType }: PurgeExpiredLinksProp
         },
         body: JSON.stringify({
           purgeOption: request.purgeOption,
+          organiserId: request.organiserId,
           resourceType: request.resourceType === "all" ? undefined : request.resourceType,
         }),
       });
@@ -91,6 +100,7 @@ export function PurgeExpiredLinks({ currentResourceType }: PurgeExpiredLinksProp
   const handlePurge = () => {
     purgeMutation.mutate({
       purgeOption,
+      organiserId,
       resourceType: resourceTypeFilter,
     });
   };
@@ -111,32 +121,20 @@ export function PurgeExpiredLinks({ currentResourceType }: PurgeExpiredLinksProp
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base sm:text-lg">Purge Expired Links</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Remove expired and unviewed links to clean up the database. Only links that have
-            expired and were never viewed will be deleted.
-          </p>
-
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button variant="destructive" className="w-full sm:w-auto min-h-[44px]">
-                <Trash2 className="h-4 w-4 mr-2" />
-                Purge Expired Links
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px] w-[95vw]">
-              <DialogHeader>
-                <DialogTitle>Purge Expired and Unviewed Links</DialogTitle>
-                <DialogDescription>
-                  Select how old expired links should be before they are purged. Only links that
-                  have expired and were never viewed will be deleted.
-                </DialogDescription>
-              </DialogHeader>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" className="min-h-[44px]">
+          <Trash2 className="h-4 w-4 mr-2" />
+          Purge Links
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[500px] w-[95vw]">
+        <DialogHeader>
+          <DialogTitle>Purge Expired and Unviewed Links</DialogTitle>
+          <DialogDescription>
+            Remove expired and unviewed links for <strong>{organiserName}</strong>. Select how old expired links should be before they are purged. Only links that have expired and were never viewed will be deleted.
+          </DialogDescription>
+        </DialogHeader>
 
               <div className="space-y-4 py-4">
                 <Alert>
@@ -186,6 +184,7 @@ export function PurgeExpiredLinks({ currentResourceType }: PurgeExpiredLinksProp
                 <div className="rounded-md bg-muted p-3 text-sm">
                   <p className="font-medium mb-1">What will be deleted:</p>
                   <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                    <li>Links for <strong>{organiserName}</strong> only</li>
                     <li>Links expired {getPurgeOptionLabel(purgeOption).toLowerCase()}</li>
                     <li>Links that were never viewed (view_count = 0)</li>
                     {resourceTypeFilter !== "all" && (
@@ -227,9 +226,4 @@ export function PurgeExpiredLinks({ currentResourceType }: PurgeExpiredLinksProp
               </DialogFooter>
             </DialogContent>
           </Dialog>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
 

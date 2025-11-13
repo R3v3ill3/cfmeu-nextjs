@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { LinksList } from "./LinksList";
+import { PurgeExpiredLinks } from "./PurgeExpiredLinks";
 import type { DelegatedTasksAnalyticsResponse } from "./DelegatedTasksDashboard";
 
 interface LeadOrganiserSummaryViewProps {
@@ -209,22 +210,29 @@ export function LeadOrganiserSummaryView({
                             </div>
                           </div>
                         </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedOrganiserId(
-                              selectedOrganiserId === organiser.organiserId
-                                ? null
-                                : organiser.organiserId
-                            );
-                          }}
-                          className="w-full sm:w-auto shrink-0"
-                        >
-                          {selectedOrganiserId === organiser.organiserId
-                            ? "Hide Links"
-                            : "View Links"}
-                        </Button>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedOrganiserId(
+                                selectedOrganiserId === organiser.organiserId
+                                  ? null
+                                  : organiser.organiserId
+                              );
+                            }}
+                            className="w-full sm:w-auto shrink-0 min-h-[44px]"
+                          >
+                            {selectedOrganiserId === organiser.organiserId
+                              ? "Hide Links"
+                              : "View Links"}
+                          </Button>
+                          <PurgeExpiredLinks
+                            organiserId={organiser.organiserId}
+                            organiserName={organiser.organiserName}
+                            currentResourceType={resourceType}
+                          />
+                        </div>
                       </div>
                     </div>
                     {selectedOrganiserId === organiser.organiserId && (

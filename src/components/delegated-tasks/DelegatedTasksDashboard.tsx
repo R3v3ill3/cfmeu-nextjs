@@ -11,7 +11,6 @@ import { cn } from "@/lib/utils";
 import { OrganiserSummaryView } from "./OrganiserSummaryView";
 import { LeadOrganiserSummaryView } from "./LeadOrganiserSummaryView";
 import { AdminSummaryView } from "./AdminSummaryView";
-import { PurgeExpiredLinks } from "./PurgeExpiredLinks";
 import { useUserRole } from "@/hooks/useUserRole";
 
 type Period = "week" | "month" | "3months";
@@ -148,11 +147,6 @@ export function DelegatedTasksDashboard() {
           </div>
         </CardContent>
       </Card>
-
-      {/* Purge Links (Admin Only) */}
-      {data?.role === "admin" && (
-        <PurgeExpiredLinks currentResourceType={resourceType} />
-      )}
 
       {/* Role-specific views */}
       {isLoading ? (

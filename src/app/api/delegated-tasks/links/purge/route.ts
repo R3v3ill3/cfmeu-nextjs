@@ -3,7 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
-const ALLOWED_ROLES = ['admin'] as const;
+const ALLOWED_ROLES = ['admin', 'organiser', 'lead_organiser'] as const;
 type AllowedRole = typeof ALLOWED_ROLES[number];
 const ROLE_SET = new Set<AllowedRole>(ALLOWED_ROLES);
 
@@ -12,12 +12,14 @@ type PurgeOption = typeof VALID_PURGE_OPTIONS[number];
 
 export interface PurgeLinksRequest {
   purgeOption: PurgeOption;
+  organiserId: string;
   resourceType?: 'PROJECT_AUDIT_COMPLIANCE' | 'PROJECT_MAPPING_SHEET';
 }
 
 export interface PurgeLinksResponse {
   deletedCount: number;
   purgeOption: PurgeOption;
+  organiserId: string;
   resourceType?: string;
 }
 
@@ -50,13 +52,13 @@ export async function POST(request: NextRequest) {
     if (!role || !ROLE_SET.has(role)) {
       return NextResponse.json({ 
         error: 'Forbidden',
-        details: 'Only administrators can purge links'
+        details: 'You do not have permission to purge links'
       }, { status: 403 });
     }
 
     // Parse request body
     const body: PurgeLinksRequest = await request.json();
-    const { purgeOption, resourceType } = body;
+    const { purgeOption, organiserId, resourceType } = body;
 
     // Validate purge option
     if (!VALID_PURGE_OPTIONS.includes(purgeOption)) {
@@ -64,6 +66,47 @@ export async function POST(request: NextRequest) {
         error: 'Invalid purge option',
         details: `Must be one of: ${VALID_PURGE_OPTIONS.join(', ')}`
       }, { status: 400 });
+    }
+
+    // Validate organiserId
+    if (!organiserId || typeof organiserId !== 'string') {
+      return NextResponse.json({ 
+        error: 'Invalid organiser ID',
+        details: 'organiserId is required'
+      }, { status: 400 });
+    }
+
+    // Check permissions: 
+    // - Admins can purge any organiser's links
+    // - Lead organisers can purge their team members' links
+    // - Organisers can only purge their own links
+    if (role === 'admin') {
+      // Admin can purge any organiser's links - no additional check needed
+    } else if (role === 'lead_organiser') {
+      // Lead organiser can purge their team members' links
+      // Verify the organiser is in their team via role_hierarchy
+      const { data: hierarchyCheck } = await supabase
+        .from('role_hierarchy')
+        .select('id')
+        .eq('parent_user_id', user.id)
+        .eq('child_user_id', organiserId)
+        .eq('is_active', true)
+        .maybeSingle();
+      
+      if (!hierarchyCheck && organiserId !== user.id) {
+        return NextResponse.json({ 
+          error: 'Forbidden',
+          details: 'You can only purge links for organisers in your team or your own links'
+        }, { status: 403 });
+      }
+    } else if (role === 'organiser') {
+      // Organiser can only purge their own links
+      if (organiserId !== user.id) {
+        return NextResponse.json({ 
+          error: 'Forbidden',
+          details: 'You can only purge your own links'
+        }, { status: 403 });
+      }
     }
 
     // Calculate cutoff date based on purge option
@@ -94,9 +137,11 @@ export async function POST(request: NextRequest) {
     );
 
     // Build the base query conditions
+    // Only purge links for the specified organiser
     let countQuery = serviceSupabase
       .from('secure_access_tokens')
       .select('id', { count: 'exact', head: true })
+      .eq('created_by', organiserId) // Only this organiser's links
       .lt('expires_at', new Date().toISOString()) // Expired
       .is('viewed_at', null) // Never viewed
       .eq('view_count', 0); // View count is 0
@@ -104,6 +149,7 @@ export async function POST(request: NextRequest) {
     let deleteQuery = serviceSupabase
       .from('secure_access_tokens')
       .delete()
+      .eq('created_by', organiserId) // Only this organiser's links
       .lt('expires_at', new Date().toISOString()) // Expired
       .is('viewed_at', null) // Never viewed
       .eq('view_count', 0); // View count is 0
@@ -145,6 +191,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       deletedCount: count || 0,
       purgeOption,
+      organiserId,
       resourceType: resourceType || 'all',
     } as PurgeLinksResponse);
   } catch (error) {
