@@ -104,6 +104,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Build query based on role
+    // Note: We select profiles separately to avoid RLS issues with foreign key joins
     let query = supabase
       .from('secure_access_tokens')
       .select(`
@@ -115,8 +116,7 @@ export async function GET(request: NextRequest) {
         submitted_at,
         viewed_at,
         view_count,
-        created_by,
-        profiles!secure_access_tokens_created_by_fkey(full_name)
+        created_by
       `, { count: 'exact' })
       .eq('resource_type', resourceType)
       .gte('created_at', periodStart.toISOString())
@@ -209,17 +209,58 @@ export async function GET(request: NextRequest) {
 
     if (tokensError) {
       console.error('Failed to fetch links:', tokensError);
-      return NextResponse.json({ error: 'Failed to fetch links' }, { status: 500 });
+      console.error('Query error details:', JSON.stringify(tokensError, null, 2));
+      return NextResponse.json({ 
+        error: 'Failed to fetch links',
+        details: tokensError.message || 'Unknown error'
+      }, { status: 500 });
+    }
+
+    // Handle empty results
+    if (!tokens || tokens.length === 0) {
+      return NextResponse.json({
+        links: [],
+        total: 0,
+        page,
+        limit,
+      });
     }
 
     // Get project names
-    const projectIds = [...new Set((tokens || []).map(t => t.resource_id))];
-    const { data: projects } = await supabase
-      .from('projects')
-      .select('id, name')
-      .in('id', projectIds);
+    const projectIds = [...new Set((tokens || []).map(t => t.resource_id).filter(Boolean))];
+    let projectMap = new Map<string, string>();
+    
+    if (projectIds.length > 0) {
+      const { data: projects, error: projectsError } = await supabase
+        .from('projects')
+        .select('id, name')
+        .in('id', projectIds);
 
-    const projectMap = new Map((projects || []).map(p => [p.id, p.name]));
+      if (projectsError) {
+        console.error('Failed to fetch project names:', projectsError);
+        // Continue without project names rather than failing
+      } else {
+        projectMap = new Map((projects || []).map(p => [p.id, p.name]));
+      }
+    }
+
+    // Get creator names separately to avoid RLS issues
+    const creatorIds = [...new Set((tokens || []).map(t => t.created_by).filter(Boolean))];
+    let creatorMap = new Map<string, string>();
+    
+    if (creatorIds.length > 0) {
+      const { data: creators, error: creatorsError } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', creatorIds);
+
+      if (creatorsError) {
+        console.error('Failed to fetch creator names:', creatorsError);
+        // Continue without creator names rather than failing
+      } else {
+        creatorMap = new Map((creators || []).map(c => [c.id, c.full_name]));
+      }
+    }
 
     // Transform data
     const links: DelegatedTaskLink[] = (tokens || []).map((token: any) => {
@@ -248,7 +289,7 @@ export async function GET(request: NextRequest) {
         viewCount: token.view_count || 0,
         status: linkStatus,
         createdBy: token.created_by,
-        createdByName: token.profiles?.full_name || 'Unknown',
+        createdByName: creatorMap.get(token.created_by) || 'Unknown',
       };
     });
 
