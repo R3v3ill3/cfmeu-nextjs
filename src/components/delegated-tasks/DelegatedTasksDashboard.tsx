@@ -119,7 +119,7 @@ export function DelegatedTasksDashboard() {
             <div className="flex-1">
               <label className="text-sm font-medium mb-2 block">Time Period</label>
               <Select value={period} onValueChange={(value) => setPeriod(value as Period)}>
-                <SelectTrigger>
+                <SelectTrigger className="min-h-[44px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -135,7 +135,7 @@ export function DelegatedTasksDashboard() {
                 value={resourceType}
                 onValueChange={(value) => setResourceType(value as ResourceType)}
               >
-                <SelectTrigger>
+                <SelectTrigger className="min-h-[44px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
