@@ -9,6 +9,7 @@ import RoleGuard from "@/components/guards/RoleGuard"
 import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { useAuth } from "@/hooks/useAuth"
+import { useUserRole } from "@/hooks/useUserRole"
 import { useSearchParams } from "next/navigation"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -51,23 +52,18 @@ export default function AdminPage() {
   const [open, setOpen] = useState(false)
   const [addDraftOpen, setAddDraftOpen] = useState(false)
   const [lookupOpen, setLookupOpen] = useState(false)
-  const [userRole, setUserRole] = useState<string | null>(null)
   const { user } = useAuth()
+  const { role: userRole } = useUserRole()
   const searchParams = useSearchParams()
   const isMobile = useIsMobile()
 
   // Get user role
   useEffect(() => {
-    const checkUserRole = async () => {
-      if (!user) return
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single()
-      setUserRole((profile as { role?: string } | null)?.role || null)
+    // Invalidate pending items if auth context changes (e.g. sign-out while on page)
+    if (!user) {
+      setPendingProjects([])
+      setPendingEmployers([])
     }
-    checkUserRole()
   }, [user])
 
   // Fetch users for hierarchy manager
