@@ -226,4 +226,6 @@ export function PurgeExpiredLinks({
               </DialogFooter>
             </DialogContent>
           </Dialog>
+  );
+}
 
