@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { User, Session } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
+const SESSION_FETCH_TIMEOUT = 5000;
 
 interface AuthContextType {
   user: User | null;
@@ -26,6 +27,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const supabase = getSupabaseBrowserClient();
     let isSubscribed = true;
     let sessionChecked = false;
+    const getSessionWithTimeout = async () => {
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error("Supabase session fetch timed out")), SESSION_FETCH_TIMEOUT);
+      });
+      try {
+        const result = await Promise.race([
+          supabase.auth.getSession(),
+          timeoutPromise,
+        ]) as Awaited<ReturnType<typeof supabase.auth.getSession>>;
+        return result;
+      } finally {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+      }
+    };
 
     console.log('[useAuth] Setting up auth state listener');
 
@@ -100,7 +118,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const startTime = Date.now();
 
       try {
-        const { data: { session }, error } = await supabase.auth.getSession();
+        const { data: { session }, error } = await getSessionWithTimeout();
         const duration = Date.now() - startTime;
 
         if (!isSubscribed) return; // Component unmounted, ignore result
