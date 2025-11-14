@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserRole } from "@/hooks/useUserRole";
 import { Mail } from "lucide-react";
 
 interface InviteUserDialogProps {
@@ -19,30 +20,10 @@ export const InviteUserDialog = ({ open, onOpenChange, onSuccess }: InviteUserDi
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("viewer");
   const [loading, setLoading] = useState(false);
-  const [userRole, setUserRole] = useState<string | null>(null);
-  const [inviterLeadId, setInviterLeadId] = useState<string | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
-
-  // Get current user's role and lead organiser ID
-  useEffect(() => {
-    const checkUserRole = async () => {
-      if (!user) return;
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("id, role")
-        .eq("id", user.id)
-        .single();
-      
-      if (profile) {
-        setUserRole(profile.role || null);
-        if (profile.role === "lead_organiser") {
-          setInviterLeadId(profile.id);
-        }
-      }
-    };
-    checkUserRole();
-  }, [user]);
+  const { role: userRole } = useUserRole();
+  const inviterLeadId = userRole === "lead_organiser" ? user?.id ?? null : null;
 
   // Get available roles based on current user's permissions
   const getAvailableRoles = () => {

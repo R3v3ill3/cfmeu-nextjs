@@ -437,7 +437,7 @@ BEGIN
       'name', e.name,
       'currentCompliance', COALESCE(
         (
-          SELECT row_to_json(ecc.*)
+          SELECT to_jsonb(ecc)
           FROM employer_compliance_checks ecc
           WHERE ecc.employer_id = e.id
             AND ecc.project_id = v_resource_id
