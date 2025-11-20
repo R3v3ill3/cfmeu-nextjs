@@ -90,23 +90,39 @@ export function PendingEmployersTable({
     }
 
     try {
+      console.log('[PendingEmployersTable] Quick approving employer:', employerId);
+      
       const response = await fetch('/api/admin/approve-employer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ employerId }),
       });
 
-      if (!response.ok) throw new Error('Failed to approve');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('[PendingEmployersTable] Quick approve failed:', errorData);
+        throw new Error(errorData.error || 'Failed to approve');
+      }
+
+      const result = await response.json();
+      console.log('[PendingEmployersTable] Quick approve successful:', result);
 
       toast({
         title: 'Employer approved',
-        variant: 'default',
+        description: 'The employer has been approved successfully.',
       });
+
+      // Add delay to ensure database has been updated
+      console.log('[PendingEmployersTable] Waiting 500ms before refresh...');
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      console.log('[PendingEmployersTable] Calling onRefresh...');
       onRefresh();
     } catch (error) {
-      console.error('Error approving employer:', error);
+      console.error('[PendingEmployersTable] Error quick approving employer:', error);
       toast({
         title: 'Failed to approve employer',
+        description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       });
     }
@@ -117,23 +133,39 @@ export function PendingEmployersTable({
     if (!reason) return;
 
     try {
+      console.log('[PendingEmployersTable] Quick rejecting employer:', employerId, 'Reason:', reason);
+      
       const response = await fetch('/api/admin/reject-employer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ employerId, reason }),
       });
 
-      if (!response.ok) throw new Error('Failed to reject');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('[PendingEmployersTable] Quick reject failed:', errorData);
+        throw new Error(errorData.error || 'Failed to reject');
+      }
+
+      const result = await response.json();
+      console.log('[PendingEmployersTable] Quick reject successful:', result);
 
       toast({
         title: 'Employer rejected',
-        variant: 'default',
+        description: 'The employer has been rejected successfully.',
       });
+
+      // Add delay to ensure database has been updated
+      console.log('[PendingEmployersTable] Waiting 500ms before refresh...');
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      console.log('[PendingEmployersTable] Calling onRefresh...');
       onRefresh();
     } catch (error) {
-      console.error('Error rejecting employer:', error);
+      console.error('[PendingEmployersTable] Error quick rejecting employer:', error);
       toast({
         title: 'Failed to reject employer',
+        description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       });
     }
