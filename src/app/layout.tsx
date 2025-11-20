@@ -25,7 +25,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "CFMEU Organizer App",
+  title: "CFMEU uConstuct",
   description: "Construction, Forestry, Maritime, Mining and Energy Union organizing platform",
   manifest: "/manifest.json",
   icons: {

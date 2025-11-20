@@ -306,7 +306,7 @@ export default function SettingsPage() {
 
       {/* App Version Info */}
       <div className="text-center text-xs text-muted-foreground pt-4">
-        <p>CFMEU Organizer App</p>
+        <p>CFMEU uConstuct</p>
         <p className="mt-1">
           Version 1.0 · October 2025
         </p>
