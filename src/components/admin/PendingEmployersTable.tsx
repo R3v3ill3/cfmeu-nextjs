@@ -50,7 +50,10 @@ export function PendingEmployersTable({
     completeReview,
     cancelReview,
   } = usePendingEmployerReview({
-    onComplete: () => {
+    onComplete: async () => {
+      // Add small delay to ensure database has been updated
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
       onRefresh();
       toast({
         title: 'Review completed',
@@ -211,6 +214,8 @@ export function PendingEmployersTable({
     if (!workflowState) return;
 
     try {
+      console.log('[PendingEmployersTable] Approving employer:', workflowState.employerId);
+      
       const response = await fetch('/api/admin/approve-employer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -220,13 +225,21 @@ export function PendingEmployersTable({
         }),
       });
 
-      if (!response.ok) throw new Error('Failed to approve');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('[PendingEmployersTable] Approve failed:', errorData);
+        throw new Error(errorData.error || 'Failed to approve');
+      }
+
+      const result = await response.json();
+      console.log('[PendingEmployersTable] Approve successful:', result);
 
       completeReview('approved');
     } catch (error) {
       console.error('Error approving employer:', error);
       toast({
         title: 'Failed to approve employer',
+        description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       });
     }
@@ -236,6 +249,8 @@ export function PendingEmployersTable({
     if (!workflowState) return;
 
     try {
+      console.log('[PendingEmployersTable] Rejecting employer:', workflowState.employerId, 'Reason:', reason);
+      
       const response = await fetch('/api/admin/reject-employer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -245,13 +260,21 @@ export function PendingEmployersTable({
         }),
       });
 
-      if (!response.ok) throw new Error('Failed to reject');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('[PendingEmployersTable] Reject failed:', errorData);
+        throw new Error(errorData.error || 'Failed to reject');
+      }
+
+      const result = await response.json();
+      console.log('[PendingEmployersTable] Reject successful:', result);
 
       completeReview('rejected');
     } catch (error) {
       console.error('Error rejecting employer:', error);
       toast({
         title: 'Failed to reject employer',
+        description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       });
     }
