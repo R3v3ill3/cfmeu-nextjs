@@ -81,6 +81,38 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const isMobile = isMobileOrTablet(userAgent)
   const currentPath = hdrs.get('x-pathname') || ''
   const layoutDuration = Date.now() - layoutStartTime
+
+  // SECURITY: Validate user has a valid profile with a role
+  // This prevents unauthorized OAuth users from accessing the app
+  if (user && !role) {
+    // Check if profile exists but has no role (new OAuth user not yet validated)
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id, email, role, is_active')
+      .eq('id', user.id)
+      .maybeSingle()
+    
+    if (!profile) {
+      // No profile at all - redirect to auth
+      console.warn('[AppLayout] User has no profile, redirecting to auth:', {
+        userId: user.id,
+        timestamp: new Date().toISOString(),
+      })
+      redirect('/auth')
+    } else if (!profile.is_active || !profile.role) {
+      // Profile exists but is inactive or has no role - unauthorized OAuth user
+      console.warn('[AppLayout] User profile is inactive or has no role, redirecting to auth:', {
+        userId: user.id,
+        email: profile.email,
+        role: profile.role,
+        isActive: profile.is_active,
+        timestamp: new Date().toISOString(),
+      })
+      // Sign out the user and redirect
+      await supabase.auth.signOut()
+      redirect('/auth?error=unauthorized&error_description=Your account is not authorized. Please contact your administrator.')
+    }
+  }
   
   if (process.env.NODE_ENV === 'development' || layoutDuration > 500) {
     console.log('[AppLayout] Layout rendered:', {

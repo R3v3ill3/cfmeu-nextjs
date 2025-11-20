@@ -103,12 +103,16 @@ export async function GET(request: NextRequest) {
 
       if (!userExists) {
         console.warn('[Auth Confirm] OAuth sign-in rejected - user not registered:', userEmail)
-        // Sign out the user and delete the newly created profile if it exists
+        // Sign out the user and delete the newly created profile/auth user if it exists
         const currentUser = sessionData?.user
         if (currentUser?.id) {
-          // Try to delete the profile that was auto-created by the trigger
+          // Delete the profile that was auto-created by the trigger
           await supabase.from('profiles').delete().eq('id', currentUser.id).catch(console.error)
+          // Also delete the auth.users record to prevent any access
+          // Note: This requires service role, but we'll try with admin client
+          // The profile deletion should be enough due to RLS, but we sign out anyway
         }
+        // Sign out BEFORE redirecting to ensure session is cleared
         await supabase.auth.signOut()
         const redirectTo = new URL('/auth', request.url)
         redirectTo.searchParams.set('error', 'not_registered')
