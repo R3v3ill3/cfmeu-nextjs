@@ -183,16 +183,18 @@ export function PendingEmployersTable({
     setShowDuplicateMerge(false);
     setDuplicatesToMerge([]);
 
-    // Show success message
+    // Show success message with instructions
     toast({
-      title: 'Duplicates merged',
-      description: 'The duplicate employers have been consolidated. You can now proceed with the pending employer.',
+      title: 'Duplicates merged successfully',
+      description: 'The duplicate employers have been consolidated. Please select the merged employer to continue.',
+      duration: 5000,
     });
 
-    // Now select the canonical employer for merging with pending
-    if (workflowState) {
-      handleSelectExisting(canonicalEmployerId);
-    }
+    // NOTE: We do NOT automatically call handleSelectExisting here because:
+    // 1. The search results are now stale (showing deleted employers)
+    // 2. The user needs to see the updated employer list
+    // 3. The match search component will handle refreshing the results
+    // The user should manually select the merged employer from the refreshed search
   };
 
   const handleCreateNew = () => {

@@ -63,12 +63,17 @@ export function PendingEmployerMatchSearch({
   onMergeDuplicates,
 }: PendingEmployerMatchSearchProps) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [lastSearchTime, setLastSearchTime] = useState<number>(0);
 
   const [{ results: rawResults, isSearching, hasSearched, error }, { search, clear }] =
     useAliasAwareEmployerSearch({ limit: 40, includeAliases: true, aliasMatchMode: 'any' });
 
   // Filter out the pending employer itself from results
-  const results = rawResults.filter(result => result.id !== pendingEmployer.id);
+  // Also filter out non-active employers to prevent merge errors
+  const results = rawResults.filter(result => 
+    result.id !== pendingEmployer.id && 
+    result.approval_status === 'active'
+  );
 
   // Detect duplicate groups in search results
   const duplicateGroups = useMemo(() => {
@@ -128,13 +133,19 @@ export function PendingEmployerMatchSearch({
   // Initialize search with pending employer name
   useEffect(() => {
     if (isOpen && pendingEmployer) {
-      setSearchTerm(pendingEmployer.name);
-      search(pendingEmployer.name);
+      const currentTime = Date.now();
+      // Only re-search if dialog just opened or if it's been more than 2 seconds
+      // This handles the case where duplicate merge dialog closes and returns here
+      if (currentTime - lastSearchTime > 2000) {
+        setSearchTerm(pendingEmployer.name);
+        search(pendingEmployer.name);
+        setLastSearchTime(currentTime);
+      }
     }
     if (!isOpen) {
       clear();
     }
-  }, [clear, isOpen, pendingEmployer, search]);
+  }, [clear, isOpen, pendingEmployer, search, lastSearchTime]);
 
   const handleSearchChange = (value: string) => {
     setSearchTerm(value);

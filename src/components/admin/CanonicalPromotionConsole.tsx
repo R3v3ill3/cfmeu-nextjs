@@ -223,7 +223,11 @@ export default function CanonicalPromotionConsole() {
 
       // Only close dialog and reload queue on success
       closeDecisionDialog()
-      await loadQueue() // Reload the queue
+      // Add a small delay before reloading to avoid auth session timeout issues
+      // This gives the RPC transaction time to complete and avoids race conditions
+      setTimeout(async () => {
+        await loadQueue()
+      }, 500)
     } catch (error: any) {
       console.error('[CanonicalPromotion] Error submitting decision:', error)
       const errorMessage = error?.message || error?.toString() || 'Failed to submit decision'
