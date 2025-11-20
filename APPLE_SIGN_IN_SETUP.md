@@ -108,6 +108,20 @@ The script will output a JWT token. **Copy this entire token** - you'll need it 
 
 **Important:** The Secret Key field expects a JWT, not the .p8 file contents. Make sure you paste the complete JWT token.
 
+### Enable Signups for OAuth (Required)
+
+**Critical:** You must enable signups in Supabase for OAuth providers to work, even though we restrict access to existing users:
+
+1. Navigate to **Authentication** > **Settings** > **Auth**
+2. Under **User Management**, ensure **"Enable Signups"** is **enabled** (checked)
+3. This allows OAuth flows to complete, but our callback handler will validate and reject unauthorized users
+
+**Why this is safe:**
+- OAuth users will be created in `auth.users` table
+- Our callback handler (`/auth/confirm`) checks if the email exists in `profiles` or `pending_users`
+- If the user doesn't exist, they are immediately signed out and shown an error
+- Users without a profile cannot access any application data due to RLS policies
+
 ## Step 5: Apply Database Migration
 
 Run the database migration to add the user validation function:

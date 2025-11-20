@@ -19,9 +19,18 @@ export async function GET(request: NextRequest) {
       
       if (sessionError) {
         console.error('[Auth Confirm] OAuth session error:', sessionError)
+        
+        // Check if error is due to signups being disabled
+        if (sessionError.message?.includes('Signups not allowed') || sessionError.status === 422) {
+          const redirectTo = new URL('/auth', request.url)
+          redirectTo.searchParams.set('error', 'signups_disabled')
+          redirectTo.searchParams.set('error_description', 'OAuth signups are currently disabled. Please contact your administrator.')
+          return NextResponse.redirect(redirectTo)
+        }
+        
         const redirectTo = new URL('/auth', request.url)
         redirectTo.searchParams.set('error', 'oauth_error')
-        redirectTo.searchParams.set('error_description', 'Failed to complete sign-in. Please try again.')
+        redirectTo.searchParams.set('error_description', `Failed to complete sign-in: ${sessionError.message}`)
         return NextResponse.redirect(redirectTo)
       }
 
