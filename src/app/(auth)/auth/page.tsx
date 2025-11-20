@@ -121,6 +121,19 @@ export default function AuthPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-sm space-y-4">
+        {/* YouTube Video Embed - Looping */}
+        <div className="w-full aspect-video rounded-lg overflow-hidden mb-4">
+          <iframe
+            className="w-full h-full"
+            src="https://www.youtube.com/embed/xS2GiGpvdqM?autoplay=1&mute=1&loop=1&playlist=xS2GiGpvdqM&controls=0&modestbranding=1&rel=0&playsinline=1"
+            title="Eureka flag Australia (vintage style)"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            referrerPolicy="strict-origin-when-cross-origin"
+            allowFullScreen
+            style={{ border: 0 }}
+          />
+        </div>
+        
         <h1 className="text-2xl font-semibold text-center">Sign in</h1>
         
         {/* Apple Sign In Button */}
