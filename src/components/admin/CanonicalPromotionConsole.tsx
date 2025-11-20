@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
+import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal"
 
 type CanonicalPromotionQueueItem = {
   alias_id: string
@@ -61,6 +62,7 @@ export default function CanonicalPromotionConsole() {
   
   const [queueItems, setQueueItems] = useState<CanonicalPromotionQueueItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null)
   const [decisionDialog, setDecisionDialog] = useState<DecisionDialogState>({
     open: false,
     action: null,
@@ -137,17 +139,31 @@ export default function CanonicalPromotionConsole() {
             p_decision_rationale: decisionDialog.rationale || null,
           })
           
-          if (result.error) throw result.error
+          if (result.error) {
+            console.error('[CanonicalPromotion] Promote error:', result.error)
+            throw new Error(result.error.message || 'Failed to promote alias to canonical')
+          }
+          
+          // Validate response structure
+          if (!result.data) {
+            console.error('[CanonicalPromotion] No data returned from promote RPC')
+            throw new Error('Invalid response from server')
+          }
           
           // Log telemetry
-          telemetry.logInsert({
-            employerId: employer_id,
-            alias: proposed_name,
-            normalized: decisionDialog.item.alias_normalized || '',
-            sourceSystem: decisionDialog.item.source_system || undefined,
-            sourceIdentifier: decisionDialog.item.source_identifier,
-            notes: `Promoted to canonical via console: ${decisionDialog.rationale}`,
-          })
+          try {
+            telemetry.logInsert({
+              employerId: employer_id,
+              alias: proposed_name,
+              normalized: decisionDialog.item.alias_normalized || '',
+              sourceSystem: decisionDialog.item.source_system || undefined,
+              sourceIdentifier: decisionDialog.item.source_identifier,
+              notes: `Promoted to canonical via console: ${decisionDialog.rationale}`,
+            })
+          } catch (telemetryError) {
+            console.warn('[CanonicalPromotion] Telemetry logging failed:', telemetryError)
+            // Don't fail the operation if telemetry fails
+          }
           
           toast.success(`Promoted "${proposed_name}" to canonical name`)
           break
@@ -164,7 +180,16 @@ export default function CanonicalPromotionConsole() {
             p_decision_rationale: decisionDialog.rationale,
           })
           
-          if (result.error) throw result.error
+          if (result.error) {
+            console.error('[CanonicalPromotion] Reject error:', result.error)
+            throw new Error(result.error.message || 'Failed to reject promotion')
+          }
+          
+          // Validate response structure
+          if (!result.data) {
+            console.error('[CanonicalPromotion] No data returned from reject RPC')
+            throw new Error('Invalid response from server')
+          }
           
           toast.success('Promotion rejected')
           break
@@ -181,18 +206,29 @@ export default function CanonicalPromotionConsole() {
             p_decision_rationale: decisionDialog.rationale,
           })
           
-          if (result.error) throw result.error
+          if (result.error) {
+            console.error('[CanonicalPromotion] Defer error:', result.error)
+            throw new Error(result.error.message || 'Failed to defer promotion')
+          }
+          
+          // Validate response structure
+          if (!result.data) {
+            console.error('[CanonicalPromotion] No data returned from defer RPC')
+            throw new Error('Invalid response from server')
+          }
           
           toast.success('Decision deferred for later review')
           break
       }
 
+      // Only close dialog and reload queue on success
       closeDecisionDialog()
-      loadQueue() // Reload the queue
+      await loadQueue() // Reload the queue
     } catch (error: any) {
-      console.error('Error submitting decision:', error)
-      toast.error(error.message || 'Failed to submit decision')
-    } finally {
+      console.error('[CanonicalPromotion] Error submitting decision:', error)
+      const errorMessage = error?.message || error?.toString() || 'Failed to submit decision'
+      toast.error(errorMessage)
+      // Reset submitting state but keep dialog open so user can retry or cancel
       setDecisionDialog(prev => ({ ...prev, isSubmitting: false }))
     }
   }
@@ -297,14 +333,13 @@ export default function CanonicalPromotionConsole() {
                     <CardDescription className="mt-2">
                       Current canonical: <strong>{item.current_canonical_name}</strong>
                       {item.employer_id && (
-                        <a
-                          href={`/employers/${item.employer_id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="ml-2 inline-flex items-center text-blue-600 hover:underline"
+                        <Button
+                          variant="link"
+                          className="ml-2 h-auto p-0 text-blue-600 hover:underline"
+                          onClick={() => setSelectedEmployerId(item.employer_id)}
                         >
                           View employer <ExternalLink className="h-3 w-3 ml-1" />
-                        </a>
+                        </Button>
                       )}
                     </CardDescription>
                   </div>
@@ -359,14 +394,13 @@ export default function CanonicalPromotionConsole() {
                                 {' '}(similarity: {Math.round(conflict.similarity * 100)}%)
                               </span>
                             )}
-                            <a
-                              href={`/employers/${conflict.employer_id}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="ml-2 text-blue-600 hover:underline inline-flex items-center"
+                            <Button
+                              variant="link"
+                              className="ml-2 h-auto p-0 text-blue-600 hover:underline inline-flex items-center"
+                              onClick={() => setSelectedEmployerId(conflict.employer_id)}
                             >
                               View <ExternalLink className="h-3 w-3 ml-1" />
-                            </a>
+                            </Button>
                           </li>
                         ))}
                       </ul>
@@ -487,6 +521,17 @@ export default function CanonicalPromotionConsole() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Employer Detail Modal */}
+      <EmployerDetailModal
+        employerId={selectedEmployerId}
+        isOpen={!!selectedEmployerId}
+        onClose={() => setSelectedEmployerId(null)}
+        onEmployerUpdated={() => {
+          // Reload queue when employer is updated
+          loadQueue()
+        }}
+      />
     </div>
   )
 }

@@ -57,11 +57,88 @@ export async function POST(request: NextRequest) {
       }, { status: 403 });
     }
 
+    // Validate pending employer exists and is pending
+    const { data: pendingEmployer, error: pendingError } = await supabase
+      .from('employers')
+      .select('id, name, approval_status')
+      .eq('id', params.pendingEmployerId)
+      .maybeSingle();
+
+    if (pendingError) {
+      console.error('[merge-into-existing] Error checking pending employer:', pendingError);
+      return NextResponse.json({
+        error: 'Failed to validate pending employer',
+        details: pendingError.message,
+      }, { status: 500 });
+    }
+
+    if (!pendingEmployer) {
+      console.error('[merge-into-existing] Pending employer not found:', params.pendingEmployerId);
+      return NextResponse.json({
+        error: 'Pending employer not found',
+        details: `No employer exists with ID: ${params.pendingEmployerId}`,
+        pendingEmployerId: params.pendingEmployerId,
+      }, { status: 404 });
+    }
+
+    if (pendingEmployer.approval_status !== 'pending') {
+      console.error('[merge-into-existing] Employer is not pending:', {
+        id: params.pendingEmployerId,
+        currentStatus: pendingEmployer.approval_status,
+      });
+      return NextResponse.json({
+        error: 'Employer is not pending',
+        details: `Employer "${pendingEmployer.name}" has status "${pendingEmployer.approval_status}" (expected "pending")`,
+        pendingEmployerId: params.pendingEmployerId,
+        currentStatus: pendingEmployer.approval_status,
+      }, { status: 400 });
+    }
+
+    // Validate existing employer exists and is active
+    const { data: existingEmployer, error: existingError } = await supabase
+      .from('employers')
+      .select('id, name, approval_status')
+      .eq('id', params.existingEmployerId)
+      .maybeSingle();
+
+    if (existingError) {
+      console.error('[merge-into-existing] Error checking existing employer:', existingError);
+      return NextResponse.json({
+        error: 'Failed to validate existing employer',
+        details: existingError.message,
+      }, { status: 500 });
+    }
+
+    if (!existingEmployer) {
+      console.error('[merge-into-existing] Existing employer not found:', params.existingEmployerId);
+      return NextResponse.json({
+        error: 'Existing employer not found',
+        details: `No employer exists with ID: ${params.existingEmployerId}. The employer may have been deleted or merged into another employer.`,
+        existingEmployerId: params.existingEmployerId,
+        hint: 'Search for the employer again to find the current record',
+      }, { status: 404 });
+    }
+
+    if (existingEmployer.approval_status !== 'active') {
+      console.error('[merge-into-existing] Existing employer is not active:', {
+        id: params.existingEmployerId,
+        currentStatus: existingEmployer.approval_status,
+      });
+      return NextResponse.json({
+        error: 'Cannot merge into non-active employer',
+        details: `Employer "${existingEmployer.name}" has status "${existingEmployer.approval_status}" (expected "active")`,
+        existingEmployerId: params.existingEmployerId,
+        existingEmployerName: existingEmployer.name,
+        currentStatus: existingEmployer.approval_status,
+        hint: 'Select an active employer to merge into',
+      }, { status: 400 });
+    }
+
     // Log merge attempt
     console.log('[merge-into-existing] Starting merge:', {
       user: user.id,
-      pendingEmployerId: params.pendingEmployerId,
-      existingEmployerId: params.existingEmployerId,
+      pendingEmployer: { id: pendingEmployer.id, name: pendingEmployer.name },
+      existingEmployer: { id: existingEmployer.id, name: existingEmployer.name },
     });
 
     // Perform the merge - pass the Supabase client as first parameter

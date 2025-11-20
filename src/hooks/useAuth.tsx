@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import { User, Session } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
-const SESSION_FETCH_TIMEOUT = 5000;
+const SESSION_FETCH_TIMEOUT = 10000; // Increased from 5000ms to 10000ms for better network resilience
+const MAX_RETRIES = 2;
 
 interface AuthContextType {
   user: User | null;
@@ -27,7 +28,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const supabase = getSupabaseBrowserClient();
     let isSubscribed = true;
     let sessionChecked = false;
-    const getSessionWithTimeout = async () => {
+    const getSessionWithTimeout = async (retryCount = 0): Promise<Awaited<ReturnType<typeof supabase.auth.getSession>>> => {
       let timeoutId: ReturnType<typeof setTimeout> | null = null;
       const timeoutPromise = new Promise<never>((_, reject) => {
         timeoutId = setTimeout(() => reject(new Error("Supabase session fetch timed out")), SESSION_FETCH_TIMEOUT);
@@ -38,6 +39,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           timeoutPromise,
         ]) as Awaited<ReturnType<typeof supabase.auth.getSession>>;
         return result;
+      } catch (error: any) {
+        // Check if it's a timeout error and we have retries left
+        const isTimeout = error?.message?.includes('timed out');
+        if (isTimeout && retryCount < MAX_RETRIES) {
+          const delay = Math.min(1000 * Math.pow(2, retryCount), 5000); // Exponential backoff, max 5s
+          console.warn(`[useAuth] Session fetch timeout (attempt ${retryCount + 1}/${MAX_RETRIES + 1}), retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          return getSessionWithTimeout(retryCount + 1);
+        }
+        // Re-throw if not a timeout or no retries left
+        throw error;
       } finally {
         if (timeoutId) {
           clearTimeout(timeoutId);
@@ -124,7 +136,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (!isSubscribed) return; // Component unmounted, ignore result
 
         if (error) {
-          console.error('[useAuth] Error fetching initial session:', error, { duration });
+          // Distinguish between timeout and other errors
+          const isTimeout = error?.message?.includes('timed out');
+          if (isTimeout) {
+            console.warn('[useAuth] Session fetch timed out after retries, continuing with null session', { duration });
+          } else {
+            console.error('[useAuth] Error fetching initial session:', error, { duration });
+          }
+          // Continue with null session - don't block UI
+          if (!sessionChecked) {
+            setSession(null);
+            setUser(null);
+          }
         } else {
           console.log('[useAuth] Initial session loaded', {
             duration,
@@ -138,8 +161,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setUser(session?.user ?? null);
           }
         }
-      } catch (error) {
-        console.error('[useAuth] Exception fetching initial session:', error);
+      } catch (error: any) {
+        // Handle timeout errors gracefully - don't block UI
+        const isTimeout = error?.message?.includes('timed out');
+        if (isTimeout) {
+          console.warn('[useAuth] Session fetch timed out after all retries, continuing with null session');
+        } else {
+          console.error('[useAuth] Exception fetching initial session:', error);
+        }
+        // Continue with null session - don't block UI
+        if (!sessionChecked) {
+          setSession(null);
+          setUser(null);
+        }
       } finally {
         if (isSubscribed) {
           setLoading(false);

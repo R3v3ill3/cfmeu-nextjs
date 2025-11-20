@@ -135,23 +135,15 @@ export default function ScanReviewPage({ params }: PageProps) {
       
       console.log('Fetching builder for ID:', projectData.builder_id)
       try {
-        // Use API route to avoid RLS recursion
         const response = await fetch(`/api/employers/${projectData.builder_id}?fields=name`)
         
         if (!response.ok) {
-          // If API route doesn't exist or fails, try direct query as fallback
-          const { data, error } = await supabase
-            .from('employers')
-            .select('name')
-            .eq('id', projectData.builder_id)
-            .single()
-          
-          if (error) {
-            console.warn('Builder fetch error (fallback):', error)
-            return null // Don't throw, just return null to avoid blocking UI
+          if (response.status === 404) {
+            console.warn('Builder not found:', projectData.builder_id)
+          } else {
+            console.warn('Builder fetch error:', response.status, response.statusText)
           }
-          
-          return data
+          return null // Don't throw, just return null to avoid blocking UI
         }
         
         const data = await response.json()

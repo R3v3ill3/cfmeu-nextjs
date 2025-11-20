@@ -40,32 +40,58 @@ export async function mergePendingIntoExisting(
       .select('*')
       .eq('id', pendingEmployerId)
       .eq('approval_status', 'pending')
-      .single();
+      .maybeSingle();
 
     if (fetchError) {
-      console.error('Error fetching pending employer:', fetchError);
+      console.error('[mergePendingIntoExisting] Error fetching pending employer:', {
+        pendingEmployerId,
+        error: fetchError,
+        code: fetchError.code,
+        details: fetchError.details,
+      });
       throw new Error(`Pending employer fetch error: ${fetchError.message || JSON.stringify(fetchError)}`);
     }
 
     if (!pendingEmployer) {
-      throw new Error(`Pending employer not found with ID: ${pendingEmployerId}`);
+      console.error('[mergePendingIntoExisting] Pending employer not found:', {
+        pendingEmployerId,
+        message: 'No pending employer exists with this ID',
+      });
+      throw new Error(`Pending employer not found with ID: ${pendingEmployerId}. It may have already been processed or does not exist.`);
     }
 
     // 2. Verify existing employer exists and is active
     const { data: existingEmployer, error: existingError } = await supabase
       .from('employers')
-      .select('id, name')
+      .select('id, name, approval_status')
       .eq('id', existingEmployerId)
-      .eq('approval_status', 'active')
-      .single();
+      .maybeSingle();
 
     if (existingError) {
-      console.error('Error fetching existing employer:', existingError);
+      console.error('[mergePendingIntoExisting] Error fetching existing employer:', {
+        existingEmployerId,
+        error: existingError,
+        code: existingError.code,
+        details: existingError.details,
+      });
       throw new Error(`Existing employer fetch error: ${existingError.message || JSON.stringify(existingError)}`);
     }
 
     if (!existingEmployer) {
-      throw new Error(`Existing employer not found or not active with ID: ${existingEmployerId}`);
+      console.error('[mergePendingIntoExisting] Existing employer not found:', {
+        existingEmployerId,
+        message: 'No employer exists with this ID',
+      });
+      throw new Error(`Existing employer not found with ID: ${existingEmployerId}. The employer may have been deleted or merged.`);
+    }
+
+    if (existingEmployer.approval_status !== 'active') {
+      console.error('[mergePendingIntoExisting] Existing employer is not active:', {
+        existingEmployerId,
+        currentStatus: existingEmployer.approval_status,
+        message: 'Cannot merge into a non-active employer',
+      });
+      throw new Error(`Cannot merge into employer "${existingEmployer.name}" (ID: ${existingEmployerId}). Status is "${existingEmployer.approval_status}" but must be "active".`);
     }
 
     // 3. Transfer project assignments

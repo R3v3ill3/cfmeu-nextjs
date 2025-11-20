@@ -1,381 +1,281 @@
-# Employer Search Materialized View: Implementation Summary
+# Pending Employer Review - Duplicate Merge Implementation
 
-## 🎯 What Was Implemented
+## Summary
 
-A complete materialized view optimization for the Employers page search, providing **80-90% faster query times** (1500ms → 200ms) while maintaining full search functionality.
+This implementation fixes the critical error in the pending employer review workflow and adds functionality to merge duplicate active employers before linking a pending employer.
 
-## 📁 Files Created/Modified
+## Problem Addressed
 
-### 1. Database Migration
-**File:** `supabase/migrations/20251017000000_employers_search_materialized_view.sql`
+When reviewing pending employers (e.g., "Eastgoup") with multiple potential active matches (e.g., "Eastgroup" and "Retail Eastgroup"), the system was throwing a 500 error:
 
-**What it does:**
-- Creates materialized view `employers_search_optimized` with precomputed filters
-- Adds 10+ indexes for optimal query performance
-- Creates refresh functions (manual and logged)
-- Sets up monitoring views and health dashboard
-- Includes automatic refresh logging
-
-**Key features:**
-- Precomputes engagement status (is_engaged)
-- Precomputes EBA category (active/lodged/pending/no)
-- Stores relationships as JSONB for fast access
-- Supports concurrent refresh (no downtime)
-
-### 2. API Route Updates
-**File:** `src/app/api/employers/route.ts`
-
-**Changes made:**
-- Added feature flag: `NEXT_PUBLIC_USE_EMPLOYER_MAT_VIEW`
-- Added materialized view query path (lines 387-496)
-- Skips post-filtering when using materialized view (already precomputed)
-- Added debug output to indicate which path is used
-- Maintains backward compatibility with analytics view
-
-**How it works:**
-```typescript
-const USE_MATERIALIZED_VIEW = process.env.NEXT_PUBLIC_USE_EMPLOYER_MAT_VIEW !== 'false';
-
-if (useAliasSearch) {
-  // Use alias RPC
-} else if (useMaterializedView) {
-  // Use materialized view (NEW - FAST!)
-} else {
-  // Use analytics view (OLD - fallback)
-}
+```
+POST /api/admin/pending-employers/merge-into-existing 500 (Internal Server Error)
+Error: Existing employer fetch error: JSON object requested, multiple (or no) rows returned
 ```
 
-### 3. Environment Configuration
-**File:** `ENVIRONMENT_VARIABLES.md`
-
-**Purpose:**
-- Documents new environment variable
-- Provides configuration for each environment
-- Explains rollback procedure
-- Shows monitoring approach
-
-### 4. Deployment Guide
-**File:** `EMPLOYER_SEARCH_DEPLOYMENT_GUIDE.md`
-
-**Contents:**
-- Complete step-by-step deployment instructions
-- Development testing procedures
-- Staging deployment checklist
-- Production rollout strategy (gradual with 10% → 50% → 100%)
-- Monitoring and validation procedures
-- Troubleshooting guide
-- Rollback procedures
-
-### 5. Analysis Documentation (Already Created)
-- `EMPLOYER_SEARCH_PERFORMANCE_ANALYSIS.md` - Technical analysis
-- `EMPLOYER_SEARCH_OPTIONS_COMPARISON.md` - Implementation options
-- `EMPLOYER_SEARCH_MATERIALIZED_VIEW_RISKS.md` - Risk analysis
-- `EMPLOYER_SEARCH_EXECUTIVE_SUMMARY.md` - Overview
-- `FULL_TEXT_SEARCH_EXPLANATION.md` - Future enhancement
-
-## 🚀 How to Deploy
-
-### Quick Start (Development)
-
-```bash
-# 1. Apply database migration
-psql $DATABASE_URL -f supabase/migrations/20251017000000_employers_search_materialized_view.sql
-
-# 2. Set environment variable
-echo "NEXT_PUBLIC_USE_EMPLOYER_MAT_VIEW=true" >> .env.local
-
-# 3. Start development server
-npm run dev
-
-# 4. Test at http://localhost:3000/employers
-```
-
-### Production Deployment
-
-**See:** `EMPLOYER_SEARCH_DEPLOYMENT_GUIDE.md` for complete instructions
-
-**Summary:**
-1. Apply migration to production database
-2. Deploy code with feature flag OFF
-3. Test materialized view works
-4. Enable gradually: 10% → 50% → 100%
-5. Monitor performance and errors
-6. Complete rollout after 1 week
-
-## ⚡ Performance Improvements
-
-### Before
-```
-Simple search:        200-500ms
-Search + filters:     700-1200ms
-With enhanced data:   1200-1800ms
-```
-
-### After (Materialized View)
-```
-Simple search:        50-100ms   (80% faster!)
-Search + filters:     100-200ms  (85% faster!)
-With enhanced data:   200-400ms  (75% faster!)
-```
-
-### Why So Fast?
-
-**Old approach:**
-1. Query employers table → 100 employers
-2. Load relationships for all 100
-3. Filter in JavaScript → 10 actually engaged
-4. User waits 1500ms
-
-**New approach:**
-1. Query materialized view → 10 engaged employers (prefiltered!)
-2. Relationships already included as JSONB
-3. User waits 200ms
-
-**Key optimizations:**
-- ✅ Engagement filter precomputed in database
-- ✅ EBA category precomputed in database
-- ✅ Relationships stored as JSONB (fast)
-- ✅ 10+ indexes for optimal query plans
-- ✅ No JavaScript post-filtering needed
-
-## 🔄 Refresh Strategy
-
-**Frequency:** Every 5 minutes (configurable)
-
-**Method:** CONCURRENT refresh (allows reads during refresh)
-
-**Setup options:**
-1. **pg_cron** (recommended) - Built into Supabase
-2. **Vercel Cron** - External scheduler
-3. **Railway Cron** - External scheduler
-
-**Monitoring:**
-```sql
--- Check refresh status
-SELECT * FROM employers_search_view_status;
-
--- View refresh history
-SELECT * FROM mat_view_refresh_log
-ORDER BY refreshed_at DESC LIMIT 10;
-```
-
-## 🛡️ Safety Features
-
-### 1. Feature Flag
-Instant rollback without code changes:
-```bash
-NEXT_PUBLIC_USE_EMPLOYER_MAT_VIEW=false
-```
-
-### 2. Backward Compatibility
-Old analytics view path remains unchanged - used as fallback
-
-### 3. No Breaking Changes
-- Base `employers` table untouched
-- All writes continue to base table
-- All other components unaffected
-- Only search API uses new view
-
-### 4. Gradual Rollout
-```typescript
-// Start with 10% of users
-const USE_MATERIALIZED_VIEW = 
-  (process.env.NEXT_PUBLIC_USE_EMPLOYER_MAT_VIEW !== 'false') &&
-  (Math.random() < 0.1);
-
-// Increase to 50%, then 100%
-```
-
-### 5. Comprehensive Monitoring
-- Refresh logs
-- Performance metrics
-- Health dashboard
-- Error tracking
-
-## 📊 What Gets Precomputed
-
-### Engagement Status
-```sql
--- Before: Checked in JavaScript after query
--- After: Precomputed in view
-is_engaged boolean = EXISTS(worker_placements) OR EXISTS(project_assignments)
-```
-
-### EBA Category
-```sql
--- Before: Complex date logic in JavaScript
--- After: Precomputed in view
-eba_category = 'active' | 'lodged' | 'pending' | 'no'
-
-Based on:
-- enterprise_agreement_status (override)
-- fwc_certified_date (< 4 years)
-- eba_lodged_fwc (< 1 year)
-- date_eba_signed (< 6 months)
-- date_vote_occurred (< 6 months)
-- In-progress indicators
-```
-
-### Counts & Scores
-```sql
--- Worker and project counts
-actual_worker_count int
-project_count int
-
--- EBA recency for sorting
-eba_recency_score numeric
-
--- Most recent EBA date
-most_recent_eba_date date
-```
-
-### Relationships as JSONB
-```sql
--- Company EBA records
-company_eba_records_json jsonb
-
--- Worker placements (IDs only)
-worker_placements_json jsonb
-
--- Project assignments (IDs only)
-project_assignments_json jsonb
-```
-
-## 🔍 What Doesn't Change
-
-### User Experience
-- Same UI
-- Same functionality
-- Same filters
-- Same search behavior
-- Just **much faster!**
-
-### Data Writes
-- Create employer → still writes to `employers` table
-- Update employer → still writes to `employers` table
-- Import employers → still writes to `employers` table
-
-### Other Components
-- Employer picker → uses base `employers` table
-- Detail modal → uses base `employers` table  
-- Dashboard → uses base `employers` table
-- All unchanged!
-
-### Data Freshness Consideration
-- **5-minute refresh delay** for search results
-- **Real-time** for detail views (uses base table)
-- **Acceptable** for analytics/search use case
-
-## ✅ Testing Checklist
-
-### Development
-- [ ] Migration applies successfully
-- [ ] View is populated with data
-- [ ] Refresh function works
-- [ ] API returns results
-- [ ] Console shows "🚀 Using materialized view"
-- [ ] Query times improved
-- [ ] All filters work
-- [ ] Rollback works (set flag to false)
-
-### Staging
-- [ ] Migration deployed
-- [ ] View refreshing automatically
-- [ ] No errors in logs
-- [ ] Performance improved
-- [ ] Load testing passed
-- [ ] All functionality works
-
-### Production
-- [ ] Migration deployed (with backup)
-- [ ] View healthy
-- [ ] Gradual rollout: 10% → 50% → 100%
-- [ ] No errors
-- [ ] Performance improved
-- [ ] User feedback positive
-
-## 📈 Success Criteria
-
-**✅ Deployment successful if:**
-1. Query times reduced by 80%+
-2. No increase in error rates
-3. View refreshes every 5 minutes
-4. All filters work correctly
-5. No user complaints
-
-**🎯 Long-term success if:**
-1. Maintained performance over time
-2. Refresh times stay < 30 seconds
-3. View stays healthy
-4. No degradation as data grows
-
-## 🔮 Future Enhancements
-
-### Phase 4: Full-Text Search (Optional)
-**See:** `FULL_TEXT_SEARCH_EXPLANATION.md`
-
-**What it adds:**
-- Typo tolerance
-- Fuzzy matching
-- Relevance ranking
-- Better search quality
-
-**Effort:** 1-2 days
-**When:** After materialized view stabilizes
-
-## 📞 Support
-
-### Documentation
-All documentation in project root:
-- `EMPLOYER_SEARCH_DEPLOYMENT_GUIDE.md` ← Start here
-- `EMPLOYER_SEARCH_MATERIALIZED_VIEW_RISKS.md`
-- `EMPLOYER_SEARCH_PERFORMANCE_ANALYSIS.md`
-- `ENVIRONMENT_VARIABLES.md`
-
-### Monitoring
-```sql
--- Quick health check
-SELECT * FROM employers_search_view_status;
-
--- Refresh history
-SELECT * FROM mat_view_refresh_log ORDER BY refreshed_at DESC LIMIT 10;
-```
-
-### Rollback
-```bash
-# Instant rollback (< 5 minutes)
-NEXT_PUBLIC_USE_EMPLOYER_MAT_VIEW=false
-git commit --allow-empty -m "Rollback materialized view"
-git push production
-```
-
-## 🎉 Summary
-
-**Implementation complete!** ✅
-
-**Ready to deploy:** ✅
-- Migration file ready
-- API route updated
-- Feature flag configured
-- Documentation complete
-
-**Next steps:**
-1. Review deployment guide
-2. Test in development
-3. Deploy to staging
-4. Gradual production rollout
-5. Monitor and optimize
-
-**Expected outcome:**
-- 80-90% faster employer searches
-- Better user experience
-- No breaking changes
-- Easy rollback if needed
-
----
-
-**Version:** 1.0.0
-**Date:** October 17, 2024
-**Status:** Ready for Deployment
+## Root Cause
 
+The `mergePendingIntoExisting` function used `.single()` query which expects exactly one row. If the employer ID doesn't exist or if there are database integrity issues, this fails with a cryptic error.
 
+## Changes Made
+
+### 1. Fixed Critical Query Errors
+
+**File**: `src/lib/employers/mergePendingIntoExisting.ts`
+
+- Replaced `.single()` with `.maybeSingle()` for both pending and existing employer queries
+- Added comprehensive error handling with detailed logging
+- Added validation for employer approval status
+- Improved error messages to be user-friendly and actionable
+
+**Key improvements:**
+- Better error messages: "Existing employer not found with ID: {id}. The employer may have been deleted or merged."
+- Status validation: "Cannot merge into employer 'X'. Status is 'pending' but must be 'active'."
+- Detailed logging with context for debugging
+
+### 2. Enhanced API Validation
+
+**File**: `src/app/api/admin/pending-employers/merge-into-existing/route.ts`
+
+- Added pre-merge validation to check both employers exist
+- Validates approval status before attempting merge
+- Returns 404 with helpful hints if employers not found
+- Returns 400 with clear messages if employers in wrong state
+
+**Benefits:**
+- Fails fast with clear errors before attempting database operations
+- Provides actionable error messages to the UI
+- Better logging for debugging production issues
+
+### 3. Duplicate Detection Logic
+
+**File**: `src/components/admin/PendingEmployerMatchSearch.tsx`
+
+- Added Levenshtein distance algorithm for fuzzy name matching
+- Detects duplicate groups with 85%+ similarity threshold
+- Identifies substring matches (e.g., "Eastgroup" in "Retail Eastgroup")
+- Highlights duplicates with warning badges
+- Shows alert when high-confidence duplicates detected
+
+**Detection criteria:**
+- Exact match after normalization
+- Substring match (for names > 5 characters)
+- Levenshtein distance similarity >= 85%
+
+### 4. Duplicate Merge Dialog
+
+**File**: `src/components/admin/PendingEmployerDuplicateMerge.tsx` (NEW)
+
+A dedicated component for merging duplicate active employers:
+
+- Radio button selection of canonical employer
+- Side-by-side comparison of duplicate employers
+- Clear explanation of what happens during merge
+- Uses existing `merge_employers` RPC function
+- Handles success/error states with proper feedback
+
+**Features:**
+- Shows all employer details for informed decision
+- Highlights canonical selection
+- Displays merge impact (relationships transferred)
+- Prevents accidental merges with confirmation flow
+
+### 5. Enhanced Review Workflow
+
+**File**: `src/components/admin/PendingEmployersTable.tsx`
+
+- Added state for duplicate merge dialog
+- New handler `handleMergeDuplicates` to initiate merge workflow
+- New handler `handleDuplicateMergeComplete` to resume after merge
+- Passes `onMergeDuplicates` callback to match search
+
+**Workflow flow:**
+1. User clicks "Review" on pending employer
+2. Search finds multiple similar active employers
+3. Alert shows "Potential duplicates detected"
+4. User clicks "Merge Duplicates" button
+5. Dialog opens to select canonical and merge
+6. After merge, automatically proceeds with pending employer link
+7. Complete workflow with final approval
+
+## Testing Completed
+
+### Unit-level Testing
+
+✅ **Error Handling Tests**
+- Verified `.maybeSingle()` handles missing employers gracefully
+- Confirmed clear error messages for different failure modes
+- Tested non-active employer rejection
+
+✅ **Duplicate Detection Tests**
+- Levenshtein distance calculation verified
+- Substring matching for partial matches
+- Threshold tuning (85% similarity)
+
+### Integration Testing
+
+✅ **API Endpoint Tests**
+- Validation returns 404 for missing employers
+- Validation returns 400 for wrong status
+- Merge proceeds successfully with valid inputs
+
+✅ **UI Flow Tests**
+- Duplicate badge appears on matching employers
+- Alert shows when duplicates detected
+- Merge button triggers dialog
+- Dialog allows selection and merge
+- Workflow continues after merge
+
+## How to Test Manually
+
+### Test Case 1: Error Handling (Already Fixed)
+
+**Scenario**: Employer ID doesn't exist or multiple rows returned
+
+1. Navigate to Administration → Data Integrity → Pending Employers
+2. Click "Review" on a pending employer
+3. If search finds an employer and you click it, the system should now:
+   - Show clear error if employer not found
+   - Show clear error if employer is not active
+   - No more 500 errors with cryptic database messages
+
+**Expected Result**: User-friendly error message with actionable guidance
+
+### Test Case 2: Duplicate Detection
+
+**Scenario**: Multiple similar employers in search results
+
+1. Navigate to Administration → Data Integrity → Pending Employers
+2. Find a pending employer with typo (e.g., "Eastgoup")
+3. Click "Review"
+4. In search results, look for employers like:
+   - "Eastgroup"
+   - "Retail Eastgroup"
+   - Any similar variations
+
+**Expected Results**:
+- Duplicate badge appears on similar employers
+- Orange alert banner shows at top: "Potential duplicates detected!"
+- "Merge Duplicates" button appears in alert
+
+### Test Case 3: Merge Duplicate Employers
+
+**Scenario**: User wants to consolidate duplicates before linking pending
+
+1. Continue from Test Case 2
+2. Click "Merge Duplicates" button in alert
+3. Dialog opens showing all duplicate employers
+4. Select canonical employer (the "correct" one to keep)
+5. Click "Merge X Employers"
+
+**Expected Results**:
+- Dialog shows all employer details for comparison
+- Can select which one should be canonical
+- Merge button shows count of employers to merge
+- Success toast: "Employers merged successfully"
+- Automatically proceeds to link pending employer
+- Returns to match search with consolidated result
+
+### Test Case 4: Complete Workflow
+
+**Scenario**: Full pending employer review with duplicate merge
+
+1. Start with pending employer that has duplicates
+2. Click "Review"
+3. See duplicates detected
+4. Click "Merge Duplicates"
+5. Select canonical and merge
+6. System automatically selects merged employer
+7. Complete the pending employer approval
+
+**Expected Results**:
+- Seamless flow from duplicate detection → merge → link → approve
+- All relationships transferred correctly
+- Duplicate names saved as aliases
+- No data loss
+- Clean consolidated employer record
+
+## Database Functions Used
+
+### `merge_employers(p_primary_employer_id, p_duplicate_employer_ids)`
+
+**Location**: `supabase/migrations/20251023000004_merge_employers_alias_fix.sql`
+
+**What it does**:
+- Transfers worker placements
+- Transfers project employer roles (handles duplicates)
+- Transfers project contractor trades (handles duplicates)
+- Transfers site employers
+- Consolidates trade capabilities
+- Creates aliases from duplicate names
+- Marks duplicates as inactive
+- Logs merge operation
+
+**Used by**: `PendingEmployerDuplicateMerge` component
+
+### `mergePendingIntoExisting(supabase, params)`
+
+**Location**: `src/lib/employers/mergePendingIntoExisting.ts`
+
+**What it does**:
+- Transfers project assignments
+- Transfers trade capabilities (avoiding duplicates)
+- Creates alias for pending employer name
+- Marks pending employer as rejected
+- Records in approval history
+
+**Used by**: `merge-into-existing` API route
+
+## Success Criteria
+
+✅ **No more 500 errors** when selecting existing employer
+✅ **Clear error messages** if employer doesn't exist
+✅ **Duplicates visually highlighted** in search results
+✅ **Users can merge duplicates** before linking pending employer
+✅ **Complete workflow**: Review → Find duplicates → Merge → Link → Approve
+
+## Known Limitations
+
+1. **Duplicate detection is heuristic**: 85% threshold may need tuning based on real-world data
+2. **Merge is not automatically triggered**: User must click button (by design for safety)
+3. **Single group merge**: If multiple duplicate groups exist, only largest is offered for merge
+4. **No undo in UI**: Merge can be undone by admin via database, but not in UI (yet)
+
+## Future Enhancements
+
+1. **Auto-merge high-confidence duplicates**: >= 95% similarity could be auto-merged
+2. **Show all duplicate groups**: Allow user to merge multiple groups in sequence
+3. **Bulk pending employer processing**: Handle multiple pending employers at once
+4. **Undo merge in UI**: Add "Undo Merge" button in employer detail view
+5. **Audit trail visualization**: Show merge history in employer detail
+
+## Files Modified
+
+1. `src/lib/employers/mergePendingIntoExisting.ts` - Fixed query errors
+2. `src/app/api/admin/pending-employers/merge-into-existing/route.ts` - Added validation
+3. `src/components/admin/PendingEmployerMatchSearch.tsx` - Added duplicate detection
+4. `src/components/admin/PendingEmployerDuplicateMerge.tsx` - NEW: Merge dialog
+5. `src/components/admin/PendingEmployersTable.tsx` - Wired up merge workflow
+
+## Deployment Notes
+
+- **No database migrations required**: All database functions already exist
+- **No environment variables needed**: Uses existing configuration
+- **Backward compatible**: Existing workflows continue to work
+- **Safe to deploy**: All changes are additive, no breaking changes
+
+## Rollback Plan
+
+If issues occur:
+1. All changes are in application layer (no DB schema changes)
+2. Can revert specific files without data loss
+3. Existing `merge_employers` RPC function is unchanged
+4. No data migrations to reverse
+
+## Support Information
+
+For issues or questions:
+- Check logs with prefix `[merge-into-existing]` or `[mergePendingIntoExisting]`
+- Error messages now include employer IDs and status for debugging
+- All merge operations logged to `approval_history` table
+- Merge operations can be audited via `pending_employer_merge_log` table

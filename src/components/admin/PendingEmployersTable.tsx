@@ -14,9 +14,10 @@ import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { Check, X, Eye, ChevronDown, ChevronRight, Undo } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import type { PendingEmployer } from '@/types/pendingEmployerReview';
+import type { PendingEmployer, MatchSearchResult } from '@/types/pendingEmployerReview';
 import { PendingEmployerMatchSearch } from './PendingEmployerMatchSearch';
 import { PendingEmployerFinalDecision } from './PendingEmployerFinalDecision';
+import { PendingEmployerDuplicateMerge } from './PendingEmployerDuplicateMerge';
 import { EmployerDetailModal } from '@/components/employers/EmployerDetailModal';
 import { usePendingEmployerReview } from '@/hooks/usePendingEmployerReview';
 import { useToast } from '@/hooks/use-toast';
@@ -34,6 +35,8 @@ export function PendingEmployersTable({
   onUndoMerge,
 }: PendingEmployersTableProps) {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [showDuplicateMerge, setShowDuplicateMerge] = useState(false);
+  const [duplicatesToMerge, setDuplicatesToMerge] = useState<MatchSearchResult[]>([]);
   const { toast } = useToast();
   
   const {
@@ -167,6 +170,28 @@ export function PendingEmployersTable({
         description: errorMessage,
         variant: 'destructive',
       });
+    }
+  };
+
+  const handleMergeDuplicates = (duplicates: MatchSearchResult[]) => {
+    setDuplicatesToMerge(duplicates);
+    setShowDuplicateMerge(true);
+  };
+
+  const handleDuplicateMergeComplete = (canonicalEmployerId: string) => {
+    // Close the merge dialog
+    setShowDuplicateMerge(false);
+    setDuplicatesToMerge([]);
+
+    // Show success message
+    toast({
+      title: 'Duplicates merged',
+      description: 'The duplicate employers have been consolidated. You can now proceed with the pending employer.',
+    });
+
+    // Now select the canonical employer for merging with pending
+    if (workflowState) {
+      handleSelectExisting(canonicalEmployerId);
     }
   };
 
@@ -423,6 +448,7 @@ export function PendingEmployersTable({
             pendingEmployer={workflowState.employerData as PendingEmployer}
             onSelectExisting={handleSelectExisting}
             onCreateNew={handleCreateNew}
+            onMergeDuplicates={handleMergeDuplicates}
           />
 
           {/* Step 2: Edit Employer */}
@@ -452,6 +478,19 @@ export function PendingEmployersTable({
             }}
           />
         </>
+      )}
+
+      {/* Duplicate Merge Dialog */}
+      {showDuplicateMerge && duplicatesToMerge.length > 0 && (
+        <PendingEmployerDuplicateMerge
+          isOpen={showDuplicateMerge}
+          onClose={() => {
+            setShowDuplicateMerge(false);
+            setDuplicatesToMerge([]);
+          }}
+          duplicateEmployers={duplicatesToMerge}
+          onMergeComplete={handleDuplicateMergeComplete}
+        />
       )}
     </>
   );
