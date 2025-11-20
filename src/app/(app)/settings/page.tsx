@@ -1,7 +1,7 @@
 "use client"
 
-import React from "react"
-import { useQuery } from "@tanstack/react-query"
+import React, { useState } from "react"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { GeofencingSetup } from "@/components/siteVisits/GeofencingSetup"
@@ -14,6 +14,8 @@ import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Input } from "@/components/ui/input"
 import { Slider } from "@/components/ui/slider"
+import { Button } from "@/components/ui/button"
+import { useToast } from "@/hooks/use-toast"
 
 export default function SettingsPage() {
   // Get current user info
@@ -25,7 +27,7 @@ export default function SettingsPage() {
       
       const { data: profile } = await supabase
         .from("profiles")
-        .select("id, full_name, email, role")
+        .select("id, full_name, email, apple_email, role")
         .eq("id", auth.user.id)
         .single()
       
@@ -119,6 +121,10 @@ export default function SettingsPage() {
               </div>
             )}
           </div>
+          
+          {/* Apple Email Section */}
+          <Separator />
+          <AppleEmailManager userId={currentUser?.id} currentAppleEmail={currentUser?.apple_email} />
         </CardContent>
       </Card>
 
@@ -448,6 +454,132 @@ function AuditTargetSelector() {
           <p>{auditTarget}% of key contractors should have audits</p>
         </div>
       </div>
+    </div>
+  )
+}
+
+function AppleEmailManager({ userId, currentAppleEmail }: { userId?: string; currentAppleEmail?: string | null }) {
+  const [appleEmail, setAppleEmail] = useState(currentAppleEmail || "")
+  const [isEditing, setIsEditing] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const { toast } = useToast()
+  const queryClient = useQueryClient()
+
+  React.useEffect(() => {
+    setAppleEmail(currentAppleEmail || "")
+  }, [currentAppleEmail])
+
+  const handleSave = async () => {
+    if (!userId) return
+
+    const trimmedEmail = appleEmail.trim().toLowerCase()
+    
+    // Basic email validation
+    if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      toast({
+        title: "Invalid email",
+        description: "Please enter a valid email address",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsSaving(true)
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ apple_email: trimmedEmail || null })
+        .eq("id", userId)
+
+      if (error) throw error
+
+      toast({
+        title: "Apple email saved",
+        description: trimmedEmail 
+          ? "Your Apple email has been updated. You can now use Apple Sign In with this email."
+          : "Apple email removed.",
+      })
+
+      setIsEditing(false)
+      // Invalidate the query to refresh the data
+      queryClient.invalidateQueries({ queryKey: ["settings-current-user"] })
+    } catch (error: any) {
+      console.error("Error saving Apple email:", error)
+      toast({
+        title: "Failed to save",
+        description: error.message || "An error occurred while saving your Apple email",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleCancel = () => {
+    setAppleEmail(currentAppleEmail || "")
+    setIsEditing(false)
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <Label className="text-sm font-medium">Apple ID Email</Label>
+          <p className="text-xs text-muted-foreground mt-1">
+            Add your Apple ID email to enable Apple Sign In. This is useful if your Apple ID email differs from your work email.
+          </p>
+        </div>
+        {!isEditing && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsEditing(true)}
+          >
+            {currentAppleEmail ? "Edit" : "Add"}
+          </Button>
+        )}
+      </div>
+
+      {isEditing ? (
+        <div className="space-y-3">
+          <Input
+            type="email"
+            placeholder="your.apple.id@example.com"
+            value={appleEmail}
+            onChange={(e) => setAppleEmail(e.target.value)}
+            disabled={isSaving}
+            className="max-w-md"
+          />
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={handleSave}
+              disabled={isSaving}
+            >
+              {isSaving ? "Saving..." : "Save"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleCancel}
+              disabled={isSaving}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="text-base">
+          {currentAppleEmail ? (
+            <div className="flex items-center gap-2">
+              <span>{currentAppleEmail}</span>
+              <Badge variant="secondary" className="text-xs">Configured</Badge>
+            </div>
+          ) : (
+            <span className="text-muted-foreground">Not set</span>
+          )}
+        </div>
+      )}
     </div>
   )
 }
