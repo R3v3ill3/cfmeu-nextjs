@@ -57,31 +57,60 @@ export function PendingEmployerDuplicateMerge({
 
     setIsMerging(true);
 
+    // Show progress toast for long operations
+    const progressToast = toast({
+      title: 'Merging employers...',
+      description: 'This may take up to 30 seconds. Please wait.',
+      duration: 30000, // Keep toast visible for full merge duration
+    });
+
     try {
       const supabase = getSupabaseBrowserClient();
+      
+      console.log('[PendingEmployerDuplicateMerge] Starting merge:', {
+        canonical: selectedCanonicalId,
+        duplicates: duplicateIds,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Call RPC with extended timeout handling
       const { data, error } = await supabase.rpc('merge_employers', {
         p_primary_employer_id: selectedCanonicalId,
         p_duplicate_employer_ids: duplicateIds,
       });
 
+      console.log('[PendingEmployerDuplicateMerge] Merge completed:', {
+        success: !error,
+        data,
+        error,
+        timestamp: new Date().toISOString(),
+      });
+
       if (error) {
-        console.error('Error merging employers:', error);
+        console.error('[PendingEmployerDuplicateMerge] Error merging employers:', error);
         throw new Error(error.message);
       }
 
       const result = data as any;
 
+      // Check if merge was successful
+      if (result && !result.success && result.error) {
+        throw new Error(result.error);
+      }
+
       toast({
         title: 'Employers merged successfully',
-        description: `Merged ${duplicateIds.length} duplicate employer(s) into the canonical record`,
+        description: `Merged ${duplicateIds.length} duplicate employer(s). ${result?.relationships_moved || 0} relationships transferred.`,
       });
 
       onMergeComplete(selectedCanonicalId);
     } catch (error) {
-      console.error('Failed to merge employers:', error);
+      console.error('[PendingEmployerDuplicateMerge] Failed to merge employers:', error);
+      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
+      
       toast({
         title: 'Merge failed',
-        description: error instanceof Error ? error.message : 'An unexpected error occurred',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
@@ -110,11 +139,21 @@ export function PendingEmployerDuplicateMerge({
                 <li>All projects, job sites, and workers from duplicate employers will be transferred</li>
                 <li>Trade capabilities will be combined (no duplicates)</li>
                 <li>Duplicate employer names will be saved as aliases</li>
-                <li>Duplicate records will be marked as inactive</li>
-                <li>This action can be undone by an administrator if needed</li>
+                <li>Duplicate records will be deleted</li>
+                <li>This process may take up to 30 seconds for large employers</li>
               </ul>
             </AlertDescription>
           </Alert>
+
+          {isMerging && (
+            <Alert className="bg-blue-50 border-blue-200">
+              <Loader2 className="h-4 w-4 text-blue-600 animate-spin" />
+              <AlertDescription className="text-blue-800">
+                <strong>Merging in progress...</strong> Please wait while we consolidate the employer records.
+                This may take up to 30 seconds. Do not close this window or refresh the page.
+              </AlertDescription>
+            </Alert>
+          )}
 
           <div className="space-y-3">
             <Label className="text-base font-semibold">Select the canonical employer:</Label>
