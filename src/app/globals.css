@@ -643,3 +643,21 @@ table[role="grid"] thead th,
 .rdp-table thead th {
   text-align: center !important;
 }
+
+/* YouTube overlay mask animation - hides YouTube UI for first 3.5 seconds */
+@keyframes youtubeOverlayFadeOut {
+  0% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+.youtube-overlay-mask {
+  animation: youtubeOverlayFadeOut 3.5s ease-out forwards;
+}

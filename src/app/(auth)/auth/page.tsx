@@ -122,7 +122,7 @@ export default function AuthPage() {
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-sm space-y-4">
         {/* YouTube Video Embed - Looping */}
-        <div className="w-full aspect-video rounded-lg overflow-hidden mb-4">
+        <div className="w-full aspect-video rounded-lg overflow-hidden mb-4 relative">
           <iframe
             className="w-full h-full"
             src="https://www.youtube-nocookie.com/embed/xS2GiGpvdqM?autoplay=1&mute=1&loop=1&playlist=xS2GiGpvdqM&controls=0&modestbranding=1&rel=0&playsinline=1"
@@ -132,6 +132,8 @@ export default function AuthPage() {
             allowFullScreen
             style={{ border: 0 }}
           />
+          {/* Overlay to mask YouTube UI for first 3.5 seconds */}
+          <div className="absolute inset-0 bg-black rounded-lg pointer-events-none youtube-overlay-mask" />
         </div>
         
         <h1 className="text-2xl font-semibold text-center">Sign in</h1>
