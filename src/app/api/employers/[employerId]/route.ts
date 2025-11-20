@@ -5,10 +5,10 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { employerId: string } }
 ) {
   try {
-    const { id } = params
+    const { employerId } = params
     const supabase = await createServerSupabase()
 
     // Authentication
@@ -26,7 +26,7 @@ export async function GET(
     let selectQuery = supabase
       .from('employers')
       .select(fields ? fields.join(',') : '*')
-      .eq('id', id)
+      .eq('id', employerId)
       .single()
 
     const { data, error } = await selectQuery
