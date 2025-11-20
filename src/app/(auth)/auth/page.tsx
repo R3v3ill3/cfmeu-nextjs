@@ -125,7 +125,7 @@ export default function AuthPage() {
         <div className="w-full aspect-video rounded-lg overflow-hidden mb-4">
           <iframe
             className="w-full h-full"
-            src="https://www.youtube.com/embed/xS2GiGpvdqM?autoplay=1&mute=1&loop=1&playlist=xS2GiGpvdqM&controls=0&modestbranding=1&rel=0&playsinline=1"
+            src="https://www.youtube-nocookie.com/embed/xS2GiGpvdqM?autoplay=1&mute=1&loop=1&playlist=xS2GiGpvdqM&controls=0&modestbranding=1&rel=0&playsinline=1"
             title="Eureka flag Australia (vintage style)"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             referrerPolicy="strict-origin-when-cross-origin"
