@@ -23,7 +23,18 @@ export default function AuthPage() {
     const errorDescription = params.get('error_description')
     
     if (errorParam && errorDescription) {
-      setError(errorDescription)
+      // Special handling for specific error types
+      if (errorParam === 'private_relay_email') {
+        setError(
+          'Apple Sign In requires sharing your email address. ' +
+          'Please try again and when Apple asks, select "Share My Email" instead of "Hide My Email". ' +
+          'Your email is needed to match your account.'
+        )
+      } else if (errorParam === 'account_exists') {
+        setError(errorDescription || 'An account already exists for this email. Please sign in with your existing account instead.')
+      } else {
+        setError(errorDescription)
+      }
       // Clean up URL
       window.history.replaceState({}, '', window.location.pathname)
     }
@@ -90,6 +101,7 @@ export default function AuthPage() {
         provider: 'apple',
         options: {
           redirectTo: `${window.location.origin}/auth/confirm`,
+          scopes: 'email', // Request email scope so Apple shows "Share My Email" option
         },
       })
       
@@ -112,26 +124,31 @@ export default function AuthPage() {
         <h1 className="text-2xl font-semibold text-center">Sign in</h1>
         
         {/* Apple Sign In Button */}
-        <button
-          type="button"
-          onClick={handleAppleSignIn}
-          disabled={appleLoading || loading}
-          className="w-full flex items-center justify-center gap-2 bg-black text-white py-2.5 px-4 rounded-md hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {appleLoading ? (
-            <>
-              <span className="animate-spin">⟳</span>
-              <span>Signing in with Apple…</span>
-            </>
-          ) : (
-            <>
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
-              </svg>
-              <span>Continue with Apple</span>
-            </>
-          )}
-        </button>
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={handleAppleSignIn}
+            disabled={appleLoading || loading}
+            className="w-full flex items-center justify-center gap-2 bg-black text-white py-2.5 px-4 rounded-md hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {appleLoading ? (
+              <>
+                <span className="animate-spin">⟳</span>
+                <span>Signing in with Apple…</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
+                </svg>
+                <span>Continue with Apple</span>
+              </>
+            )}
+          </button>
+          <p className="text-xs text-muted-foreground text-center">
+            When signing in, please select "Share My Email" so we can match your account
+          </p>
+        </div>
 
         {/* Divider */}
         <div className="relative flex items-center py-2">

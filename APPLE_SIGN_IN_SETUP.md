@@ -147,6 +147,8 @@ In Apple Developer, ensure your Service ID is configured correctly:
    - `https://[your-project-ref].supabase.co/auth/v1/callback`
    - Your production domain callback URL (if applicable)
 
+**Note:** The code automatically requests the `email` scope, which ensures Apple shows the "Share My Email" / "Hide My Email" option during sign-in. No additional Apple Developer configuration is needed for this.
+
 ## Step 7: Test the Implementation
 
 1. Navigate to `/auth` in your application

@@ -7,9 +7,35 @@ export async function GET(request: NextRequest) {
   const token_hash = searchParams.get('token_hash')
   const type = searchParams.get('type') as EmailOtpType | null
   const code = searchParams.get('code') // OAuth code (for Apple Sign In)
+  const error_param = searchParams.get('error') // OAuth error from Supabase
+  const error_description = searchParams.get('error_description')
   const next = searchParams.get('next') ?? '/'
 
   const supabase = await createServerSupabase()
+
+  // Log all incoming parameters for debugging
+  console.log('[Auth Confirm] Callback received:', {
+    hasCode: !!code,
+    hasTokenHash: !!token_hash,
+    hasType: !!type,
+    hasError: !!error_param,
+    errorDescription: error_description,
+    allParams: Object.fromEntries(searchParams.entries()),
+  })
+
+  // Handle OAuth error from Supabase (e.g., signups disabled)
+  if (error_param) {
+    console.error('[Auth Confirm] OAuth error from Supabase:', { error_param, error_description })
+    const redirectTo = new URL('/auth', request.url)
+    if (error_param === 'signups_not_allowed' || error_description?.includes('Signups not allowed')) {
+      redirectTo.searchParams.set('error', 'signups_disabled')
+      redirectTo.searchParams.set('error_description', 'OAuth signups are currently disabled in Supabase. Please enable signups in Authentication → Settings → Auth, then disable the "Disable new user signups" toggle.')
+    } else {
+      redirectTo.searchParams.set('error', 'oauth_error')
+      redirectTo.searchParams.set('error_description', error_description || 'OAuth authentication failed')
+    }
+    return NextResponse.redirect(redirectTo)
+  }
 
   // Handle OAuth callback (Apple Sign In)
   if (code) {
@@ -47,6 +73,19 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(redirectTo)
       }
 
+      // Check if Apple provided a private relay email (user chose "Hide My Email")
+      const isPrivateRelayEmail = userEmail.includes('@privaterelay.appleid.com')
+      
+      if (isPrivateRelayEmail) {
+        console.warn('[Auth Confirm] Apple private relay email detected - user chose "Hide My Email":', userEmail)
+        // Sign out the user immediately
+        await supabase.auth.signOut()
+        const redirectTo = new URL('/auth', request.url)
+        redirectTo.searchParams.set('error', 'private_relay_email')
+        redirectTo.searchParams.set('error_description', 'Apple Sign In requires sharing your email address. Please try again and select "Share My Email" instead of "Hide My Email" when signing in with Apple.')
+        return NextResponse.redirect(redirectTo)
+      }
+
       // Check if user exists in profiles or pending_users
       const { data: userExists, error: checkError } = await supabase.rpc('check_user_exists_for_oauth', {
         p_email: userEmail
@@ -64,11 +103,54 @@ export async function GET(request: NextRequest) {
 
       if (!userExists) {
         console.warn('[Auth Confirm] OAuth sign-in rejected - user not registered:', userEmail)
-        // Sign out the user
+        // Sign out the user and delete the newly created profile if it exists
+        const currentUser = sessionData?.user
+        if (currentUser?.id) {
+          // Try to delete the profile that was auto-created by the trigger
+          await supabase.from('profiles').delete().eq('id', currentUser.id).catch(console.error)
+        }
         await supabase.auth.signOut()
         const redirectTo = new URL('/auth', request.url)
         redirectTo.searchParams.set('error', 'not_registered')
         redirectTo.searchParams.set('error_description', 'Your email is not registered. Please contact your administrator to request access.')
+        return NextResponse.redirect(redirectTo)
+      }
+
+      // Check if this email matches an existing profile with a different user ID
+      // This happens when OAuth creates a new account but the email already exists
+      const normalizedEmail = userEmail.toLowerCase().trim()
+      const { data: existingProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, email, role, is_active')
+        .or(`email.ilike.${normalizedEmail},apple_email.ilike.${normalizedEmail}`)
+        .eq('is_active', true)
+        .maybeSingle()
+
+      if (profileError) {
+        console.error('[Auth Confirm] Error checking existing profile:', profileError)
+      }
+
+      const currentUserId = sessionData?.user?.id
+      
+      // If email matches an existing profile but with a different user ID, we have a problem
+      if (existingProfile && existingProfile.id !== currentUserId) {
+        console.warn('[Auth Confirm] Email matches existing profile but different user ID:', {
+          existingProfileId: existingProfile.id,
+          currentUserId,
+          email: userEmail
+        })
+        
+        // Sign out the new OAuth user
+        await supabase.auth.signOut()
+        
+        // Try to delete the profile that was auto-created by the trigger
+        if (currentUserId) {
+          await supabase.from('profiles').delete().eq('id', currentUserId).catch(console.error)
+        }
+        
+        const redirectTo = new URL('/auth', request.url)
+        redirectTo.searchParams.set('error', 'account_exists')
+        redirectTo.searchParams.set('error_description', `An account already exists for ${userEmail}. Please sign in with your existing account (email/password) instead of Apple Sign In, or contact support to link your Apple ID to your existing account.`)
         return NextResponse.redirect(redirectTo)
       }
 
