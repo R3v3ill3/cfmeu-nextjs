@@ -2254,6 +2254,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
           collected_at: nowIso,
           collected_by: collectedBy,
           is_authoritative: false,
+          mark_for_canonical_review: false,
           notes: `Matched via BCI import (${csvRole})`
         };
 

@@ -296,6 +296,7 @@ export function BulkAliasOperations({
             alias: suggestion.suggestedAlias,
             alias_normalized: suggestion.suggestedAlias.toLowerCase(),
             is_authoritative: true,
+            mark_for_canonical_review: false,
             source_system: 'bulk_import',
             source_identifier: `scan-review-${suggestion.subcontractorIndex}`,
             notes: `Bulk created from scan review. Reason: ${suggestion.reason}`,

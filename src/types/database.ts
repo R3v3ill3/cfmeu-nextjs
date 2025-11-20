@@ -1401,6 +1401,7 @@ export type Database = {
           employer_id: string
           id: string
           is_authoritative: boolean
+          mark_for_canonical_review: boolean
           notes: string | null
           source_identifier: string | null
           source_system: string | null
@@ -1416,6 +1417,7 @@ export type Database = {
           employer_id: string
           id?: string
           is_authoritative?: boolean
+          mark_for_canonical_review?: boolean
           notes?: string | null
           source_identifier?: string | null
           source_system?: string | null
@@ -1431,6 +1433,7 @@ export type Database = {
           employer_id?: string
           id?: string
           is_authoritative?: boolean
+          mark_for_canonical_review?: boolean
           notes?: string | null
           source_identifier?: string | null
           source_system?: string | null

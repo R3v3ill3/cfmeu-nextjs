@@ -68,6 +68,7 @@ async function createEmployerAlias(
         source_system: request.source_system || 'manual',
         source_identifier: request.source_identifier || request.alias,
         is_authoritative: Boolean(request.is_authoritative),
+        mark_for_canonical_review: request.mark_for_canonical_review !== undefined ? Boolean(request.mark_for_canonical_review) : false,
         notes: request.notes || null,
         created_by: request.created_by || null,
         alias_normalized: request.alias.toLowerCase().trim()
@@ -271,7 +272,7 @@ async function createAliasHandler(request: NextRequest, { params }: { params: { 
       return NextResponse.json({ error: 'Request body is required' }, { status: 400 });
     }
 
-    const { alias, source_system, source_identifier, is_authoritative, notes } = body;
+    const { alias, source_system, source_identifier, is_authoritative, mark_for_canonical_review, notes } = body;
 
     if (!alias || typeof alias !== 'string' || alias.trim().length === 0) {
       return NextResponse.json({ error: 'Alias is required and must be a non-empty string' }, { status: 400 });
@@ -283,6 +284,7 @@ async function createAliasHandler(request: NextRequest, { params }: { params: { 
       source_system: source_system || 'manual',
       source_identifier: source_identifier || alias.trim(),
       is_authoritative: Boolean(is_authoritative),
+      mark_for_canonical_review: mark_for_canonical_review !== undefined ? Boolean(mark_for_canonical_review) : false,
       notes: notes || null,
       created_by: user.id
     };

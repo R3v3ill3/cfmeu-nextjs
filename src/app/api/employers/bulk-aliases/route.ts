@@ -96,6 +96,7 @@ async function bulkCreateHandler(request: NextRequest) {
       source_system: alias.source_system || 'bulk_import',
       source_identifier: alias.source_identifier || alias.alias.trim(),
       is_authoritative: alias.is_authoritative !== undefined ? Boolean(alias.is_authoritative) : true,
+      mark_for_canonical_review: alias.mark_for_canonical_review !== undefined ? Boolean(alias.mark_for_canonical_review) : false,
       notes: alias.notes || null,
       created_by: user.id
     }));

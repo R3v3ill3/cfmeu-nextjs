@@ -14,6 +14,7 @@ export interface EmployerAlias {
   collected_at: string | null;
   collected_by: string | null;
   is_authoritative: boolean;
+  mark_for_canonical_review: boolean;
   notes: string | null;
 }
 
@@ -23,6 +24,7 @@ export interface CreateEmployerAliasRequest {
   source_system?: string;
   source_identifier?: string;
   is_authoritative?: boolean;
+  mark_for_canonical_review?: boolean;
   notes?: string;
   created_by?: string;
 }
@@ -104,6 +106,7 @@ export async function createEmployerAlias(
         collected_at: new Date().toISOString(),
         collected_by: request.created_by || null,
         is_authoritative: request.is_authoritative !== undefined ? request.is_authoritative : true,
+        mark_for_canonical_review: request.mark_for_canonical_review !== undefined ? request.mark_for_canonical_review : false,
         notes: request.notes || null,
         created_by: request.created_by || null
       })
@@ -402,6 +405,7 @@ export async function updateEmployerAlias(
   updates: {
     alias?: string;
     is_authoritative?: boolean;
+    mark_for_canonical_review?: boolean;
     notes?: string;
   },
   userId?: string

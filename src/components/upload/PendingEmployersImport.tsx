@@ -248,6 +248,7 @@ export default function PendingEmployersImport() {
       collected_at: new Date().toISOString(),
       collected_by: pendingEmployer.created_by ?? null,
       is_authoritative: aliasDecision === 'promote_canonical',
+      mark_for_canonical_review: aliasDecision === 'promote_canonical',
       notes: aliasNotes,
     };
 
@@ -282,6 +283,7 @@ export default function PendingEmployersImport() {
                 collected_at: new Date().toISOString(),
                 collected_by: pendingEmployer.created_by ?? null,
                 is_authoritative: false,
+                mark_for_canonical_review: false,
                 notes: `Previous canonical name prior to promotion on ${new Date().toISOString()}`,
               },
               { onConflict: 'employer_id,alias_normalized' },
@@ -1059,6 +1061,7 @@ export default function PendingEmployersImport() {
               collected_at: new Date().toISOString(),
               collected_by: pendingEmployer.created_by ?? null,
               is_authoritative: false,
+              mark_for_canonical_review: false,
               notes: `Trading name extracted from EBA trade PDF: ${raw.sourceFile || 'unknown'}`,
             }, { onConflict: 'employer_id,alias_normalized' });
           

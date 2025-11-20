@@ -306,9 +306,10 @@ export default function CanonicalPromotionConsole() {
         <Info className="h-4 w-4" />
         <AlertTitle>About Canonical Promotions</AlertTitle>
         <AlertDescription>
-          This console shows aliases from authoritative sources (BCI, Incolink, EBA, FWC) that could
-          become the canonical (official) name for an employer. Promoting an alias updates the employer's
-          primary name across the system.
+          This console shows aliases that have been explicitly marked for canonical review. Only aliases
+          tagged with "Mark for canonical review" at creation time will appear here. Most aliases (nicknames,
+          shortened names, trading names) are not suitable for canonical names and will not appear in this queue.
+          Promoting an alias updates the employer's primary name across the system.
         </AlertDescription>
       </Alert>
 

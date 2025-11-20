@@ -34,6 +34,7 @@ interface EmployerAlias {
   alias: string
   alias_normalized: string
   is_authoritative: boolean
+  mark_for_canonical_review?: boolean
   source_system?: string
   source_identifier?: string
   collected_at?: string
@@ -59,6 +60,7 @@ interface AliasFormData {
   alias: string
   notes: string
   isAuthoritative: boolean
+  markForCanonicalReview: boolean
 }
 
 export function EmployerAliasManager({
@@ -83,7 +85,8 @@ export function EmployerAliasManager({
   const [formData, setFormData] = useState<AliasFormData>({
     alias: '',
     notes: '',
-    isAuthoritative: false
+    isAuthoritative: false,
+    markForCanonicalReview: false
   })
   const [submitting, setSubmitting] = useState(false)
   const [hasAutoOpened, setHasAutoOpened] = useState(false)
@@ -96,7 +99,8 @@ export function EmployerAliasManager({
         setFormData({
           alias: suggestedAlias,
           notes: `Added from scanned document`,
-          isAuthoritative: true // Auto-enable for suggested aliases
+          isAuthoritative: true, // Auto-enable for suggested aliases
+          markForCanonicalReview: false
         })
         setEditDialog({ open: true, mode: 'create' })
         setHasAutoOpened(true)
@@ -178,7 +182,8 @@ export function EmployerAliasManager({
     setFormData({ 
       alias: suggestedAlias || '', 
       notes: suggestedAlias ? `Added from scanned document` : '', 
-      isAuthoritative: !!suggestedAlias 
+      isAuthoritative: !!suggestedAlias,
+      markForCanonicalReview: false
     })
     setEditDialog({ open: true, mode: 'create' })
   }
@@ -187,7 +192,8 @@ export function EmployerAliasManager({
     setFormData({
       alias: alias.alias,
       notes: alias.notes || '',
-      isAuthoritative: alias.is_authoritative
+      isAuthoritative: alias.is_authoritative,
+      markForCanonicalReview: alias.mark_for_canonical_review || false
     })
     setEditDialog({ open: true, alias, mode: 'edit' })
   }
@@ -229,6 +235,7 @@ export function EmployerAliasManager({
           alias_normalized: normalizedAlias,
           notes: formData.notes.trim() || null,
           is_authoritative: formData.isAuthoritative,
+          mark_for_canonical_review: formData.markForCanonicalReview,
           employer_id: employerId,
           source_system: 'manual',
           source_identifier: suggestedAlias || null,
@@ -255,7 +262,8 @@ export function EmployerAliasManager({
           alias: formData.alias.trim(),
           alias_normalized: normalizedAlias,
           notes: formData.notes.trim() || null,
-          is_authoritative: formData.isAuthoritative
+          is_authoritative: formData.isAuthoritative,
+          mark_for_canonical_review: formData.markForCanonicalReview
         }
 
         const { error } = await supabase
@@ -283,7 +291,7 @@ export function EmployerAliasManager({
 
       setAliases(data || [])
       setEditDialog({ open: false, mode: 'create' })
-      setFormData({ alias: '', notes: '', isAuthoritative: false })
+      setFormData({ alias: '', notes: '', isAuthoritative: false, markForCanonicalReview: false })
       onAliasUpdate?.()
     } catch (error: any) {
       console.error('Failed to save alias:', error)
@@ -607,6 +615,24 @@ export function EmployerAliasManager({
                   className="h-4 w-4"
                 />
                 <Label htmlFor="isAuthoritative">Active (use for matching)</Label>
+              </div>
+
+              <div className="flex items-start space-x-2 pt-2 border-t">
+                <input
+                  type="checkbox"
+                  id="markForCanonicalReview"
+                  checked={formData.markForCanonicalReview}
+                  onChange={(e) => setFormData({ ...formData, markForCanonicalReview: e.target.checked })}
+                  className="h-4 w-4 mt-1"
+                />
+                <div className="flex-1">
+                  <Label htmlFor="markForCanonicalReview" className="cursor-pointer">
+                    Mark for canonical review
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    This alias may become the official employer name. Only check this if the alias represents the full legal or official company name.
+                  </p>
+                </div>
               </div>
             </div>
 
