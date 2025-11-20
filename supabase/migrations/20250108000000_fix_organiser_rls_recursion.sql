@@ -228,3 +228,4 @@ COMMENT ON FUNCTION "public"."can_access_employer"("uuid") IS
   'Check if user can access an employer. For organisers, checks patch assignments first to avoid RLS recursion. Uses SECURITY DEFINER to bypass RLS during checks.';
 
 
+

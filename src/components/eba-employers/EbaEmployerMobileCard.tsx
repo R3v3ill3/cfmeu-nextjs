@@ -220,3 +220,4 @@ export function EbaEmployerMobileCard({ employer, rating, onViewDetails }: EbaEm
 
 
 
+

@@ -205,3 +205,4 @@ supabase db reset
 - Both Track 1 (project compliance) and Track 2 (organiser expertise) respect hard block
 
 
+
