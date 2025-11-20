@@ -11,21 +11,24 @@ import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { isTestingEmail } from "@/utils/emailConversion"
-import { Shield, Key, Copy, CheckCircle2 } from "lucide-react"
+import { Shield, Key, Copy, CheckCircle2, Edit } from "lucide-react"
+import EditUserDialog from "@/components/admin/EditUserDialog"
 
-type Profile = { id: string; email: string | null; full_name: string | null; role: string | null; is_active: boolean | null }
+type Profile = { id: string; email: string | null; full_name: string | null; role: string | null; is_active: boolean | null; apple_email?: string | null; phone?: string | null }
 
 const ROLES = ["admin", "lead_organiser", "organiser", "delegate", "viewer"]
 
 export function UsersTable() {
   const { toast } = useToast()
   const qc = useQueryClient()
+  const [editingUser, setEditingUser] = useState<Profile | null>(null)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
   const { data: users = [], isFetching } = useQuery({
     queryKey: ["admin-users"],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("profiles")
-        .select("id, email, full_name, role, is_active")
+        .select("id, email, full_name, role, is_active, apple_email, phone")
         .order("full_name")
       if (error) throw error
       return data || []
@@ -164,26 +167,39 @@ export function UsersTable() {
                     </Select>
                   </TableCell>
                   <TableCell>
-                    {u.email && isTestingEmail(u.email) ? (
+                    <div className="flex items-center gap-2">
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleResetTestingPassword(u.email!)}
-                        disabled={resetTestingPassword.isPending}
+                        onClick={() => {
+                          setEditingUser(u)
+                          setEditDialogOpen(true)
+                        }}
                       >
-                        <Key className="h-4 w-4 mr-2" />
-                        {resetTestingPassword.isPending ? "Resetting..." : "Reset Testing Password"}
+                        <Edit className="h-4 w-4 mr-2" />
+                        Edit
                       </Button>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => u.email && resetPassword.mutate({ email: u.email })}
-                        disabled={!u.email || resetPassword.isPending}
-                      >
-                        {resetPassword.isPending ? "Sending..." : "Reset Password"}
-                      </Button>
-                    )}
+                      {u.email && isTestingEmail(u.email) ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleResetTestingPassword(u.email!)}
+                          disabled={resetTestingPassword.isPending}
+                        >
+                          <Key className="h-4 w-4 mr-2" />
+                          {resetTestingPassword.isPending ? "Resetting..." : "Reset Password"}
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => u.email && resetPassword.mutate({ email: u.email })}
+                          disabled={!u.email || resetPassword.isPending}
+                        >
+                          {resetPassword.isPending ? "Sending..." : "Reset Password"}
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -259,6 +275,19 @@ export function UsersTable() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Edit User Dialog */}
+      {editingUser && (
+        <EditUserDialog
+          user={editingUser}
+          open={editDialogOpen}
+          onOpenChange={setEditDialogOpen}
+          onSaved={(updated) => {
+            qc.invalidateQueries({ queryKey: ["admin-users"] })
+            setEditingUser(null)
+          }}
+        />
+      )}
     </Card>
   )
 }

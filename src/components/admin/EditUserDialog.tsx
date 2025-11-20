@@ -16,6 +16,7 @@ type ProfileEditable = {
   email?: string | null;
   full_name?: string | null;
   phone?: string | null;
+  apple_email?: string | null;
   role?: AppRole | string | null;
   is_active?: boolean | null;
 };
@@ -36,6 +37,7 @@ export default function EditUserDialog({ user, open, onOpenChange, onSaved }: Ed
   const { toast } = useToast();
   const [fullName, setFullName] = useState(user.full_name ?? "");
   const [phone, setPhone] = useState(user.phone ?? "");
+  const [appleEmail, setAppleEmail] = useState(user.apple_email ?? "");
   const [role, setRole] = useState<AppRole | string>((user.role as AppRole) ?? "viewer");
   const [active, setActive] = useState<boolean>(user.is_active ?? true);
   const [saving, setSaving] = useState(false);
@@ -44,6 +46,7 @@ export default function EditUserDialog({ user, open, onOpenChange, onSaved }: Ed
     // Refresh form when a different user is provided
     setFullName(user.full_name ?? "");
     setPhone(user.phone ?? "");
+    setAppleEmail(user.apple_email ?? "");
     setRole((user.role as AppRole) ?? "viewer");
     setActive(user.is_active ?? true);
   }, [user]);
@@ -56,11 +59,19 @@ export default function EditUserDialog({ user, open, onOpenChange, onSaved }: Ed
     setSaving(true);
     try {
       console.log("[EditUserDialog] Updating user profile", { id: user.id, fullName, phone, role, active });
+      // Validate apple_email if provided
+      const trimmedAppleEmail = appleEmail.trim().toLowerCase();
+      if (trimmedAppleEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedAppleEmail)) {
+        toast({ title: "Invalid Apple email", description: "Please enter a valid email address or leave it blank", variant: "destructive" });
+        return;
+      }
+
       const { data, error } = await supabase
         .from("profiles")
         .update({
           full_name: fullName.trim(),
           phone: phone.trim() || null,
+          apple_email: trimmedAppleEmail || null,
           role: role as AppRole,
           is_active: active,
         })
@@ -79,6 +90,7 @@ export default function EditUserDialog({ user, open, onOpenChange, onSaved }: Ed
         ...user,
         full_name: data.full_name,
         phone: data.phone,
+        apple_email: data.apple_email,
         role: data.role,
         is_active: data.is_active,
       });
@@ -123,6 +135,20 @@ export default function EditUserDialog({ user, open, onOpenChange, onSaved }: Ed
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
             />
+          </div>
+
+          <div className={fieldContainer}>
+            <Label className={fieldLabel} htmlFor="apple_email">Apple ID Email</Label>
+            <Input
+              id="apple_email"
+              type="email"
+              placeholder="user@example.com or @privaterelay.appleid.com"
+              value={appleEmail}
+              onChange={(e) => setAppleEmail(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Optional: Add Apple ID email to enable Apple Sign In if it differs from the primary email.
+            </p>
           </div>
 
           <div className={fieldContainer}>
