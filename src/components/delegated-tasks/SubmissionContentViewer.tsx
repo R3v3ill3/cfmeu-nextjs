@@ -40,7 +40,7 @@ export function SubmissionContentViewer({ token, onClose }: SubmissionContentVie
   if (isLoading) {
     return (
       <Dialog open={true} onOpenChange={onClose}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl w-[95vw] sm:w-full mx-2 sm:mx-auto">
           <div className="flex items-center justify-center p-8">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
@@ -52,14 +52,16 @@ export function SubmissionContentViewer({ token, onClose }: SubmissionContentVie
   if (error || !data) {
     return (
       <Dialog open={true} onOpenChange={onClose}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="max-w-4xl w-[95vw] sm:w-full mx-2 sm:mx-auto">
           <DialogHeader>
-            <DialogTitle>Error</DialogTitle>
+            <DialogTitle className="text-base sm:text-lg">Error</DialogTitle>
           </DialogHeader>
           <div className="p-4 text-sm text-destructive">
             Failed to load submission content. Please try again.
           </div>
-          <Button onClick={onClose}>Close</Button>
+          <Button onClick={onClose} className="w-full sm:w-auto min-h-[44px]">
+            Close
+          </Button>
         </DialogContent>
       </Dialog>
     );
@@ -67,23 +69,23 @@ export function SubmissionContentViewer({ token, onClose }: SubmissionContentVie
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] sm:max-h-[85vh] overflow-y-auto w-[95vw] sm:w-full mx-2 sm:mx-auto">
         <DialogHeader>
-          <DialogTitle>Submission Content</DialogTitle>
+          <DialogTitle className="text-base sm:text-lg">Submission Content</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
           {/* Project Info */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Project Information</CardTitle>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base sm:text-lg">Project Information</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
-                <div>
+              <div className="space-y-2 text-sm sm:text-base">
+                <div className="break-words">
                   <span className="font-medium">Project:</span> {data.projectName}
                 </div>
-                <div>
+                <div className="break-words">
                   <span className="font-medium">Resource Type:</span> {data.resourceType}
                 </div>
                 <div>
@@ -107,11 +109,11 @@ export function SubmissionContentViewer({ token, onClose }: SubmissionContentVie
           {/* Submission Data */}
           {data.submissionData && (
             <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Submitted Form Data</CardTitle>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base sm:text-lg">Submitted Form Data</CardTitle>
               </CardHeader>
               <CardContent>
-                <pre className="bg-muted p-4 rounded-md overflow-x-auto text-sm">
+                <pre className="bg-muted p-3 sm:p-4 rounded-md overflow-x-auto text-xs sm:text-sm whitespace-pre-wrap break-words">
                   {JSON.stringify(data.submissionData, null, 2)}
                 </pre>
               </CardContent>
@@ -121,19 +123,21 @@ export function SubmissionContentViewer({ token, onClose }: SubmissionContentVie
           {/* Metadata */}
           {data.metadata && (
             <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Metadata</CardTitle>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base sm:text-lg">Metadata</CardTitle>
               </CardHeader>
               <CardContent>
-                <pre className="bg-muted p-4 rounded-md overflow-x-auto text-sm">
+                <pre className="bg-muted p-3 sm:p-4 rounded-md overflow-x-auto text-xs sm:text-sm whitespace-pre-wrap break-words">
                   {JSON.stringify(data.metadata, null, 2)}
                 </pre>
               </CardContent>
             </Card>
           )}
 
-          <div className="flex justify-end">
-            <Button onClick={onClose}>Close</Button>
+          <div className="flex justify-end pt-2">
+            <Button onClick={onClose} className="w-full sm:w-auto min-h-[44px]">
+              Close
+            </Button>
           </div>
         </div>
       </DialogContent>

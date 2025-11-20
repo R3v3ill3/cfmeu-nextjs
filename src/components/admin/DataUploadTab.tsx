@@ -1,12 +1,11 @@
 "use client"
 
-import React, { useState, useEffect, type ComponentType } from "react"
+import React, { useState, type ComponentType } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Users, Building, FileText, FolderOpen, FileSpreadsheet } from "lucide-react"
+import { ArrowLeft, Users, Building, FileText, FolderOpen, FileSpreadsheet, Loader2 } from "lucide-react"
 import EbaProjectSearch from "@/components/upload/EbaProjectSearch"
-import { useAuth } from "@/hooks/useAuth"
-import { getSupabaseBrowserClient } from "@/lib/supabase/client"
+import { useUserRole } from "@/hooks/useUserRole"
 import EmployersManagement from "@/components/admin/EmployersManagement"
 import ProjectsManagement from "@/components/admin/ProjectsManagement"
 import BCIXlsxWizard from "@/components/upload/BCIXlsxWizard"
@@ -69,9 +68,7 @@ const importOptions: ImportOption[] = [
 ]
 
 export default function DataUploadTab() {
-  const { user } = useAuth()
-  const [userRole, setUserRole] = useState<string | null>(null)
-  const supabase = getSupabaseBrowserClient()
+  const { role: userRole, isLoading: roleLoading } = useUserRole()
 
   const [step, setStep] = useState<"choose" | "import">("choose")
   const [importType, setImportType] = useState<ImportType>("bci")
@@ -79,24 +76,6 @@ export default function DataUploadTab() {
   const [bciCsvRows, setBciCsvRows] = useState<any[]>([])
   const [bciCsvMode, setBciCsvMode] = useState<any>("projects-only")
   const [showBciCsvImport, setShowBciCsvImport] = useState(false)
-
-  // Get user role on component mount
-  useEffect(() => {
-    const checkUserRole = async () => {
-      if (!user) return
-      try {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("role")
-          .eq("id", user.id)
-          .single()
-        setUserRole((profile as { role?: string } | null)?.role || null)
-      } catch (error) {
-        console.error("Error fetching user role:", error)
-      }
-    }
-    checkUserRole()
-  }, [user, supabase])
 
   // Get available import types based on user role
   const getAvailableImportTypes = (): ImportType[] => {
@@ -116,6 +95,15 @@ export default function DataUploadTab() {
 
   const reset = () => {
     setStep("choose")
+  }
+
+  if (roleLoading) {
+    return (
+      <div className="flex items-center gap-2 rounded-md border border-dashed border-border/60 bg-muted/30 p-4 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Checking data upload permissions…
+      </div>
+    )
   }
 
   // Don't render anything if user has no upload access

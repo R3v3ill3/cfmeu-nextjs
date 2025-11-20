@@ -17,6 +17,7 @@ import Image from 'next/image';
 import DateInput from '@/components/ui/date-input';
 import { EmployerSearch } from '@/components/ui/EmployerSearch';
 import { PublicAuditComplianceForm } from '@/components/public/PublicAuditComplianceForm';
+import { Checkbox } from '@/components/ui/checkbox';
 
 interface PublicFormData {
   token: string;

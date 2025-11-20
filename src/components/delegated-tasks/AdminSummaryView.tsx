@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Fragment } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LinksList } from "./LinksList";
+import { PurgeExpiredLinks } from "./PurgeExpiredLinks";
 import type { DelegatedTasksAnalyticsResponse } from "./DelegatedTasksDashboard";
 
 interface AdminSummaryViewProps {
@@ -25,6 +26,7 @@ export function AdminSummaryView({ data, period, resourceType }: AdminSummaryVie
     teams: false,
     organisers: false,
   });
+  const [selectedOrganiserId, setSelectedOrganiserId] = useState<string | null>(null);
 
   const toggleSection = (section: keyof typeof expandedSections) => {
     setExpandedSections((prev) => ({
@@ -124,26 +126,26 @@ export function AdminSummaryView({ data, period, resourceType }: AdminSummaryVie
                 {data.teams.map((team) => (
                   <div
                     key={team.leadOrganiserId}
-                    className="flex items-center justify-between p-3 border rounded-lg"
+                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 border rounded-lg"
                   >
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <div className="font-medium">{team.leadOrganiserName}</div>
                       <div className="text-sm text-muted-foreground">
                         {team.organiserCount} organisers
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <div className="text-sm text-muted-foreground">Generated</div>
-                        <div className="font-bold">{team.generated}</div>
+                    <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
+                      <div className="text-left sm:text-right min-w-[70px]">
+                        <div className="text-xs sm:text-sm text-muted-foreground">Generated</div>
+                        <div className="font-bold text-base sm:text-lg">{team.generated}</div>
                       </div>
-                      <div className="text-right">
-                        <div className="text-sm text-muted-foreground">Submitted</div>
-                        <div className="font-bold text-green-600">{team.submitted}</div>
+                      <div className="text-left sm:text-right min-w-[70px]">
+                        <div className="text-xs sm:text-sm text-muted-foreground">Submitted</div>
+                        <div className="font-bold text-base sm:text-lg text-green-600">{team.submitted}</div>
                       </div>
-                      <div className="text-right">
-                        <div className="text-sm text-muted-foreground">Rate</div>
-                        <div className="font-bold">{team.submissionRate.toFixed(1)}%</div>
+                      <div className="text-left sm:text-right min-w-[70px]">
+                        <div className="text-xs sm:text-sm text-muted-foreground">Rate</div>
+                        <div className="font-bold text-base sm:text-lg">{team.submissionRate.toFixed(1)}%</div>
                       </div>
                     </div>
                   </div>
@@ -182,37 +184,70 @@ export function AdminSummaryView({ data, period, resourceType }: AdminSummaryVie
             <CardContent>
               <div className="space-y-3">
                 {data.organisers.map((organiser) => (
-                  <div
-                    key={organiser.organiserId}
-                    className="flex items-center justify-between p-3 border rounded-lg"
-                  >
-                    <div className="flex-1">
-                      <div className="font-medium">{organiser.organiserName}</div>
-                      {organiser.teamLeadName && (
-                        <div className="text-sm text-muted-foreground">
-                          Team: {organiser.teamLeadName}
+                  <Fragment key={organiser.organiserId}>
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 border rounded-lg">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium">{organiser.organiserName}</div>
+                        {organiser.teamLeadName && (
+                          <div className="text-sm text-muted-foreground">
+                            Team: {organiser.teamLeadName}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                        <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
+                          <div className="text-left sm:text-right min-w-[70px]">
+                            <div className="text-xs sm:text-sm text-muted-foreground">Generated</div>
+                            <div className="font-bold text-base sm:text-lg">{organiser.generated}</div>
+                          </div>
+                          <div className="text-left sm:text-right min-w-[70px]">
+                            <div className="text-xs sm:text-sm text-muted-foreground">Submitted</div>
+                            <div className="font-bold text-base sm:text-lg text-green-600">
+                              {organiser.submitted}
+                            </div>
+                          </div>
+                          <div className="text-left sm:text-right min-w-[70px]">
+                            <div className="text-xs sm:text-sm text-muted-foreground">Rate</div>
+                            <div className="font-bold text-base sm:text-lg">
+                              {organiser.submissionRate.toFixed(1)}%
+                            </div>
+                          </div>
                         </div>
-                      )}
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedOrganiserId(
+                                selectedOrganiserId === organiser.organiserId
+                                  ? null
+                                  : organiser.organiserId
+                              );
+                            }}
+                            className="w-full sm:w-auto shrink-0 min-h-[44px]"
+                          >
+                            {selectedOrganiserId === organiser.organiserId
+                              ? "Hide Links"
+                              : "View Links"}
+                          </Button>
+                          <PurgeExpiredLinks
+                            organiserId={organiser.organiserId}
+                            organiserName={organiser.organiserName}
+                            currentResourceType={resourceType}
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <div className="text-sm text-muted-foreground">Generated</div>
-                        <div className="font-bold">{organiser.generated}</div>
+                    {selectedOrganiserId === organiser.organiserId && (
+                      <div className="mt-3 pt-3 border-t">
+                        <LinksList
+                          period={period}
+                          resourceType={resourceType}
+                          organiserId={organiser.organiserId}
+                        />
                       </div>
-                      <div className="text-right">
-                        <div className="text-sm text-muted-foreground">Submitted</div>
-                        <div className="font-bold text-green-600">
-                          {organiser.submitted}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-sm text-muted-foreground">Rate</div>
-                        <div className="font-bold">
-                          {organiser.submissionRate.toFixed(1)}%
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                    )}
+                  </Fragment>
                 ))}
               </div>
             </CardContent>

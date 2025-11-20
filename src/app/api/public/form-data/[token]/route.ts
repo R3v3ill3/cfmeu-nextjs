@@ -40,6 +40,12 @@ export interface PublicFormSubmission {
   tradeContractorUpdates?: any[];
 }
 
+const redactToken = (token: string) => {
+  if (!token) return "unknown";
+  if (token.length <= 8) return token;
+  return `${token.slice(0, 6)}…${token.slice(-4)}`;
+};
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { token: string } }
@@ -63,7 +69,12 @@ export async function GET(
         .rpc('get_public_audit_form_data', { p_token: token });
 
       if (auditError || !auditData) {
-        console.error('Failed to fetch audit form data:', auditError);
+        console.error('[PublicForm] Failed to fetch audit form data', {
+          error: auditError,
+          token: redactToken(token),
+          response: auditData,
+          timestamp: new Date().toISOString(),
+        });
         return NextResponse.json(
           { error: auditData?.error || 'Failed to fetch audit form data' },
           { status: auditData?.status || 500 }
@@ -78,7 +89,12 @@ export async function GET(
       .rpc('get_public_form_data', { p_token: token });
 
     if (baseError || !baseData) {
-      console.error('Failed to fetch public form data:', baseError);
+      console.error('[PublicForm] Failed to fetch public form data', {
+        error: baseError,
+        token: redactToken(token),
+        response: baseData,
+        timestamp: new Date().toISOString(),
+      });
       return NextResponse.json(
         { error: baseData?.error || 'Failed to fetch form data' },
         { status: baseData?.status || 500 }
