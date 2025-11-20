@@ -50,11 +50,17 @@ export function PendingEmployersTable({
     completeReview,
     cancelReview,
   } = usePendingEmployerReview({
-    onComplete: async () => {
+    onComplete: async (decision) => {
+      console.log('[PendingEmployersTable] Review complete, decision:', decision);
+      console.log('[PendingEmployersTable] Waiting 500ms before refresh...');
+      
       // Add small delay to ensure database has been updated
       await new Promise(resolve => setTimeout(resolve, 500));
       
+      console.log('[PendingEmployersTable] Calling onRefresh...');
       onRefresh();
+      
+      console.log('[PendingEmployersTable] onRefresh called, showing toast');
       toast({
         title: 'Review completed',
         description: 'The employer has been processed successfully.',

@@ -123,14 +123,30 @@ export default function AdminPage() {
   const fetchPendingItems = async () => {
     setIsLoadingPending(true)
     try {
-      const response = await fetch('/api/admin/pending-items')
+      console.log('[AdminPage] Fetching pending items...')
+      
+      // Add cache-busting query parameter to prevent stale data
+      const timestamp = Date.now()
+      const response = await fetch(`/api/admin/pending-items?_=${timestamp}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      })
+      
       if (response.ok) {
         const data = await response.json()
+        console.log('[AdminPage] Pending items fetched:', {
+          projects: data.projects?.length || 0,
+          employers: data.employers?.length || 0,
+        })
         setPendingProjects(data.projects || [])
         setPendingEmployers(data.employers || [])
+      } else {
+        console.error('[AdminPage] Failed to fetch pending items:', response.status)
       }
     } catch (error) {
-      console.error('Error fetching pending items:', error)
+      console.error('[AdminPage] Error fetching pending items:', error)
     } finally {
       setIsLoadingPending(false)
     }
