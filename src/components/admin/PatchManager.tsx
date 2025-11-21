@@ -83,9 +83,14 @@ export default function PatchManager() {
         .in("role", ["organiser", "lead_organiser"]) 
         .in("status", ["draft", "invited"]) 
         .order("created_at", { ascending: false })
-      if (error) throw error
+      if (error) {
+        console.error("Error fetching pending users:", error)
+        throw error
+      }
       return (data || []) as PendingUser[]
-    }
+    },
+    staleTime: 0, // Always refetch to ensure fresh data
+    refetchOnWindowFocus: true
   })
 
   const deleteDrafts = useMutation({
@@ -699,7 +704,22 @@ export default function PatchManager() {
           </DialogContent>
         </Dialog>
 
-        <AddDraftUserDialog open={draftDialogOpen} onOpenChange={(o) => { setDraftDialogOpen(o); if (!o) refetchPending() }} onSuccess={() => { refetchPending() }} />
+        <AddDraftUserDialog 
+          open={draftDialogOpen} 
+          onOpenChange={(o) => { 
+            setDraftDialogOpen(o)
+            if (!o) {
+              // Invalidate and refetch when dialog closes
+              qc.invalidateQueries({ queryKey: ["admin-patch-pending-users"] })
+              refetchPending()
+            }
+          }} 
+          onSuccess={() => { 
+            // Invalidate queries to ensure fresh data
+            qc.invalidateQueries({ queryKey: ["admin-patch-pending-users"] })
+            refetchPending()
+          }} 
+        />
 
         {/* GeoJSON Upload Dialog */}
         <Dialog open={geojsonUploadOpen} onOpenChange={setGeojsonUploadOpen}>
