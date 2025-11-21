@@ -191,100 +191,18 @@ export default function PatchManager() {
 
   const assignToOrganiser = useMutation({
     mutationFn: async ({ organiserId, patchId, assigned }: { organiserId: string; patchId: string; assigned: boolean }) => {
-      console.log('assignToOrganiser mutation called:', { organiserId, patchId, assigned })
       setUpdatingOrganiser({ organiserId, patchId })
       try {
         if (!organiserId || !patchId) {
           throw new Error("Organiser ID and Patch ID are required")
         }
         
-        console.log('Calling RPC:', assigned ? 'upsert_organiser_patch' : 'close_organiser_patch', { p_org: organiserId, p_patch: patchId })
+        const { error } = assigned
+          ? await (supabase as any).rpc("upsert_organiser_patch", { p_org: organiserId, p_patch: patchId })
+          : await (supabase as any).rpc("close_organiser_patch", { p_org: organiserId, p_patch: patchId })
         
-        if (assigned) {
-          const { data, error } = await (supabase as any).rpc("upsert_organiser_patch", { p_org: organiserId, p_patch: patchId })
-          console.log('RPC response:', { data, error })
-          if (error) {
-            console.error('RPC error:', error)
-            throw new Error(error.message || 'Failed to assign organiser')
-          }
-        } else {
-          // For removal, first verify the assignment exists
-          const { data: existingAssignment, error: checkError } = await (supabase as any)
-            .from("organiser_patch_assignments")
-            .select("id")
-            .eq("organiser_id", organiserId)
-            .eq("patch_id", patchId)
-            .is("effective_to", null)
-            .maybeSingle()
-          
-          console.log('Existing assignment check:', { existingAssignment, checkError })
-          
-          if (checkError) {
-            console.error('Check error:', checkError)
-            throw new Error(checkError.message || 'Failed to verify assignment exists')
-          }
-          
-          if (!existingAssignment) {
-            console.warn('Assignment not found - may have already been removed')
-            // Don't throw error, just log - assignment might have been removed already
-          } else {
-            console.log('Found existing assignment to close:', existingAssignment)
-            
-            // Try RPC first
-            const { data: rpcData, error: rpcError } = await (supabase as any).rpc("close_organiser_patch", { p_org: organiserId, p_patch: patchId })
-            console.log('RPC response:', { rpcData, rpcError, rpcDataString: JSON.stringify(rpcData), rpcErrorString: JSON.stringify(rpcError) })
-            
-            // Always verify and use direct update if RPC didn't work
-            // Check if assignment still exists after RPC call
-            const { data: verifyAfterRpc } = await (supabase as any)
-              .from("organiser_patch_assignments")
-              .select("id, effective_to")
-              .eq("organiser_id", organiserId)
-              .eq("patch_id", patchId)
-              .is("effective_to", null)
-              .maybeSingle()
-            
-            console.log('Verification after RPC:', { verifyAfterRpc })
-            
-            // If assignment still exists, try direct update
-            if (verifyAfterRpc || rpcError) {
-              console.log('RPC did not remove assignment, trying direct update...')
-              const { data: updateData, error: updateError } = await (supabase as any)
-                .from("organiser_patch_assignments")
-                .update({ effective_to: new Date().toISOString() })
-                .eq("organiser_id", organiserId)
-                .eq("patch_id", patchId)
-                .is("effective_to", null)
-              
-              console.log('Direct update response:', { 
-                updateData, 
-                updateError,
-                updateDataString: JSON.stringify(updateData),
-                updateErrorString: JSON.stringify(updateError)
-              })
-              
-              if (updateError) {
-                console.error('Direct update error:', updateError)
-                throw new Error(updateError.message || 'Failed to remove organiser')
-              }
-            }
-            
-            // Final verification
-            const { data: finalVerify } = await (supabase as any)
-              .from("organiser_patch_assignments")
-              .select("id, effective_to")
-              .eq("organiser_id", organiserId)
-              .eq("patch_id", patchId)
-              .is("effective_to", null)
-              .maybeSingle()
-            
-            console.log('Final verification:', { finalVerify })
-            
-            if (finalVerify) {
-              console.error('Assignment still exists after all attempts:', finalVerify)
-              throw new Error('Failed to remove organiser assignment - assignment still exists after update attempts')
-            }
-          }
+        if (error) {
+          throw new Error(error.message || `Failed to ${assigned ? 'assign' : 'remove'} organiser`)
         }
       } finally {
         setUpdatingOrganiser(null)
@@ -314,22 +232,17 @@ export default function PatchManager() {
 
   const assignToLead = useMutation({
     mutationFn: async ({ leadId, patchId, assigned }: { leadId: string; patchId: string; assigned: boolean }) => {
-      console.log('assignToLead mutation called:', { leadId, patchId, assigned })
       setUpdatingLead({ leadId, patchId })
       try {
         if (!leadId || !patchId) {
           throw new Error("Lead ID and Patch ID are required")
         }
         
-        console.log('Calling RPC:', assigned ? 'upsert_lead_patch' : 'close_lead_patch', { p_lead: leadId, p_patch: patchId })
-        const { data, error } = assigned
+        const { error } = assigned
           ? await (supabase as any).rpc("upsert_lead_patch", { p_lead: leadId, p_patch: patchId })
           : await (supabase as any).rpc("close_lead_patch", { p_lead: leadId, p_patch: patchId })
         
-        console.log('RPC response:', { data, error })
-        
         if (error) {
-          console.error('RPC error:', error)
           throw new Error(error.message || `Failed to ${assigned ? 'assign' : 'remove'} lead organiser`)
         }
       } finally {
@@ -360,7 +273,6 @@ export default function PatchManager() {
 
   const updatePendingAllocations = useMutation({
     mutationFn: async ({ pendingId, patchId, add }: { pendingId: string; patchId: string; add: boolean }) => {
-      console.log('updatePendingAllocations mutation called:', { pendingId, patchId, add })
       setUpdatingPending({ pendingId, patchId })
       try {
         if (!pendingId || !patchId) {
@@ -380,16 +292,12 @@ export default function PatchManager() {
         }
         const next = Array.from(current)
         
-        console.log('Updating pending_users:', { id: pendingId, assigned_patch_ids: next })
-        const { data, error } = await (supabase as any)
+        const { error } = await (supabase as any)
           .from("pending_users")
           .update({ assigned_patch_ids: next })
           .eq("id", pendingId)
         
-        console.log('Update response:', { data, error })
-        
         if (error) {
-          console.error('Update error:', error)
           throw new Error(error.message || `Failed to ${add ? 'add' : 'remove'} planned assignment`)
         }
       } finally {
@@ -659,11 +567,10 @@ export default function PatchManager() {
                                   <Checkbox
                                     checked={assigned}
                                     disabled={updatingOrganiser?.organiserId === u.id && updatingOrganiser?.patchId === assignDialogPatchId}
-                                    onCheckedChange={(v) => {
-                                      console.log('Organiser checkbox clicked:', { organiserId: u.id, patchId: assignDialogPatchId, checked: v, assigned })
-                                      const newAssigned = v === true
-                                      assignToOrganiser.mutate({ organiserId: u.id, patchId: assignDialogPatchId!, assigned: newAssigned })
-                                    }}
+                                  onCheckedChange={(v) => {
+                                    const newAssigned = v === true
+                                    assignToOrganiser.mutate({ organiserId: u.id, patchId: assignDialogPatchId!, assigned: newAssigned })
+                                  }}
                                   />
                                 </div>
                               </TableCell>
@@ -700,11 +607,10 @@ export default function PatchManager() {
                                   <Checkbox
                                     checked={assigned}
                                     disabled={updatingLead?.leadId === u.id && updatingLead?.patchId === assignDialogPatchId}
-                                    onCheckedChange={(v) => {
-                                      console.log('Lead checkbox clicked:', { leadId: u.id, patchId: assignDialogPatchId, checked: v, assigned })
-                                      const newAssigned = v === true
-                                      assignToLead.mutate({ leadId: u.id, patchId: assignDialogPatchId!, assigned: newAssigned })
-                                    }}
+                                  onCheckedChange={(v) => {
+                                    const newAssigned = v === true
+                                    assignToLead.mutate({ leadId: u.id, patchId: assignDialogPatchId!, assigned: newAssigned })
+                                  }}
                                   />
                                 </div>
                               </TableCell>
@@ -761,11 +667,10 @@ export default function PatchManager() {
                                   <Checkbox
                                     checked={planned}
                                     disabled={updatingPending?.pendingId === pu.id && updatingPending?.patchId === assignDialogPatchId}
-                                    onCheckedChange={(v) => {
-                                      console.log('Pending checkbox clicked:', { pendingId: pu.id, patchId: assignDialogPatchId, checked: v, planned })
-                                      const shouldAdd = v === true
-                                      updatePendingAllocations.mutate({ pendingId: pu.id, patchId: assignDialogPatchId!, add: shouldAdd })
-                                    }}
+                                  onCheckedChange={(v) => {
+                                    const shouldAdd = v === true
+                                    updatePendingAllocations.mutate({ pendingId: pu.id, patchId: assignDialogPatchId!, add: shouldAdd })
+                                  }}
                                   />
                                 </div>
                               </TableCell>
