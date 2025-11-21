@@ -199,15 +199,73 @@ export default function PatchManager() {
         }
         
         console.log('Calling RPC:', assigned ? 'upsert_organiser_patch' : 'close_organiser_patch', { p_org: organiserId, p_patch: patchId })
-        const { data, error } = assigned
-          ? await (supabase as any).rpc("upsert_organiser_patch", { p_org: organiserId, p_patch: patchId })
-          : await (supabase as any).rpc("close_organiser_patch", { p_org: organiserId, p_patch: patchId })
         
-        console.log('RPC response:', { data, error })
-        
-        if (error) {
-          console.error('RPC error:', error)
-          throw new Error(error.message || `Failed to ${assigned ? 'assign' : 'remove'} organiser`)
+        if (assigned) {
+          const { data, error } = await (supabase as any).rpc("upsert_organiser_patch", { p_org: organiserId, p_patch: patchId })
+          console.log('RPC response:', { data, error })
+          if (error) {
+            console.error('RPC error:', error)
+            throw new Error(error.message || 'Failed to assign organiser')
+          }
+        } else {
+          // For removal, first verify the assignment exists
+          const { data: existingAssignment, error: checkError } = await (supabase as any)
+            .from("organiser_patch_assignments")
+            .select("id")
+            .eq("organiser_id", organiserId)
+            .eq("patch_id", patchId)
+            .is("effective_to", null)
+            .maybeSingle()
+          
+          console.log('Existing assignment check:', { existingAssignment, checkError })
+          
+          if (checkError) {
+            console.error('Check error:', checkError)
+            throw new Error(checkError.message || 'Failed to verify assignment exists')
+          }
+          
+          if (!existingAssignment) {
+            console.warn('Assignment not found - may have already been removed')
+            // Don't throw error, just log - assignment might have been removed already
+          } else {
+            // Try RPC first
+            const { data: rpcData, error: rpcError } = await (supabase as any).rpc("close_organiser_patch", { p_org: organiserId, p_patch: patchId })
+            console.log('RPC response:', { rpcData, rpcError })
+            
+            // If RPC fails or doesn't work, try direct update as fallback
+            if (rpcError) {
+              console.warn('RPC failed, trying direct update:', rpcError)
+              const { data: updateData, error: updateError } = await (supabase as any)
+                .from("organiser_patch_assignments")
+                .update({ effective_to: new Date().toISOString() })
+                .eq("organiser_id", organiserId)
+                .eq("patch_id", patchId)
+                .is("effective_to", null)
+              
+              console.log('Direct update response:', { updateData, updateError })
+              
+              if (updateError) {
+                console.error('Direct update error:', updateError)
+                throw new Error(updateError.message || 'Failed to remove organiser')
+              }
+            }
+            
+            // Verify the update worked by checking if assignment still exists
+            const { data: verifyAssignment } = await (supabase as any)
+              .from("organiser_patch_assignments")
+              .select("id")
+              .eq("organiser_id", organiserId)
+              .eq("patch_id", patchId)
+              .is("effective_to", null)
+              .maybeSingle()
+            
+            console.log('Verification after close:', { verifyAssignment })
+            
+            if (verifyAssignment) {
+              console.warn('Assignment still exists after close - update may have failed')
+              throw new Error('Failed to remove organiser assignment - assignment still exists')
+            }
+          }
         }
       } finally {
         setUpdatingOrganiser(null)
