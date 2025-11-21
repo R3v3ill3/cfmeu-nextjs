@@ -1,3 +1,17 @@
+/**
+ * @deprecated This component is superseded by EnhancedSiteVisitForm
+ * 
+ * Use EnhancedSiteVisitForm instead for the following reasons:
+ * - Full visit reason tracking with predefined and custom reasons
+ * - Follow-up action support with due dates and calendar integration
+ * - Better mobile optimization with iOS integrations
+ * - Site contact management
+ * - Draft saving functionality
+ * - Proper project-site validation
+ * 
+ * This file is kept for reference only and should not be used in new code.
+ */
+
 "use client"
 
 import { useEffect, useMemo, useState } from "react"

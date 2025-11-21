@@ -1,3 +1,17 @@
+/**
+ * @deprecated This experimental component integrates 4-point assessments with site visits
+ * 
+ * This was an experimental implementation that combined site visit recording
+ * with immediate 4-point compliance assessments. It has been superseded by:
+ * - EnhancedSiteVisitForm for site visit recording
+ * - Separate assessment flows for compliance tracking
+ * 
+ * This file is kept for reference only and should not be used in new code.
+ * The functionality has been split into:
+ * 1. Site visit recording (EnhancedSiteVisitForm)
+ * 2. Compliance assessments (separate assessment forms)
+ */
+
 "use client"
 
 import { useEffect, useMemo, useState } from "react"

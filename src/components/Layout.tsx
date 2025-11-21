@@ -206,6 +206,11 @@ const Layout = ({ children, onRefresh }: LayoutProps) => {
       items.push({ path: "/map", label: "Map", icon: MapPin });
     }
 
+    // Site Visits for organisers
+    if (!isLoadingRole && userRole && (userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") && visibility.site_visits) {
+      items.push({ path: "/mobile/site-visits/new", label: "Record Visit", icon: ClipboardList });
+    }
+
     // Add Settings
     items.push({ path: "/settings", label: "Settings", icon: Settings });
 

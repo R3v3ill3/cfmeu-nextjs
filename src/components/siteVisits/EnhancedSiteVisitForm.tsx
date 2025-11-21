@@ -1,3 +1,28 @@
+/**
+ * EnhancedSiteVisitForm - The canonical site visit recording component
+ * 
+ * This is the recommended and actively maintained site visit form component.
+ * 
+ * Features:
+ * - Patch-based project/site filtering for organisers
+ * - Visit reason tracking (predefined and custom)
+ * - Follow-up action management with due dates
+ * - Site contact integration
+ * - iOS-optimized features (directions, calendar events)
+ * - Draft and completed visit states
+ * - Multi-employer visit support
+ * - Proper validation of project-site relationships
+ * 
+ * Usage:
+ * import { EnhancedSiteVisitForm } from "@/components/siteVisits/EnhancedSiteVisitForm"
+ * 
+ * <EnhancedSiteVisitForm 
+ *   open={isOpen} 
+ *   onOpenChange={setIsOpen}
+ *   initial={{ project_id: projectId }} // Optional pre-fill
+ * />
+ */
+
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
@@ -97,7 +122,9 @@ export function EnhancedSiteVisitForm({
             .single()
           role = prof?.role || null
         }
-      } catch {}
+      } catch (err) {
+        console.error('[EnhancedSiteVisitForm] Error fetching user auth:', err)
+      }
 
       if (role === "admin") {
         return { role, userId, patchIds: null as string[] | null }
@@ -106,41 +133,61 @@ export function EnhancedSiteVisitForm({
       const patchIdSet = new Set<string>()
       try {
         if (role === "lead_organiser") {
-          const { data: direct } = await supabase
+          const { data: direct, error: directErr } = await supabase
             .from("lead_organiser_patch_assignments")
             .select("patch_id")
             .is("effective_to", null)
             .eq("lead_organiser_id", userId)
-          direct?.forEach((r: any) => r?.patch_id && patchIdSet.add(r.patch_id))
+          if (directErr) {
+            console.error('[EnhancedSiteVisitForm] Error fetching lead organiser patches:', directErr)
+          } else {
+            direct?.forEach((r: any) => r?.patch_id && patchIdSet.add(r.patch_id))
+          }
           
           const today = new Date().toISOString().slice(0, 10)
-          const { data: links } = await supabase
+          const { data: links, error: linksErr } = await supabase
             .from("role_hierarchy")
             .select("child_user_id")
             .eq("parent_user_id", userId)
             .eq("is_active", true)
             .or(`end_date.is.null,end_date.gte.${today}`)
-          
-          const childIds = Array.from(new Set(links?.map((r: any) => r.child_user_id).filter(Boolean) || []))
-          if (childIds.length > 0) {
-            const { data: team } = await supabase
-              .from("organiser_patch_assignments")
-              .select("patch_id")
-              .is("effective_to", null)
-              .in("organiser_id", childIds)
-            team?.forEach((r: any) => r?.patch_id && patchIdSet.add(r.patch_id))
+          if (linksErr) {
+            console.error('[EnhancedSiteVisitForm] Error fetching role hierarchy:', linksErr)
+          } else {
+            const childIds = Array.from(new Set(links?.map((r: any) => r.child_user_id).filter(Boolean) || []))
+            if (childIds.length > 0) {
+              const { data: team, error: teamErr } = await supabase
+                .from("organiser_patch_assignments")
+                .select("patch_id")
+                .is("effective_to", null)
+                .in("organiser_id", childIds)
+              if (teamErr) {
+                console.error('[EnhancedSiteVisitForm] Error fetching team patches:', teamErr)
+              } else {
+                team?.forEach((r: any) => r?.patch_id && patchIdSet.add(r.patch_id))
+              }
+            }
           }
         } else if (role === "organiser") {
-          const { data } = await supabase
+          const { data, error } = await supabase
             .from("organiser_patch_assignments")
             .select("patch_id")
             .is("effective_to", null)
             .eq("organiser_id", userId)
-          data?.forEach((r: any) => r?.patch_id && patchIdSet.add(r.patch_id))
+          if (error) {
+            console.error('[EnhancedSiteVisitForm] Error fetching organiser patches:', error)
+          } else {
+            data?.forEach((r: any) => r?.patch_id && patchIdSet.add(r.patch_id))
+            console.log('[EnhancedSiteVisitForm] Organiser patches:', Array.from(patchIdSet))
+          }
         }
-      } catch {}
+      } catch (err) {
+        console.error('[EnhancedSiteVisitForm] Error in patch assignment logic:', err)
+      }
 
-      return { role, userId, patchIds: Array.from(patchIdSet) }
+      const patchIds = Array.from(patchIdSet)
+      console.log('[EnhancedSiteVisitForm] User scope:', { role, userId, patchIds })
+      return { role, userId, patchIds }
     }
   })
 
@@ -184,32 +231,59 @@ export function EnhancedSiteVisitForm({
   })
 
   // Fetch projects
-  const { data: projects = [] } = useQuery({
+  const { data: projects = [], error: projectsError, isLoading: projectsLoading } = useQuery({
     queryKey: ["sv-projects", userScope?.role, (userScope?.patchIds || []).join(","), organiserId],
     queryFn: async () => {
       const projectsFromPatches = async (patchIdsInput: string[]) => {
-        if (!patchIdsInput || patchIdsInput.length === 0) return []
+        if (!patchIdsInput || patchIdsInput.length === 0) {
+          console.warn('[EnhancedSiteVisitForm] No patch IDs provided for project filtering')
+          return []
+        }
+        
         const { data: patchSites, error: psErr } = await supabase
           .from("v_patch_sites_current")
           .select("job_site_id, patch_id")
           .in("patch_id", patchIdsInput)
-        if (psErr) throw psErr
+        if (psErr) {
+          console.error('[EnhancedSiteVisitForm] Error fetching patch sites:', psErr)
+          throw psErr
+        }
         
         const jobSiteIds = Array.from(new Set(patchSites?.map((r: any) => r.job_site_id).filter(Boolean) || []))
-        if (jobSiteIds.length === 0) return []
+        if (jobSiteIds.length === 0) {
+          console.warn('[EnhancedSiteVisitForm] No job sites found for patches:', patchIdsInput)
+          return []
+        }
         
+        // Query job sites first, then projects separately to avoid RLS issues
         const { data: siteRows, error: jsErr } = await supabase
           .from("job_sites")
-          .select("id, project_id, projects(id,name)")
+          .select("id, project_id")
           .in("id", jobSiteIds)
-        if (jsErr) throw jsErr
+          .not("project_id", "is", null)
+        if (jsErr) {
+          console.error('[EnhancedSiteVisitForm] Error fetching job sites:', jsErr)
+          throw jsErr
+        }
         
-        const byProject: Record<string, { id: string; name: string | null }> = {}
-        siteRows?.forEach((s: any) => {
-          const p = s.projects
-          if (p?.id && !byProject[p.id]) byProject[p.id] = { id: p.id, name: p.name || p.id }
-        })
-        return Object.values(byProject).sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")))
+        const projectIds = Array.from(new Set(siteRows?.map((s: any) => s.project_id).filter(Boolean) || []))
+        if (projectIds.length === 0) {
+          console.warn('[EnhancedSiteVisitForm] No projects found for job sites')
+          return []
+        }
+        
+        // Query projects separately
+        const { data: projectRows, error: pErr } = await supabase
+          .from("projects")
+          .select("id, name")
+          .in("id", projectIds)
+          .order("name")
+        if (pErr) {
+          console.error('[EnhancedSiteVisitForm] Error fetching projects:', pErr)
+          throw pErr
+        }
+        
+        return (projectRows || []).map((p: any) => ({ id: p.id, name: p.name || p.id }))
       }
 
       if (userScope?.role === "admin" || userScope?.patchIds === null) {
@@ -219,12 +293,18 @@ export function EnhancedSiteVisitForm({
             .select("patch_id")
             .is("effective_to", null)
             .eq("organiser_id", organiserId)
-          if (error) throw error
+          if (error) {
+            console.error('[EnhancedSiteVisitForm] Error fetching organiser patches:', error)
+            throw error
+          }
           const patchIds = Array.from(new Set(orgPatches?.map((r: any) => r.patch_id).filter(Boolean) || []))
           return await projectsFromPatches(patchIds)
         }
         const { data, error } = await supabase.from("projects").select("id,name").order("name")
-        if (error) throw error
+        if (error) {
+          console.error('[EnhancedSiteVisitForm] Error fetching all projects:', error)
+          throw error
+        }
         return data || []
       }
 
@@ -235,7 +315,10 @@ export function EnhancedSiteVisitForm({
             .select("patch_id")
             .is("effective_to", null)
             .eq("organiser_id", organiserId)
-          if (error) throw error
+          if (error) {
+            console.error('[EnhancedSiteVisitForm] Error fetching organiser patches:', error)
+            throw error
+          }
           const patchIds = Array.from(new Set(orgPatches?.map((r: any) => r.patch_id).filter(Boolean) || []))
           return await projectsFromPatches(patchIds)
         }
@@ -243,11 +326,23 @@ export function EnhancedSiteVisitForm({
         return await projectsFromPatches(patchIds)
       }
 
+      // Organiser role
       const patchIds = userScope?.patchIds || []
+      if (patchIds.length === 0) {
+        console.warn('[EnhancedSiteVisitForm] Organiser has no patch assignments')
+        return []
+      }
       return await projectsFromPatches(patchIds)
     },
     enabled: !!userScope
   })
+  
+  // Log project loading errors for debugging
+  useEffect(() => {
+    if (projectsError) {
+      console.error('[EnhancedSiteVisitForm] Projects query error:', projectsError)
+    }
+  }, [projectsError])
 
   // Fetch sites for selected project
   const { data: sites = [] } = useQuery({
@@ -350,6 +445,21 @@ export function EnhancedSiteVisitForm({
   )
 
   const selectedSite = useMemo(() => sites.find((s: any) => s.id === siteId) || null, [sites, siteId])
+
+  // Validation: Check if selected site belongs to selected project
+  const isSiteValidForProject = useMemo(() => {
+    if (!projectId || !siteId) return true // No validation needed if both not selected
+    const site = sites.find((s: any) => s.id === siteId)
+    return site !== undefined // Site should be in the filtered list for this project
+  }, [projectId, siteId, sites])
+
+  // Save disabled conditions
+  const saveDisabled = useMemo(() => {
+    if (!visitDate || !projectId || !siteId) return true
+    if (!organiserId && userScope?.role !== "organiser") return true
+    if (!isSiteValidForProject) return true
+    return false
+  }, [visitDate, projectId, siteId, organiserId, userScope?.role, isSiteValidForProject])
 
   // Toggle visit reason
   const toggleReason = (reasonId: string) => {
@@ -503,11 +613,6 @@ export function EnhancedSiteVisitForm({
     }
   })
 
-  const saveDisabled = useMemo(() => {
-    if (!visitDate || !projectId || !siteId) return true
-    return false
-  }, [visitDate, projectId, siteId])
-
   const allEmployersSelected = useMemo(() => {
     if (siteEmployers.length === 0) return false
     return selectedEmployerIds.length === siteEmployers.length
@@ -577,16 +682,29 @@ export function EnhancedSiteVisitForm({
                         setSiteId(null)
                         setSelectedEmployerIds([])
                       }}
+                      disabled={projectsLoading}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select project" />
+                        <SelectValue placeholder={projectsLoading ? "Loading projects..." : projectsError ? "Error loading projects" : "Select project"} />
                       </SelectTrigger>
                       <SelectContent>
+                        {projects.length === 0 && !projectsLoading && (
+                          <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                            {userScope?.role === "organiser" && userScope?.patchIds?.length === 0
+                              ? "No patches assigned. Contact your lead organiser."
+                              : "No projects available"}
+                          </div>
+                        )}
                         {projects.map((p: any) => (
                           <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                    {projectsError && (
+                      <p className="text-sm text-red-600 mt-1">
+                        Failed to load projects. Please refresh the page.
+                      </p>
+                    )}
                   </div>
                   <div>
                     <Label>Site *</Label>
@@ -598,7 +716,7 @@ export function EnhancedSiteVisitForm({
                       }} 
                       disabled={!projectId}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className={!isSiteValidForProject ? "border-red-500" : ""}>
                         <SelectValue placeholder="Select site" />
                       </SelectTrigger>
                       <SelectContent>
@@ -607,6 +725,11 @@ export function EnhancedSiteVisitForm({
                         ))}
                       </SelectContent>
                     </Select>
+                    {!isSiteValidForProject && (
+                      <p className="text-sm text-red-600 mt-1">
+                        Selected site does not belong to this project
+                      </p>
+                    )}
                   </div>
                 </div>
 
