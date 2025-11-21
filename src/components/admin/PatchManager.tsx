@@ -228,13 +228,27 @@ export default function PatchManager() {
             console.warn('Assignment not found - may have already been removed')
             // Don't throw error, just log - assignment might have been removed already
           } else {
+            console.log('Found existing assignment to close:', existingAssignment)
+            
             // Try RPC first
             const { data: rpcData, error: rpcError } = await (supabase as any).rpc("close_organiser_patch", { p_org: organiserId, p_patch: patchId })
-            console.log('RPC response:', { rpcData, rpcError })
+            console.log('RPC response:', { rpcData, rpcError, rpcDataString: JSON.stringify(rpcData), rpcErrorString: JSON.stringify(rpcError) })
             
-            // If RPC fails or doesn't work, try direct update as fallback
-            if (rpcError) {
-              console.warn('RPC failed, trying direct update:', rpcError)
+            // Always verify and use direct update if RPC didn't work
+            // Check if assignment still exists after RPC call
+            const { data: verifyAfterRpc } = await (supabase as any)
+              .from("organiser_patch_assignments")
+              .select("id, effective_to")
+              .eq("organiser_id", organiserId)
+              .eq("patch_id", patchId)
+              .is("effective_to", null)
+              .maybeSingle()
+            
+            console.log('Verification after RPC:', { verifyAfterRpc })
+            
+            // If assignment still exists, try direct update
+            if (verifyAfterRpc || rpcError) {
+              console.log('RPC did not remove assignment, trying direct update...')
               const { data: updateData, error: updateError } = await (supabase as any)
                 .from("organiser_patch_assignments")
                 .update({ effective_to: new Date().toISOString() })
@@ -242,7 +256,12 @@ export default function PatchManager() {
                 .eq("patch_id", patchId)
                 .is("effective_to", null)
               
-              console.log('Direct update response:', { updateData, updateError })
+              console.log('Direct update response:', { 
+                updateData, 
+                updateError,
+                updateDataString: JSON.stringify(updateData),
+                updateErrorString: JSON.stringify(updateError)
+              })
               
               if (updateError) {
                 console.error('Direct update error:', updateError)
@@ -250,20 +269,20 @@ export default function PatchManager() {
               }
             }
             
-            // Verify the update worked by checking if assignment still exists
-            const { data: verifyAssignment } = await (supabase as any)
+            // Final verification
+            const { data: finalVerify } = await (supabase as any)
               .from("organiser_patch_assignments")
-              .select("id")
+              .select("id, effective_to")
               .eq("organiser_id", organiserId)
               .eq("patch_id", patchId)
               .is("effective_to", null)
               .maybeSingle()
             
-            console.log('Verification after close:', { verifyAssignment })
+            console.log('Final verification:', { finalVerify })
             
-            if (verifyAssignment) {
-              console.warn('Assignment still exists after close - update may have failed')
-              throw new Error('Failed to remove organiser assignment - assignment still exists')
+            if (finalVerify) {
+              console.error('Assignment still exists after all attempts:', finalVerify)
+              throw new Error('Failed to remove organiser assignment - assignment still exists after update attempts')
             }
           }
         }
