@@ -43,6 +43,9 @@ export default function PatchManager() {
   const [selectedPatchIds, setSelectedPatchIds] = useState<Set<string>>(new Set())
   const [geojsonUploadOpen, setGeojsonUploadOpen] = useState(false)
   const [mapViewerOpen, setMapViewerOpen] = useState(false)
+  const [updatingOrganiser, setUpdatingOrganiser] = useState<{ organiserId: string; patchId: string } | null>(null)
+  const [updatingLead, setUpdatingLead] = useState<{ leadId: string; patchId: string } | null>(null)
+  const [updatingPending, setUpdatingPending] = useState<{ pendingId: string; patchId: string } | null>(null)
 
   const { data: patches = [], isLoading } = useQuery({
     queryKey: ["admin-patches"],
@@ -188,51 +191,140 @@ export default function PatchManager() {
 
   const assignToOrganiser = useMutation({
     mutationFn: async ({ organiserId, patchId, assigned }: { organiserId: string; patchId: string; assigned: boolean }) => {
-      if (assigned) {
-        await (supabase as any).rpc("upsert_organiser_patch", { p_org: organiserId, p_patch: patchId })
-      } else {
-        await (supabase as any).rpc("close_organiser_patch", { p_org: organiserId, p_patch: patchId })
+      setUpdatingOrganiser({ organiserId, patchId })
+      try {
+        if (!organiserId || !patchId) {
+          throw new Error("Organiser ID and Patch ID are required")
+        }
+        
+        const { error } = assigned
+          ? await (supabase as any).rpc("upsert_organiser_patch", { p_org: organiserId, p_patch: patchId })
+          : await (supabase as any).rpc("close_organiser_patch", { p_org: organiserId, p_patch: patchId })
+        
+        if (error) {
+          throw new Error(error.message || `Failed to ${assigned ? 'assign' : 'remove'} organiser`)
+        }
+      } finally {
+        setUpdatingOrganiser(null)
       }
     },
     onSuccess: () => {
+      // Invalidate all queries that depend on patch-organiser assignments
       qc.invalidateQueries({ queryKey: ["admin-patch-assignments"] })
-      toast({ title: "Assignments updated" })
+      qc.invalidateQueries({ queryKey: ["patch-organisers-live"] })
+      qc.invalidateQueries({ queryKey: ["patch-organisers-draft"] })
+      qc.invalidateQueries({ queryKey: ["accessible-patches"] })
+      qc.invalidateQueries({ queryKey: ["patch-info"] })
+      qc.invalidateQueries({ queryKey: ["patch-summary"] })
+      qc.invalidateQueries({ queryKey: ["project-patch-ids"] })
+      qc.invalidateQueries({ queryKey: ["admin-patch-pending-users"] })
+      toast({ title: "Assignments updated", description: "Organiser assignment changes will be reflected across the platform" })
     },
-    onError: (e) => toast({ title: "Failed to update", description: (e as any)?.message || String(e), variant: "destructive" })
+    onError: (e: any) => {
+      const errorMessage = e?.message || String(e) || "Failed to update organiser assignment"
+      toast({ 
+        title: "Failed to update assignment", 
+        description: errorMessage,
+        variant: "destructive" 
+      })
+    }
   })
 
   const assignToLead = useMutation({
     mutationFn: async ({ leadId, patchId, assigned }: { leadId: string; patchId: string; assigned: boolean }) => {
-      if (assigned) {
-        await (supabase as any).rpc("upsert_lead_patch", { p_lead: leadId, p_patch: patchId })
-      } else {
-        await (supabase as any).rpc("close_lead_patch", { p_lead: leadId, p_patch: patchId })
+      setUpdatingLead({ leadId, patchId })
+      try {
+        if (!leadId || !patchId) {
+          throw new Error("Lead ID and Patch ID are required")
+        }
+        
+        const { error } = assigned
+          ? await (supabase as any).rpc("upsert_lead_patch", { p_lead: leadId, p_patch: patchId })
+          : await (supabase as any).rpc("close_lead_patch", { p_lead: leadId, p_patch: patchId })
+        
+        if (error) {
+          throw new Error(error.message || `Failed to ${assigned ? 'assign' : 'remove'} lead organiser`)
+        }
+      } finally {
+        setUpdatingLead(null)
       }
     },
     onSuccess: () => {
+      // Invalidate all queries that depend on lead-organiser patch assignments
       qc.invalidateQueries({ queryKey: ["admin-patch-lead-assignments"] })
-      toast({ title: "Lead assignments updated" })
+      qc.invalidateQueries({ queryKey: ["patch-organisers-live"] })
+      qc.invalidateQueries({ queryKey: ["patch-organisers-draft"] })
+      qc.invalidateQueries({ queryKey: ["accessible-patches"] })
+      qc.invalidateQueries({ queryKey: ["patch-info"] })
+      qc.invalidateQueries({ queryKey: ["patch-summary"] })
+      qc.invalidateQueries({ queryKey: ["project-patch-ids"] })
+      qc.invalidateQueries({ queryKey: ["admin-patch-pending-users"] })
+      toast({ title: "Lead assignments updated", description: "Lead organiser assignment changes will be reflected across the platform" })
     },
-    onError: (e) => toast({ title: "Failed to update lead", description: (e as any)?.message || String(e), variant: "destructive" })
+    onError: (e: any) => {
+      const errorMessage = e?.message || String(e) || "Failed to update lead organiser assignment"
+      toast({ 
+        title: "Failed to update lead assignment", 
+        description: errorMessage,
+        variant: "destructive" 
+      })
+    }
   })
 
   const updatePendingAllocations = useMutation({
     mutationFn: async ({ pendingId, patchId, add }: { pendingId: string; patchId: string; add: boolean }) => {
-      const pending = (pendingUsers as PendingUser[]).find(p => p.id === pendingId)
-      const current = new Set<string>(pending?.assigned_patch_ids || [])
-      if (add) current.add(patchId); else current.delete(patchId)
-      const next = Array.from(current)
-      const { error } = await (supabase as any)
-        .from("pending_users")
-        .update({ assigned_patch_ids: next })
-        .eq("id", pendingId)
-      if (error) throw error
+      setUpdatingPending({ pendingId, patchId })
+      try {
+        if (!pendingId || !patchId) {
+          throw new Error("Pending user ID and Patch ID are required")
+        }
+        
+        const pending = (pendingUsers as PendingUser[]).find(p => p.id === pendingId)
+        if (!pending) {
+          throw new Error("Pending user not found")
+        }
+        
+        const current = new Set<string>(pending?.assigned_patch_ids || [])
+        if (add) {
+          current.add(patchId)
+        } else {
+          current.delete(patchId)
+        }
+        const next = Array.from(current)
+        
+        const { error } = await (supabase as any)
+          .from("pending_users")
+          .update({ assigned_patch_ids: next })
+          .eq("id", pendingId)
+        
+        if (error) {
+          throw new Error(error.message || `Failed to ${add ? 'add' : 'remove'} planned assignment`)
+        }
+      } finally {
+        setUpdatingPending(null)
+      }
     },
     onSuccess: () => {
+      // Invalidate all queries that depend on pending user patch assignments
       refetchPending()
-      toast({ title: "Draft allocations updated" })
+      qc.invalidateQueries({ queryKey: ["admin-patch-pending-users"] })
+      qc.invalidateQueries({ queryKey: ["patch-organisers-live"] })
+      qc.invalidateQueries({ queryKey: ["patch-organisers-draft"] })
+      qc.invalidateQueries({ queryKey: ["accessible-patches"] })
+      qc.invalidateQueries({ queryKey: ["patch-info"] })
+      qc.invalidateQueries({ queryKey: ["patch-summary"] })
+      qc.invalidateQueries({ queryKey: ["project-patch-ids"] })
+      qc.invalidateQueries({ queryKey: ["admin-patch-assignments"] })
+      toast({ title: "Draft allocations updated", description: "Planned assignment changes will be reflected across the platform" })
     },
-    onError: (e) => toast({ title: "Failed to update draft", description: (e as any)?.message || String(e), variant: "destructive" })
+    onError: (e: any) => {
+      const errorMessage = e?.message || String(e) || "Failed to update planned assignment"
+      toast({ 
+        title: "Failed to update planned assignment", 
+        description: errorMessage,
+        variant: "destructive" 
+      })
+    }
   })
 
   const openAssignDialog = (patchId: string) => setAssignDialogPatchId(patchId)
@@ -473,6 +565,7 @@ export default function PatchManager() {
                               <TableCell className="text-right">
                                 <Checkbox
                                   checked={assigned}
+                                  disabled={updatingOrganiser?.organiserId === u.id && updatingOrganiser?.patchId === assignDialogPatchId}
                                   onCheckedChange={(v) => assignToOrganiser.mutate({ organiserId: u.id, patchId: assignDialogPatchId!, assigned: Boolean(v) })}
                                 />
                               </TableCell>
@@ -507,6 +600,7 @@ export default function PatchManager() {
                               <TableCell className="text-right">
                                 <Checkbox
                                   checked={assigned}
+                                  disabled={updatingLead?.leadId === u.id && updatingLead?.patchId === assignDialogPatchId}
                                   onCheckedChange={(v) => assignToLead.mutate({ leadId: u.id, patchId: assignDialogPatchId!, assigned: Boolean(v) })}
                                 />
                               </TableCell>
@@ -561,6 +655,7 @@ export default function PatchManager() {
                               <TableCell className="text-right">
                                 <Checkbox
                                   checked={planned}
+                                  disabled={updatingPending?.pendingId === pu.id && updatingPending?.patchId === assignDialogPatchId}
                                   onCheckedChange={(v) => updatePendingAllocations.mutate({ pendingId: pu.id, patchId: assignDialogPatchId!, add: Boolean(v) })}
                                 />
                               </TableCell>
