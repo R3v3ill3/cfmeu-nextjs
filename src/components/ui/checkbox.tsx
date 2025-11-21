@@ -26,9 +26,9 @@ const Checkbox = forwardRef<
         <Check className="h-3 w-3 max-lg:h-4 max-lg:w-4" />
       </CheckboxPrimitive.Indicator>
     </CheckboxPrimitive.Root>
-    {/* Invisible touch target overlay for mobile */}
+    {/* Invisible touch target overlay for mobile only - disabled on desktop to allow checkbox clicks */}
     <div
-      className="absolute inset-0 -m-4 max-lg:-m-5 z-10 touch-manipulation"
+      className="absolute inset-0 -m-4 max-lg:-m-5 z-10 touch-manipulation lg:pointer-events-none"
       aria-hidden="true"
       style={{
         minHeight: '44px',

@@ -191,17 +191,22 @@ export default function PatchManager() {
 
   const assignToOrganiser = useMutation({
     mutationFn: async ({ organiserId, patchId, assigned }: { organiserId: string; patchId: string; assigned: boolean }) => {
+      console.log('assignToOrganiser mutation called:', { organiserId, patchId, assigned })
       setUpdatingOrganiser({ organiserId, patchId })
       try {
         if (!organiserId || !patchId) {
           throw new Error("Organiser ID and Patch ID are required")
         }
         
-        const { error } = assigned
+        console.log('Calling RPC:', assigned ? 'upsert_organiser_patch' : 'close_organiser_patch', { p_org: organiserId, p_patch: patchId })
+        const { data, error } = assigned
           ? await (supabase as any).rpc("upsert_organiser_patch", { p_org: organiserId, p_patch: patchId })
           : await (supabase as any).rpc("close_organiser_patch", { p_org: organiserId, p_patch: patchId })
         
+        console.log('RPC response:', { data, error })
+        
         if (error) {
+          console.error('RPC error:', error)
           throw new Error(error.message || `Failed to ${assigned ? 'assign' : 'remove'} organiser`)
         }
       } finally {
@@ -232,17 +237,22 @@ export default function PatchManager() {
 
   const assignToLead = useMutation({
     mutationFn: async ({ leadId, patchId, assigned }: { leadId: string; patchId: string; assigned: boolean }) => {
+      console.log('assignToLead mutation called:', { leadId, patchId, assigned })
       setUpdatingLead({ leadId, patchId })
       try {
         if (!leadId || !patchId) {
           throw new Error("Lead ID and Patch ID are required")
         }
         
-        const { error } = assigned
+        console.log('Calling RPC:', assigned ? 'upsert_lead_patch' : 'close_lead_patch', { p_lead: leadId, p_patch: patchId })
+        const { data, error } = assigned
           ? await (supabase as any).rpc("upsert_lead_patch", { p_lead: leadId, p_patch: patchId })
           : await (supabase as any).rpc("close_lead_patch", { p_lead: leadId, p_patch: patchId })
         
+        console.log('RPC response:', { data, error })
+        
         if (error) {
+          console.error('RPC error:', error)
           throw new Error(error.message || `Failed to ${assigned ? 'assign' : 'remove'} lead organiser`)
         }
       } finally {
@@ -273,6 +283,7 @@ export default function PatchManager() {
 
   const updatePendingAllocations = useMutation({
     mutationFn: async ({ pendingId, patchId, add }: { pendingId: string; patchId: string; add: boolean }) => {
+      console.log('updatePendingAllocations mutation called:', { pendingId, patchId, add })
       setUpdatingPending({ pendingId, patchId })
       try {
         if (!pendingId || !patchId) {
@@ -292,12 +303,16 @@ export default function PatchManager() {
         }
         const next = Array.from(current)
         
-        const { error } = await (supabase as any)
+        console.log('Updating pending_users:', { id: pendingId, assigned_patch_ids: next })
+        const { data, error } = await (supabase as any)
           .from("pending_users")
           .update({ assigned_patch_ids: next })
           .eq("id", pendingId)
         
+        console.log('Update response:', { data, error })
+        
         if (error) {
+          console.error('Update error:', error)
           throw new Error(error.message || `Failed to ${add ? 'add' : 'remove'} planned assignment`)
         }
       } finally {
@@ -563,11 +578,17 @@ export default function PatchManager() {
                                 <Badge variant={u.is_active ? "default" : "secondary"}>{u.is_active ? "Active" : "Inactive"}</Badge>
                               </TableCell>
                               <TableCell className="text-right">
-                                <Checkbox
-                                  checked={assigned}
-                                  disabled={updatingOrganiser?.organiserId === u.id && updatingOrganiser?.patchId === assignDialogPatchId}
-                                  onCheckedChange={(v) => assignToOrganiser.mutate({ organiserId: u.id, patchId: assignDialogPatchId!, assigned: Boolean(v) })}
-                                />
+                                <div onClick={(e) => e.stopPropagation()}>
+                                  <Checkbox
+                                    checked={assigned}
+                                    disabled={updatingOrganiser?.organiserId === u.id && updatingOrganiser?.patchId === assignDialogPatchId}
+                                    onCheckedChange={(v) => {
+                                      console.log('Organiser checkbox clicked:', { organiserId: u.id, patchId: assignDialogPatchId, checked: v, assigned })
+                                      const newAssigned = v === true
+                                      assignToOrganiser.mutate({ organiserId: u.id, patchId: assignDialogPatchId!, assigned: newAssigned })
+                                    }}
+                                  />
+                                </div>
                               </TableCell>
                             </TableRow>
                           )
@@ -598,11 +619,17 @@ export default function PatchManager() {
                                 <Badge variant={u.is_active ? "default" : "secondary"}>{u.is_active ? "Active" : "Inactive"}</Badge>
                               </TableCell>
                               <TableCell className="text-right">
-                                <Checkbox
-                                  checked={assigned}
-                                  disabled={updatingLead?.leadId === u.id && updatingLead?.patchId === assignDialogPatchId}
-                                  onCheckedChange={(v) => assignToLead.mutate({ leadId: u.id, patchId: assignDialogPatchId!, assigned: Boolean(v) })}
-                                />
+                                <div onClick={(e) => e.stopPropagation()}>
+                                  <Checkbox
+                                    checked={assigned}
+                                    disabled={updatingLead?.leadId === u.id && updatingLead?.patchId === assignDialogPatchId}
+                                    onCheckedChange={(v) => {
+                                      console.log('Lead checkbox clicked:', { leadId: u.id, patchId: assignDialogPatchId, checked: v, assigned })
+                                      const newAssigned = v === true
+                                      assignToLead.mutate({ leadId: u.id, patchId: assignDialogPatchId!, assigned: newAssigned })
+                                    }}
+                                  />
+                                </div>
                               </TableCell>
                             </TableRow>
                           )
@@ -653,11 +680,17 @@ export default function PatchManager() {
                                 <Badge variant={pu.status === 'draft' ? 'secondary' : 'default'}>{pu.status === 'draft' ? 'Not-invited' : 'Pending'}</Badge>
                               </TableCell>
                               <TableCell className="text-right">
-                                <Checkbox
-                                  checked={planned}
-                                  disabled={updatingPending?.pendingId === pu.id && updatingPending?.patchId === assignDialogPatchId}
-                                  onCheckedChange={(v) => updatePendingAllocations.mutate({ pendingId: pu.id, patchId: assignDialogPatchId!, add: Boolean(v) })}
-                                />
+                                <div onClick={(e) => e.stopPropagation()}>
+                                  <Checkbox
+                                    checked={planned}
+                                    disabled={updatingPending?.pendingId === pu.id && updatingPending?.patchId === assignDialogPatchId}
+                                    onCheckedChange={(v) => {
+                                      console.log('Pending checkbox clicked:', { pendingId: pu.id, patchId: assignDialogPatchId, checked: v, planned })
+                                      const shouldAdd = v === true
+                                      updatePendingAllocations.mutate({ pendingId: pu.id, patchId: assignDialogPatchId!, add: shouldAdd })
+                                    }}
+                                  />
+                                </div>
                               </TableCell>
                               <TableCell className="text-right">
                                 <Checkbox
