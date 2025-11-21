@@ -1,8 +1,8 @@
 "use client"
-import { useMemo, useState, useEffect, type ComponentType } from "react"
+import { useMemo, useState, useEffect, useCallback, type ComponentType } from "react"
 import Link from "next/link"
 import Image from "next/image"
-import { usePathname } from "next/navigation"
+import { usePathname, useSearchParams } from "next/navigation"
 import { useAuth } from "@/hooks/useAuth"
 import { useUserRole } from "@/hooks/useUserRole"
 import { Button } from "@/components/ui/button"
@@ -31,6 +31,7 @@ import { JoinQrDialog } from "@/components/JoinQrDialog"
 import { HelpLauncher } from '@/components/help/HelpLauncher'
 import { AiHelpDialog } from '@/components/help/AiHelpDialog'
 import { MessageSquare } from 'lucide-react'
+import { useAdminPatchContext } from "@/context/AdminPatchContext"
 
 const cfmeuLogoLight = "/favicon.svg" as unknown as string
 
@@ -213,6 +214,51 @@ export default function DesktopLayout({ children }: { children: ReactNode }) {
   const { isNavigating, startNavigation } = useNavigationLoading()
   const [query, setQuery] = useState("")
   const [joinQrOpen, setJoinQrOpen] = useState(false)
+  const searchParams = useSearchParams()
+  const adminPatchContext = useAdminPatchContext()
+
+  // Routes where patch filtering should not be preserved
+  const PATCH_FILTER_EXCLUDED_ROUTES = ['/admin', '/eba-employers']
+  
+  // Helper function to preserve patch parameter when navigating
+  // For admins: reads from context (persistent across navigation)
+  // For non-admins: reads from URL
+  const getNavigationUrl = useCallback((targetPath: string): string => {
+    const isExcludedRoute = PATCH_FILTER_EXCLUDED_ROUTES.some(route => targetPath.startsWith(route))
+    
+    // Don't preserve patch param for excluded routes
+    if (isExcludedRoute) {
+      return targetPath
+    }
+    
+    // Check if target URL already has a patch parameter - if so, preserve it
+    const targetUrl = new URL(targetPath, typeof window !== 'undefined' ? window.location.origin : 'http://localhost')
+    if (targetUrl.searchParams.has('patch')) {
+      return targetPath
+    }
+    
+    // Determine patch param based on role
+    let patchParam: string | null = null
+    
+    if (adminPatchContext.isAdmin && adminPatchContext.selectedPatchIds && adminPatchContext.selectedPatchIds.length > 0) {
+      // Admin with context-stored patches - use those
+      patchParam = adminPatchContext.selectedPatchIds.join(',')
+    } else if (typeof window !== 'undefined') {
+      // Fallback: read from current URL
+      const urlParams = new URLSearchParams(window.location.search)
+      patchParam = urlParams.get('patch')
+    }
+    
+    // Don't preserve if no patch param exists
+    if (!patchParam) {
+      return targetPath
+    }
+    
+    // Preserve patch param for other routes
+    const separator = targetPath.includes('?') ? '&' : '?'
+    const result = `${targetPath}${separator}patch=${encodeURIComponent(patchParam)}`
+    return result
+  }, [adminPatchContext.isAdmin, adminPatchContext.selectedPatchIds])
 
   const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -296,7 +342,7 @@ export default function DesktopLayout({ children }: { children: ReactNode }) {
                         className="justify-start rounded-full data-[active=true]:bg-[var(--brand-blue)] data-[active=true]:text-white data-[active=true]:shadow data-[active=true]:ring-1 data-[active=true]:ring-[var(--brand-blue)]"
                       >
                         <Link
-                          href={item.path}
+                          href={getNavigationUrl(item.path)}
                           className="flex items-center gap-3 w-full"
                           onClick={() => {
                             if (item.path !== pathname) {

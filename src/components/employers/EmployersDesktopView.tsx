@@ -24,6 +24,7 @@ import { useDebounce, useLocalStorage, useInterval } from "react-use"
 import { RatingFiltersComponent, ActiveRatingFilters } from "@/components/ratings/RatingFilters"
 import { RatingFilters } from "@/types/rating"
 import { useAccessiblePatches } from "@/hooks/useAccessiblePatches"
+import { useAdminPatchContext } from "@/context/AdminPatchContext"
 
 export function EmployersDesktopView() {
   const queryClient = useQueryClient()
@@ -46,10 +47,25 @@ export function EmployersDesktopView() {
 
   // Get user's accessible patches for default filtering
   const { patches: accessiblePatches, isLoading: patchesLoading, role } = useAccessiblePatches()
+  const adminPatchContext = useAdminPatchContext()
 
   // Apply default patch filtering when no patch parameter exists
   useEffect(() => {
-    // Skip if still loading patches or if user is admin (admin sees all)
+    // For admins: check if context has patches, if so, apply them to URL if URL doesn't have any
+    if (role === 'admin' && adminPatchContext.isInitialized) {
+      const existingPatchParam = sp.get('patch')
+      
+      // If context has patches but URL doesn't, restore from context
+      if (!existingPatchParam && adminPatchContext.selectedPatchIds && adminPatchContext.selectedPatchIds.length > 0) {
+        const params = new URLSearchParams(sp.toString())
+        params.set('patch', adminPatchContext.selectedPatchIds.join(','))
+        const newUrl = `${pathname}?${params.toString()}`
+        router.replace(newUrl)
+      }
+      return
+    }
+
+    // For non-admins: apply default patch filtering as before
     if (patchesLoading || role === 'admin') {
       return
     }
@@ -68,7 +84,7 @@ export function EmployersDesktopView() {
       const newUrl = `${pathname}?${params.toString()}`
       router.replace(newUrl)
     }
-  }, [patchesLoading, role, accessiblePatches, sp, router, pathname])
+  }, [patchesLoading, role, accessiblePatches, sp, router, pathname, adminPatchContext.isInitialized, adminPatchContext.selectedPatchIds])
 
   // ============================================================================
   // LOCALSTORAGE: Remember user preferences
@@ -155,6 +171,7 @@ export function EmployersDesktopView() {
   })
 
   // SERVER-SIDE DATA FETCHING (New implementation)
+  // For admins, don't apply patch filtering (admins should see all employers)
   const serverSideResult = useEmployersServerSideCompatible({
     page,
     pageSize,
@@ -164,7 +181,7 @@ export function EmployersDesktopView() {
     engaged,
     eba: eba as any,
     type: type as any,
-    patch: patchParam || undefined,
+    patch: (role === 'admin' ? undefined : patchParam) || undefined,
     enhanced: true, // Enable enhanced data for projects, organisers, incolink
     includeAliases: true, // Enable alias search for better employer matching
     aliasMatchMode: 'any', // Match any type of alias

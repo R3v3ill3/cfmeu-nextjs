@@ -22,6 +22,7 @@ import { Loader2 } from "lucide-react"
 import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { usePatchScans } from "@/hooks/usePatchScans"
+import { useAdminPatchContext } from "@/context/AdminPatchContext"
 
 const DEFAULT_PAGE_SIZE = 25
 
@@ -34,6 +35,7 @@ export default function PatchPage() {
   const [lookupOpen, setLookupOpen] = useState(false)
   const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null)
   const isMobile = useIsMobile()
+  const adminPatchContext = useAdminPatchContext()
 
   const handleOpenEmployer = useCallback((employerId: string) => {
     setSelectedEmployerId(employerId)
@@ -44,10 +46,16 @@ export default function PatchPage() {
 
   const defaultPatchId = useMemo(() => {
     if (patchIdFromQuery) return patchIdFromQuery
+    // For admins, check context for persisted selection
+    if (role === 'admin' && adminPatchContext.selectedPatchIds && adminPatchContext.selectedPatchIds.length > 0) {
+      return adminPatchContext.selectedPatchIds[0]
+    }
+    // For admins without context selection, don't auto-select - allow showing all patches
+    if (role === 'admin') return null
     // Auto-select first patch if available (for organisers, this will be their primary patch)
     if (patches.length > 0) return patches[0].id
     return null
-  }, [patchIdFromQuery, patches])
+  }, [patchIdFromQuery, patches, role, adminPatchContext.selectedPatchIds])
 
   const selectedPatchId = defaultPatchId
 
@@ -79,11 +87,27 @@ export default function PatchPage() {
     [pathname, router, searchParams]
   )
 
+  // Auto-select patch when appropriate
   useEffect(() => {
-    if (!patchParam && selectedPatchId) {
-      setParams({ patch: selectedPatchId }, { resetPage: false })
+    // For admins: check if context has patches, if so, apply them to URL if URL doesn't have any
+    if (role === 'admin' && adminPatchContext.isInitialized) {
+      const currentPatchParam = searchParams.get("patch")
+      
+      // If context has patches but URL doesn't, restore from context
+      if (!currentPatchParam && adminPatchContext.selectedPatchIds && adminPatchContext.selectedPatchIds.length > 0) {
+        setParams({ patch: adminPatchContext.selectedPatchIds[0] }, { resetPage: false })
+      }
+      return
     }
-  }, [patchParam, selectedPatchId, setParams])
+
+    // For non-admins: auto-select patch as before
+    if (loadingPatches || role === 'admin') return
+    
+    const currentPatchParam = searchParams.get("patch")
+    if (!currentPatchParam && patches.length > 0) {
+      setParams({ patch: patches[0].id }, { resetPage: false })
+    }
+  }, [loadingPatches, role, patches, searchParams, setParams, adminPatchContext.isInitialized, adminPatchContext.selectedPatchIds])
 
   // Get organiser names for all patches
   const patchIds = useMemo(() => patches.map(p => p.id), [patches])

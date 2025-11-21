@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import AdminPatchSelector from "@/components/admin/AdminPatchSelector";
 import { useNavigationVisibility } from "@/hooks/useNavigationVisibility";
 import { useNavigationLoading } from "@/hooks/useNavigationLoading";
@@ -17,6 +17,7 @@ import { JoinQrDialog } from "@/components/JoinQrDialog";
 import { HelpLauncher } from "@/components/help/HelpLauncher";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { useAdminPatchContext } from "@/context/AdminPatchContext";
 
 // Simple mobile detection
 const isMobile = () => {
@@ -42,6 +43,7 @@ const Layout = ({ children, onRefresh }: LayoutProps) => {
   const { user, signOut } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isOpen, setIsOpen] = useState(false);
   const { role: userRole, isLoading: isLoadingRole, error: userRoleError } = useUserRole();
   const { visibility } = useNavigationVisibility();
@@ -49,6 +51,50 @@ const Layout = ({ children, onRefresh }: LayoutProps) => {
   const [joinQrOpen, setJoinQrOpen] = useState(false);
   const { toast } = useToast();
   const [roleErrorNotified, setRoleErrorNotified] = useState(false);
+  const adminPatchContext = useAdminPatchContext();
+
+  // Routes where patch filtering should not be preserved
+  const PATCH_FILTER_EXCLUDED_ROUTES = ['/admin', '/eba-employers']
+  
+  // Helper function to preserve patch parameter when navigating
+  // For admins: reads from context (persistent across navigation)
+  // For non-admins: reads from URL
+  const getNavigationUrl = useCallback((targetPath: string): string => {
+    const isExcludedRoute = PATCH_FILTER_EXCLUDED_ROUTES.some(route => targetPath.startsWith(route))
+    
+    // Don't preserve patch param for excluded routes
+    if (isExcludedRoute) {
+      return targetPath
+    }
+    
+    // Check if target URL already has a patch parameter - if so, preserve it
+    const targetUrl = new URL(targetPath, typeof window !== 'undefined' ? window.location.origin : 'http://localhost')
+    if (targetUrl.searchParams.has('patch')) {
+      return targetPath
+    }
+    
+    // Determine patch param based on role
+    let patchParam: string | null = null
+    
+    if (adminPatchContext.isAdmin && adminPatchContext.selectedPatchIds && adminPatchContext.selectedPatchIds.length > 0) {
+      // Admin with context-stored patches - use those
+      patchParam = adminPatchContext.selectedPatchIds.join(',')
+    } else if (typeof window !== 'undefined') {
+      // Fallback: read from current URL
+      const urlParams = new URLSearchParams(window.location.search)
+      patchParam = urlParams.get('patch')
+    }
+    
+    // Don't preserve if no patch param exists
+    if (!patchParam) {
+      return targetPath
+    }
+    
+    // Preserve patch param for other routes
+    const separator = targetPath.includes('?') ? '&' : '?'
+    const result = `${targetPath}${separator}patch=${encodeURIComponent(patchParam)}`
+    return result
+  }, [adminPatchContext.isAdmin, adminPatchContext.selectedPatchIds])
 
   // Mobile navigation state
   const [canGoBack, setCanGoBack] = useState(false);
@@ -275,11 +321,13 @@ const Layout = ({ children, onRefresh }: LayoutProps) => {
           );
         }
 
+        const navigationUrl = getNavigationUrl(item.path)
+        
         return (
           <Link
             key={item.path}
-            href={item.path}
-            onClick={() => {
+            href={navigationUrl}
+            onClick={(e) => {
               if (item.path !== pathname) {
                 startNavigation(item.path);
               }
@@ -358,11 +406,13 @@ const Layout = ({ children, onRefresh }: LayoutProps) => {
                     {getMobileNavItems().map((item) => {
                       const Icon = item.icon;
                       const isActive = !item.external && pathname === item.path;
+                      const navigationUrl = getNavigationUrl(item.path)
+                      
                       return (
                         <Link
                           key={item.path}
-                          href={item.path}
-                          onClick={() => {
+                          href={navigationUrl}
+                          onClick={(e) => {
                             if (item.path !== pathname) {
                               startNavigation(item.path);
                             }

@@ -12,6 +12,7 @@ import { Check, ChevronDown, Search, Users } from "lucide-react"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { toast } from "sonner"
 import { usePatchOrganiserLabels } from "@/hooks/usePatchOrganiserLabels"
+import { useAdminPatchContext } from "@/context/AdminPatchContext"
 
 interface PatchOption { id: string; name: string }
 interface LeadOption { id: string; label: string; kind: "live" | "draft" }
@@ -31,13 +32,37 @@ export default function AdminPatchSelector() {
 	const router = useRouter()
 	const params = useSearchParams()
 	const isMobile = useIsMobile()
+	const adminPatchContext = useAdminPatchContext()
 
-	// Read selection from URL (comma-separated `patch` values)
+	// Initialize from context (which persists across navigation)
 	useEffect(() => {
+		if (adminPatchContext.isInitialized && adminPatchContext.isAdmin) {
+			// Priority: URL param > Context > Empty
+			const fromUrl = params.get("patch") || ""
+			const urlIds = fromUrl.split(",").map(s => s.trim()).filter(Boolean)
+			
+			if (urlIds.length > 0) {
+				// URL has patches - use those and sync to context
+				setSelectedPatchIds(urlIds)
+				adminPatchContext.setSelectedPatchIds(urlIds)
+			} else if (adminPatchContext.selectedPatchIds && adminPatchContext.selectedPatchIds.length > 0) {
+				// Context has patches but URL doesn't - restore from context
+				setSelectedPatchIds(adminPatchContext.selectedPatchIds)
+			} else {
+				// Neither has patches - start empty
+				setSelectedPatchIds([])
+			}
+		}
+	}, [adminPatchContext.isInitialized, adminPatchContext.isAdmin, params])
+
+	// Read selection from URL (comma-separated `patch` values) for non-context updates
+	useEffect(() => {
+		if (!adminPatchContext.isInitialized) return
+		
 		const fromUrl = params.get("patch") || ""
 		const ids = fromUrl.split(",").map(s => s.trim()).filter(Boolean)
 		setSelectedPatchIds(ids)
-	}, [params])
+	}, [params, adminPatchContext.isInitialized])
 
 	// Load all patches for admin
 	useEffect(() => {
@@ -89,12 +114,21 @@ export default function AdminPatchSelector() {
 		setSelectedPatchIds([])
 		setLeadFilterPatchIds([])
 		setSelectedLead("")
+		// Clear context as well
+		adminPatchContext.clearSelection()
 	}
 
 	const applyToUrl = () => {
 		const sp = new URLSearchParams(params.toString())
-		if (selectedPatchIds.length === 0) sp.delete("patch")
-		else sp.set("patch", selectedPatchIds.join(","))
+		if (selectedPatchIds.length === 0) {
+			sp.delete("patch")
+			// Clear context when no patches selected
+			adminPatchContext.clearSelection()
+		} else {
+			sp.set("patch", selectedPatchIds.join(","))
+			// Update context to persist across navigation
+			adminPatchContext.setSelectedPatchIds(selectedPatchIds)
+		}
 		router.replace(`${pathname}?${sp.toString()}`)
 		setOpen(false)
 	}
@@ -201,6 +235,12 @@ export default function AdminPatchSelector() {
 		}
 	}
 
+	// Routes where patch filtering should be ignored/not applied
+	const PATCH_FILTER_EXCLUDED_ROUTES = ['/admin', '/eba-employers']
+	const isExcludedRoute = useMemo(() => {
+		return PATCH_FILTER_EXCLUDED_ROUTES.some(route => pathname.startsWith(route))
+	}, [pathname])
+
 	const selectedSummary = useMemo(() => {
 		if (selectedPatchIds.length === 0) return "All patches"
 		if (selectedPatchIds.length === 1) {
@@ -210,19 +250,38 @@ export default function AdminPatchSelector() {
 		return `${selectedPatchIds.length} selected`
 	}, [selectedPatchIds, allPatches])
 
+	// Determine if filter is active (patches selected and not on excluded route)
+	const isFilterActive = selectedPatchIds.length > 0 && !isExcludedRoute
+
 	return (
 		<div className="flex items-center gap-2">
 			<Dialog open={open} onOpenChange={setOpen}>
 				<DialogTrigger asChild>
 					{isMobile ? (
-						<Button variant="outline" size="sm" className="inline-flex items-center gap-1 bg-white text-gray-900 border-gray-300 hover:bg-gray-50 font-medium relative z-30 text-xs px-2 py-1 h-8">
+						<Button 
+							variant="outline" 
+							size="sm" 
+							className={`inline-flex items-center gap-1 font-medium relative z-30 text-xs px-2 py-1 h-8 ${
+								isFilterActive 
+									? "bg-yellow-100 text-gray-900 border-yellow-400 hover:bg-yellow-200" 
+									: "bg-white text-gray-900 border-gray-300 hover:bg-gray-50"
+							}`}
+						>
 							<Users className="h-3 w-3" />
 							<span className="hidden xs:inline">Patches:</span>
 							<Badge variant="secondary" className="text-xs px-1 py-0">{selectedSummary}</Badge>
 							<ChevronDown className="h-2 w-2" />
 						</Button>
 					) : (
-						<Button variant="outline" size="xl" className="inline-flex items-center gap-2 bg-white text-gray-900 border-gray-300 hover:bg-gray-50 font-medium relative z-30">
+						<Button 
+							variant="outline" 
+							size="xl" 
+							className={`inline-flex items-center gap-2 font-medium relative z-30 ${
+								isFilterActive 
+									? "bg-yellow-100 text-gray-900 border-yellow-400 hover:bg-yellow-200" 
+									: "bg-white text-gray-900 border-gray-300 hover:bg-gray-50"
+							}`}
+						>
 							<Users className="h-4 w-4" />
 							<span>Patches:</span>
 							<Badge variant="secondary">{selectedSummary}</Badge>

@@ -8,6 +8,7 @@ import { isMobileOrTablet } from '@/lib/device'
 import { NavigationLoadingWrapper } from '@/components/NavigationLoadingWrapper'
 import { HelpContextProvider } from '@/context/HelpContext'
 import { SafeRatingProvider } from '@/components/ratings/SafeRatingProvider'
+import { AdminPatchProvider } from '@/context/AdminPatchContext'
 import { AppRole } from '@/constants/roles'
 import { DesktopDashboardView } from '@/components/dashboard/DesktopDashboardView'
 import type { ReactNode } from 'react'
@@ -113,17 +114,19 @@ export default async function RootPage() {
     <AuthProvider>
       <HelpContextProvider initialPathname={currentPath} initialRole={role}>
         <SafeRatingProvider>
-          <NavigationLoadingWrapper>
-            {isMobile ? (
-              <Layout>
-                <DesktopDashboardView />
-              </Layout>
-            ) : (
-              <DesktopLayout>
-                <DesktopDashboardView />
-              </DesktopLayout>
-            )}
-          </NavigationLoadingWrapper>
+          <AdminPatchProvider>
+            <NavigationLoadingWrapper>
+              {isMobile ? (
+                <Layout>
+                  <DesktopDashboardView />
+                </Layout>
+              ) : (
+                <DesktopLayout>
+                  <DesktopDashboardView />
+                </DesktopLayout>
+              )}
+            </NavigationLoadingWrapper>
+          </AdminPatchProvider>
         </SafeRatingProvider>
       </HelpContextProvider>
     </AuthProvider>

@@ -8,6 +8,7 @@ import { isMobileOrTablet } from '@/lib/device'
 import { NavigationLoadingWrapper } from '@/components/NavigationLoadingWrapper'
 import { HelpContextProvider } from '@/context/HelpContext'
 import { SafeRatingProvider } from '@/components/ratings/SafeRatingProvider'
+import { AdminPatchProvider } from '@/context/AdminPatchContext'
 import { AppRole } from '@/constants/roles'
 import { ReactNode } from 'react'
 
@@ -128,9 +129,11 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     <AuthProvider>
       <HelpContextProvider initialPathname={currentPath || '/'} initialRole={role}>
         <SafeRatingProvider>
-          <NavigationLoadingWrapper>
-            {isMobile ? <Layout>{children}</Layout> : <DesktopLayout>{children}</DesktopLayout>}
-          </NavigationLoadingWrapper>
+          <AdminPatchProvider>
+            <NavigationLoadingWrapper>
+              {isMobile ? <Layout>{children}</Layout> : <DesktopLayout>{children}</DesktopLayout>}
+            </NavigationLoadingWrapper>
+          </AdminPatchProvider>
         </SafeRatingProvider>
       </HelpContextProvider>
     </AuthProvider>
