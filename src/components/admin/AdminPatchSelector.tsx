@@ -13,6 +13,7 @@ import { useIsMobile } from "@/hooks/use-mobile"
 import { toast } from "sonner"
 import { usePatchOrganiserLabels } from "@/hooks/usePatchOrganiserLabels"
 import { useAdminPatchContext } from "@/context/AdminPatchContext"
+import { useAuth } from "@/hooks/useAuth"
 
 interface PatchOption { id: string; name: string }
 interface LeadOption { id: string; label: string; kind: "live" | "draft" }
@@ -33,6 +34,7 @@ export default function AdminPatchSelector() {
 	const params = useSearchParams()
 	const isMobile = useIsMobile()
 	const adminPatchContext = useAdminPatchContext()
+	const { user, loading: authLoading } = useAuth()
 
 	// Initialize from context (which persists across navigation)
 	useEffect(() => {
@@ -64,37 +66,82 @@ export default function AdminPatchSelector() {
 		setSelectedPatchIds(ids)
 	}, [params, adminPatchContext.isInitialized])
 
-	// Load all patches for admin
+	// Load all patches for admin - only after authentication is complete
 	useEffect(() => {
+		// Wait for authentication to complete
+		if (authLoading || !user) {
+			console.log('[AdminPatchSelector] Waiting for authentication:', { authLoading, hasUser: !!user })
+			return
+		}
+		
 		const load = async () => {
-			const { data } = await (supabase as any)
-				.from("patches")
-				.select("id, name, type")
-				.in("type", ["geo", "fallback"])
-				.eq("status", "active")
-				.order("name")
-			setAllPatches(((data as any[]) || []).map(r => ({ id: r.id, name: r.name || r.id })))
+			try {
+				console.log('[AdminPatchSelector] Loading patches...')
+				const { data, error } = await (supabase as any)
+					.from("patches")
+					.select("id, name, type")
+					.in("type", ["geo", "fallback"])
+					.eq("status", "active")
+					.order("name")
+				
+				if (error) {
+					console.error('[AdminPatchSelector] Failed to load patches:', error)
+					toast.error('Failed to load patches: ' + error.message)
+					setAllPatches([])
+					return
+				}
+				
+				const patches = ((data as any[]) || []).map(r => ({ id: r.id, name: r.name || r.id }))
+				console.log('[AdminPatchSelector] Loaded patches:', patches.length)
+				setAllPatches(patches)
+			} catch (err) {
+				console.error('[AdminPatchSelector] Exception loading patches:', err)
+				toast.error('Failed to load patches')
+				setAllPatches([])
+			}
 		}
 		load()
-	}, [])
+	}, [authLoading, user])
 
 	// Load organiser names for all patches
 	const patchIds = useMemo(() => allPatches.map(p => p.id), [allPatches])
 	const { byPatchId: organiserNamesByPatch } = usePatchOrganiserLabels(patchIds)
 
 	// Load live and draft co-ordinators (lead organisers) and admins for the special selection
+	// Only after authentication is complete
 	useEffect(() => {
+		// Wait for authentication to complete
+		if (authLoading || !user) {
+			console.log('[AdminPatchSelector] Waiting for authentication (leads):', { authLoading, hasUser: !!user })
+			return
+		}
+		
 		const loadLeads = async () => {
-			const [live, draft] = await Promise.all([
-				(supabase as any).from("profiles").select("id, full_name, email, role").in("role", ["lead_organiser", "admin"]),
-				(supabase as any).from("pending_users").select("id, full_name, email, role, status").in("role", ["lead_organiser", "admin"]).in("status", ["draft", "invited"]) ,
-			])
-			const lives = (((live as any)?.data as any[]) || []).map((r: any) => ({ id: String(r.id), label: r.full_name || r.email || r.id, kind: "live" as const }))
-			const drafts = (((draft as any)?.data as any[]) || []).map((r: any) => ({ id: String(r.id), label: (r.full_name || r.email || r.id) + " (draft)", kind: "draft" as const }))
-			setLeadOptions([...lives, ...drafts].sort((a, b) => a.label.localeCompare(b.label)))
+			try {
+				console.log('[AdminPatchSelector] Loading lead organisers...')
+				const [live, draft] = await Promise.all([
+					(supabase as any).from("profiles").select("id, full_name, email, role").in("role", ["lead_organiser", "admin"]),
+					(supabase as any).from("pending_users").select("id, full_name, email, role, status").in("role", ["lead_organiser", "admin"]).in("status", ["draft", "invited"]) ,
+				])
+				
+				if (live.error) {
+					console.error('[AdminPatchSelector] Failed to load live leads:', live.error)
+				}
+				if (draft.error) {
+					console.error('[AdminPatchSelector] Failed to load draft leads:', draft.error)
+				}
+				
+				const lives = (((live as any)?.data as any[]) || []).map((r: any) => ({ id: String(r.id), label: r.full_name || r.email || r.id, kind: "live" as const }))
+				const drafts = (((draft as any)?.data as any[]) || []).map((r: any) => ({ id: String(r.id), label: (r.full_name || r.email || r.id) + " (draft)", kind: "draft" as const }))
+				const allLeads = [...lives, ...drafts].sort((a, b) => a.label.localeCompare(b.label))
+				console.log('[AdminPatchSelector] Loaded lead organisers:', allLeads.length)
+				setLeadOptions(allLeads)
+			} catch (err) {
+				console.error('[AdminPatchSelector] Exception loading leads:', err)
+			}
 		}
 		loadLeads()
-	}, [])
+	}, [authLoading, user])
 
 	const filteredPatches = useMemo(() => {
 		const s = search.trim().toLowerCase()
