@@ -69,3 +69,4 @@ Check migration status:
 The `.applied` files are being skipped because they don't match the expected pattern (`<timestamp>_name.sql`). Either remove them or rename to `.sql` if you need them.
 
 
+

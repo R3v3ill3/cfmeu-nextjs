@@ -14,3 +14,4 @@ echo ""
 npx supabase migration repair --db-url "$DB_URL" "$@"
 
 
+

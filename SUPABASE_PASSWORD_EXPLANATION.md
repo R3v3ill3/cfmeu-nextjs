@@ -147,3 +147,4 @@ But the CLI's password prompt mechanism appears to be broken, forcing the workar
 This is a known issue with Supabase CLI's credential management system.
 
 
+

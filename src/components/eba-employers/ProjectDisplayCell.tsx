@@ -1,4 +1,4 @@
-"use client"
+  "use client"
 
 import { Badge } from "@/components/ui/badge"
 import { useNavigationLoading } from "@/hooks/useNavigationLoading"
@@ -109,6 +109,7 @@ export function ProjectDisplayCell({ projects, displayMode }: ProjectDisplayCell
 
   return null
 }
+
 
 
 

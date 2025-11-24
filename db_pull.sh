@@ -11,3 +11,4 @@ echo "📥 Pulling Supabase migrations..."
 npx supabase db pull --db-url "$DB_URL" "$@"
 
 
+
