@@ -28,6 +28,7 @@ export function useGeofencing(enabled: boolean = false) {
   const [hasLocationPermission, setHasLocationPermission] = useState(false)
   const [permissionError, setPermissionError] = useState<string | null>(null)
   const [currentPosition, setCurrentPosition] = useState<GeolocationPosition | null>(null)
+  const [permissionChecked, setPermissionChecked] = useState(false)
   const [nearbySites, setNearbySites] = useState<JobSiteLocation[]>([])
   const [lastNotification, setLastNotification] = useState<GeofenceNotification | null>(null)
   const watchIdRef = useRef<number | null>(null)
@@ -67,6 +68,48 @@ export function useGeofencing(enabled: boolean = false) {
       })
     }
   }, [])
+
+  // Auto-check permissions on mount and restore saved state
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    // Check if we previously had permission
+    const hadPermission = localStorage.getItem('geofence-location-granted') === 'true'
+
+    if (hadPermission && isSupported && !permissionChecked) {
+      // Silently check if we still have permission
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setHasLocationPermission(true)
+          setCurrentPosition(position)
+          setPermissionChecked(true)
+          setPermissionError(null)
+
+          if (localStorage.getItem('debug-geofencing') === 'true') {
+            console.log('[Geofencing] Permission restored from previous session')
+          }
+        },
+        (error) => {
+          setHasLocationPermission(false)
+          setPermissionChecked(true)
+
+          if (error.code === error.PERMISSION_DENIED) {
+            // Permission was revoked, clear the saved state
+            localStorage.removeItem('geofence-location-granted')
+          }
+
+          if (localStorage.getItem('debug-geofencing') === 'true') {
+            console.log('[Geofencing] Permission check failed:', error.message)
+          }
+        },
+        {
+          enableHighAccuracy: false,
+          timeout: 5000,
+          maximumAge: 300000, // 5 minutes
+        }
+      )
+    }
+  }, [isSupported, permissionChecked])
 
   useEffect(() => {
     if (typeof navigator === "undefined") return
@@ -309,6 +352,11 @@ export function useGeofencing(enabled: boolean = false) {
           setHasLocationPermission(true)
           setCurrentPosition(position)
           setPermissionError(null)
+          setPermissionChecked(true)
+
+          // Save that we have permission for future sessions
+          localStorage.setItem('geofence-location-granted', 'true')
+
           resolve(true)
         },
         (error) => {
@@ -466,6 +514,7 @@ export function useGeofencing(enabled: boolean = false) {
     requestLocationAccess,
     startWatching,
     stopWatching,
+    permissionChecked,
   }
 }
 

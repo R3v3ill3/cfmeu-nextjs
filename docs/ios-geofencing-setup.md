@@ -95,6 +95,12 @@ Go to: **Settings > General > Background App Refresh**
 ### Issue: Permission denied message
 **Solution**: Reset permission in iOS Settings, then retry in the app.
 
+### Issue: Permission required every time app launches
+**Solution**: This is normal behavior for iOS PWAs. The app will check if you previously granted permission and restore it automatically.
+- If you see "Checking Location Permission..." briefly, this is normal
+- Once permission is granted, iOS remembers it for the PWA
+- Only if you manually revoke permission in iOS Settings will you need to grant it again
+
 ## Developer Debugging
 
 To add debug logging, open console on connected Mac:
