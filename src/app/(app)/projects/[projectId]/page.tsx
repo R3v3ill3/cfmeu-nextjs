@@ -6,6 +6,29 @@ import { useParams, useSearchParams, useRouter, usePathname } from "next/navigat
 import { useQuery } from "@tanstack/react-query"
 import { format } from "date-fns"
 import { supabase } from "@/integrations/supabase/client"
+
+// TypeScript type definitions for project detail data
+interface ProjectDetailData {
+  id: string
+  name: string
+  main_job_site_id: string | null
+  value: number | null
+  tier: string | null
+  organising_universe: 'active' | 'potential' | 'excluded'
+  stage_class: 'future' | 'pre_construction' | 'construction' | 'archived'
+  proposed_start_date: string | null
+  proposed_finish_date: string | null
+  roe_email: string | null
+  project_type: string | null
+  state_funding: boolean | null
+  federal_funding: boolean | null
+  builder_id: string | null
+  project_assignments: Array<{
+    assignment_type: string
+    contractor_role_types: { code: string } | null
+    employers: { name: string; enterprise_agreement_status: string } | null
+  }>
+}
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -137,7 +160,7 @@ export default function ProjectDetailPage() {
   // Use the 'enabled' option in useQuery to control when queries actually run
 
   // Project data query
-  const { data: project, isLoading: projectLoading, isFetching: projectFetching, error: projectError } = useQuery({
+  const { data: project, isLoading: projectLoading, isFetching: projectFetching, error: projectError } = useQuery<ProjectDetailData | null>({
     queryKey: ["project-detail", projectId],
     enabled: !!projectId,
     staleTime: 30000,
@@ -185,7 +208,7 @@ export default function ProjectDetailPage() {
           hasData: !!data,
         });
         
-        return data;
+        return data as ProjectDetailData | null;
       } catch (err) {
         const duration = Date.now() - startTime;
         console.error('[ProjectDetailPage] Exception fetching project:', {
@@ -197,14 +220,6 @@ export default function ProjectDetailPage() {
         });
         throw err;
       }
-    },
-    onError: (error) => {
-      console.error('[ProjectDetailPage] Query error:', {
-        projectId,
-        error,
-        errorMessage: error instanceof Error ? error.message : String(error),
-        timestamp: new Date().toISOString(),
-      });
     },
   })
 
@@ -278,15 +293,17 @@ export default function ProjectDetailPage() {
   // Builder and main site address for mapping sheet
   const { data: mappingSheetData, isLoading: mappingDataLoading, isFetching: mappingDataFetching } = useQuery({
     queryKey: ["project-mapping-details", project?.id, project?.main_job_site_id, project?.builder_id],
-    enabled: !!project?.id,
+    enabled: !!project?.id && !!project,
     staleTime: 30000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
+      if (!project) return { builderName: null, builderHasEba: null, address: null }
+      
       let builderName: string | null = null
       let builderHasEba: boolean | null = null
       let address: string | null = null
 
-      if (project?.main_job_site_id) {
+      if (project.main_job_site_id) {
         const { data: site } = await supabase.from("job_sites").select("full_address, location").eq("id", project.main_job_site_id).maybeSingle()
         address = site?.full_address || site?.location || null
       }
@@ -295,7 +312,7 @@ export default function ProjectDetailPage() {
       const { data: builderAssignments } = await supabase
         .from("project_assignments")
         .select("employer_id, employers(name, enterprise_agreement_status), contractor_role_types(code)")
-        .eq("project_id", project!.id)
+        .eq("project_id", project.id)
         .eq("assignment_type", "contractor_role")
         .eq("contractor_role_types.code", "builder")
         .limit(1)
@@ -367,6 +384,15 @@ export default function ProjectDetailPage() {
     staleTime: 30000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
+      // Type for worker estimate data (columns added in migration 20251124000000)
+      type WorkerEstimateData = {
+        estimated_full_time_workers?: number | null
+        estimated_casual_workers?: number | null
+        estimated_abn_workers?: number | null
+        estimated_members?: number | null
+        membership_checked?: boolean | null
+      }
+
       // Get trade contractors from both project_assignments and project_contractor_trades
       const { data: assignmentTrades } = await supabase
         .from("project_assignments")
@@ -392,7 +418,7 @@ export default function ProjectDetailPage() {
         .eq("project_id", projectId);
 
       // Combine data from both sources
-      const allTrades = [...(assignmentTrades || []), ...(projectTrades || [])];
+      const allTrades = [...(assignmentTrades as WorkerEstimateData[] || []), ...(projectTrades as WorkerEstimateData[] || [])];
 
       // Calculate totals
       const totals = allTrades.reduce((acc, trade) => {
@@ -592,12 +618,13 @@ export default function ProjectDetailPage() {
 
   // Calculate target percentages based on project conditions
   const identificationTarget = useMemo(() => {
-    return project?.organising_universe === 'active' ? 100 : null
-  }, [project?.organising_universe])
+    if (!project) return null
+    return project.organising_universe === 'active' ? 100 : null
+  }, [project])
 
   const ebaTarget = useMemo(() => {
     if (!project) return null
-    const ebaStatus = getProjectEbaStatus(project)
+    const ebaStatus = getProjectEbaStatus(project as any)
     return project.organising_universe === 'active' && ebaStatus.hasActiveEba ? 100 : null
   }, [project])
 
@@ -824,11 +851,11 @@ export default function ProjectDetailPage() {
       {/* Project Header */}
       <div className="flex items-start justify-between">
         <div className="space-y-2">
-          <h1 className="text-3xl font-bold">{project?.name}</h1>
+          <h1 className="text-3xl font-bold">{project?.name ?? ''}</h1>
           <div className="flex items-center gap-3">
             <ProjectTierBadge tier={project?.tier || null} size="lg" />
-            {project && (() => {
-              const ebaStatus = getProjectEbaStatus(project)
+            {project ? (() => {
+              const ebaStatus = getProjectEbaStatus(project as any)
               return (
                 <CfmeuEbaBadge 
                   hasActiveEba={ebaStatus.hasActiveEba} 
@@ -837,24 +864,24 @@ export default function ProjectDetailPage() {
                   showText={true}
                 />
               )
-            })()}
-            {project?.stage_class && (
+            })() : null}
+            {project?.stage_class ? (
               <Badge variant="secondary" className="capitalize">{String(project.stage_class).replace('_',' ')}</Badge>
-            )}
-            {project?.organising_universe && (
+            ) : null}
+            {project?.organising_universe ? (
               <OrganizingUniverseBadge
                 projectId={project.id}
                 currentStatus={project.organising_universe}
               />
-            )}
-            {project?.value && (
+            ) : null}
+            {project?.value ? (
               <span className="text-lg text-muted-foreground">
                 ${(project.value / 1000000).toFixed(1)}M
               </span>
-            )}
+            ) : null}
           </div>
         </div>
-        {project && (
+        {project ? (
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => { try { router.push('/projects') } catch {} }}>Close</Button>
             <MarkProjectCompleteButton 
@@ -863,10 +890,10 @@ export default function ProjectDetailPage() {
               variant="outline"
               size="default"
             />
-            <EditProjectDialog project={project} />
+            <EditProjectDialog project={project as any} />
             <DeleteProjectDialog projectId={project.id} projectName={project.name} />
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* Key Contractor EBA Overview */}
@@ -988,7 +1015,7 @@ export default function ProjectDetailPage() {
                       // No need to update local state as react-query will refetch
                     }}
                   />
-                  <MappingSubcontractorsTable projectId={project.id} />
+                  <MappingSubcontractorsTable projectId={project?.id ?? ''} />
                 </div>
               </div>
             </div>
@@ -1000,12 +1027,12 @@ export default function ProjectDetailPage() {
         </TabsContent>
 
         <TabsContent value="sites">
-          {project && (
+          {project ? (
             <div className="space-y-4">
               <JobSitesManager projectId={project.id} projectName={project.name} />
               <SiteContactsEditor projectId={project.id} siteIds={sortedSiteIds} />
             </div>
-          )}
+          ) : null}
         </TabsContent>
 
         <TabsContent value="wallcharts">
@@ -1035,7 +1062,7 @@ export default function ProjectDetailPage() {
         <TabsContent value="site-visits">
           <ProjectSiteVisits 
             projectId={projectId} 
-            projectName={project?.name}
+            projectName={project?.name ?? ''}
             autoCreate={false}
           />
         </TabsContent>
