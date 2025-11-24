@@ -64,7 +64,8 @@ async function errorsHandler(request: NextRequest) {
 }
 
 // Apply rate limiting to prevent abuse
-export const POST = withRateLimit(errorsHandler, RATE_LIMIT_PRESETS.HIGH)
+// Using RELAXED preset (120 req/min) since error logging should be allowed frequently
+export const POST = withRateLimit(errorsHandler, RATE_LIMIT_PRESETS.RELAXED)
 
 // Handle other HTTP methods
 export async function GET() {

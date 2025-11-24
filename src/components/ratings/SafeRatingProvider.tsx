@@ -1,7 +1,7 @@
 "use client"
 
 import { ReactNode, Suspense } from 'react'
-import { RatingProvider } from '@/context/RatingContext'
+import dynamic from 'next/dynamic'
 import { RatingErrorBoundary, DefaultRatingError } from './RatingErrorBoundary'
 import { Card, CardContent } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
@@ -19,6 +19,15 @@ function RatingLoadingFallback() {
     </div>
   )
 }
+
+// Dynamically import RatingProvider with SSR disabled to prevent server-side useCallback errors
+const RatingProvider = dynamic(
+  () => import('@/context/RatingContext').then(mod => ({ default: mod.RatingProvider })),
+  { 
+    ssr: false,
+    loading: () => <RatingLoadingFallback />
+  }
+)
 
 // Error fallback for rating provider
 function RatingProviderError() {

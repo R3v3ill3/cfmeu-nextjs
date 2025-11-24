@@ -155,6 +155,8 @@ export async function middleware(req: NextRequest) {
 
 function buildCSP(nonce: string): string {
   const isDev = process.env.NODE_ENV !== 'production'
+  const isVercelPreview = process.env.VERCEL_ENV === 'preview' || process.env.VERCEL_ENV === 'development'
+  const allowVercelLive = isDev || isVercelPreview
 
   // Build connect-src with required origins
   const connectSrc = [
@@ -175,14 +177,27 @@ function buildCSP(nonce: string): string {
     if (!connectSrc.includes('http://localhost:3200')) connectSrc.push('http://localhost:3200')
   }
 
+  // Build script-src with conditional Vercel Live support
+  const scriptSrc = [
+    "'self'",
+    `'nonce-${nonce}'`,
+    'https://maps.googleapis.com',
+  ]
+  
+  if (isDev) {
+    scriptSrc.push("'unsafe-eval'") // Required for HMR in development
+  }
+  
+  if (allowVercelLive) {
+    scriptSrc.push('https://vercel.live') // Allow Vercel Live feedback scripts in preview/dev
+  }
+
   // Build CSP directives
   const directives = [
     "default-src 'self'",
     // Production: strict nonce-based scripts (NO unsafe-eval, NO unsafe-inline)
-    // Dev: allow unsafe-eval for HMR only
-    isDev
-      ? `script-src 'self' 'nonce-${nonce}' 'unsafe-eval' https://maps.googleapis.com`
-      : `script-src 'self' 'nonce-${nonce}' https://maps.googleapis.com`,
+    // Dev/Preview: allow unsafe-eval for HMR and Vercel Live scripts
+    `script-src ${scriptSrc.join(' ')}`,
     // Style: unsafe-inline required for React inline styles (style={{...}})
     // NOTE: Cannot use nonce with unsafe-inline - nonce causes unsafe-inline to be ignored per CSP spec
     // TODO: migrate to CSS modules/Tailwind only for full nonce-based styles
