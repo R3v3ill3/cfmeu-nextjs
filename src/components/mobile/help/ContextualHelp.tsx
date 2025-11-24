@@ -52,6 +52,7 @@ interface ContextualHelpProps {
   topic?: string
   showOnboarding?: boolean
   onHelpComplete?: (topicId: string) => void
+  onOnboardingComplete?: () => void
   className?: string
 }
 
@@ -300,6 +301,7 @@ export function ContextualHelp({
   topic,
   showOnboarding = false,
   onHelpComplete,
+  onOnboardingComplete,
   className = ""
 }: ContextualHelpProps) {
   const [isOpen, setIsOpen] = useState(false)
@@ -308,6 +310,15 @@ export function ContextualHelp({
   const [currentStep, setCurrentStep] = useState(0)
   const [completedTopics, setCompletedTopics] = useState<Set<string>>(new Set())
   const { trigger, success } = useHapticFeedback()
+
+  useEffect(() => {
+    if (showOnboarding) {
+      setCurrentStep(0)
+      setShowOnboardingTour(true)
+    } else {
+      setShowOnboardingTour(false)
+    }
+  }, [showOnboarding])
 
   // Load completed topics from localStorage
   useEffect(() => {
@@ -355,13 +366,15 @@ export function ContextualHelp({
       setShowOnboardingTour(false)
       localStorage.setItem('mobile-onboarding-complete', 'true')
       success()
+      onOnboardingComplete?.()
     }
-  }, [currentStep, trigger, success])
+  }, [currentStep, trigger, success, onOnboardingComplete])
 
   const handleOnboardingSkip = useCallback(() => {
     setShowOnboardingTour(false)
     localStorage.setItem('mobile-onboarding-complete', 'true')
-  }, [])
+    onOnboardingComplete?.()
+  }, [onOnboardingComplete])
 
   // Get category icon
   const getCategoryIcon = (category: string) => {

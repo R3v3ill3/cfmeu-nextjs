@@ -31,13 +31,24 @@ export default function MobileHomePage() {
   })
 
   const [loading, setLoading] = useState(true)
+  const [showOnboarding, setShowOnboarding] = useState(false)
 
   // Check if user has completed onboarding
   useEffect(() => {
-    const hasCompletedOnboarding = localStorage.getItem('mobile-onboarding-complete')
-    setShowOnboarding(!hasCompletedOnboarding)
-    setLoading(false)
+    try {
+      const hasCompletedOnboarding = localStorage.getItem('mobile-onboarding-complete') === 'true'
+      setShowOnboarding(!hasCompletedOnboarding)
+    } catch (error) {
+      console.warn('Unable to read onboarding state', error)
+      setShowOnboarding(false)
+    } finally {
+      setLoading(false)
+    }
   }, [])
+
+  const handleOnboardingComplete = () => {
+    setShowOnboarding(false)
+  }
 
   const quickActions: QuickAction[] = [
     {
@@ -94,7 +105,10 @@ export default function MobileHomePage() {
                 Construction site organizing tools
               </p>
             </div>
-            <ContextualHelp showOnboarding={true} />
+            <ContextualHelp
+              showOnboarding={showOnboarding}
+              onOnboardingComplete={handleOnboardingComplete}
+            />
           </div>
         </div>
       </div>

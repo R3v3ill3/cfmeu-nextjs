@@ -126,6 +126,10 @@ export interface RawExpertiseAssessment {
   is_active: boolean;
   created_at: Date;
   updated_at: Date;
+  // Optional fields to align with shared assessment processing
+  assessment_type?: ComplianceAssessmentType;
+  score?: number | null;
+  severity_level?: number | null;
 }
 
 export interface RawEBARecord {
@@ -357,6 +361,139 @@ export interface HybridMethodInput {
 }
 
 // =============================================================================
+// CONFIDENCE CALCULATION TYPES
+// =============================================================================
+
+export interface ConfidenceInput {
+  source_id: string;
+  source_type: 'project' | 'expertise' | 'eba';
+  assessment_type: ComplianceAssessmentType;
+  confidence_level: ConfidenceLevel;
+  assessment_date: Date;
+  score: number;
+  weight: number;
+  quality_score: number;
+  source_reliability: number;
+  organiser_reputation?: number;
+  metadata?: Record<string, any>;
+}
+
+export interface ConfidenceFactors {
+  recency_confidence: number;
+  volume_confidence: number;
+  consistency_confidence: number;
+  source_quality_confidence: number;
+  diversity_confidence: number;
+}
+
+export interface ConfidenceComponentScore {
+  score: number;
+  weight: number;
+  contribution: number;
+}
+
+export interface ConfidenceBreakdown {
+  component_scores: {
+    recency: ConfidenceComponentScore;
+    volume: ConfidenceComponentScore;
+    consistency: ConfidenceComponentScore;
+    source_quality: ConfidenceComponentScore;
+    diversity: ConfidenceComponentScore;
+  };
+  final_score: number;
+  confidence_level: ConfidenceLevel;
+  threshold_comparison: {
+    high_threshold: number;
+    medium_threshold: number;
+    low_threshold: number;
+    distance_from_threshold: number;
+  };
+}
+
+export interface ConfidenceValidationResult {
+  is_valid: boolean;
+  errors: string[];
+  warnings: string[];
+  recommendations: string[];
+}
+
+export interface ConfidenceCalculationConfig {
+  recency_weight: number;
+  volume_weight: number;
+  consistency_weight: number;
+  source_quality_weight: number;
+  diversity_weight: number;
+  high_confidence_threshold: number;
+  medium_confidence_threshold: number;
+  low_confidence_threshold: number;
+  recency_half_life_days: number;
+  max_data_age_days: number;
+  temporal_smoothing_enabled: boolean;
+  temporal_smoothing_factor: number;
+  minimum_assessments_for_high: number;
+  minimum_assessments_for_medium: number;
+  volume_plateau_threshold: number;
+  consistency_window_days: number;
+  outlier_detection_enabled: boolean;
+  outlier_threshold_std_dev: number;
+  expert_weight_modifier: number;
+  organiser_reputation_factor: number;
+  assessment_quality_threshold: number;
+  consensus_bonus_enabled: boolean;
+  consensus_bonus_factor: number;
+  diversity_bonus_enabled: boolean;
+  diversity_penalty_factor: number;
+}
+
+export interface ConfidenceResult {
+  confidence_level: ConfidenceLevel;
+  confidence_score: number;
+  confidence_factors: ConfidenceFactors;
+  breakdown: ConfidenceBreakdown | Record<string, any>;
+  validation: ConfidenceValidationResult;
+  temporal_trend?: 'improving' | 'stable' | 'declining';
+  recommendations: string[];
+  metadata: {
+    input_count: number;
+    calculation_timestamp: Date;
+    config_used: ConfidenceCalculationConfig;
+    processing_time_ms: number;
+    [key: string]: any;
+  };
+}
+
+export interface TemporalConfidenceData {
+  date: Date;
+  score: number;
+  confidence_level?: ConfidenceLevel;
+  assessment_type?: ComplianceAssessmentType;
+  source_type?: 'project' | 'expertise' | 'eba';
+  source_id?: string;
+  weight?: number;
+  quality_score?: number;
+  source_reliability?: number;
+  organiser_reputation?: number;
+  metadata?: Record<string, any>;
+}
+
+export interface SourceReliabilityFactor {
+  factor: string;
+  score: number;
+  weight: number;
+  description?: string;
+}
+
+export interface SourceReliabilityScore {
+  reliability_score: number;
+  reliability_tier: ConfidenceLevel;
+  factors: SourceReliabilityFactor[];
+  source_type: 'project' | 'expertise' | 'eba';
+  data_points: number;
+  calculation_timestamp: Date;
+  confidence_level: ConfidenceLevel;
+}
+
+// =============================================================================
 // CACHING AND PERFORMANCE TYPES
 // =============================================================================
 
@@ -523,6 +660,135 @@ export type CalculationParameters = {
       : never;
   };
 }[CalculationMethod];
+
+// =============================================================================
+// DISCREPANCY DETECTION TYPES
+// =============================================================================
+
+export interface DiscrepancyCheck {
+  id: string;
+  level: DiscrepancyLevel;
+  detected: boolean;
+  description?: string;
+  impact_score?: number;
+}
+
+export type DiscrepancyAnalysisResult = DiscrepancyAnalysis;
+
+export interface DiscrepancyDetectionConfig {
+  thresholds: Record<DiscrepancyLevel, number>;
+  validation_window_days: number;
+  auto_resolve: boolean;
+  notify_roles: string[];
+}
+
+export interface DiscrepancyPattern {
+  id: string;
+  name: string;
+  severity: DiscrepancyLevel;
+  indicators: string[];
+  description?: string;
+}
+
+export interface DiscrepancyTrend {
+  direction: 'increasing' | 'decreasing' | 'stable';
+  magnitude: number;
+  period_days: number;
+}
+
+export interface DiscrepancyResolution {
+  strategy: 'accept_calculated' | 'prefer_project' | 'prefer_expertise' | 'prefer_eba' | 'manual_review';
+  confidence: number;
+  notes?: string;
+}
+
+// =============================================================================
+// TIME DECAY TYPES
+// =============================================================================
+
+export type DecayCurveType = 'exponential' | 'linear' | 'step' | 'custom';
+
+export interface DecayConfiguration {
+  curve: DecayCurveType;
+  half_life_days: number;
+  minimum_weight: number;
+  maximum_decay?: number;
+}
+
+export interface DecayFactors {
+  base_weight: number;
+  decay_factor: number;
+  effective_weight: number;
+}
+
+export interface DecayResult {
+  decayed_score: number;
+  decay_factor: number;
+  original_score: number;
+}
+
+export interface HistoricalDataPoint {
+  date: Date;
+  score: number;
+  weight?: number;
+}
+
+export interface DecaySchedule {
+  [interval: string]: number;
+}
+
+export interface TemporalWeightingResult {
+  weighted_score: number;
+  total_weight: number;
+  data_points: number;
+}
+
+// =============================================================================
+// WEIGHTED SCORING TYPES
+// =============================================================================
+
+export interface AssessmentWeight {
+  assessment_type: ComplianceAssessmentType;
+  base_weight: number;
+  max_weight?: number;
+  min_weight?: number;
+}
+
+export interface WeightAdjustment {
+  assessment_id: string;
+  reason: string;
+  adjustment: number;
+}
+
+export interface ScoringConfiguration {
+  normalize_weights: boolean;
+  max_score: number;
+  min_score: number;
+  assessment_weights: AssessmentWeight[];
+  allow_negative?: boolean;
+}
+
+export interface ScoringComponentResult {
+  assessment_id: string;
+  assessment_type: ComplianceAssessmentType;
+  score: number;
+  weight: number;
+  effective_weight: number;
+  contribution: number;
+}
+
+export interface ScoringResult {
+  total_score: number;
+  total_weight: number;
+  normalized_score: number;
+  components: ScoringComponentResult[];
+}
+
+export interface ScoringValidationResult {
+  is_valid: boolean;
+  errors: string[];
+  warnings: string[];
+}
 
 // Type guard functions
 export function isProjectAssessment(obj: any): obj is RawProjectAssessment {

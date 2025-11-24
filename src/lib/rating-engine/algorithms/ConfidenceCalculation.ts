@@ -52,51 +52,6 @@ export interface IConfidenceCalculator {
 }
 
 // =============================================================================
-// CONFIDENCE CALCULATION CONFIGURATION
-// =============================================================================
-
-export interface ConfidenceCalculationConfig {
-  // Weighting factors for different confidence components
-  recency_weight: number;
-  volume_weight: number;
-  consistency_weight: number;
-  source_quality_weight: number;
-  diversity_weight: number;
-
-  // Thresholds
-  high_confidence_threshold: number;
-  medium_confidence_threshold: number;
-  low_confidence_threshold: number;
-
-  // Temporal settings
-  recency_half_life_days: number;
-  max_data_age_days: number;
-  temporal_smoothing_enabled: boolean;
-  temporal_smoothing_factor: number;
-
-  // Volume settings
-  minimum_assessments_for_high: number;
-  minimum_assessments_for_medium: number;
-  volume_plateau_threshold: number;
-
-  // Consistency settings
-  consistency_window_days: number;
-  outlier_detection_enabled: boolean;
-  outlier_threshold_std_dev: number;
-
-  // Source quality settings
-  expert_weight_modifier: number;
-  organiser_reputation_factor: number;
-  assessment_quality_threshold: number;
-
-  // Advanced settings
-  consensus_bonus_enabled: boolean;
-  consensus_bonus_factor: number;
-  diversity_bonus_enabled: boolean;
-  diversity_penalty_factor: number;
-}
-
-// =============================================================================
 // CONFIDENCE CALCULATION IMPLEMENTATION
 // =============================================================================
 
@@ -222,11 +177,11 @@ export class ConfidenceCalculator implements IConfidenceCalculator {
     const finalConfig = { ...this.defaultConfig, ...config };
 
     // Convert assessment data to confidence inputs
-    const inputs: ConfidenceInput[] = assessmentData.map(assessment => ({
+    const inputs: ConfidenceInput[] = assessmentData.map((assessment, index) => ({
       source_id: assessment.id,
       source_type: 'project' as const,
       assessment_type: assessmentType,
-      confidence_level: assessment.confidence_level || 'medium',
+      confidence_level: this.normalizeConfidenceLevel(assessment.confidence_level),
       assessment_date: new Date(assessment.assessment_date),
       score: assessment.score || 0,
       weight: 1.0,
@@ -315,7 +270,10 @@ export class ConfidenceCalculator implements IConfidenceCalculator {
       confidence_factors: factors,
       breakdown: this.generateTemporalBreakdown(factors, sortedData, finalConfig),
       validation: { is_valid: true, errors: [], warnings: [], recommendations: [] },
-      temporal_trend: this.calculateTemporalTrend(sortedData, finalConfig),
+      temporal_trend: this.calculateTemporalTrend(
+        this.convertTemporalDataToInputs(sortedData),
+        finalConfig
+      ),
       recommendations: this.generateTemporalRecommendations(confidenceScore, factors, finalConfig),
       metadata: {
         input_count: historicalData.length,
@@ -778,7 +736,7 @@ export class ConfidenceCalculator implements IConfidenceCalculator {
     return Math.min(1.0, Math.max(0.0, adjustedReliability));
   }
 
-  private determineReliabilityTier(reliability: number, config: ConfidenceCalculationConfig): string {
+  private determineReliabilityTier(reliability: number, config: ConfidenceCalculationConfig): ConfidenceLevel {
     if (reliability >= config.high_confidence_threshold) return 'high';
     if (reliability >= config.medium_confidence_threshold) return 'medium';
     if (reliability >= config.low_confidence_threshold) return 'low';
@@ -1106,6 +1064,29 @@ export class ConfidenceCalculator implements IConfidenceCalculator {
     }
 
     return recommendations;
+  }
+
+  private convertTemporalDataToInputs(data: TemporalConfidenceData[]): ConfidenceInput[] {
+    return data.map((entry, index) => ({
+      source_id: entry.source_id || `temporal-${index}`,
+      source_type: entry.source_type || 'project',
+      assessment_type: entry.assessment_type || 'cbus_status',
+      confidence_level: this.normalizeConfidenceLevel(entry.confidence_level),
+      assessment_date: entry.date,
+      score: entry.score,
+      weight: entry.weight ?? 1,
+      quality_score: entry.quality_score ?? 0.8,
+      source_reliability: entry.source_reliability ?? 0.8,
+      organiser_reputation: entry.organiser_reputation,
+      metadata: entry.metadata
+    }));
+  }
+
+  private normalizeConfidenceLevel(level?: string): ConfidenceLevel {
+    if (level === 'high' || level === 'medium' || level === 'low' || level === 'very_low') {
+      return level;
+    }
+    return 'medium';
   }
 
   // Additional placeholder methods for temporal and consensus breakdowns

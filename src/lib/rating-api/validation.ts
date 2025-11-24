@@ -407,7 +407,7 @@ export function validateObject(data: any, schema: ValidationSchema, context?: an
   };
 }
 
-function validateField(
+export function validateField(
   fieldName: string,
   value: any,
   rule: ValidationRule,
@@ -540,7 +540,7 @@ function validateField(
   return errors;
 }
 
-function validateType(value: any, expectedType: string): boolean {
+export function validateType(value: any, expectedType: string): boolean {
   switch (expectedType) {
     case 'string':
       return typeof value === 'string';
@@ -567,7 +567,7 @@ function validateType(value: any, expectedType: string): boolean {
 // DATABASE VALIDATION FUNCTIONS (Would be implemented with actual DB calls)
 // =============================================================================
 
-async function validateEmployerExists(employerId: string): Promise<string | null> {
+export function validateEmployerExists(employerId: string): string | null {
   // In a real implementation, this would check against the database
   // For now, we'll do basic format validation
   if (!employerId || typeof employerId !== 'string') {
@@ -576,35 +576,35 @@ async function validateEmployerExists(employerId: string): Promise<string | null
   return null;
 }
 
-async function validateProjectExists(projectId: string): Promise<string | null> {
+export function validateProjectExists(projectId: string): string | null {
   if (!projectId || typeof projectId !== 'string') {
     return 'Project ID is required';
   }
   return null;
 }
 
-async function validateOrganiserExists(organiserId: string): Promise<string | null> {
+export function validateOrganiserExists(organiserId: string): string | null {
   if (!organiserId || typeof organiserId !== 'string') {
     return 'Organiser ID is required';
   }
   return null;
 }
 
-async function validateSiteVisitExists(siteVisitId: string): Promise<string | null> {
+export function validateSiteVisitExists(siteVisitId: string): string | null {
   if (!siteVisitId || typeof siteVisitId !== 'string') {
     return 'Site visit ID is required';
   }
   return null;
 }
 
-async function validateWizardStepExists(stepId: string): Promise<string | null> {
+export function validateWizardStepExists(stepId: string): string | null {
   if (!stepId || typeof stepId !== 'string') {
     return 'Wizard step ID is required';
   }
   return null;
 }
 
-function validateDateNotInFuture(dateString: string): string | null {
+export function validateDateNotInFuture(dateString: string): string | null {
   const date = new Date(dateString);
   const today = new Date();
   today.setHours(0, 0, 0, 0); // Set to start of day for fair comparison
@@ -615,7 +615,7 @@ function validateDateNotInFuture(dateString: string): string | null {
   return null;
 }
 
-function validateTimestamp(timestampString: string): string | null {
+export function validateTimestamp(timestampString: string): string | null {
   const timestamp = new Date(timestampString);
   if (isNaN(timestamp.getTime())) {
     return 'Invalid timestamp format';
@@ -623,7 +623,7 @@ function validateTimestamp(timestampString: string): string | null {
   return null;
 }
 
-function validateEvidenceAttachments(attachments: any): string | null {
+export function validateEvidenceAttachments(attachments: any): string | null {
   if (!Array.isArray(attachments)) {
     return 'Evidence attachments must be an array';
   }
@@ -640,7 +640,7 @@ function validateEvidenceAttachments(attachments: any): string | null {
   return null;
 }
 
-function validateHistoricalIssues(issues: any): string | null {
+export function validateHistoricalIssues(issues: any): string | null {
   if (!Array.isArray(issues)) {
     return 'Historical issues must be an array';
   }
@@ -657,7 +657,7 @@ function validateHistoricalIssues(issues: any): string | null {
   return null;
 }
 
-function validateEmployerIdsArray(employerIds: any): string | null {
+export function validateEmployerIdsArray(employerIds: any): string | null {
   if (!Array.isArray(employerIds)) {
     return 'Employer IDs must be an array';
   }
@@ -809,54 +809,6 @@ export function sanitizeHtml(input: string): string {
     .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
     .replace(/on\w+="[^"]*"/gi, '');
 }
-
-// =============================================================================
-// EXPORT VALIDATION UTILITIES
-// =============================================================================
-
-export {
-  // Schemas
-  COMPLIANCE_ASSESSMENT_SCHEMA,
-  EXPERTISE_RATING_SCHEMA,
-  WIZARD_STEP_SCHEMA,
-  RATING_CALCULATION_SCHEMA,
-  BATCH_OPERATION_SCHEMA,
-
-  // Enums
-  TRAFFIC_LIGHT_RATINGS,
-  COMPLIANCE_ASSESSMENT_TYPES,
-  CONFIDENCE_LEVELS,
-  RATING_STATUSES,
-  UNION_RELATIONSHIP_QUALITIES,
-
-  // Core validation functions
-  validateRequestBody,
-  validateObject,
-  validateField,
-  validateType,
-
-  // Utility functions
-  createValidationError,
-  createValidationResponse,
-  formatValidationErrors,
-  sendValidationErrorResponse,
-  validateRateLimit,
-  validateAuthenticationHeader,
-  sanitizeString,
-  sanitizeHtml,
-
-  // Database validation functions
-  validateEmployerExists,
-  validateProjectExists,
-  validateOrganiserExists,
-  validateSiteVisitExists,
-  validateWizardStepExists,
-  validateDateNotInFuture,
-  validateTimestamp,
-  validateEvidenceAttachments,
-  validateHistoricalIssues,
-  validateEmployerIdsArray,
-};
 
 export default {
   // Schemas
