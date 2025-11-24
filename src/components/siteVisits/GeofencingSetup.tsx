@@ -147,12 +147,23 @@ export function GeofencingSetup() {
               See in-app reminders when you are within 100m of a job site (app must stay open)
             </p>
           </div>
-          <Switch
-            aria-label="Enable geofencing reminders"
-            data-testid="geofencing-toggle"
-            checked={enabled}
-            onCheckedChange={handleToggle}
-          />
+          <div className="flex items-center gap-3">
+            <Switch
+              aria-label="Enable geofencing reminders"
+              data-testid="geofencing-toggle"
+              checked={enabled}
+              onCheckedChange={handleToggle}
+              style={{ pointerEvents: 'auto' }}
+            />
+            {/* Fallback checkbox for testing */}
+            <input
+              type="checkbox"
+              checked={enabled}
+              onChange={(e) => handleToggle(e.target.checked)}
+              className="w-5 h-5"
+              title="Fallback toggle (testing)"
+            />
+          </div>
         </div>
 
         {/* Request Permission Button - iOS needs explicit user action */}
@@ -318,7 +329,7 @@ export function GeofencingSetup() {
           {showAdvanced && (
             <div className="mt-4 space-y-4">
               {/* Debug Info */}
-              <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-md text-xs font-mono">
+              <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-md text-xs font-mono space-y-2">
                 <div>Enabled: {enabled ? 'YES' : 'NO'}</div>
                 <div>Permission: {hasLocationPermission ? 'GRANTED' : 'NOT GRANTED'}</div>
                 <div>Position: {currentPosition ? 'ACTIVE' : 'NONE'}</div>
@@ -326,6 +337,20 @@ export function GeofencingSetup() {
                 <div>PWA Mode: {typeof window !== 'undefined' &&
                   (window.matchMedia?.("(display-mode: standalone)")?.matches ||
                    (window.navigator as any).standalone === true) ? 'YES' : 'NO'}</div>
+                <div className="flex gap-2 mt-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      console.log('Manual toggle - enabled:', enabled)
+                      setEnabled(!enabled)
+                      localStorage.setItem("geofencing-enabled", (!enabled).toString())
+                    }}
+                    className="text-xs"
+                  >
+                    Toggle Geofencing
+                  </Button>
+                </div>
               </div>
 
               {/* Test Mode */}
@@ -339,6 +364,7 @@ export function GeofencingSetup() {
                     checked={testMode}
                     onCheckedChange={setTestMode}
                     aria-label="Enable test mode"
+                    style={{ pointerEvents: 'auto' }}
                   />
                 </div>
                 <p className="text-sm text-purple-700 dark:text-purple-300 mb-2">

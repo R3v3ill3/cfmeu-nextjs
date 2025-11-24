@@ -23,16 +23,6 @@ const Switch = forwardRef<
         )}
       />
     </SwitchPrimitives.Root>
-    {/* Invisible touch target overlay for mobile */}
-    <div
-      className="absolute inset-0 -m-4 z-10 touch-manipulation"
-      aria-hidden="true"
-      style={{
-        minHeight: '44px',
-        minWidth: '44px',
-        cursor: 'pointer'
-      }}
-    />
   </div>
 ))
 Switch.displayName = SwitchPrimitives.Root.displayName
