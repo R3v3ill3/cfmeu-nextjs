@@ -83,3 +83,4 @@ When you reset the password in the Supabase dashboard:
 
 This is a known issue with Supabase CLI's credential management on macOS.
 
+

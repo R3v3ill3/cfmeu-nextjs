@@ -125,3 +125,4 @@ This is a known Supabase CLI bug where:
 
 The `--db-url` workaround is the most reliable solution until Supabase fixes this bug.
 
+

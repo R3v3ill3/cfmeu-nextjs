@@ -10,3 +10,4 @@ DB_URL="postgresql://postgres.${PROJECT_REF}:${DB_PASSWORD}@aws-0-ap-southeast-2
 echo "📥 Pulling Supabase migrations..."
 npx supabase db pull --db-url "$DB_URL" "$@"
 
+
