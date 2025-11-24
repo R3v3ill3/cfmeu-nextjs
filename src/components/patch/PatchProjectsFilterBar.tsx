@@ -1,9 +1,15 @@
 "use client"
+import { useState, useEffect, useCallback } from "react"
+import { useSearchParams } from "next/navigation"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PROJECT_TIER_LABELS, ProjectTier } from "@/components/projects/types"
-import { ArrowDownNarrowWide, ArrowUpNarrowWide, Filter } from "lucide-react"
+import { ArrowDownNarrowWide, ArrowUpNarrowWide, Filter, Search, Navigation } from "lucide-react"
+import { useIsMobile } from "@/hooks/use-mobile"
+import { GoogleAddressInput, GoogleAddress, AddressValidationError } from "@/components/projects/GoogleAddressInput"
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner"
 
 export type PatchProjectFilters = {
   patchId: string | null
@@ -14,6 +20,7 @@ export type PatchProjectFilters = {
   eba: "all" | "eba_active" | "eba_inactive" | "builder_unknown"
   sort: "name" | "value" | "tier" | "workers" | "members" | "delegates" | "eba_coverage" | "employers"
   dir: "asc" | "desc"
+  searchMode?: "name" | "address"
 }
 
 interface PatchProjectsFilterBarProps {
@@ -22,6 +29,7 @@ interface PatchProjectsFilterBarProps {
   onFiltersChange: (changes: Partial<PatchProjectFilters>) => void
   onClear?: () => void
   disablePatchSelect?: boolean
+  onAddressSelect?: (address: GoogleAddress, error?: AddressValidationError | null) => void
 }
 
 const universeOptions: Array<{ value: PatchProjectFilters["universe"]; label: string }> = [
@@ -57,7 +65,54 @@ const sortOptions: Array<{ value: PatchProjectFilters["sort"]; label: string }> 
   { value: "employers", label: "Employers" }
 ]
 
-export function PatchProjectsFilterBar({ patchOptions, filters, onFiltersChange, onClear, disablePatchSelect }: PatchProjectsFilterBarProps) {
+export function PatchProjectsFilterBar({ patchOptions, filters, onFiltersChange, onClear, disablePatchSelect, onAddressSelect }: PatchProjectsFilterBarProps) {
+  const isMobile = useIsMobile()
+  const searchParams = useSearchParams()
+  
+  // Local state for search input (for debouncing)
+  const [searchInput, setSearchInput] = useState(() => searchParams.get("q") || "")
+  const searchMode = (searchParams.get("searchMode") || "name") as "name" | "address"
+  const addressQuery = searchParams.get("addressQuery") || ""
+  
+  // Track if search is pending (debounced but not yet applied)
+  const qParam = searchParams.get("q") || ""
+  const isSearchPending = searchInput !== qParam && searchMode === "name"
+  
+  // Debounced search update
+  useEffect(() => {
+    const handler = window.setTimeout(() => {
+      const currentParam = searchParams.get("q") || ""
+      if (searchInput === currentParam) return
+      onFiltersChange({ q: searchInput.length > 0 ? searchInput : undefined })
+    }, 300)
+    
+    return () => {
+      window.clearTimeout(handler)
+    }
+  }, [searchInput, onFiltersChange, searchParams])
+  
+  // Sync local state when URL param changes externally
+  useEffect(() => {
+    const current = searchParams.get("q") || ""
+    setSearchInput((prev) => (prev === current ? prev : current))
+  }, [searchParams])
+  
+  // Handle search mode change
+  const handleSearchModeChange = useCallback((mode: "name" | "address") => {
+    if (mode === "address") {
+      onFiltersChange({ q: undefined, searchMode: "address" })
+    } else {
+      onFiltersChange({ searchMode: undefined })
+    }
+  }, [onFiltersChange])
+  
+  // Handle address selection
+  const handleAddressSelect = useCallback((address: GoogleAddress, error?: AddressValidationError | null) => {
+    if (onAddressSelect) {
+      onAddressSelect(address, error)
+    }
+  }, [onAddressSelect])
+  
   return (
     <div className="flex flex-col sm:flex-row flex-wrap items-center gap-2 sm:gap-3 rounded-md border bg-white/60 p-3">
       <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground w-full sm:w-auto">
@@ -85,12 +140,59 @@ export function PatchProjectsFilterBar({ patchOptions, filters, onFiltersChange,
         </Select>
       )}
 
-      <Input
-        placeholder="Search projects..."
-        className="w-full sm:w-60"
-        value={filters.q}
-        onChange={(event) => onFiltersChange({ q: event.target.value })}
-      />
+      {/* Mobile: Tabs for Name/Address search */}
+      {isMobile ? (
+        <div className="w-full">
+          <Tabs value={searchMode} onValueChange={(v) => handleSearchModeChange(v as "name" | "address")} className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="name">
+                <Search className="h-4 w-4 mr-2" />
+                By Name
+              </TabsTrigger>
+              <TabsTrigger value="address">
+                <Navigation className="h-4 w-4 mr-2" />
+                By Address
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="name" className="mt-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="patch-project-search-mobile"
+                  placeholder="Search projects..."
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  className="pl-10 pr-10 min-h-[44px]"
+                  autoComplete="off"
+                />
+                {isSearchPending && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <LoadingSpinner size={16} alt="Searching" />
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+            <TabsContent value="address" className="mt-2">
+              <GoogleAddressInput
+                value={addressQuery}
+                onChange={handleAddressSelect}
+                placeholder="Enter an address..."
+                showLabel={false}
+                requireSelection={false}
+              />
+            </TabsContent>
+          </Tabs>
+        </div>
+      ) : (
+        /* Desktop: Simple input (backward compatible) */
+        <Input
+          placeholder="Search projects..."
+          className="w-full sm:w-60"
+          value={filters.q}
+          onChange={(event) => onFiltersChange({ q: event.target.value })}
+          autoComplete="off"
+        />
+      )}
 
       <Select value={filters.tier} onValueChange={(value) => onFiltersChange({ tier: value as PatchProjectFilters["tier"] })}>
         <SelectTrigger className="w-full sm:w-44">

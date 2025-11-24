@@ -25,20 +25,74 @@ interface GeofenceNotification {
 
 export function useGeofencing(enabled: boolean = false) {
   const [isSupported, setIsSupported] = useState(false)
-  const [hasPermission, setHasPermission] = useState(false)
+  const [hasLocationPermission, setHasLocationPermission] = useState(false)
+  const [permissionError, setPermissionError] = useState<string | null>(null)
   const [currentPosition, setCurrentPosition] = useState<GeolocationPosition | null>(null)
   const [nearbySites, setNearbySites] = useState<JobSiteLocation[]>([])
+  const [lastNotification, setLastNotification] = useState<GeofenceNotification | null>(null)
   const watchIdRef = useRef<number | null>(null)
   const notificationCooldownRef = useRef<Map<string, number>>(new Map())
-  const lastNotificationRef = useRef<GeofenceNotification | null>(null)
+  const mockSites: JobSiteLocation[] | null =
+    typeof window !== "undefined" && Array.isArray((window as any).__GEOFENCE_TEST_SITES)
+      ? (window as any).__GEOFENCE_TEST_SITES
+      : null
+  const useMockSites = !!mockSites
 
   // Check if geolocation and notifications are supported
   useEffect(() => {
-    const supported = 
-      "geolocation" in navigator && 
-      "Notification" in window
-    
-    setIsSupported(supported)
+    if (typeof window === "undefined") return
+    setIsSupported("geolocation" in navigator)
+  }, [])
+
+  useEffect(() => {
+    if (typeof navigator === "undefined") return
+    const permissions = (navigator as any).permissions
+    if (!permissions?.query) return
+
+    let cancelled = false
+
+    let permissionStatus: PermissionStatus | null = null
+    let handleChange: (() => void) | null = null
+
+    permissions
+      .query({ name: "geolocation" })
+      .then((status: PermissionStatus) => {
+        if (cancelled) return
+        permissionStatus = status
+        setHasLocationPermission(status.state === "granted")
+
+        handleChange = () => {
+          if (status.state === "granted") {
+            setHasLocationPermission(true)
+            setPermissionError(null)
+          } else if (status.state === "denied") {
+            setHasLocationPermission(false)
+            setPermissionError("Location permission denied. Enable it in Settings > Privacy > Location Services.")
+          } else {
+            setHasLocationPermission(false)
+          }
+        }
+
+        if (status.addEventListener) {
+          status.addEventListener("change", handleChange)
+        } else {
+          status.onchange = handleChange
+        }
+      })
+      .catch(() => {
+        // Safari (and some embedded browsers) don't expose permissions API—fall back to manual request flow.
+      })
+
+    return () => {
+      cancelled = true
+      if (permissionStatus && handleChange) {
+        if (permissionStatus.removeEventListener) {
+          permissionStatus.removeEventListener("change", handleChange)
+        } else if (permissionStatus.onchange === handleChange) {
+          permissionStatus.onchange = null
+        }
+      }
+    }
   }, [])
 
   // Get user's role and assigned patches for filtering
@@ -81,12 +135,12 @@ export function useGeofencing(enabled: boolean = false) {
         return { role: null, patchIds: [] }
       }
     },
-    enabled: enabled && isSupported,
+    enabled: enabled && isSupported && !useMockSites,
     staleTime: 5 * 60 * 1000, // 5 minutes
   })
 
   // Fetch job sites with coordinates (filtered by user's patches for organisers)
-  const { data: jobSites = [] } = useQuery({
+  const { data: fetchedJobSites = [] } = useQuery({
     queryKey: ["job-sites-with-coords", userPatchScope?.role, userPatchScope?.patchIds?.join(",")],
     queryFn: async () => {
       // If user has no patches or role, return empty
@@ -166,9 +220,10 @@ export function useGeofencing(enabled: boolean = false) {
         longitude: site.longitude,
       })) as JobSiteLocation[]
     },
-    enabled: enabled && isSupported && !!userPatchScope,
+    enabled: enabled && isSupported && !!userPatchScope && !useMockSites,
     staleTime: 10 * 60 * 1000, // 10 minutes
   })
+  const jobSites = useMockSites ? mockSites ?? [] : fetchedJobSites
 
   // Calculate distance between two lat/lng points (Haversine formula)
   const calculateDistance = useCallback((
@@ -198,54 +253,68 @@ export function useGeofencing(enabled: boolean = false) {
     return Date.now() - lastNotification < NOTIFICATION_COOLDOWN
   }, [])
 
-  // Send notification for nearby site
-  const sendNotification = useCallback(async (site: JobSiteLocation) => {
-    if (!hasPermission || isSiteInCooldown(site.id)) return
+  const requestLocationAccess = useCallback((): Promise<boolean> => {
+    if (typeof navigator === "undefined" || !isSupported) {
+      setPermissionError("Geolocation is not supported in this browser.")
+      return Promise.resolve(false)
+    }
+
+    setPermissionError(null)
+
+    return new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setHasLocationPermission(true)
+          setCurrentPosition(position)
+          setPermissionError(null)
+          resolve(true)
+        },
+        (error) => {
+          if (error.code === error.PERMISSION_DENIED) {
+            setPermissionError("Location permission denied. Update iOS Settings > Privacy > Location Services.")
+          } else {
+            setPermissionError(error.message)
+          }
+          setHasLocationPermission(false)
+          resolve(false)
+        },
+        {
+          enableHighAccuracy: false,
+          timeout: 20000,
+          maximumAge: 0,
+        }
+      )
+    })
+  }, [isSupported])
+
+  // Record nearby site for in-app alerts/toasts
+  const recordNearbySite = useCallback((site: JobSiteLocation) => {
+    if (isSiteInCooldown(site.id)) return
+
+    const timestamp = Date.now()
+    const payload: GeofenceNotification = {
+      siteId: site.id,
+      siteName: site.name,
+      projectId: site.project_id,
+      projectName: site.project_name,
+      timestamp,
+    }
+
+    notificationCooldownRef.current.set(site.id, timestamp)
+    setLastNotification(payload)
 
     try {
-      // Check if browser supports notifications
-      if (Notification.permission === "granted") {
-        const notification = new Notification("Site Visit Reminder", {
-          body: `You're near ${site.name}. Tap to record a site visit.`,
-          icon: "/icon-192x192.png", // Assumes PWA icon exists
-          tag: `site-visit-${site.id}`, // Prevents duplicate notifications
-          requireInteraction: false,
-          data: {
-            siteId: site.id,
-            siteName: site.name,
-            projectId: site.project_id,
-            projectName: site.project_name,
-          },
+      sessionStorage.setItem(
+        "pendingSiteVisit",
+        JSON.stringify({
+          job_site_id: site.id,
+          project_id: site.project_id,
         })
-
-        // Handle notification click
-        notification.onclick = () => {
-          window.focus()
-          // Store notification data for form to pick up
-          sessionStorage.setItem("pendingSiteVisit", JSON.stringify({
-            job_site_id: site.id,
-            project_id: site.project_id,
-          }))
-          // Navigate to site visits page or open form
-          window.location.href = "/site-visits?openForm=true"
-          notification.close()
-        }
-
-        // Set cooldown for this site
-        notificationCooldownRef.current.set(site.id, Date.now())
-        
-        lastNotificationRef.current = {
-          siteId: site.id,
-          siteName: site.name,
-          projectId: site.project_id,
-          projectName: site.project_name,
-          timestamp: Date.now(),
-        }
-      }
+      )
     } catch (error) {
-      console.error("Error sending notification:", error)
+      console.warn("Unable to store pending site visit:", error)
     }
-  }, [hasPermission, isSiteInCooldown])
+  }, [isSiteInCooldown])
 
   // Check for nearby sites
   const checkNearbySites = useCallback((position: GeolocationPosition) => {
@@ -266,32 +335,19 @@ export function useGeofencing(enabled: boolean = false) {
 
     setNearbySites(nearby)
 
-    // Send notification for first nearby site
-    if (nearby.length > 0 && hasPermission) {
-      // Sort by distance and notify about closest site only
-      const sorted = nearby.sort((a, b) => {
-        const distA = calculateDistance(userLat, userLon, a.latitude, a.longitude)
-        const distB = calculateDistance(userLat, userLon, b.latitude, b.longitude)
-        return distA - distB
-      })
-      
-      sendNotification(sorted[0])
-    }
-  }, [jobSites, calculateDistance, hasPermission, sendNotification])
+    // Alert for closest site within radius
+    if (nearby.length > 0) {
+      const sorted = nearby
+        .map((site) => ({
+          site,
+          distance: calculateDistance(userLat, userLon, site.latitude, site.longitude),
+        }))
+        .sort((a, b) => a.distance - b.distance)
+        .map((entry) => entry.site)
 
-  // Request notification permission
-  const requestPermission = useCallback(async () => {
-    if (!isSupported) return false
-
-    try {
-      const permission = await Notification.requestPermission()
-      setHasPermission(permission === "granted")
-      return permission === "granted"
-    } catch (error) {
-      console.error("Error requesting notification permission:", error)
-      return false
+      recordNearbySite(sorted[0])
     }
-  }, [isSupported])
+  }, [jobSites, calculateDistance, recordNearbySite])
 
   // Store checkNearbySites in a ref to avoid dependency issues
   const checkNearbySitesRef = useRef(checkNearbySites)
@@ -301,7 +357,7 @@ export function useGeofencing(enabled: boolean = false) {
 
   // Start watching position
   const startWatching = useCallback(() => {
-    if (!enabled || !isSupported || !hasPermission) return
+    if (!enabled || !isSupported || !hasLocationPermission) return
 
     if (watchIdRef.current !== null) return // Already watching
 
@@ -324,7 +380,7 @@ export function useGeofencing(enabled: boolean = false) {
         maximumAge: POSITION_CHECK_INTERVAL,
       }
     )
-  }, [enabled, isSupported, hasPermission])
+  }, [enabled, isSupported, hasLocationPermission])
 
   // Stop watching position
   const stopWatching = useCallback(() => {
@@ -336,7 +392,7 @@ export function useGeofencing(enabled: boolean = false) {
 
   // Start/stop watching based on enabled state
   useEffect(() => {
-    if (enabled && hasPermission && isSupported) {
+    if (enabled && hasLocationPermission && isSupported) {
       startWatching()
     } else {
       stopWatching()
@@ -345,17 +401,24 @@ export function useGeofencing(enabled: boolean = false) {
     return () => {
       stopWatching()
     }
-  }, [enabled, hasPermission, isSupported])
+  }, [enabled, hasLocationPermission, isSupported, startWatching, stopWatching])
 
   return {
     isSupported,
-    hasPermission,
+    hasLocationPermission,
+    permissionError,
     currentPosition,
     nearbySites,
-    lastNotification: lastNotificationRef.current,
-    requestPermission,
+    lastNotification,
+    requestLocationAccess,
     startWatching,
     stopWatching,
+  }
+}
+
+declare global {
+  interface Window {
+    __GEOFENCE_TEST_SITES?: JobSiteLocation[]
   }
 }
 

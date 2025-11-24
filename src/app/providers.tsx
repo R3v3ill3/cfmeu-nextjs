@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
 import type { ReactNode } from 'react'
@@ -24,6 +24,30 @@ export default function Providers({ children }: ProvidersProps) {
       },
     },
   }))
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
+      return
+    }
+
+    const registerServiceWorker = () => {
+      navigator.serviceWorker
+        .register('/sw.js', { scope: '/' })
+        .catch((error) => {
+          console.error('[PWA] Failed to register service worker', error)
+        })
+    }
+
+    if (document.readyState === 'complete') {
+      registerServiceWorker()
+    } else {
+      window.addEventListener('load', registerServiceWorker, { once: true })
+    }
+
+    return () => {
+      window.removeEventListener('load', registerServiceWorker)
+    }
+  }, [])
 
   return (
     <QueryClientProvider client={queryClient}>

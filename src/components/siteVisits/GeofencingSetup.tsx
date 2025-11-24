@@ -7,19 +7,26 @@ import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { useGeofencing } from "@/hooks/useGeofencing"
-import { MapPin, Bell, BellOff, CheckCircle2, XCircle, AlertCircle } from "lucide-react"
+import { IosInstallPrompt, useIosInstallPrompt } from "@/components/pwa/IosInstallPrompt"
+import { MapPin, CheckCircle2, AlertCircle, XCircle } from "lucide-react"
 import { toast } from "sonner"
 
 export function GeofencingSetup() {
   const [enabled, setEnabled] = useState(false)
   const {
     isSupported,
-    hasPermission,
+    hasLocationPermission,
+    permissionError,
     currentPosition,
     nearbySites,
     lastNotification,
-    requestPermission,
+    requestLocationAccess,
   } = useGeofencing(enabled)
+  const {
+    visible: iosInstallVisible,
+    dismiss: dismissIosInstallPrompt,
+    evaluate: evaluateIosInstallPrompt,
+  } = useIosInstallPrompt()
 
   // Load enabled state from localStorage
   useEffect(() => {
@@ -29,12 +36,36 @@ export function GeofencingSetup() {
     }
   }, [isSupported])
 
+  useEffect(() => {
+    if (enabled) {
+      evaluateIosInstallPrompt()
+    }
+  }, [enabled, evaluateIosInstallPrompt])
+
+  useEffect(() => {
+    if (!enabled || !lastNotification) return
+
+    toast(
+      `You're near ${lastNotification.siteName}`,
+      {
+        description: lastNotification.projectName,
+        action: {
+          label: "Record visit",
+          onClick: () => {
+            window.location.href = "/site-visits?openForm=true"
+          },
+        },
+        duration: 5000,
+      }
+    )
+  }, [enabled, lastNotification])
+
   // Save enabled state to localStorage
   const handleToggle = async (checked: boolean) => {
-    if (checked && !hasPermission) {
-      const granted = await requestPermission()
+    if (checked) {
+      const granted = await requestLocationAccess()
       if (!granted) {
-        toast.error("Notification permission denied. Geofencing requires notifications.")
+        toast.error("Location permission is required for geofencing reminders.")
         return
       }
     }
@@ -43,11 +74,13 @@ export function GeofencingSetup() {
     localStorage.setItem("geofencing-enabled", checked.toString())
     
     if (checked) {
-      toast.success("Geofencing enabled. You'll be notified when near job sites.")
+      toast.success("Geofencing enabled. Keep the app open to see nearby site reminders.")
+      evaluateIosInstallPrompt()
     } else {
-      toast.info("Geofencing disabled.")
+      toast.info("Geofencing disabled. We'll stop checking your location.")
     }
   }
+  const showInstallPrompt = enabled && iosInstallVisible
 
   if (!isSupported) {
     return (
@@ -62,8 +95,11 @@ export function GeofencingSetup() {
           <div className="flex items-start gap-3 p-4 bg-muted rounded-md">
             <AlertCircle className="h-5 w-5 mt-0.5 text-muted-foreground" />
             <div className="text-sm text-muted-foreground">
-              <p>Your browser doesn't support geolocation or notifications.</p>
-              <p className="mt-2">Geofencing features require a modern browser with location services enabled.</p>
+              <p>Your browser doesn't expose foreground geolocation.</p>
+              <p className="mt-2">
+                Install the CFMEU app via Safari → Share → <span className="font-medium">Add to Home Screen</span> or
+                switch to a modern browser with location services enabled.
+              </p>
             </div>
           </div>
         </CardContent>
@@ -79,7 +115,8 @@ export function GeofencingSetup() {
           Site Visit Geofencing
         </CardTitle>
         <CardDescription>
-          Get notified when you're near a job site to record visits
+          Keep the CFMEU mobile app or installed PWA open and we’ll surface nearby sites so you can start a visit in a
+          single tap.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -88,14 +125,23 @@ export function GeofencingSetup() {
           <div className="space-y-0.5">
             <Label className="text-base">Enable Geofencing</Label>
             <p className="text-sm text-muted-foreground">
-              Receive notifications when within 100m of a job site
+              See in-app reminders when you are within 100m of a job site (app must stay open)
             </p>
           </div>
           <Switch
+            aria-label="Enable geofencing reminders"
+            data-testid="geofencing-toggle"
             checked={enabled}
             onCheckedChange={handleToggle}
           />
         </div>
+
+        {showInstallPrompt && (
+          <IosInstallPrompt
+            visible={showInstallPrompt}
+            onDismiss={dismissIosInstallPrompt}
+          />
+        )}
 
         {/* Permission Status */}
         <div className="space-y-3">
@@ -103,10 +149,10 @@ export function GeofencingSetup() {
           <div className="space-y-2">
             <div className="flex items-center justify-between p-3 bg-muted rounded-md">
               <div className="flex items-center gap-2">
-                <Bell className="h-4 w-4" />
-                <span className="text-sm">Notification Permission</span>
+                <MapPin className="h-4 w-4" />
+                <span className="text-sm">Location Permission</span>
               </div>
-              {hasPermission ? (
+              {hasLocationPermission ? (
                 <Badge variant="default" className="gap-1">
                   <CheckCircle2 className="h-3 w-3" />
                   Granted
@@ -129,42 +175,70 @@ export function GeofencingSetup() {
                   Active
                 </Badge>
               ) : enabled ? (
-                <Badge variant="secondary">
-                  Waiting...
-                </Badge>
+                <Badge variant="secondary">Waiting...</Badge>
               ) : (
-                <Badge variant="outline">
-                  Disabled
-                </Badge>
+                <Badge variant="outline">Disabled</Badge>
               )}
             </div>
           </div>
         </div>
 
+        {permissionError && (
+          <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+            {permissionError}
+          </div>
+        )}
+
         {/* Nearby Sites */}
         {enabled && nearbySites.length > 0 && (
           <div className="space-y-3">
-            <h4 className="text-sm font-medium">Nearby Sites</h4>
+            <div className="flex items-center gap-2">
+              <h4 className="text-sm font-medium">Nearby Sites</h4>
+              <Badge variant="outline">{nearbySites.length}</Badge>
+            </div>
             <div className="space-y-2">
               {nearbySites.map((site) => (
-                <div key={site.id} className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-md">
+                <div
+                  key={site.id}
+                  className="flex items-center justify-between gap-4 rounded-md border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-950"
+                >
                   <div>
                     <div className="text-sm font-medium">{site.name}</div>
                     <div className="text-xs text-muted-foreground">{site.project_name}</div>
                   </div>
-                  <Badge variant="default">
-                    Within range
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="default">Within range</Badge>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => {
+                        try {
+                          sessionStorage.setItem(
+                            "pendingSiteVisit",
+                            JSON.stringify({
+                              job_site_id: site.id,
+                              project_id: site.project_id,
+                            })
+                          )
+                        } catch (error) {
+                          console.warn("Unable to store pending site visit", error)
+                        }
+                        window.location.href = "/site-visits?openForm=true"
+                      }}
+                    >
+                      Start visit
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* Last Notification */}
+        {/* Last Reminder */}
         {enabled && lastNotification && (
           <div className="space-y-3">
-            <h4 className="text-sm font-medium">Last Notification</h4>
+            <h4 className="text-sm font-medium">Last Reminder</h4>
             <div className="p-3 bg-muted rounded-md text-sm">
               <div className="flex items-center justify-between">
                 <span className="font-medium">{lastNotification.siteName}</span>
@@ -186,11 +260,11 @@ export function GeofencingSetup() {
             How It Works
           </h4>
           <ul className="text-sm text-muted-foreground space-y-1 ml-6 list-disc">
-            <li>Your location is checked periodically when the app is open</li>
-            <li>Notifications appear when you're within 100 meters of a job site</li>
-            <li>Each site has a 1-hour cooldown to prevent notification spam</li>
-            <li>Tap a notification to quickly record a site visit</li>
-            <li>Location data is not stored or transmitted</li>
+            <li>The CFMEU app (or installed PWA) checks your position every ~60s while it is in the foreground.</li>
+            <li>In-app toasts highlight the closest job site when you are within 100m.</li>
+            <li>Each site has a 1-hour cooldown to avoid repeated reminders.</li>
+            <li>Use “Start visit” or tap the toast to pre-fill the site visit form instantly.</li>
+            <li>Location data never leaves your device until you submit a visit.</li>
           </ul>
         </div>
 

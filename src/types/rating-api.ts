@@ -864,6 +864,11 @@ export interface ApiError {
   message?: string;
   code?: string;
   details?: any;
+  type?: string;
+  severity?: string;
+  timestamp?: string;
+  retryAfter?: number;
+  requestId?: string;
 }
 
 export interface ApiResponse<T = any> {

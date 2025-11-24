@@ -10,8 +10,10 @@
  * - Touch interaction optimization for construction site conditions
  */
 
-import { mobilePerformanceMonitor } from './mobile-performance-monitor'
-import { isMobile, getDeviceInfo } from '@/lib/device'
+import { useEffect, useState } from 'react'
+import { isMobile } from '@/lib/device'
+
+type TaskType = 'mapping' | 'audit' | 'compliance' | 'discovery'
 
 interface FieldOrganizerMetrics {
   // Location & GPS metrics
@@ -57,7 +59,7 @@ interface FieldOrganizerMetrics {
   timestamp: number
   sessionId: string
   projectId?: string
-  taskType?: 'mapping' | 'audit' | 'compliance' | 'discovery'
+  taskType?: TaskType
 }
 
 interface WorkflowEvent {
@@ -65,7 +67,7 @@ interface WorkflowEvent {
         'photo_capture' | 'photo_upload' | 'photo_fail' |
         'form_start' | 'form_save' | 'form_submit' | 'form_error' |
         'offline_enter' | 'offline_exit' | 'sync_start' | 'sync_complete' | 'sync_fail' |
-        'touch_start' | 'touch_success' | 'touch_miss' |
+        'touch_start' | 'touch_success' | 'touch_miss' | 'touch_complete' |
         'task_start' | 'task_complete' | 'task_abandon'
   timestamp: number
   duration?: number
@@ -167,11 +169,12 @@ class FieldOrganizerMonitor {
       const touchEndX = touch.clientX
       const touchEndY = touch.clientY
       const distance = Math.sqrt(Math.pow(touchEndX - touchStartX, 2) + Math.pow(touchEndY - touchStartY, 2))
+      const target = e.target as HTMLElement | null
 
       this.recordEvent('touch_complete', true, {
         responseTime,
         distance,
-        target: e.target?.tagName,
+        target: target?.tagName,
         timestamp: Date.now()
       })
 
@@ -417,7 +420,7 @@ class FieldOrganizerMonitor {
     })
   }
 
-  recordTaskStart(taskType: string, projectId?: string): void {
+  recordTaskStart(taskType: TaskType, projectId?: string): void {
     this.metrics.taskType = taskType
     this.metrics.projectId = projectId
 
@@ -428,7 +431,7 @@ class FieldOrganizerMonitor {
     })
   }
 
-  recordTaskCompletion(taskType: string, duration: number, success: boolean): void {
+  recordTaskCompletion(taskType: TaskType, duration: number, success: boolean): void {
     this.recordEvent('task_complete', success, {
       taskType,
       duration,

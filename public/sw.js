@@ -15,6 +15,10 @@ const STATIC_ASSETS = [
   '/mobile/ratings',
   '/mobile/ratings/dashboard',
   '/mobile/ratings/wizard',
+  '/mobile/site-visits',
+  '/mobile/site-visits/new',
+  '/site-visits',
+  '/manifest.json',
   '/_next/static/css/',
   '/_next/static/chunks/',
   '/favicon.ico',
@@ -46,9 +50,12 @@ const MOBILE_ASSETS = [
   '/mobile/ratings',
   '/mobile/projects',
   '/mobile/employers',
+  '/mobile/site-visits',
+  '/mobile/site-visits/new',
+  '/site-visits',
   '/manifest.json',
   '/_next/static/chunks/framework-*.js',
-  '_next/static/chunks/main-*.js'
+  '/_next/static/chunks/main-*.js'
 ]
 
 // Install event - cache static assets and critical mobile data

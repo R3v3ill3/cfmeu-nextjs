@@ -220,6 +220,7 @@ export function createError(
     details?: any;
     cause?: Error;
     context?: AppError['context'];
+    stack?: string;
   } = {}
 ): AppError {
   return {
@@ -231,7 +232,7 @@ export function createError(
     cause: options.cause,
     context: options.context || {},
     timestamp: new Date().toISOString(),
-    stack: options.cause?.stack,
+    stack: options.stack ?? options.cause?.stack,
   };
 }
 
@@ -686,12 +687,11 @@ export async function withErrorHandling<T>(
     const data = await operation();
     return { data };
   } catch (error) {
-      const appError = createAppError(error);
-      if (context?.request) {
-        await logError(appError, context.request);
-      }
-      return { data: null, error: appError };
+    const appError = createAppError(error);
+    if (context?.request) {
+      await logError(appError, context.request);
     }
+    return { data: null, error: appError };
   }
 }
 
@@ -719,51 +719,6 @@ export function createAppError(error: unknown): AppError {
     return createError(ErrorType.INTERNAL, 'Unknown error occurred');
   }
 }
-
-// =============================================================================
-// EXPORTS
-// =============================================================================
-
-export {
-  // Error creation
-  createError,
-  createValidationError,
-  createAuthenticationError,
-  createAuthorizationError,
-  createNotFoundError,
-  createConflictError,
-  createDatabaseError,
-  createExternalServiceError,
-  createRateLimitError,
-
-  // Error handling
-  handleApiError,
-  logError,
-  shouldIncludeDetails,
-  calculateRetryAfter,
-
-  // Response builders
-  buildErrorResponse,
-  buildSuccessResponse,
-
-  // Utilities
-  generateRequestId,
-  getClientIpAddress,
-  isRateLimitError,
-  isRetryableError,
-  isUserError,
-  isServerError,
-  getErrorSummary,
-
-  // Wrapper functions
-  withErrorHandling,
-  createAppError,
-
-  // Configs and enums
-  ErrorType,
-  ErrorSeverity,
-  ERROR_CONFIGS,
-};
 
 export default {
   // Error creation

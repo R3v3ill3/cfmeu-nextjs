@@ -592,7 +592,9 @@ export class SiteVisitDataService {
         const category = finding.category as keyof typeof this.FINDING_CATEGORIES;
         if (category && this.FINDING_CATEGORIES[category]) {
           const severity = finding.severity || 'medium';
-          const multiplier = this.FINDING_CATEGORIES[category].severityMultiplier[severity as keyof typeof this.FINDING_CATEGORIES[category].severityMultiplier] || 1;
+          const severityMultipliers = this.FINDING_CATEGORIES[category].severityMultiplier;
+          const severityKey = severity as keyof typeof severityMultipliers;
+          const multiplier = severityMultipliers[severityKey] || 1;
 
           // Apply negative impact for findings
           const impact = -10 * multiplier;

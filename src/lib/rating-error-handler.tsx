@@ -1,3 +1,5 @@
+import React from 'react'
+
 /**
  * Centralized error handling utilities for the rating system
  * This helps prevent React crashes and provides consistent error reporting
@@ -223,14 +225,14 @@ export function useRatingErrorHandler() {
     ratingErrorHandler.handleError(errorObj, context)
   }
 
-  const handleAsyncError = async <T>(
+  const handleAsyncError = async <T,>(
     operation: () => Promise<T>,
     context?: RatingErrorContext
   ): Promise<T> => {
     return ratingErrorHandler.handleAsyncError(operation, context)
   }
 
-  const createSafeCallback = <T extends any[], R>(
+  const createSafeCallback = <T extends any[], R,>(
     callback: (...args: T) => R,
     context?: RatingErrorContext
   ) => {

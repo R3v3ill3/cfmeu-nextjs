@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { mobileTokens } from '@/styles/mobile-design-tokens';
 import {
   SearchSuggestion,
   useSearchHistory,
@@ -18,6 +17,7 @@ import {
   Mic,
   Users,
   Building2,
+  Search,
   X,
   ChevronRight,
   Sparkles,
@@ -256,7 +256,7 @@ export const SearchSuggestionsPanel: React.FC<SearchSuggestionsPanelProps> = ({
                 suggestion.trend === 'up' && 'text-green-600 border-green-200',
                 suggestion.trend === 'down' && 'text-red-600 border-red-200',
                 suggestion.trend === 'stable' && 'text-gray-600 border-gray-200'
-              ))}>
+              )}>
                 {suggestion.trend === 'up' && '↗'}
                 {suggestion.trend === 'down' && '↘'}
                 {suggestion.trend === 'stable' && '→'}

@@ -70,7 +70,7 @@ function DynamicComponentWrapper({
   ...props
 }: DynamicComponentProps) {
   const LazyComponent = useMemo(() => dynamic(loader, {
-    loading: () => fallback,
+    loading: () => <>{fallback}</>,
     ssr: false // Disable SSR for mobile components for better performance
   }), [loader, fallback])
 

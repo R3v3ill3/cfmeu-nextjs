@@ -23,6 +23,8 @@ import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { usePatchScans } from "@/hooks/usePatchScans"
 import { useAdminPatchContext } from "@/context/AdminPatchContext"
+import { GoogleAddress, AddressValidationError } from "@/components/projects/GoogleAddressInput"
+import { useAddressSearch } from "@/hooks/useAddressSearch"
 
 const DEFAULT_PAGE_SIZE = 25
 
@@ -67,6 +69,10 @@ export default function PatchPage() {
   const sort = (searchParams.get("sort") || "name") as PatchProjectFilters["sort"]
   const dir = (searchParams.get("dir") || "asc") as PatchProjectFilters["dir"]
   const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10) || 1)
+  const searchMode = (searchParams.get("searchMode") || "name") as "name" | "address"
+  const addressLat = searchParams.get("addressLat") ? parseFloat(searchParams.get("addressLat")!) : null
+  const addressLng = searchParams.get("addressLng") ? parseFloat(searchParams.get("addressLng")!) : null
+  const addressQuery = searchParams.get("addressQuery") || ""
 
   const setParams = useCallback(
     (changes: Record<string, string | null | undefined>, { resetPage = true } = {}) => {
@@ -133,8 +139,19 @@ export default function PatchPage() {
     stage,
     eba,
     sort,
-    dir
+    dir,
+    searchMode: searchMode === "address" ? "address" : undefined
   }
+
+  // Address search query (for finding nearby projects)
+  const addressSearchQuery = useAddressSearch({
+    lat: addressLat,
+    lng: addressLng,
+    address: addressQuery,
+    enabled: searchMode === "address" && addressLat !== null && addressLng !== null,
+    maxResults: 20,
+    maxDistanceKm: 100
+  })
 
   const disablePatchSelect = patchOptions.length <= 1
 
@@ -176,9 +193,41 @@ export default function PatchPage() {
     if (changes.eba !== undefined) updated.eba = changes.eba
     if (changes.sort !== undefined) updated.sort = changes.sort
     if (changes.dir !== undefined) updated.dir = changes.dir
+    if (changes.searchMode !== undefined) {
+      if (changes.searchMode === "address") {
+        updated.searchMode = "address"
+      } else {
+        updated.searchMode = null
+        // Clear address params when switching to name mode
+        updated.addressLat = null
+        updated.addressLng = null
+        updated.addressQuery = null
+      }
+    }
 
     setParams(updated)
   }
+
+  // Handle address selection from GoogleAddressInput
+  const handleAddressSelect = useCallback((address: GoogleAddress, error?: AddressValidationError | null) => {
+    if (address.lat && address.lng) {
+      setParams({
+        searchMode: "address",
+        addressLat: address.lat.toString(),
+        addressLng: address.lng.toString(),
+        addressQuery: address.formatted,
+        q: null // Clear name search when using address search
+      })
+    } else {
+      // User is typing a new address, clear previous search results
+      setParams({
+        addressLat: null,
+        addressLng: null,
+        addressQuery: null,
+        searchMode: searchMode === "address" ? "address" : null
+      })
+    }
+  }, [setParams, searchMode])
 
   const handleClearFilters = () => {
     const next: Record<string, string | null> = {
@@ -189,7 +238,11 @@ export default function PatchPage() {
       stage: null,
       eba: null,
       sort: "name",
-      dir: "asc"
+      dir: "asc",
+      searchMode: null,
+      addressLat: null,
+      addressLng: null,
+      addressQuery: null
     }
     setParams(next)
   }
@@ -254,6 +307,7 @@ export default function PatchPage() {
           onFiltersChange={handleFiltersChange}
           onClear={handleClearFilters}
           disablePatchSelect={disablePatchSelect}
+          onAddressSelect={handleAddressSelect}
         />
 
         {loadingPatches && (

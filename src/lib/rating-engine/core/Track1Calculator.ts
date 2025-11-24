@@ -452,7 +452,7 @@ export class Track1Calculator implements ITrack1Calculator {
         assessment_date: new Date(assessment.assessment_date),
         weight: wa.weight,
         severity_level: assessment.severity_level,
-        severity_name: this.getS SeverityName(assessment.assessment_type, assessment.severity_level),
+        severity_name: this.getSeverityName(assessment.assessment_type, assessment.severity_level),
         weighted_score: wa.contribution,
         project_id: assessment.project_id,
         organiser_id: assessment.organiser_id,

@@ -31,7 +31,7 @@ class SyncQueue {
   private storage: IndexedDBStorage
   private config: SyncQueueConfig
   private isProcessing = false
-  private processingPromise: Promise<void> | null = null
+  private processingPromise: Promise<SyncResult[]> | null = null
   private onSyncCallback?: (results: SyncResult[]) => void
   private onConflictCallback?: (conflict: ConflictInfo) => Promise<'local' | 'server' | 'merge'>
 
@@ -74,14 +74,15 @@ class SyncQueue {
    */
   async processQueue(): Promise<SyncResult[]> {
     if (this.isProcessing) {
-      return this.processingPromise || []
+      return this.processingPromise ?? Promise.resolve([])
     }
 
     this.isProcessing = true
-    this.processingPromise = this._processQueue()
+    const currentPromise = this._processQueue()
+    this.processingPromise = currentPromise
 
     try {
-      const results = await this.processingPromise
+      const results = await currentPromise
       return results
     } finally {
       this.isProcessing = false
@@ -225,12 +226,12 @@ class SyncQueue {
         if (this.onConflictCallback) {
           resolution = await this.onConflictCallback(conflict)
         } else {
-          resolution = 'client' // Fallback
+          resolution = 'local' // Fallback
         }
         break
       case 'client':
       default:
-        resolution = 'client'
+        resolution = 'local'
         break
     }
 

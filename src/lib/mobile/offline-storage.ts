@@ -484,3 +484,4 @@ export const generalStorage = new IndexedDBStorage({
 
 // Export the class for custom storage instances
 export { IndexedDBStorage }
+export type { SyncOperation }

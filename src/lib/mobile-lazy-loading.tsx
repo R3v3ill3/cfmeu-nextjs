@@ -55,7 +55,7 @@ export function createMobileLazyLoad<T extends Record<string, any>>(
     errorComponent?: ComponentType<{ error: Error; retry: () => void }>
     strategy?: LoadingStrategy
     preloadDelay?: number
-    fallback?: ComponentType
+    fallback?: ComponentType<T>
   } = {}
 ) {
   const {
@@ -506,31 +506,6 @@ class ErrorBoundary extends Component<
   }
 }
 
-// Predefined lazy components for common mobile use cases
-export const MobileLazyProjects = createMobileLazyLoad(
-  () => import('@/components/projects/ProjectsList'),
-  {
-    strategy: LoadingStrategy.NETWORK_AWARE,
-    fallback: () => <div className="h-64 bg-gray-100 animate-pulse rounded-lg" />
-  }
-)
-
-export const MobileLazyEmployers = createMobileLazyLoad(
-  () => import('@/components/employers/EmployersList'),
-  {
-    strategy: LoadingStrategy.NETWORK_AWARE,
-    fallback: () => <div className="h-64 bg-gray-100 animate-pulse rounded-lg" />
-  }
-)
-
-export const MobileLazyRatings = createMobileLazyLoad(
-  () => import('@/components/ratings/RatingsDashboard'),
-  {
-    strategy: LoadingStrategy.NETWORK_AWARE,
-    fallback: () => <div className="h-64 bg-gray-100 animate-pulse rounded-lg" />
-  }
-)
-
 // Hook for network-aware loading decisions
 export function useNetworkAwareLoading() {
   const [networkInfo, setNetworkInfo] = useState({
@@ -594,9 +569,6 @@ export default {
   useMobileImageLazyLoad,
   createMobileRouteComponent,
   useMobileDataPreload,
-  MobileLazyProjects,
-  MobileLazyEmployers,
-  MobileLazyRatings,
   useNetworkAwareLoading,
   LoadingStrategy
 }

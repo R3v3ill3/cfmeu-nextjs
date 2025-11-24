@@ -9,16 +9,19 @@
  * - Network performance analysis
  */
 
+import { useEffect, useState } from 'react'
 import { isMobile, isSlowConnection, getDeviceInfo } from '@/lib/device'
 
+type CwvMetric = 'lcp' | 'fid' | 'cls' | 'fcp' | 'ttfb' | 'inp'
+
 // Core Web Vitals thresholds for mobile
-const MOBILE_CWV_THRESHOLDS = {
-  LCP: { good: 2.5, needsImprovement: 4.0 }, // Largest Contentful Paint (seconds)
-  FID: { good: 100, needsImprovement: 300 },  // First Input Delay (milliseconds)
-  CLS: { good: 0.1, needsImprovement: 0.25 }, // Cumulative Layout Shift
-  FCP: { good: 1.8, needsImprovement: 3.0 }, // First Contentful Paint (seconds)
-  TTFB: { good: 800, needsImprovement: 1800 }, // Time to First Byte (milliseconds)
-  INP: { good: 200, needsImprovement: 500 }, // Interaction to Next Paint (milliseconds)
+const MOBILE_CWV_THRESHOLDS: Record<CwvMetric, { good: number; needsImprovement: number }> = {
+  lcp: { good: 2.5, needsImprovement: 4.0 }, // Largest Contentful Paint (seconds)
+  fid: { good: 100, needsImprovement: 300 },  // First Input Delay (milliseconds)
+  cls: { good: 0.1, needsImprovement: 0.25 }, // Cumulative Layout Shift
+  fcp: { good: 1.8, needsImprovement: 3.0 }, // First Contentful Paint (seconds)
+  ttfb: { good: 800, needsImprovement: 1800 }, // Time to First Byte (milliseconds)
+  inp: { good: 200, needsImprovement: 500 }, // Interaction to Next Paint (milliseconds)
 }
 
 // Mobile performance targets
@@ -156,7 +159,10 @@ class MobilePerformanceMonitor {
     // First Input Delay
     this.observePerformanceEntry('first-input', (entries) => {
       entries.forEach(entry => {
-        this.metrics.fid = entry.processingStart - entry.startTime
+        const timing = entry as PerformanceEventTiming
+        if (typeof timing.processingStart === 'number') {
+          this.metrics.fid = timing.processingStart - timing.startTime
+        }
       })
     })
 
@@ -183,8 +189,9 @@ class MobilePerformanceMonitor {
     // Interaction to Next Paint (if supported)
     this.observePerformanceEntry('event', (entries) => {
       entries.forEach(entry => {
-        if ((entry as any).interactionId) {
-          const inp = entry.processingStart - entry.startTime
+        const timing = entry as PerformanceEventTiming & { interactionId?: number }
+        if (timing.interactionId && typeof timing.processingStart === 'number') {
+          const inp = timing.processingStart - timing.startTime
           this.metrics.inp = Math.max(this.metrics.inp || 0, inp)
         }
       })
@@ -351,12 +358,12 @@ class MobilePerformanceMonitor {
     this.alerts = []
 
     // Core Web Vitals analysis
-    this.analyzeMetric('LCP', this.metrics.lcp, MOBILE_CWV_THRESHOLDS.LCP)
-    this.analyzeMetric('FID', this.metrics.fid, MOBILE_CWV_THRESHOLDS.FID)
-    this.analyzeMetric('CLS', this.metrics.cls, MOBILE_CWV_THRESHOLDS.CLS)
-    this.analyzeMetric('FCP', this.metrics.fcp, MOBILE_CWV_THRESHOLDS.FCP)
-    this.analyzeMetric('TTFB', this.metrics.ttfb, MOBILE_CWV_THRESHOLDS.TTFB)
-    this.analyzeMetric('INP', this.metrics.inp, MOBILE_CWV_THRESHOLDS.INP)
+    this.analyzeMetric('lcp', this.metrics.lcp, MOBILE_CWV_THRESHOLDS.lcp)
+    this.analyzeMetric('fid', this.metrics.fid, MOBILE_CWV_THRESHOLDS.fid)
+    this.analyzeMetric('cls', this.metrics.cls, MOBILE_CWV_THRESHOLDS.cls)
+    this.analyzeMetric('fcp', this.metrics.fcp, MOBILE_CWV_THRESHOLDS.fcp)
+    this.analyzeMetric('ttfb', this.metrics.ttfb, MOBILE_CWV_THRESHOLDS.ttfb)
+    this.analyzeMetric('inp', this.metrics.inp, MOBILE_CWV_THRESHOLDS.inp)
 
     // Mobile-specific targets
     this.analyzeMobileTargets()
@@ -504,15 +511,15 @@ class MobilePerformanceMonitor {
   getOptimizationRecommendations(): string[] {
     const recommendations: string[] = []
 
-    if (this.metrics.lcp && this.metrics.lcp > MOBILE_CWV_THRESHOLDS.LCP.good) {
+    if (this.metrics.lcp && this.metrics.lcp > MOBILE_CWV_THRESHOLDS.lcp.good) {
       recommendations.push('Optimize largest contentful paint: use optimized images, lazy load content')
     }
 
-    if (this.metrics.fid && this.metrics.fid > MOBILE_CWV_THRESHOLDS.FID.good) {
+    if (this.metrics.fid && this.metrics.fid > MOBILE_CWV_THRESHOLDS.fid.good) {
       recommendations.push('Reduce first input delay: minimize JavaScript execution time')
     }
 
-    if (this.metrics.cls && this.metrics.cls > MOBILE_CWV_THRESHOLDS.CLS.good) {
+    if (this.metrics.cls && this.metrics.cls > MOBILE_CWV_THRESHOLDS.cls.good) {
       recommendations.push('Prevent layout shifts: specify image dimensions, avoid dynamic content insertion')
     }
 

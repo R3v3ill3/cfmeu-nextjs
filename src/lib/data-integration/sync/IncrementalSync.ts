@@ -442,11 +442,11 @@ export class IncrementalSync {
     table: string,
     deletes: SyncEvent[],
     options: IncrementalSyncOptions
-  }: {
+  ): Promise<{
     processed: number;
     conflicts: DataConflict[];
     errors: Array<{ operation: string; recordId: string; error: string }>;
-  }) {
+  }> {
     const result = {
       processed: 0,
       conflicts: [] as DataConflict[],
