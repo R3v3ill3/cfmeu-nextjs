@@ -461,6 +461,8 @@ export interface DiscrepancyAnalysis {
   source_reliability: SourceReliabilityAssessment;
 }
 
+export type DiscrepancyAnalysisDetails = DiscrepancyAnalysis;
+
 export interface DiscrepancyCause {
   cause: string;
   impact: number;

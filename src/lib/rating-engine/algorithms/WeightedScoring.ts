@@ -48,39 +48,6 @@ export interface IWeightedScoringCalculator {
 }
 
 // =============================================================================
-// SCORING CONFIGURATION
-// =============================================================================
-
-export interface ScoringConfiguration {
-  // Basic configuration
-  normalize_weights: boolean;
-  max_total_score: number;
-  min_total_score: number;
-  confidence_threshold: number;
-
-  // Weight adjustments
-  apply_confidence_weighting: boolean;
-  apply_recency_weighting: boolean;
-  apply_severity_weighting: boolean;
-  apply_volume_weighting: boolean;
-
-  // Advanced options
-  enable_outlier_detection: boolean;
-  outlier_threshold: number;
-  smoothing_enabled: boolean;
-  smoothing_factor: number;
-
-  // EBA specific settings
-  eba_critical_weight: number;
-  eba_override_threshold: number;
-
-  // Validation settings
-  require_minimum_assessments: boolean;
-  minimum_assessment_count: number;
-  validate_weight_distribution: boolean;
-}
-
-// =============================================================================
 // WEIGHTED SCORING IMPLEMENTATION
 // =============================================================================
 

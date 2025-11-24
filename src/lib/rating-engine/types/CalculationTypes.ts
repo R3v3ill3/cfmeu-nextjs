@@ -624,13 +624,14 @@ export type QualityDimension =
   | 'accuracy'
   | 'coverage';
 
-export type ReconciliationStrategy =
-  | 'weighted_trust'
-  | 'data_quality_priority'
-  | 'recency_priority'
-  | 'expertise_priority'
-  | 'project_priority'
-  | 'hybrid_strategy';
+export interface ReconciliationStrategy {
+  approach: string;
+  confidence: number;
+  reasoning: string;
+  expected_outcome: string;
+  implementation: Record<string, any>;
+  risk_level: 'low' | 'medium' | 'high';
+}
 
 export type CacheStrategy =
   | 'aggressive'
@@ -676,10 +677,28 @@ export interface DiscrepancyCheck {
 export type DiscrepancyAnalysisResult = DiscrepancyAnalysis;
 
 export interface DiscrepancyDetectionConfig {
-  thresholds: Record<DiscrepancyLevel, number>;
-  validation_window_days: number;
-  auto_resolve: boolean;
-  notify_roles: string[];
+  score_difference_thresholds: Record<DiscrepancyLevel, number>;
+  confidence_gap_thresholds: Record<DiscrepancyLevel, number>;
+  rating_mismatch_weights: Record<DiscrepancyLevel, number>;
+  detection_sensitivity: 'conservative' | 'balanced' | 'aggressive';
+  min_assessments_for_detection: number;
+  temporal_consistency_window: number;
+  enable_pattern_detection: boolean;
+  pattern_history_length: number;
+  pattern_significance_threshold: number;
+  enable_risk_prediction: boolean;
+  risk_factors: Record<string, number>;
+  risk_adjustment_enabled: boolean;
+  auto_resolve_enabled: boolean;
+  auto_resolve_threshold: DiscrepancyLevel;
+  human_review_threshold: DiscrepancyLevel;
+  enable_ml_detection: boolean;
+  ml_model_confidence_threshold: number;
+  enable_contextual_analysis: boolean;
+  contextual_factors: Record<string, number>;
+  enable_caching: boolean;
+  cache_ttl_seconds: number;
+  batch_processing: boolean;
 }
 
 export interface DiscrepancyPattern {
@@ -688,12 +707,17 @@ export interface DiscrepancyPattern {
   severity: DiscrepancyLevel;
   indicators: string[];
   description?: string;
+  occurrence_count?: number;
+  significance_score?: number;
 }
 
 export interface DiscrepancyTrend {
   direction: 'increasing' | 'decreasing' | 'stable';
-  magnitude: number;
-  period_days: number;
+  strength: number;
+  trend_score: number;
+  volatility: number;
+  period_analyzed: number;
+  data_points: number;
 }
 
 export interface DiscrepancyResolution {
@@ -756,38 +780,83 @@ export interface AssessmentWeight {
 
 export interface WeightAdjustment {
   assessment_id: string;
-  reason: string;
-  adjustment: number;
+  original_weight: number;
+  final_weight: number;
+  adjustment_factor: number;
+  reasons: string[];
 }
 
 export interface ScoringConfiguration {
   normalize_weights: boolean;
-  max_score: number;
-  min_score: number;
-  assessment_weights: AssessmentWeight[];
-  allow_negative?: boolean;
+  max_total_score: number;
+  min_total_score: number;
+  confidence_threshold: number;
+  apply_confidence_weighting: boolean;
+  apply_recency_weighting: boolean;
+  apply_severity_weighting: boolean;
+  apply_volume_weighting: boolean;
+  enable_outlier_detection: boolean;
+  outlier_threshold: number;
+  smoothing_enabled: boolean;
+  smoothing_factor: number;
+  eba_critical_weight: number;
+  eba_override_threshold: number;
+  require_minimum_assessments: boolean;
+  minimum_assessment_count: number;
+  validate_weight_distribution: boolean;
 }
 
 export interface ScoringComponentResult {
   assessment_id: string;
-  assessment_type: ComplianceAssessmentType;
-  score: number;
-  weight: number;
+  assessment_type?: ComplianceAssessmentType;
+  score: number | null;
+  base_weight: number;
+  confidence_level: ConfidenceLevel;
   effective_weight: number;
   contribution: number;
+  percentage_of_total: number;
+}
+
+export interface ScoringBreakdown {
+  total_weighted_score: number;
+  total_effective_weight: number;
+  component_breakdown: ScoringComponentResult[];
+  weighting_factors: Record<string, number>;
+  calculation_summary: {
+    method: string;
+    total_components: number;
+    config_used: ScoringConfiguration;
+  };
+}
+
+export interface ScoringProcessingDetails {
+  assessment_count: number;
+  total_weight: number;
+  effective_weight_range: {
+    min: number;
+    max: number;
+  };
+  outliers_detected: number;
+  smoothing_applied: boolean;
 }
 
 export interface ScoringResult {
-  total_score: number;
-  total_weight: number;
-  normalized_score: number;
-  components: ScoringComponentResult[];
+  final_score: number;
+  final_rating: TrafficLightRating;
+  method_used: string;
+  components: WeightedAssessment[];
+  weight_adjustments: WeightAdjustment[];
+  breakdown: ScoringBreakdown;
+  validation: ScoringValidationResult;
+  confidence_level: ConfidenceLevel;
+  processing_details: ScoringProcessingDetails;
 }
 
 export interface ScoringValidationResult {
   is_valid: boolean;
   errors: string[];
   warnings: string[];
+  recommendations?: string[];
 }
 
 // Type guard functions
