@@ -129,7 +129,7 @@
     }
   ],
   "share_target": {
-    "action": "/mobile/share",
+    "action": "/share",
     "method": "POST",
     "enctype": "multipart/form-data",
     "params": {
