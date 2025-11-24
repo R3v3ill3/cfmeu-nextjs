@@ -10,6 +10,7 @@ import { useGeofencing } from "@/hooks/useGeofencing"
 import { IosInstallPrompt, useIosInstallPrompt } from "@/components/pwa/IosInstallPrompt"
 import { MapPin, CheckCircle2, AlertCircle, XCircle } from "lucide-react"
 import { toast } from "sonner"
+import { useGeofencingPermission } from "@/lib/geofencing/GeofencingPermissionManager"
 
 export function GeofencingSetup() {
   const [enabled, setEnabled] = useState(false)
@@ -39,6 +40,8 @@ export function GeofencingSetup() {
     dismiss: dismissIosInstallPrompt,
     evaluate: evaluateIosInstallPrompt,
   } = useIosInstallPrompt()
+
+  const { requestPermissionsNow } = useGeofencingPermission()
 
   // Load enabled state from localStorage
   useEffect(() => {
@@ -196,7 +199,7 @@ export function GeofencingSetup() {
                 size="sm"
                 variant="outline"
                 onClick={async () => {
-                  const granted = await requestLocationAccess()
+                  const granted = await requestPermissionsNow()
                   if (granted) {
                     toast.success("Location permission granted! You can now enable geofencing.")
                   }

@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import "./globals.css";
 import "./print.css";
 import Providers from "./providers";
+import { GeofencingPermissionProvider } from "@/lib/geofencing/GeofencingPermissionManager";
 
 const geistSans = Inter({
   variable: "--font-geist-sans",
@@ -81,7 +82,11 @@ export default function RootLayout({
         nonce={nonce}
         suppressHydrationWarning
       >
-        <Providers>{children}</Providers>
+        <Providers>
+          <GeofencingPermissionProvider>
+            {children}
+          </GeofencingPermissionProvider>
+        </Providers>
       </body>
     </html>
   );
