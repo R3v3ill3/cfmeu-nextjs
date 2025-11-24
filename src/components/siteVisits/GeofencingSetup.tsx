@@ -153,6 +153,34 @@ export function GeofencingSetup() {
           />
         </div>
 
+        {/* Request Permission Button - iOS needs explicit user action */}
+        {!hasLocationPermission && !permissionError && (
+          <div className="p-4 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-md">
+            <div className="flex items-center gap-2 mb-2">
+              <AlertCircle className="h-4 w-4 text-amber-600" />
+              <span className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                Location Permission Required
+              </span>
+            </div>
+            <p className="text-sm text-amber-700 dark:text-amber-300 mb-3">
+              iOS requires explicit permission to access your location for geofencing.
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                const granted = await requestLocationAccess()
+                if (granted) {
+                  toast.success("Location permission granted! You can now enable geofencing.")
+                }
+              }}
+              className="text-xs"
+            >
+              Request Location Permission
+            </Button>
+          </div>
+        )}
+
         {showInstallPrompt && (
           <IosInstallPrompt
             visible={showInstallPrompt}

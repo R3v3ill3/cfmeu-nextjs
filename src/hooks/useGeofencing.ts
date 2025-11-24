@@ -41,7 +41,31 @@ export function useGeofencing(enabled: boolean = false) {
   // Check if geolocation and notifications are supported
   useEffect(() => {
     if (typeof window === "undefined") return
-    setIsSupported("geolocation" in navigator)
+
+    // Check for geolocation support
+    const hasGeolocation = "geolocation" in navigator
+
+    // On iOS, check if we're in PWA mode for better permission handling
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    const isPWA = window.matchMedia?.("(display-mode: standalone)")?.matches ||
+                  (window.navigator as any).standalone === true
+
+    // Geofencing requires PWA mode on iOS for reliable operation
+    if (isIOS && !isPWA) {
+      console.warn('[Geofencing] iOS detected but not in PWA mode - geofencing may not work reliably')
+    }
+
+    setIsSupported(hasGeolocation)
+
+    // Debug logging
+    if (localStorage.getItem('debug-geofencing') === 'true') {
+      console.log('[Geofencing] Platform check:', {
+        isIOS,
+        isPWA,
+        hasGeolocation,
+        userAgent: navigator.userAgent
+      })
+    }
   }, [])
 
   useEffect(() => {
@@ -261,19 +285,48 @@ export function useGeofencing(enabled: boolean = false) {
 
     setPermissionError(null)
 
+    // Check if we're in PWA mode on iOS
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    const isPWA = window.matchMedia?.("(display-mode: standalone)")?.matches ||
+                  (window.navigator as any).standalone === true
+
+    if (isIOS && !isPWA) {
+      setPermissionError("On iOS, geofencing requires installing the app to your home screen. Use Safari → Share → Add to Home Screen.")
+      return Promise.resolve(false)
+    }
+
     return new Promise((resolve) => {
+      // Debug logging
+      if (localStorage.getItem('debug-geofencing') === 'true') {
+        console.log('[Geofencing] Requesting location access...', { isIOS, isPWA })
+      }
+
       navigator.geolocation.getCurrentPosition(
         (position) => {
+          if (localStorage.getItem('debug-geofencing') === 'true') {
+            console.log('[Geofencing] Location access granted!', position)
+          }
           setHasLocationPermission(true)
           setCurrentPosition(position)
           setPermissionError(null)
           resolve(true)
         },
         (error) => {
+          if (localStorage.getItem('debug-geofencing') === 'true') {
+            console.error('[Geofencing] Location access denied:', error)
+          }
+
           if (error.code === error.PERMISSION_DENIED) {
-            setPermissionError("Location permission denied. Update iOS Settings > Privacy > Location Services.")
+            setPermissionError(
+              "Location permission denied. To fix: Settings > Privacy & Security > Location Services > CFMEU > While Using the App. " +
+              "If CFMEU doesn't appear in the list, remove the app from your home screen and reinstall it from Safari."
+            )
+          } else if (error.code === error.POSITION_UNAVAILABLE) {
+            setPermissionError("Unable to determine your location. Check that Location Services are enabled.")
+          } else if (error.code === error.TIMEOUT) {
+            setPermissionError("Location request timed out. Please try again.")
           } else {
-            setPermissionError(error.message)
+            setPermissionError(`Location error (${error.code}): ${error.message}`)
           }
           setHasLocationPermission(false)
           resolve(false)
