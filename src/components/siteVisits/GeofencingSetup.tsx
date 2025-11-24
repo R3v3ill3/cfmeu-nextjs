@@ -235,7 +235,7 @@ export function GeofencingSetup() {
             <div className="font-medium">Location Access Required</div>
             <div className="mt-1">{permissionError}</div>
             <div className="mt-2 text-xs">
-              To fix: Settings > Privacy & Location Services > CFMEU > While Using the App
+              To fix: Settings &gt; Privacy & Location Services &gt; CFMEU &gt; While Using the App
             </div>
           </div>
         )}
@@ -390,9 +390,9 @@ export function GeofencingSetup() {
                   </div>
                 )}
               </div>
-            )}
-          </div>
-        )}
+            </div>
+          )}
+        </div>
 
         {/* How It Works */}
         <div className="p-4 bg-blue-50 dark:bg-blue-950 rounded-md">
