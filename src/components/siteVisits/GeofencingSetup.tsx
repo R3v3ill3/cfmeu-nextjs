@@ -13,6 +13,8 @@ import { toast } from "sonner"
 
 export function GeofencingSetup() {
   const [enabled, setEnabled] = useState(false)
+  const [testMode, setTestMode] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const {
     isSupported,
     hasLocationPermission,
@@ -302,6 +304,96 @@ export function GeofencingSetup() {
           </div>
         )}
 
+        {/* Advanced Options & Test Mode */}
+        <div className="border-t pt-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            className="text-xs text-muted-foreground"
+          >
+            {showAdvanced ? 'Hide' : 'Show'} Advanced Options
+          </Button>
+
+          {showAdvanced && (
+            <div className="mt-4 space-y-4">
+              {/* Debug Info */}
+              <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-md text-xs font-mono">
+                <div>Enabled: {enabled ? 'YES' : 'NO'}</div>
+                <div>Permission: {hasLocationPermission ? 'GRANTED' : 'NOT GRANTED'}</div>
+                <div>Position: {currentPosition ? 'ACTIVE' : 'NONE'}</div>
+                <div>Nearby Sites: {nearbySites.length}</div>
+                <div>PWA Mode: {typeof window !== 'undefined' &&
+                  (window.matchMedia?.("(display-mode: standalone)")?.matches ||
+                   (window.navigator as any).standalone === true) ? 'YES' : 'NO'}</div>
+              </div>
+
+              {/* Test Mode */}
+              <div className="p-4 bg-purple-50 dark:bg-purple-950 border border-purple-200 dark:border-purple-800 rounded-md">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-medium flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 text-purple-600" />
+                    Test Mode
+                  </h4>
+                  <Switch
+                    checked={testMode}
+                    onCheckedChange={setTestMode}
+                    aria-label="Enable test mode"
+                  />
+                </div>
+                <p className="text-sm text-purple-700 dark:text-purple-300 mb-2">
+                  Simulate nearby job sites for testing without physical proximity.
+                </p>
+                {testMode && (
+                  <div className="space-y-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        // Add test sites at current location
+                        if (currentPosition) {
+                          const testSites = [
+                            {
+                              id: 'test-site-1',
+                              name: 'Test Site A',
+                              project_id: 'test-project-1',
+                              project_name: 'Test Project Alpha',
+                              latitude: currentPosition.coords.latitude + 0.0001,
+                              longitude: currentPosition.coords.longitude + 0.0001
+                            },
+                            {
+                              id: 'test-site-2',
+                              name: 'Test Site B',
+                              project_id: 'test-project-2',
+                              project_name: 'Test Project Beta',
+                              latitude: currentPosition.coords.latitude - 0.0001,
+                              longitude: currentPosition.coords.longitude - 0.0001
+                            }
+                          ];
+                          (window as any).__GEOFENCE_TEST_SITES = testSites;
+                          toast.success('Test sites added! Check location in ~60 seconds.');
+                          // Trigger a manual check
+                          if (enabled) {
+                            window.location.reload();
+                          }
+                        } else {
+                          toast.error('Need location permission first. Tap "Request Location Permission".');
+                        }
+                      }}
+                      className="text-xs"
+                    >
+                      Add Test Sites Nearby
+                    </Button>
+                    <p className="text-xs text-purple-600 dark:text-purple-400">
+                      Sites will be added ~10 meters from your current location
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* How It Works */}
         <div className="p-4 bg-blue-50 dark:bg-blue-950 rounded-md">
           <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
@@ -312,7 +404,7 @@ export function GeofencingSetup() {
             <li>The CFMEU app (or installed PWA) checks your position every ~60s while it is in the foreground.</li>
             <li>In-app toasts highlight the closest job site when you are within 100m.</li>
             <li>Each site has a 1-hour cooldown to avoid repeated reminders.</li>
-            <li>Use “Start visit” or tap the toast to pre-fill the site visit form instantly.</li>
+            <li>Use "Start visit" or tap the toast to pre-fill the site visit form instantly.</li>
             <li>Location data never leaves your device until you submit a visit.</li>
           </ul>
         </div>
