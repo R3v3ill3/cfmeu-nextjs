@@ -1,5 +1,5 @@
 "use client"
-import { useState, useRef, useEffect, type ComponentType } from "react";
+import { ReactNode, useState, useRef, useEffect, useCallback, type ComponentType } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Button } from "@/components/ui/button";
