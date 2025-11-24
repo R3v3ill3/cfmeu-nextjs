@@ -82,6 +82,21 @@ export function GeofencingSetup() {
   }
   const showInstallPrompt = enabled && iosInstallVisible
 
+  // Debug logging
+  useEffect(() => {
+    if (typeof window !== 'undefined' && localStorage.getItem('debug-geofencing') === 'true') {
+      console.log('[GeofencingSetup] Debug Info:', {
+        isSupported,
+        hasLocationPermission,
+        permissionError,
+        enabled,
+        isStandalone: window.matchMedia?.("(display-mode: standalone)")?.matches,
+        navigatorStandalone: (window.navigator as any).standalone,
+        userAgent: navigator.userAgent,
+      })
+    }
+  }, [isSupported, hasLocationPermission, permissionError, enabled])
+
   if (!isSupported) {
     return (
       <Card>
@@ -95,10 +110,12 @@ export function GeofencingSetup() {
           <div className="flex items-start gap-3 p-4 bg-muted rounded-md">
             <AlertCircle className="h-5 w-5 mt-0.5 text-muted-foreground" />
             <div className="text-sm text-muted-foreground">
-              <p>Your browser doesn't expose foreground geolocation.</p>
+              <p>Your browser doesn't support geolocation or you're not in a PWA.</p>
               <p className="mt-2">
-                Install the CFMEU app via Safari → Share → <span className="font-medium">Add to Home Screen</span> or
-                switch to a modern browser with location services enabled.
+                Install the CFMEU app via Safari → Share → <span className="font-medium">Add to Home Screen</span>.
+              </p>
+              <p className="mt-1 text-xs">
+                If already installed, ensure you're launching from the home screen icon, not Safari.
               </p>
             </div>
           </div>
@@ -185,7 +202,11 @@ export function GeofencingSetup() {
 
         {permissionError && (
           <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-            {permissionError}
+            <div className="font-medium">Location Access Required</div>
+            <div className="mt-1">{permissionError}</div>
+            <div className="mt-2 text-xs">
+              To fix: Settings > Privacy & Location Services > CFMEU > While Using the App
+            </div>
           </div>
         )}
 
