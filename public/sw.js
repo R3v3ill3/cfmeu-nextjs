@@ -1,23 +1,23 @@
 // Service Worker for CFMEU Employer Rating System PWA
 // Enhanced with Mobile Performance Optimizations
-// Version 2.0.0
+// Version 2.0.1 - Fixed routing to settings page
 
-const CACHE_NAME = 'cfmeu-ratings-v2.0.0'
-const STATIC_CACHE = 'cfmeu-static-v2.0.0'
-const API_CACHE = 'cfmeu-api-v2.0.0'
-const DYNAMIC_CACHE = 'cfmeu-dynamic-v2.0.0'
-const MOBILE_CACHE = 'cfmeu-mobile-v2.0.0'
-const CRITICAL_DATA_CACHE = 'cfmeu-critical-v2.0.0'
+const CACHE_NAME = 'cfmeu-ratings-v2.0.1'
+const STATIC_CACHE = 'cfmeu-static-v2.0.1'
+const API_CACHE = 'cfmeu-api-v2.0.1'
+const DYNAMIC_CACHE = 'cfmeu-dynamic-v2.0.1'
+const MOBILE_CACHE = 'cfmeu-mobile-v2.0.1'
+const CRITICAL_DATA_CACHE = 'cfmeu-critical-v2.0.1'
 
 // Critical assets to cache immediately
 const STATIC_ASSETS = [
   '/',
-  '/mobile/ratings',
-  '/mobile/ratings/dashboard',
-  '/mobile/ratings/wizard',
+  '/settings',
+  '/dashboard',
+  '/site-visits',
+  '/projects',
   '/mobile/site-visits',
   '/mobile/site-visits/new',
-  '/site-visits',
   '/manifest.json',
   '/_next/static/css/',
   '/_next/static/chunks/',
@@ -47,7 +47,7 @@ const CRITICAL_MOBILE_APIS = [
 
 // Mobile-specific assets
 const MOBILE_ASSETS = [
-  '/mobile/ratings',
+  '/settings',
   '/mobile/projects',
   '/mobile/employers',
   '/mobile/site-visits',
@@ -93,7 +93,7 @@ self.addEventListener('install', (event) => {
 
 // Activate event - clean up old caches
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activating service worker v2.0.0')
+  console.log('[SW] Activating service worker v2.0.1')
 
   event.waitUntil(
     caches.keys()
@@ -361,7 +361,7 @@ self.addEventListener('notificationclick', (event) => {
 
   if (event.action === 'view') {
     event.waitUntil(
-      clients.openWindow(event.notification.data.url || '/mobile/ratings')
+      clients.openWindow(event.notification.data.url || '/settings')
     )
   } else if (event.action === 'dismiss') {
     // Just close the notification
@@ -374,7 +374,7 @@ self.addEventListener('notificationclick', (event) => {
             return client.focus()
           }
         }
-        return clients.openWindow('/mobile/ratings')
+        return clients.openWindow('/settings')
       })
     )
   }

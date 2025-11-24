@@ -241,9 +241,9 @@ const Layout = ({ children, onRefresh }: LayoutProps) => {
       items.push({ path: "/eba-employers", label: "EBA Employers", icon: FileCheck });
     }
 
-    // Rating System - show for organiser+ roles
+    // Settings - show for organiser+ roles (includes geofencing)
     if (!isLoadingRole && userRole && (userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin")) {
-      items.push({ path: "/mobile/ratings", label: "Ratings", icon: TrendingUp });
+      items.push({ path: "/settings", label: "Settings", icon: Settings });
     }
     
     // Delegated Tasks - show for organiser+ roles

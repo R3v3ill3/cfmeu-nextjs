@@ -128,8 +128,18 @@ const nextConfig = {
   async redirects() {
     return [
       {
+        source: '/mobile/ratings',
+        destination: '/settings',
+        permanent: false,
+      },
+      {
+        source: '/mobile/ratings/:path*',
+        destination: '/settings',
+        permanent: false,
+      },
+      {
         source: '/ratings',
-        destination: '/mobile/ratings',
+        destination: '/settings',
         has: [
           {
             type: 'header',
