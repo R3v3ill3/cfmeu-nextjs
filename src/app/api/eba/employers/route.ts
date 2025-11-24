@@ -95,50 +95,114 @@ export async function GET(request: NextRequest) {
         // Fetch extended project data including tier, address, and builder
         const { data: projects, error: pErr } = await supabase
           .from('projects')
-          .select('id, name, tier, full_address')
+          .select('id, name, tier, full_address, builder_id')
           .in('id', projectIdList)
         
         if (pErr) return NextResponse.json({ error: pErr.message }, { status: 500 })
         
-        // Get builder/head contractor role type IDs
-        const { data: roleTypes, error: rtErr } = await supabase
-          .from('contractor_role_types')
-          .select('id, code')
-          .in('code', ['builder', 'head_contractor'])
-        
-        if (rtErr) {
-          console.error('Error fetching role types:', rtErr)
-          return NextResponse.json({ error: `Failed to fetch role types: ${rtErr.message}` }, { status: 500 })
-        }
-        
-        const builderRoleIds = (roleTypes || []).map((rt: any) => rt.id)
-        
-        // Get builder information for each project (only if we have role IDs)
-        let builderAssignments: any[] = []
-        if (builderRoleIds.length > 0) {
-          const { data, error: bErr } = await supabase
-            .from('project_assignments')
-            .select('project_id, employer_id, contractor_role_type_id, employers(name)')
-            .in('project_id', projectIdList)
-            .eq('assignment_type', 'contractor_role')
-            .eq('is_primary_for_role', true)
-            .in('contractor_role_type_id', builderRoleIds)
-          
-          if (bErr) {
-            console.error('Error fetching builder assignments:', bErr)
-            return NextResponse.json({ error: `Failed to fetch builder assignments: ${bErr.message}` }, { status: 500 })
-          }
-          
-          builderAssignments = data || []
-        }
-        
-        // Map builders to projects
+        // Initialize builders map with projects.builder_id as fallback
         const buildersByProject: Record<string, string> = {}
-        ;(builderAssignments || []).forEach((ba: any) => {
-          if (ba.project_id && ba.employers?.name && !buildersByProject[ba.project_id]) {
-            buildersByProject[ba.project_id] = ba.employers.name
+        
+        // Try to get builder names from projects.builder_id first (avoids RLS issues)
+        const builderIdsFromProjects = new Set<string>()
+        ;(projects || []).forEach((p: any) => {
+          if (p.builder_id) {
+            builderIdsFromProjects.add(p.builder_id)
           }
         })
+        
+        if (builderIdsFromProjects.size > 0) {
+          try {
+            // Fetch employer names for builder_ids from projects table
+            // This query will respect RLS, but we handle missing results gracefully
+            const { data: builderEmployers } = await supabase
+              .from('employers')
+              .select('id, name')
+              .in('id', Array.from(builderIdsFromProjects))
+            
+            // Map builder names by employer ID
+            const builderNamesById: Record<string, string> = {}
+            ;(builderEmployers || []).forEach((e: any) => {
+              if (e.id && e.name) {
+                builderNamesById[e.id] = e.name
+              }
+            })
+            
+            // Map builders to projects using projects.builder_id
+            ;(projects || []).forEach((p: any) => {
+              if (p.builder_id && builderNamesById[p.builder_id] && !buildersByProject[p.id]) {
+                buildersByProject[p.id] = builderNamesById[p.builder_id]
+              }
+            })
+          } catch (builderIdErr) {
+            console.warn('Warning: Could not fetch builder names from projects.builder_id:', builderIdErr)
+            // Continue without builder names - not a fatal error
+          }
+        }
+        
+        // Also try to get builder information from project_assignments (as fallback/override)
+        try {
+          // Get builder/head contractor role type IDs
+          const { data: roleTypes, error: rtErr } = await supabase
+            .from('contractor_role_types')
+            .select('id, code')
+            .in('code', ['builder', 'head_contractor'])
+          
+          if (rtErr) {
+            console.warn('Warning: Failed to fetch role types:', rtErr)
+          } else {
+            const builderRoleIds = (roleTypes || []).map((rt: any) => rt.id)
+            
+            // Get builder assignments WITHOUT joining employers table (to avoid RLS issues)
+            if (builderRoleIds.length > 0) {
+              const { data: builderAssignments, error: bErr } = await supabase
+                .from('project_assignments')
+                .select('project_id, employer_id, contractor_role_type_id')
+                .in('project_id', projectIdList)
+                .eq('assignment_type', 'contractor_role')
+                .eq('is_primary_for_role', true)
+                .in('contractor_role_type_id', builderRoleIds)
+              
+              if (bErr) {
+                console.warn('Warning: Failed to fetch builder assignments:', bErr)
+              } else {
+                // Get unique employer IDs from assignments
+                const assignmentEmployerIds = new Set<string>()
+                ;(builderAssignments || []).forEach((ba: any) => {
+                  if (ba.employer_id) {
+                    assignmentEmployerIds.add(ba.employer_id)
+                  }
+                })
+                
+                // Fetch employer names separately (respects RLS, but handles gracefully)
+                if (assignmentEmployerIds.size > 0) {
+                  const { data: assignmentEmployers } = await supabase
+                    .from('employers')
+                    .select('id, name')
+                    .in('id', Array.from(assignmentEmployerIds))
+                  
+                  // Map employer names by ID
+                  const assignmentBuilderNamesById: Record<string, string> = {}
+                  ;(assignmentEmployers || []).forEach((e: any) => {
+                    if (e.id && e.name) {
+                      assignmentBuilderNamesById[e.id] = e.name
+                    }
+                  })
+                  
+                  // Map builders to projects using project_assignments (overrides projects.builder_id if present)
+                  ;(builderAssignments || []).forEach((ba: any) => {
+                    if (ba.project_id && ba.employer_id && assignmentBuilderNamesById[ba.employer_id] && !buildersByProject[ba.project_id]) {
+                      buildersByProject[ba.project_id] = assignmentBuilderNamesById[ba.employer_id]
+                    }
+                  })
+                }
+              }
+            }
+          }
+        } catch (assignmentErr) {
+          console.warn('Warning: Could not fetch builder names from project_assignments:', assignmentErr)
+          // Continue without builder names - not a fatal error
+        }
         
         projectsById = Object.fromEntries((projects || []).map((p: any) => [
           p.id as string, 
