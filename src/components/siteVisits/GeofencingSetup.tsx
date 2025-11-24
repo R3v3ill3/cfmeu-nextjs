@@ -15,6 +15,15 @@ export function GeofencingSetup() {
   const [enabled, setEnabled] = useState(false)
   const [testMode, setTestMode] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
+
+  // Clear test sites when unmounting or when test mode is disabled
+  useEffect(() => {
+    return () => {
+      if (!testMode) {
+        delete (window as any).__GEOFENCE_TEST_SITES;
+      }
+    };
+  }, [testMode])
   const {
     isSupported,
     hasLocationPermission,
@@ -370,6 +379,9 @@ export function GeofencingSetup() {
                 <p className="text-sm text-purple-700 dark:text-purple-300 mb-2">
                   Simulate nearby job sites for testing without physical proximity.
                 </p>
+                <p className="text-xs text-purple-600 dark:text-purple-400">
+                  Test sites are stored locally and won't affect your data or authentication.
+                </p>
                 {testMode && (
                   <div className="space-y-2">
                     <Button
@@ -378,6 +390,9 @@ export function GeofencingSetup() {
                       onClick={() => {
                         // Add test sites at current location
                         if (currentPosition) {
+                          // Clear any existing test sites first
+                          delete (window as any).__GEOFENCE_TEST_SITES;
+
                           const testSites = [
                             {
                               id: 'test-site-1',
@@ -397,10 +412,16 @@ export function GeofencingSetup() {
                             }
                           ];
                           (window as any).__GEOFENCE_TEST_SITES = testSites;
-                          toast.success('Test sites added! Check location in ~60 seconds.');
-                          // Trigger a manual check
-                          if (enabled) {
-                            window.location.reload();
+                          toast.success('Test sites added! Geofencing will check in ~60 seconds.');
+                          // Don't reload - it breaks authentication
+                          // Instead, trigger a manual location update
+                          if (enabled && currentPosition) {
+                            // Simulate being near the test sites immediately
+                            setTimeout(() => {
+                              window.dispatchEvent(new CustomEvent('geofence-test-trigger', {
+                                detail: { position: currentPosition }
+                              }));
+                            }, 1000);
                           }
                         } else {
                           toast.error('Need location permission first. Tap "Request Location Permission".');
@@ -409,6 +430,17 @@ export function GeofencingSetup() {
                       className="text-xs"
                     >
                       Add Test Sites Nearby
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        delete (window as any).__GEOFENCE_TEST_SITES;
+                        toast.info('Test sites cleared');
+                      }}
+                      className="text-xs"
+                    >
+                      Clear Test Sites
                     </Button>
                     <p className="text-xs text-purple-600 dark:text-purple-400">
                       Sites will be added ~10 meters from your current location
