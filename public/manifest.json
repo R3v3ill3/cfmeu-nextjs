@@ -2,7 +2,7 @@
   "name": "CFMEU uConstuct",
   "short_name": "CFMEU",
   "description": "Construction, Forestry, Maritime, Mining and Energy Union organizing platform with employer rating system",
-  "start_url": "/mobile/ratings",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#3b82f6",
@@ -71,24 +71,10 @@
   ],
   "shortcuts": [
     {
-      "name": "Employer Ratings",
-      "short_name": "Ratings",
-      "description": "View employer traffic light ratings",
-      "url": "/mobile/ratings",
-      "icons": [{ "src": "/favicon.svg", "sizes": "96x96" }]
-    },
-    {
-      "name": "Rate Employer",
-      "short_name": "Rate",
-      "description": "Rate an employer using traffic light system",
-      "url": "/mobile/ratings/wizard",
-      "icons": [{ "src": "/favicon.svg", "sizes": "96x96" }]
-    },
-    {
-      "name": "Rating Dashboard",
+      "name": "Dashboard",
       "short_name": "Dashboard",
-      "description": "View rating analytics and trends",
-      "url": "/mobile/ratings/dashboard",
+      "description": "Open organiser dashboard",
+      "url": "/dashboard",
       "icons": [{ "src": "/favicon.svg", "sizes": "96x96" }]
     },
     {
@@ -99,17 +85,17 @@
       "icons": [{ "src": "/favicon.svg", "sizes": "96x96" }]
     },
     {
-      "name": "View Projects",
+      "name": "Projects",
       "short_name": "Projects",
-      "description": "Browse all projects",
+      "description": "Browse and manage projects",
       "url": "/projects",
       "icons": [{ "src": "/favicon.svg", "sizes": "96x96" }]
     },
     {
-      "name": "My Patch",
-      "short_name": "Patch",
-      "description": "View patch dashboard",
-      "url": "/patch",
+      "name": "Settings",
+      "short_name": "Settings",
+      "description": "Manage preferences and geofencing",
+      "url": "/settings",
       "icons": [{ "src": "/favicon.svg", "sizes": "96x96" }]
     }
   ],

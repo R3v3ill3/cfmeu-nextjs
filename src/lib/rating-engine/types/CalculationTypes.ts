@@ -732,39 +732,125 @@ export interface DiscrepancyResolution {
 
 export type DecayCurveType = 'exponential' | 'linear' | 'step' | 'custom';
 
+export type DecayCurveType =
+  | 'exponential'
+  | 'linear'
+  | 'logarithmic'
+  | 'step_function'
+  | 'custom';
+
 export interface DecayConfiguration {
-  curve: DecayCurveType;
+  enabled: boolean;
+  decay_curve_type: DecayCurveType;
   half_life_days: number;
   minimum_weight: number;
-  maximum_decay?: number;
-}
-
-export interface DecayFactors {
-  base_weight: number;
-  decay_factor: number;
-  effective_weight: number;
-}
-
-export interface DecayResult {
-  decayed_score: number;
-  decay_factor: number;
-  original_score: number;
+  maximum_weight: number;
+  assessment_type_multipliers: Record<ComplianceAssessmentType, number>;
+  critical_assessment_types: ComplianceAssessmentType[];
+  reference_date: Date;
+  max_data_age_days: number;
+  decay_floor_days: number;
+  enable_seasonal_adjustment: boolean;
+  seasonal_multiplier: number;
+  enable_volume_boost: boolean;
+  volume_boost_threshold: number;
+  volume_boost_factor: number;
+  enable_outlier_detection: boolean;
+  outlier_threshold_std_dev: number;
+  outlier_decay_factor: number;
+  enable_caching: boolean;
+  cache_ttl_seconds: number;
+  batch_processing_enabled: boolean;
+  batch_size: number;
 }
 
 export interface HistoricalDataPoint {
+  id: string;
   date: Date;
-  score: number;
-  weight?: number;
+  value: number;
+  weight: number;
+  assessment_type?: ComplianceAssessmentType;
+  metadata?: Record<string, any>;
+  decay_factor?: number;
+  decayed_weight?: number;
+  age_days?: number;
+}
+
+export interface DecayFactors {
+  total_original_weight: number;
+  total_decayed_weight: number;
+  overall_decay_factor: number;
+  average_age_days: number;
+  weight_loss_percentage: number;
+  effective_data_points: number;
+}
+
+export interface DecaySchedulePoint {
+  day: number;
+  weight: number;
 }
 
 export interface DecaySchedule {
-  [interval: string]: number;
+  assessment_type?: ComplianceAssessmentType | 'general';
+  decay_curve_type: DecayCurveType;
+  half_life_days: number;
+  minimum_weight: number;
+  maximum_weight: number;
+  decay_schedule_points: DecaySchedulePoint[];
+  critical_adjustments?: {
+    extended_half_life: number;
+    minimum_weight_boost: number;
+    decay_resistance: number;
+  };
+}
+
+export interface DecayProcessingDetails {
+  points_processed: number;
+  points_filtered_out: number;
+  outliers_detected: number;
+  cache_hit: boolean;
+  processing_time_ms: number;
+}
+
+export interface DecayResult {
+  reference_date: Date;
+  original_points: HistoricalDataPoint[];
+  decayed_points: HistoricalDataPoint[];
+  decay_factors: DecayFactors;
+  decay_schedule: DecaySchedule;
+  configuration_used: DecayConfiguration;
+  processing_details: DecayProcessingDetails;
+  metadata: Record<string, any>;
+}
+
+export interface TemporalWeightingSummary {
+  total_assessments: number;
+  total_original_weight: number;
+  total_temporal_weight: number;
+  average_decay_factor: number;
+  weight_retention_percentage: number;
+  assessments_above_minimum: number;
+}
+
+export interface TemporalAnalysis {
+  pattern: string;
+  trend: 'improving' | 'stable' | 'declining' | 'unknown';
+  recency_score: number;
+  temporal_distribution: Record<string, number>;
+  age_statistics: {
+    average_age_days: number;
+    min_age_days: number;
+    max_age_days: number;
+    age_range_days: number;
+  };
 }
 
 export interface TemporalWeightingResult {
-  weighted_score: number;
-  total_weight: number;
-  data_points: number;
+  original_assessments: any[];
+  weighted_assessments: any[];
+  decay_result: DecayResult;
+  weighting_summary: TemporalWeightingSummary;
+  temporal_analysis: TemporalAnalysis;
 }
 
 // =============================================================================

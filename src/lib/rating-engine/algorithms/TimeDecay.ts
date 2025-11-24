@@ -42,54 +42,6 @@ export interface ITimeDecayCalculator {
 }
 
 // =============================================================================
-// DECAY CONFIGURATION
-// =============================================================================
-
-export interface DecayConfiguration {
-  // Basic decay settings
-  enabled: boolean;
-  decay_curve_type: DecayCurveType;
-  half_life_days: number;
-  minimum_weight: number;
-  maximum_weight: number;
-
-  // Assessment type specific settings
-  assessment_type_multipliers: Record<ComplianceAssessmentType, number>;
-  critical_assessment_types: ComplianceAssessmentType[];
-
-  // Temporal settings
-  reference_date: Date;
-  max_data_age_days: number;
-  decay_floor_days: number;
-
-  // Advanced settings
-  enable_seasonal_adjustment: boolean;
-  seasonal_multiplier: number;
-  enable_volume_boost: boolean;
-  volume_boost_threshold: number;
-  volume_boost_factor: number;
-
-  // Outlier handling
-  enable_outlier_detection: boolean;
-  outlier_threshold_std_dev: number;
-  outlier_decay_factor: number;
-
-  // Performance settings
-  enable_caching: boolean;
-  cache_ttl_seconds: number;
-  batch_processing_enabled: boolean;
-  batch_size: number;
-}
-
-export enum DecayCurveType {
-  EXPONENTIAL = 'exponential',
-  LINEAR = 'linear',
-  LOGARITHMIC = 'logarithmic',
-  STEP_FUNCTION = 'step_function',
-  CUSTOM = 'custom'
-}
-
-// =============================================================================
 // TIME DECAY CALCULATOR IMPLEMENTATION
 // =============================================================================
 

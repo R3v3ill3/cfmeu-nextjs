@@ -35,6 +35,8 @@ Geofencing reminders on iOS require the web app to run as a Progressive Web App 
 3. Launch the installed app, open **Settings → Notifications**, enable **Site Visit Geofencing**, and grant *While Using the App* location access when prompted.
 4. Keep the installed PWA in the foreground while moving between sites. Reminders display as in-app toasts/banners (no background notifications).
 
+> If an organiser previously installed the older `/mobile/ratings` shortcut, have them delete that icon first and repeat the steps above. The current manifest now launches from `/`, so reinstalling ensures the full App Router experience (including Settings → Site Visit Geofencing) opens immediately.
+
 Update pages under `src/app/(app)` to render components copied into `src/components`.
 
 ## Deployment environments
