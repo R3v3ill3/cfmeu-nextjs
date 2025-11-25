@@ -5,6 +5,7 @@ import { headers } from 'next/headers'
 import { NavigationLoadingWrapper } from '@/components/NavigationLoadingWrapper'
 import { HelpContextProvider } from '@/context/HelpContext'
 import { SafeRatingProvider } from '@/components/ratings/SafeRatingProvider'
+import { GoogleMapsProvider } from '@/providers/GoogleMapsProvider'
 import { AppRole } from '@/constants/roles'
 import { ReactNode } from 'react'
 
@@ -38,13 +39,15 @@ export default async function MobileLayout({ children }: { children: ReactNode }
   
   return (
     <AuthProvider>
-      <HelpContextProvider initialPathname={currentPath || '/'} initialRole={role}>
-        <SafeRatingProvider>
-          <NavigationLoadingWrapper>
-            {children}
-          </NavigationLoadingWrapper>
-        </SafeRatingProvider>
-      </HelpContextProvider>
+      <GoogleMapsProvider>
+        <HelpContextProvider initialPathname={currentPath || '/'} initialRole={role}>
+          <SafeRatingProvider>
+            <NavigationLoadingWrapper>
+              {children}
+            </NavigationLoadingWrapper>
+          </SafeRatingProvider>
+        </HelpContextProvider>
+      </GoogleMapsProvider>
     </AuthProvider>
   )
 }

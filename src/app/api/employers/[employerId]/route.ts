@@ -37,7 +37,7 @@ export async function GET(
         return NextResponse.json({ error: 'Employer not found' }, { status: 404 })
       }
       
-      console.error('[employers-api] Error fetching employer:', error)
+      console.error('[employers-api] Error fetching employer:', error.message, error.code)
       return NextResponse.json(
         { error: error.message || 'Failed to fetch employer' },
         { status: 500 }

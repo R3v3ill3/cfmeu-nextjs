@@ -4,7 +4,6 @@ import React, { useEffect, useState, Suspense } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
 import type { ReactNode } from 'react'
-import { GoogleMapsProvider } from '@/providers/GoogleMapsProvider'
 import { PostHogProvider } from '@/providers/PostHogProvider'
 
 type ProvidersProps = {
@@ -54,10 +53,8 @@ export default function Providers({ children }: ProvidersProps) {
     <QueryClientProvider client={queryClient}>
       <Suspense fallback={null}>
         <PostHogProvider>
-          <GoogleMapsProvider>
-            {children}
-            <Toaster richColors position="top-right" />
-          </GoogleMapsProvider>
+          {children}
+          <Toaster richColors position="top-right" />
         </PostHogProvider>
       </Suspense>
     </QueryClientProvider>
