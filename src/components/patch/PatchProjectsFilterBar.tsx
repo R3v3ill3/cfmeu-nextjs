@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useSearchParams } from "next/navigation"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -78,23 +78,37 @@ export function PatchProjectsFilterBar({ patchOptions, filters, onFiltersChange,
   const [searchInput, setSearchInput] = useState(() => searchParams.get("q") || "")
   const searchMode = (searchParams.get("searchMode") || "name") as "name" | "address" | "closest"
   const addressQuery = searchParams.get("addressQuery") || ""
-  
+
   // Track if search is pending (debounced but not yet applied)
   const qParam = searchParams.get("q") || ""
   const isSearchPending = searchInput !== qParam && searchMode === "name"
+
+  // Ref to store scroll position during search updates
+  const scrollPositionRef = useRef<number>(0)
   
-  // Debounced search update
+  // Debounced search update with scroll preservation
   useEffect(() => {
     const handler = window.setTimeout(() => {
+      // Save current scroll position
+      scrollPositionRef.current = window.pageYOffset
+
       const currentParam = searchParams.get("q") || ""
       if (searchInput === currentParam) return
+
       onFiltersChange({ q: searchInput.length > 0 ? searchInput : undefined })
+
+      // Restore scroll position after update (only on mobile)
+      if (isMobile) {
+        requestAnimationFrame(() => {
+          window.scrollTo(0, scrollPositionRef.current)
+        })
+      }
     }, 300)
-    
+
     return () => {
       window.clearTimeout(handler)
     }
-  }, [searchInput, onFiltersChange, searchParams])
+  }, [searchInput, onFiltersChange, searchParams, isMobile])
   
   // Sync local state when URL param changes externally
   useEffect(() => {
@@ -178,6 +192,18 @@ export function PatchProjectsFilterBar({ patchOptions, filters, onFiltersChange,
       onAddressSelect(address, error)
     }
   }, [onAddressSelect])
+
+  // Handle immediate search on Enter key
+  const handleSearchKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      // Clear any pending debounce and trigger immediate search
+      const currentParam = searchParams.get("q") || ""
+      if (searchInput !== currentParam) {
+        onFiltersChange({ q: searchInput.length > 0 ? searchInput : undefined })
+      }
+    }
+  }, [searchInput, onFiltersChange, searchParams])
   
   return (
     <div className="flex flex-col sm:flex-row flex-wrap items-center gap-2 sm:gap-3 rounded-md border bg-white/60 p-3">
@@ -238,17 +264,22 @@ export function PatchProjectsFilterBar({ patchOptions, filters, onFiltersChange,
             </TabsList>
             <TabsContent value="name" className="mt-2">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Search data-testid="search-icon" className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
                 <Input
                   id="patch-project-search-mobile"
+                  type="search"
                   placeholder="Search projects..."
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
-                  className="pl-10 pr-10 min-h-[44px]"
+                  onKeyDown={handleSearchKeyDown}
+                  className="pl-12 pr-12 min-h-[44px]"
+                  style={{ paddingLeft: '3rem', paddingRight: '3rem' }}
                   autoComplete="off"
+                  enterKeyHint="search"
+                  inputMode="text"
                 />
                 {isSearchPending && (
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 z-10">
                     <LoadingSpinner size={16} alt="Searching" />
                   </div>
                 )}

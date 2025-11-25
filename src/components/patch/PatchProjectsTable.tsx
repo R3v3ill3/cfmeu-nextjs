@@ -60,7 +60,7 @@ export function PatchProjectsTable({ projects, summaries, onAction, onOpenEmploy
           const lastVisit: string | null = null
 
           return (
-            <Card key={project.id}>
+            <Card key={project.id} data-testid={`project-card-${project.id}`}>
               <CardContent className="p-4 space-y-3">
                 <div className="space-y-2">
                   <Link href={`/projects/${project.id}`} className="font-semibold text-base text-primary hover:underline flex items-center gap-1.5">
@@ -180,7 +180,7 @@ export function PatchProjectsTable({ projects, summaries, onAction, onOpenEmploy
             const lastVisit: string | null = null
 
             return (
-              <TableRow key={project.id}>
+              <TableRow key={project.id} data-testid={`project-row-${project.id}`}>
                 <TableCell>
                   <div className="flex flex-col">
                     <Link href={`/projects/${project.id}`} className="font-medium text-primary hover:underline flex items-center gap-1">

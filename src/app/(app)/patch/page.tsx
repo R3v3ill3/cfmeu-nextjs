@@ -311,14 +311,17 @@ export default function PatchPage() {
           />
         )}
 
-        <PatchProjectsFilterBar
-          patchOptions={patchOptions}
-          filters={filters}
-          onFiltersChange={handleFiltersChange}
-          onClear={handleClearFilters}
-          disablePatchSelect={disablePatchSelect}
-          onAddressSelect={handleAddressSelect}
-        />
+        {/* Sticky Filter Bar */}
+        <div className={`sticky top-0 z-20 ${isMobile ? '-mx-4 px-4' : ''} bg-white/95 backdrop-blur-sm border-b`}>
+          <PatchProjectsFilterBar
+            patchOptions={patchOptions}
+            filters={filters}
+            onFiltersChange={handleFiltersChange}
+            onClear={handleClearFilters}
+            disablePatchSelect={disablePatchSelect}
+            onAddressSelect={handleAddressSelect}
+          />
+        </div>
 
         {loadingPatches && (
           <Card className="p-4 sm:p-6 text-center text-sm text-muted-foreground">
@@ -379,6 +382,15 @@ export default function PatchPage() {
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Loading projects…
                   </div>
+                </Card>
+              ) : projects.length === 0 && q ? (
+                <Card className="p-6 text-center">
+                  <p className="text-muted-foreground mb-3">
+                    No projects found matching "{q}"
+                  </p>
+                  <Button variant="outline" onClick={handleClearFilters}>
+                    Clear search
+                  </Button>
                 </Card>
               ) : (
                 <PatchProjectsTable
