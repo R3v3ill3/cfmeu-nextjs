@@ -29,15 +29,17 @@ import { useAddressSearch } from "@/hooks/useAddressSearch"
 const DEFAULT_PAGE_SIZE = 25
 
 export default function PatchPage() {
+  // ALL HOOKS MUST BE CALLED UNCONDITIONALLY AT THE TOP LEVEL
+  // This ensures consistent hook order between server and client renders
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const { user } = useAuth()
   const { patches, role, isLoading: loadingPatches } = useAccessiblePatches()
+  const adminPatchContext = useAdminPatchContext()
   const [lookupOpen, setLookupOpen] = useState(false)
   const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null)
   const isMobile = useIsMobile()
-  const adminPatchContext = useAdminPatchContext()
 
   const handleOpenEmployer = useCallback((employerId: string) => {
     setSelectedEmployerId(employerId)
