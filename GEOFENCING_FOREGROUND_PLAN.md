@@ -2,9 +2,17 @@
 
 ## Summary
 - Geofencing reminders now run entirely in the foreground to align with iOS WebKit limitations.
-- The experience is optimized for organisers who install the CFMEU mobile PWA (Safari → Share → Add to Home Screen) from the production domain `https://cfmeu.uconstruct.app`.
+- The feature is available to **organisers, lead organisers, and administrators**.
+- The experience is optimized for users who install the CFMEU mobile PWA (Safari → Share → Add to Home Screen) from the production domain `https://cfmeu.uconstruct.app`.
 - The same build also runs locally at `http://localhost:3000` for development, with service worker registration enabled on `localhost`.
 - When the app/PWA is open, a lightweight service worker & manifest cache keep site data available and geolocation runs every ~60 seconds.
+
+## Role-based behaviour
+| Role | Sites visible | Info card |
+|------|--------------|-----------|
+| Admin | All job sites | "All Sites Visible" |
+| Lead Organiser | All job sites | "All Sites Visible" + assigned patches shown |
+| Organiser | Only sites in assigned patches | "Patch-Specific Notifications" |
 
 ## Behaviour Changes
 - `useGeofencing` no longer depends on the Notification API. It only requires `navigator.geolocation`, tracks permission errors, and uses in-app toasts/banners instead of push notifications.

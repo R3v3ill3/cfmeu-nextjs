@@ -196,7 +196,45 @@ export default function SettingsPage() {
 
           <GeofencingSetup />
 
-          {/* Geofencing Info for Organisers */}
+          {/* Geofencing Info - role-specific context */}
+          {currentUser.role === "admin" && (
+            <Card className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+              <CardHeader>
+                <CardTitle className="text-base">All Sites Visible</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  As an administrator you'll receive reminders for any job site in the system when you're within range.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+          {currentUser.role === "lead_organiser" && (
+            <Card className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+              <CardHeader>
+                <CardTitle className="text-base">All Sites Visible</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  As a lead organiser you'll receive reminders for any job site in the system when you're within range.
+                </p>
+                {patchAssignments.length > 0 && (
+                  <>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Your assigned patches:
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {patchAssignments.map((patch: any) => (
+                        <Badge key={patch.id} variant="default">
+                          {patch.name}
+                        </Badge>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          )}
           {currentUser.role === "organiser" && patchAssignments.length > 0 && (
             <Card className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
               <CardHeader>
