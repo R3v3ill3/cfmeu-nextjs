@@ -83,6 +83,8 @@ function MobileMap({
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const [isClient, setIsClient] = useState(false);
+  const [geolocationSupported, setGeolocationSupported] = useState(false);
 
   // Get user's accessible patches for auto-focus functionality
   const { patches: accessiblePatches, isLoading: patchesLoading, role } = useAccessiblePatches();
@@ -270,7 +272,7 @@ function MobileMap({
 
   // Get user's current location
   const getCurrentLocation = useCallback(() => {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+    if (!isClient || !geolocationSupported || !navigator.geolocation) {
       setLocationError('Geolocation is not supported on this device');
       return;
     }
@@ -324,16 +326,24 @@ function MobileMap({
     );
   }, [map, hasUserInteracted]);
 
+  // Check if we're on the client and if geolocation is supported
+  useEffect(() => {
+    setIsClient(true);
+    if (typeof navigator !== 'undefined' && navigator.geolocation) {
+      setGeolocationSupported(true);
+    }
+  }, []);
+
   // Auto-detect location on mount if geolocation is available and permission was previously granted
   useEffect(() => {
-    if (typeof navigator === 'undefined' || !navigator.geolocation || !isLoaded) {
+    if (!isClient || !geolocationSupported || !isLoaded) {
       return;
     }
 
     // Check if we have permission from previous session
     const hadPermission = localStorage.getItem('geofence-location-granted') === 'true';
     
-    if (hadPermission) {
+    if (hadPermission && navigator.geolocation) {
       // Try to get location silently
       navigator.geolocation.getCurrentPosition(
         (position) => {
@@ -356,7 +366,7 @@ function MobileMap({
         }
       );
     }
-  }, [isLoaded]);
+  }, [isClient, geolocationSupported, isLoaded]);
 
   // Handle map load - set initial position programmatically
   const handleMapLoad = useCallback((mapInstance: google.maps.Map) => {
@@ -851,35 +861,37 @@ function MobileMap({
       )}
         </GoogleMap>
         
-        {/* Location button and status */}
-        <div className="absolute bottom-4 right-4 flex flex-col gap-2 z-10 pointer-events-none">
-          {locationError && (
-            <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-800 max-w-[200px] shadow-md pointer-events-auto">
-              {locationError}
-            </div>
-          )}
-          {typeof navigator !== 'undefined' && navigator.geolocation && (
-            <button
-              onClick={getCurrentLocation}
-              disabled={isGettingLocation}
-              className="bg-white border-2 border-gray-300 rounded-full p-3 shadow-lg hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors pointer-events-auto touch-manipulation"
-              title={userLocation ? "Update your location" : "Show my location"}
-              aria-label={userLocation ? "Update your location" : "Show my location"}
-            >
-              {isGettingLocation ? (
-                <svg className="w-6 h-6 text-blue-600 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-              ) : (
-                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              )}
-            </button>
-          )}
-        </div>
+        {/* Location button and status - only render on client to avoid hydration mismatch */}
+        {isClient && (
+          <div className="absolute bottom-4 right-4 flex flex-col gap-2 z-10 pointer-events-none">
+            {locationError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-800 max-w-[200px] shadow-md pointer-events-auto">
+                {locationError}
+              </div>
+            )}
+            {geolocationSupported && (
+              <button
+                onClick={getCurrentLocation}
+                disabled={isGettingLocation}
+                className="bg-white border-2 border-gray-300 rounded-full p-3 shadow-lg hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors pointer-events-auto touch-manipulation"
+                title={userLocation ? "Update your location" : "Show my location"}
+                aria-label={userLocation ? "Update your location" : "Show my location"}
+              >
+                {isGettingLocation ? (
+                  <svg className="w-6 h-6 text-blue-600 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                ) : (
+                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                )}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </MapErrorBoundary>
   );
