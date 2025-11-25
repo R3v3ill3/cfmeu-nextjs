@@ -165,6 +165,9 @@ function buildCSP(nonce: string): string {
     'wss://*.supabase.co',
     'https://maps.googleapis.com',
     'https://*.googleapis.com',
+    // Monitoring services
+    'https://*.sentry.io',
+    'https://*.posthog.com',
   ]
 
   const workerUrl = process.env.NEXT_PUBLIC_DASHBOARD_WORKER_URL
