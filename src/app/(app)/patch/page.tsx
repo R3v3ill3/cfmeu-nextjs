@@ -69,7 +69,7 @@ export default function PatchPage() {
   const sort = (searchParams.get("sort") || "name") as PatchProjectFilters["sort"]
   const dir = (searchParams.get("dir") || "asc") as PatchProjectFilters["dir"]
   const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10) || 1)
-  const searchMode = (searchParams.get("searchMode") || "name") as "name" | "address"
+  const searchMode = (searchParams.get("searchMode") || "name") as "name" | "address" | "closest"
   const addressLat = searchParams.get("addressLat") ? parseFloat(searchParams.get("addressLat")!) : null
   const addressLng = searchParams.get("addressLng") ? parseFloat(searchParams.get("addressLng")!) : null
   const addressQuery = searchParams.get("addressQuery") || ""
@@ -140,7 +140,7 @@ export default function PatchPage() {
     eba,
     sort,
     dir,
-    searchMode: searchMode === "address" ? "address" : undefined
+    searchMode: (searchMode === "address" || searchMode === "closest") ? searchMode : undefined
   }
 
   // Address search query (for finding nearby projects)
@@ -148,7 +148,7 @@ export default function PatchPage() {
     lat: addressLat,
     lng: addressLng,
     address: addressQuery,
-    enabled: searchMode === "address" && addressLat !== null && addressLng !== null,
+    enabled: (searchMode === "address" || searchMode === "closest") && addressLat !== null && addressLng !== null,
     maxResults: 20,
     maxDistanceKm: 100
   })
@@ -196,6 +196,16 @@ export default function PatchPage() {
     if (changes.searchMode !== undefined) {
       if (changes.searchMode === "address") {
         updated.searchMode = "address"
+      } else if (changes.searchMode === "closest") {
+        updated.searchMode = "closest"
+        // For closest mode, we expect lat/lng to be provided
+        if (changes.addressLat && changes.addressLng) {
+          updated.addressLat = changes.addressLat
+          updated.addressLng = changes.addressLng
+        }
+        if (changes.addressQuery) {
+          updated.addressQuery = changes.addressQuery
+        }
       } else {
         updated.searchMode = null
         // Clear address params when switching to name mode

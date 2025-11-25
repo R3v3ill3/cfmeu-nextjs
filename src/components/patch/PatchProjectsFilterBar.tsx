@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PROJECT_TIER_LABELS, ProjectTier } from "@/components/projects/types"
-import { ArrowDownNarrowWide, ArrowUpNarrowWide, Filter, Search, Navigation } from "lucide-react"
+import { ArrowDownNarrowWide, ArrowUpNarrowWide, Filter, Search, Navigation, MapPin } from "lucide-react"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { GoogleAddressInput, GoogleAddress, AddressValidationError } from "@/components/projects/GoogleAddressInput"
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner"
@@ -20,7 +20,7 @@ export type PatchProjectFilters = {
   eba: "all" | "eba_active" | "eba_inactive" | "builder_unknown"
   sort: "name" | "value" | "tier" | "workers" | "members" | "delegates" | "eba_coverage" | "employers"
   dir: "asc" | "desc"
-  searchMode?: "name" | "address"
+  searchMode?: "name" | "address" | "closest"
 }
 
 interface PatchProjectsFilterBarProps {
@@ -68,10 +68,15 @@ const sortOptions: Array<{ value: PatchProjectFilters["sort"]; label: string }> 
 export function PatchProjectsFilterBar({ patchOptions, filters, onFiltersChange, onClear, disablePatchSelect, onAddressSelect }: PatchProjectsFilterBarProps) {
   const isMobile = useIsMobile()
   const searchParams = useSearchParams()
-  
+
+  // Check if we're in a PWA on mobile
+  const [isPWA, setIsPWA] = useState(false)
+  const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const [isGettingLocation, setIsGettingLocation] = useState(false)
+
   // Local state for search input (for debouncing)
   const [searchInput, setSearchInput] = useState(() => searchParams.get("q") || "")
-  const searchMode = (searchParams.get("searchMode") || "name") as "name" | "address"
+  const searchMode = (searchParams.get("searchMode") || "name") as "name" | "address" | "closest"
   const addressQuery = searchParams.get("addressQuery") || ""
   
   // Track if search is pending (debounced but not yet applied)
@@ -96,6 +101,67 @@ export function PatchProjectsFilterBar({ patchOptions, filters, onFiltersChange,
     const current = searchParams.get("q") || ""
     setSearchInput((prev) => (prev === current ? prev : current))
   }, [searchParams])
+
+  // Check if we're in PWA mode
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const isPWA = window.matchMedia?.('(display-mode: standalone)')?.matches ||
+                    (window.navigator as any).standalone === true
+      setIsPWA(isPWA)
+    }
+  }, [])
+
+  // Handle getting current location for "Closest to me"
+  const getCurrentLocation = useCallback(async () => {
+    if (!('geolocation' in navigator)) {
+      console.error('Geolocation is not supported')
+      return
+    }
+
+    setIsGettingLocation(true)
+
+    try {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: false,
+          timeout: 10000,
+          maximumAge: 300000, // 5 minutes cache
+        })
+      })
+
+      const { latitude, longitude } = position.coords
+      setCurrentLocation({ lat: latitude, lng: longitude })
+
+      // Update filters with current location
+      onFiltersChange({
+        searchMode: 'closest',
+        q: undefined,
+        addressQuery: 'Your current location',
+        // We'll need to pass these to the parent component to handle in URL
+        addressLat: latitude.toString(),
+        addressLng: longitude.toString()
+      })
+    } catch (error) {
+      console.error('Error getting location:', error)
+    } finally {
+      setIsGettingLocation(false)
+    }
+  }, [onFiltersChange])
+
+  // Handle "Closest to me" selection
+  const handleClosestToMe = useCallback(() => {
+    if (currentLocation) {
+      onFiltersChange({
+        searchMode: 'closest',
+        q: undefined,
+        addressQuery: 'Your current location',
+        addressLat: currentLocation.lat.toString(),
+        addressLng: currentLocation.lng.toString()
+      })
+    } else {
+      getCurrentLocation()
+    }
+  }, [currentLocation, onFiltersChange, getCurrentLocation])
   
   // Handle search mode change
   const handleSearchModeChange = useCallback((mode: "name" | "address") => {
@@ -140,11 +206,21 @@ export function PatchProjectsFilterBar({ patchOptions, filters, onFiltersChange,
         </Select>
       )}
 
-      {/* Mobile: Tabs for Name/Address search */}
+      {/* Mobile: Tabs for Name/Address/Closest search */}
       {isMobile ? (
         <div className="w-full">
-          <Tabs value={searchMode} onValueChange={(v) => handleSearchModeChange(v as "name" | "address")} className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
+          <Tabs
+            value={searchMode === 'closest' ? 'closest' : searchMode === 'address' ? 'address' : 'name'}
+            onValueChange={(v) => {
+              if (v === 'closest') {
+                handleClosestToMe()
+              } else {
+                handleSearchModeChange(v as "name" | "address")
+              }
+            }}
+            className="w-full"
+          >
+            <TabsList className={`grid w-full ${isPWA ? 'grid-cols-3' : 'grid-cols-2'}`}>
               <TabsTrigger value="name">
                 <Search className="h-4 w-4 mr-2" />
                 By Name
@@ -153,6 +229,12 @@ export function PatchProjectsFilterBar({ patchOptions, filters, onFiltersChange,
                 <Navigation className="h-4 w-4 mr-2" />
                 By Address
               </TabsTrigger>
+              {isPWA && (
+                <TabsTrigger value="closest">
+                  <MapPin className="h-4 w-4 mr-2" />
+                  Closest
+                </TabsTrigger>
+              )}
             </TabsList>
             <TabsContent value="name" className="mt-2">
               <div className="relative">
@@ -180,6 +262,30 @@ export function PatchProjectsFilterBar({ patchOptions, filters, onFiltersChange,
                 showLabel={false}
                 requireSelection={false}
               />
+            </TabsContent>
+            <TabsContent value="closest" className="mt-2">
+              <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                <div className="flex items-center gap-2">
+                  {isGettingLocation ? (
+                    <>
+                      <LoadingSpinner size={16} alt="Getting location" />
+                      <span className="text-sm text-blue-700 dark:text-blue-300">Getting your location...</span>
+                    </>
+                  ) : (
+                    <>
+                      <MapPin className="h-4 w-4 text-blue-600" />
+                      <div>
+                        <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                          Finding projects closest to you
+                        </p>
+                        <p className="text-xs text-blue-700 dark:text-blue-300">
+                          Using your current location
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
             </TabsContent>
           </Tabs>
         </div>
