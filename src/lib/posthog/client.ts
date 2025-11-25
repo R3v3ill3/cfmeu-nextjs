@@ -38,8 +38,12 @@ export const initPostHog = (): void => {
     // Session Recording - the main feature for testing phase
     disable_session_recording: false,
     session_recording: {
-      // Record console logs for debugging
-      recordCrossOriginIframes: true,
+      maskAllInputs: false,
+      maskInputFn: (text, element) => {
+        // Mask password fields
+        if (element?.type === 'password') return '*'.repeat(text.length);
+        return text;
+      },
     },
 
     // Performance

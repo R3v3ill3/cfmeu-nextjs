@@ -185,6 +185,8 @@ function buildCSP(nonce: string): string {
     "'self'",
     `'nonce-${nonce}'`,
     'https://maps.googleapis.com',
+    // PostHog session recording and analytics
+    'https://*.posthog.com',
   ]
   
   if (isDev) {
@@ -210,6 +212,8 @@ function buildCSP(nonce: string): string {
     "font-src 'self' data: https://fonts.gstatic.com",
     `connect-src ${connectSrc.join(' ')}`,
     "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com",
+    // PostHog session recording uses web workers for compression
+    "worker-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
