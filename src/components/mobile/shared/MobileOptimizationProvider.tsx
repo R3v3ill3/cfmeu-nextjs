@@ -206,6 +206,11 @@ export function useMobileOptimization() {
   const [isClient, setIsClient] = useState(false)
 
   useEffect(() => {
+    // Guard: Only run on client
+    if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+      return
+    }
+
     setIsClient(true)
     
     // Check if we're on a mobile device
