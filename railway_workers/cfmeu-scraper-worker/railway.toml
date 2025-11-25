@@ -1,3 +1,7 @@
+[build]
+# Don't require SENTRY_DSN at build time - it's optional and checked at runtime
+nixpacksConfigPath = ""
+
 [deploy]
 startCommand = "npm start"
 restartPolicyType = "ON_FAILURE"

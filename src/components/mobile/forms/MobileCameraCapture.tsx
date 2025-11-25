@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -184,15 +184,18 @@ export function MobileCameraCapture({
     })
   }, [maxSizeMB])
 
+  // Use useMemo to generate stable ID to prevent hydration mismatch
+  const inputId = useMemo(() => `photo-desc-${Date.now()}`, [])
+
   return (
     <div className={`space-y-3 ${className}`}>
       {/* Description input */}
       <div>
-        <Label htmlFor={`photo-desc-${Math.random()}`} className="text-sm font-medium">
+        <Label htmlFor={inputId} className="text-sm font-medium">
           Photo Description (optional)
         </Label>
         <Input
-          id={`photo-desc-${Math.random()}`}
+          id={inputId}
           placeholder="Describe what this photo shows..."
           value={description}
           onChange={(e) => setDescription(e.target.value)}

@@ -24,13 +24,16 @@ const mockStats = {
   recentActivity: 23,
 }
 
+// Use a fixed timestamp to prevent hydration mismatch
+const MOCK_TIMESTAMP = "2024-11-25T00:00:00.000Z"
+
 const mockAlerts = [
   {
     id: "1",
     type: "warning" as const,
     title: "System Maintenance",
     message: "Rating system will be under maintenance tonight from 10 PM to 2 AM",
-    timestamp: new Date().toISOString(),
+    timestamp: MOCK_TIMESTAMP,
   },
 ]
 

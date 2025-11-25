@@ -240,9 +240,11 @@ export default function MobileDashboardPage() {
 }
 
 // Mock dashboard data generator
+// Use deterministic selection to prevent hydration mismatch
 function getMockDashboardData(): DashboardData {
   const userRoles: Array<'organiser' | 'lead_organiser' | 'official' | 'admin'> = ['organiser', 'lead_organiser', 'official', 'admin']
-  const randomRole = userRoles[Math.floor(Math.random() * userRoles.length)]
+  // Use index 0 as default to ensure consistent server/client render
+  const randomRole = userRoles[0]
 
   return {
     userRole: randomRole,

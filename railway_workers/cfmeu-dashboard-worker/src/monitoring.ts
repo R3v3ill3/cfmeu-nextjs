@@ -1,5 +1,8 @@
 // Sentry monitoring integration for dashboard worker
 import * as Sentry from '@sentry/node';
+import type { Express } from 'express';
+
+let isInitialized = false;
 
 // Initialize Sentry for this worker
 export function initMonitoring() {
@@ -21,12 +24,6 @@ export function initMonitoring() {
     // Sample rate for performance monitoring
     tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
     
-    // Integrations for Express
-    integrations: [
-      Sentry.expressIntegration(),
-      Sentry.httpIntegration(),
-    ],
-    
     // Add service name tag
     initialScope: {
       tags: {
@@ -44,11 +41,20 @@ export function initMonitoring() {
     },
   });
 
+  isInitialized = true;
   console.log('[Monitoring] Sentry initialized for dashboard worker');
+}
+
+// Setup Express error handler - call after all routes are defined
+export function setupSentryErrorHandler(app: Express) {
+  if (isInitialized) {
+    Sentry.setupExpressErrorHandler(app);
+  }
 }
 
 // Capture error with context
 export function captureError(error: Error, context?: Record<string, any>) {
+  if (!isInitialized) return;
   Sentry.captureException(error, {
     extra: context,
     tags: {
@@ -59,11 +65,13 @@ export function captureError(error: Error, context?: Record<string, any>) {
 
 // Capture message
 export function captureMessage(message: string, level: 'info' | 'warning' | 'error' = 'info') {
+  if (!isInitialized) return;
   Sentry.captureMessage(message, level);
 }
 
-// Set user context (if you want to track which user's request caused an error)
+// Set user context
 export function setUserContext(userId?: string, email?: string) {
+  if (!isInitialized) return;
   if (userId) {
     Sentry.setUser({ id: userId, email });
   } else {
@@ -73,6 +81,7 @@ export function setUserContext(userId?: string, email?: string) {
 
 // Add breadcrumb for debugging
 export function addBreadcrumb(message: string, data?: Record<string, any>) {
+  if (!isInitialized) return;
   Sentry.addBreadcrumb({
     message,
     data,
@@ -80,19 +89,11 @@ export function addBreadcrumb(message: string, data?: Record<string, any>) {
   });
 }
 
-// Express error handler middleware
-export function sentryErrorHandler() {
-  return Sentry.expressErrorHandler();
-}
-
-// Express request handler middleware
-export function sentryRequestHandler() {
-  return Sentry.expressRequestHandler();
-}
-
 // Flush events before shutdown
 export async function flushEvents() {
-  await Sentry.close(2000);
+  if (isInitialized) {
+    await Sentry.close(2000);
+  }
 }
 
 export { Sentry };

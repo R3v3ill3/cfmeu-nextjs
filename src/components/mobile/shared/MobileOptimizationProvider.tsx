@@ -201,13 +201,20 @@ export function MobileOptimizationProvider({
 // Hook for mobile optimization context
 export function useMobileOptimization() {
   const [isMobileOptimized, setIsMobileOptimized] = useState(false)
+  const [isTouchDevice, setIsTouchDevice] = useState(false)
+  const [isStandalone, setIsStandalone] = useState(false)
+  const [isClient, setIsClient] = useState(false)
 
   useEffect(() => {
+    setIsClient(true)
+    
     // Check if we're on a mobile device
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
                      window.innerWidth <= 768
 
     setIsMobileOptimized(isMobile)
+    setIsTouchDevice('ontouchstart' in window)
+    setIsStandalone(window.matchMedia('(display-mode: standalone)').matches)
 
     // Add mobile-specific classes
     if (isMobile) {
@@ -236,9 +243,9 @@ export function useMobileOptimization() {
   }, [])
 
   return {
-    isMobileOptimized,
-    isTouchDevice: 'ontouchstart' in window,
-    isStandalone: window.matchMedia('(display-mode: standalone)').matches
+    isMobileOptimized: isClient ? isMobileOptimized : false,
+    isTouchDevice: isClient ? isTouchDevice : false,
+    isStandalone: isClient ? isStandalone : false
   }
 }
 

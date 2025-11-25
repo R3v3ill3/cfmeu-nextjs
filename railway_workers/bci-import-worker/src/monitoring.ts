@@ -1,6 +1,8 @@
 // Sentry monitoring integration for BCI import worker
 import * as Sentry from '@sentry/node';
 
+let isInitialized = false;
+
 // Initialize Sentry for this worker
 export function initMonitoring() {
   const dsn = process.env.SENTRY_DSN;
@@ -38,11 +40,13 @@ export function initMonitoring() {
     },
   });
 
+  isInitialized = true;
   console.log('[Monitoring] Sentry initialized for BCI import worker');
 }
 
 // Capture error with context
 export function captureError(error: Error, context?: Record<string, any>) {
+  if (!isInitialized) return;
   Sentry.captureException(error, {
     extra: context,
     tags: {
@@ -53,7 +57,9 @@ export function captureError(error: Error, context?: Record<string, any>) {
 
 // Flush events before shutdown
 export async function flushEvents() {
-  await Sentry.close(2000);
+  if (isInitialized) {
+    await Sentry.close(2000);
+  }
 }
 
 export { Sentry };

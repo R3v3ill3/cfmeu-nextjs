@@ -288,24 +288,39 @@ function getMockProjects(): Project[] {
   const statuses = ['active', 'pending', 'completed']
   const ratings: Array<'green' | 'amber' | 'red'> = ['green', 'amber', 'red']
 
+  // Use deterministic values based on index to prevent hydration mismatch
+  // Simple hash function for pseudo-random but consistent values
+  const hash = (n: number) => {
+    let h = n * 2654435761
+    return (h ^ (h >>> 16)) / 0xFFFFFFFF
+  }
+
   return Array.from({ length: 20 }, (_, i) => {
-    // Generate random coordinates around Sydney
+    // Generate deterministic coordinates around Sydney
     const angle = (i / 20) * 2 * Math.PI
-    const distance = Math.random() * 0.3 + 0.05 // 5-35km from center
+    const distance = (hash(i) * 0.3 + 0.05) % 0.3 + 0.05 // Deterministic distance
     const lat = sydneyCenter.lat + distance * Math.cos(angle)
     const lng = sydneyCenter.lng + distance * Math.sin(angle)
+
+    // Use modulo to get deterministic but varied selections
+    const statusIndex = Math.floor(hash(i) * statuses.length) % statuses.length
+    const tradeIndex = Math.floor(hash(i + 100) * trades.length) % trades.length
+    const ratingIndex = Math.floor(hash(i + 200) * ratings.length) % ratings.length
+    const workforceBase = Math.floor(hash(i + 300) * 100) % 100
+    const unionBase = Math.floor(hash(i + 400) * 40) % 40
+    const daysAgo = Math.floor(hash(i + 500) * 30) % 30
 
     return {
       id: `project-${i + 1}`,
       name: `Construction Site ${i + 1}`,
       address: `${100 + i} Construction Street, Sydney NSW`,
-      status: statuses[Math.floor(Math.random() * statuses.length)],
-      primary_trade: trades[Math.floor(Math.random() * trades.length)],
+      status: statuses[statusIndex],
+      primary_trade: trades[tradeIndex],
       coordinates: { lat, lng },
-      workforce_size: Math.floor(Math.random() * 100) + 10,
-      union_percentage: Math.floor(Math.random() * 40) + 60,
-      last_visit: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
-      compliance_rating: ratings[Math.floor(Math.random() * ratings.length)]
+      workforce_size: workforceBase + 10,
+      union_percentage: unionBase + 60,
+      last_visit: new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString(),
+      compliance_rating: ratings[ratingIndex]
     }
   })
 }

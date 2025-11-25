@@ -5,7 +5,7 @@ import { getServiceRoleClient, getUserClientFromToken, verifyJWT } from './supab
 import { scheduleMaterializedViewRefreshes, refreshPatchProjectMappingViewInBackground, warmOrganizingMetricsCache, scheduleWeeklyDashboardSnapshots } from './refresh'
 import { cache, makeCacheKey } from './cache'
 import crypto from 'crypto'
-import { initMonitoring, sentryRequestHandler, sentryErrorHandler, captureError, flushEvents } from './monitoring'
+import { initMonitoring, setupSentryErrorHandler, captureError, flushEvents } from './monitoring'
 
 // Initialize Sentry monitoring
 initMonitoring()
@@ -13,9 +13,6 @@ initMonitoring()
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' })
 
 const app = express()
-
-// Sentry request handler must be first
-app.use(sentryRequestHandler())
 
 app.use(express.json())
 app.use((req, res, next) => {
@@ -1226,8 +1223,8 @@ app.get('/v1/employers', async (req, res) => {
   }
 })
 
-// Sentry error handler must be after routes but before other error handlers
-app.use(sentryErrorHandler())
+// Setup Sentry error handler after all routes
+setupSentryErrorHandler(app)
 
 // Start server and schedule refreshes
 let server: any
