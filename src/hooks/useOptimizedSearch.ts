@@ -7,6 +7,9 @@ import { useIsMobile } from "@/hooks/use-mobile"
  * Platform-optimized search state hook
  * Desktop: Direct URL state binding (current behavior)
  * Mobile: Local state with deferred URL sync
+ * 
+ * IMPORTANT: All hooks must be called unconditionally to satisfy Rules of Hooks.
+ * We use the isMobile flag to switch behavior, not to conditionally call hooks.
  */
 export function useOptimizedSearch(initialValue = "") {
   const isMobile = useIsMobile()
@@ -14,59 +17,15 @@ export function useOptimizedSearch(initialValue = "") {
   const router = useRouter()
   const pathname = usePathname()
 
-  if (isMobile) {
-    // Mobile implementation with local state
-    return useMobileSearchState(initialValue, searchParams, router, pathname)
-  } else {
-    // Desktop implementation with direct URL state
-    return useDesktopSearchState(initialValue, searchParams, router, pathname)
-  }
-}
+  // Get URL value (used by both mobile and desktop)
+  const urlValue = searchParams.get("q") || initialValue
 
-/**
- * Desktop search: Direct URL state binding (preserves current behavior)
- */
-function useDesktopSearchState(
-  initialValue: string,
-  searchParams: ReturnType<typeof useSearchParams>,
-  router: ReturnType<typeof useRouter>,
-  pathname: string
-) {
-  const value = searchParams.get("q") || initialValue
+  // === ALL HOOKS MUST BE CALLED UNCONDITIONALLY ===
+  // Mobile state - always initialized, but only used when isMobile is true
+  const [localValue, setLocalValue] = useState(() => urlValue)
+  const syncTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined)
 
-  const setValue = useCallback((newValue: string | undefined) => {
-    const params = new URLSearchParams(searchParams)
-    if (newValue && newValue.trim()) {
-      params.set("q", newValue.trim())
-    } else {
-      params.delete("q")
-    }
-    const next = params.toString()
-    router.replace(next ? `${pathname}?${next}` : pathname)
-  }, [searchParams, router, pathname])
-
-  return [value, setValue] as const
-}
-
-/**
- * Mobile search: Local state with deferred URL sync
- */
-function useMobileSearchState(
-  initialValue: string,
-  searchParams: ReturnType<typeof useSearchParams>,
-  router: ReturnType<typeof useRouter>,
-  pathname: string
-) {
-  // Initialize from URL params or initial value
-  const [localValue, setLocalValue] = useState(() => {
-    const urlValue = searchParams.get("q")
-    return urlValue || initialValue
-  })
-
-  // Ref to track if we need to sync to URL
-  const syncTimeoutRef = useRef<NodeJS.Timeout>()
-
-  // Function to sync current local value to URL
+  // Sync local value to URL (mobile only, but callback always created)
   const syncToUrl = useCallback(() => {
     const params = new URLSearchParams(searchParams)
     if (localValue && localValue.trim()) {
@@ -78,8 +37,20 @@ function useMobileSearchState(
     router.replace(next ? `${pathname}?${next}` : pathname)
   }, [localValue, searchParams, router, pathname])
 
-  // Update local value immediately for responsive typing
-  const setValue = useCallback((newValue: string | undefined) => {
+  // Desktop setValue - updates URL directly
+  const setValueDesktop = useCallback((newValue: string | undefined) => {
+    const params = new URLSearchParams(searchParams)
+    if (newValue && newValue.trim()) {
+      params.set("q", newValue.trim())
+    } else {
+      params.delete("q")
+    }
+    const next = params.toString()
+    router.replace(next ? `${pathname}?${next}` : pathname)
+  }, [searchParams, router, pathname])
+
+  // Mobile setValue - updates local state with deferred URL sync
+  const setValueMobile = useCallback((newValue: string | undefined) => {
     const trimmedValue = newValue?.trim() || ""
     setLocalValue(trimmedValue)
 
@@ -89,13 +60,12 @@ function useMobileSearchState(
     }
 
     // Set a timeout to sync to URL after user stops typing
-    // Shorter delay than before (200ms instead of 300ms) for better responsiveness
     syncTimeoutRef.current = setTimeout(() => {
       syncToUrl()
     }, 200)
   }, [syncToUrl])
 
-  // Sync to URL on component unmount
+  // Cleanup timeout on unmount (always runs)
   useEffect(() => {
     return () => {
       if (syncTimeoutRef.current) {
@@ -104,15 +74,22 @@ function useMobileSearchState(
     }
   }, [])
 
-  // Update local state when URL changes externally (e.g., back navigation)
+  // Sync local state when URL changes externally (always runs, relevant for mobile)
   useEffect(() => {
-    const urlValue = searchParams.get("q") || ""
-    if (urlValue !== localValue) {
-      setLocalValue(urlValue)
+    const currentUrlValue = searchParams.get("q") || ""
+    if (currentUrlValue !== localValue) {
+      setLocalValue(currentUrlValue)
     }
-  }, [searchParams.get("q")])
+  }, [searchParams, localValue])
 
-  return [localValue, setValue, syncToUrl] as const
+  // === RETURN BASED ON PLATFORM ===
+  // The hooks are already called unconditionally above, so this is safe
+  if (isMobile) {
+    return [localValue, setValueMobile, syncToUrl] as const
+  } else {
+    // Desktop: return URL value and URL setter, syncToUrl for compatibility
+    return [urlValue, setValueDesktop, syncToUrl] as const
+  }
 }
 
 /**

@@ -1,5 +1,5 @@
 "use client"
-import { useMemo, useState, useEffect, useCallback, type ComponentType } from "react"
+import { useMemo, useState, useEffect, useCallback, type ComponentType, type ReactNode } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname, useSearchParams } from "next/navigation"
