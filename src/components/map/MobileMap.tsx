@@ -50,9 +50,17 @@ const containerStyle = {
   height: 'calc(100vh - 200px)', // Adjust height for mobile view
 };
 
-const center = {
+const defaultCenter = {
   lat: -33.8688,
-  lng: 151.2093,
+  lng: 151.2093, // Sydney, NSW
+};
+
+// NSW bounds restriction to prevent panning to Australia center
+const NSW_BOUNDS = {
+  north: -28.0,
+  south: -37.5,
+  east: 153.5,
+  west: 141.0,
 };
 
 function MobileMap({
@@ -69,6 +77,9 @@ function MobileMap({
 
   const [hoveredPatchId, setHoveredPatchId] = useState<string | null>(null);
   const [map, setMap] = useState<google.maps.Map | null>(null);
+  const [hasUserInteracted, setHasUserInteracted] = useState(false);
+  const [initialBoundsSet, setInitialBoundsSet] = useState(false);
+  const [useControlledCenter, setUseControlledCenter] = useState(true);
 
   // Get user's accessible patches for auto-focus functionality
   const { patches: accessiblePatches, isLoading: patchesLoading, role } = useAccessiblePatches();
@@ -224,6 +235,43 @@ function MobileMap({
     return Math.abs((maxLat - minLat) * (maxLng - minLng));
   };
 
+  // Mobile-optimized map options
+  const mapOptions = useMemo(() => ({
+    gestureHandling: 'greedy' as const, // Better touch interactions on mobile
+    restriction: {
+      latLngBounds: NSW_BOUNDS,
+      strictBounds: false, // Allow slight overflow for better UX
+    },
+    minZoom: 6,
+    maxZoom: 18,
+    disableDefaultUI: false,
+    clickableIcons: false,
+    mapTypeId: 'roadmap' as const,
+    styles: [
+      {
+        featureType: 'poi',
+        elementType: 'labels',
+        stylers: [{ visibility: 'off' }]
+      }
+    ]
+  }), []);
+
+  // Handle user interaction tracking
+  const handleDragStart = useCallback(() => {
+    setHasUserInteracted(true);
+  }, []);
+
+  const handleZoomChanged = useCallback(() => {
+    setHasUserInteracted(true);
+  }, []);
+
+  // Handle map load - set initial position programmatically
+  const handleMapLoad = useCallback((mapInstance: google.maps.Map) => {
+    setMap(mapInstance);
+    // Initial center/zoom will be set by the bounds fitting useEffect
+    // After bounds are set, we'll stop using controlled props
+  }, []);
+
   // Handle patch hover
   const handlePatchMouseOver = useCallback((patch: PatchData) => {
     setHoveredPatchId(patch.id);
@@ -334,35 +382,75 @@ function MobileMap({
     };
   }, [map, isLoaded, showJobSites, jobSites, projectColorBy, deriveBuilderStatus]);
 
-  // Auto-focus on selected patches for batch printing or user patch auto-focus
+  // Comprehensive initial bounds fitting logic
   useEffect(() => {
-    if (!map || (!autoFocusPatches && !shouldAutoFocusOnUserPatches) || autoFocusPatchIds.length === 0 || filteredPatches.length === 0) return;
+    if (!map || !isLoaded) return;
+    
+    // Don't auto-recenter if user has interacted with the map
+    if (hasUserInteracted && initialBoundsSet) return;
+
+    // For auto-focus mode (batch printing or user patch auto-focus), only focus on relevant patches
+    if ((autoFocusPatches || shouldAutoFocusOnUserPatches) && autoFocusPatchIds.length > 0 && filteredPatches.length > 0) {
+      const bounds = new google.maps.LatLngBounds();
+      let hasPoints = false;
+
+      filteredPatches.forEach(patch => {
+        if (patch.geom_geojson) {
+          try {
+            const polygons = extractPolygonsFromGeoJSON(patch.geom_geojson);
+            polygons.forEach((rings) => {
+              const outer = rings[0] || [];
+              outer.forEach((point) => {
+                bounds.extend(point);
+                hasPoints = true;
+              });
+            });
+          } catch (e) {
+            console.warn('Could not process geometry for mobile patch:', patch.name);
+          }
+        }
+      });
+
+      if (hasPoints) {
+        map.fitBounds(bounds, { padding: 50 });
+        // Limit max zoom for better context
+        setTimeout(() => {
+          const currentZoom = map.getZoom() || 10;
+          if (currentZoom > 15) {
+            map.setZoom(15);
+          }
+          setInitialBoundsSet(true);
+          setUseControlledCenter(false); // Stop using controlled props after bounds are set
+        }, 100);
+      }
+      return;
+    }
+
+    // Regular auto-fit logic for normal viewing - include all patches and job sites
+    if (filteredPatches.length === 0 && (!showJobSites || jobSites.length === 0)) {
+      // No data to show, use default center
+      if (!initialBoundsSet) {
+        map.setCenter(defaultCenter);
+        map.setZoom(10);
+        setInitialBoundsSet(true);
+      }
+      return;
+    }
 
     const bounds = new google.maps.LatLngBounds();
     let hasPoints = false;
 
+    // Add patch bounds
     filteredPatches.forEach(patch => {
       if (patch.geom_geojson) {
         try {
-          const geojson = patch.geom_geojson;
-          
-          const extractCoords = (coords: any): google.maps.LatLngLiteral[] => {
-            if (geojson.type === 'Polygon') {
-              return coords[0].map(([lng, lat]: [number, number]) => ({ lat, lng }));
-            } else if (geojson.type === 'MultiPolygon') {
-              return coords.flat(2).filter((_: any, i: number) => i % 2 === 0)
-                .map((lng: number, i: number) => ({ 
-                  lat: coords.flat(2)[i * 2 + 1], 
-                  lng 
-                }));
-            }
-            return [];
-          };
-          
-          const coordinates = extractCoords(geojson.coordinates);
-          coordinates.forEach(coord => {
-            bounds.extend(coord);
-            hasPoints = true;
+          const polygons = extractPolygonsFromGeoJSON(patch.geom_geojson);
+          polygons.forEach((rings) => {
+            const outer = rings[0] || [];
+            outer.forEach((point) => {
+              bounds.extend(point);
+              hasPoints = true;
+            });
           });
         } catch (e) {
           console.warn('Could not process geometry for mobile patch:', patch.name);
@@ -370,17 +458,33 @@ function MobileMap({
       }
     });
 
+    // Add job site bounds
+    if (showJobSites) {
+      jobSites.forEach(site => {
+        bounds.extend({ lat: site.latitude, lng: site.longitude });
+        hasPoints = true;
+      });
+    }
+
     if (hasPoints) {
-      map.fitBounds(bounds);
-      // Limit max zoom for better context
+      map.fitBounds(bounds, { padding: 50 });
+      // Limit max zoom to prevent over-zooming
       setTimeout(() => {
         const currentZoom = map.getZoom() || 10;
         if (currentZoom > 15) {
-          map.setZoom(15); // Max zoom for mobile
+          map.setZoom(15);
         }
+        setInitialBoundsSet(true);
+        setUseControlledCenter(false); // Stop using controlled props after bounds are set
       }, 100);
+    } else if (!initialBoundsSet) {
+      // Fallback to default center if no bounds could be calculated
+      map.setCenter(defaultCenter);
+      map.setZoom(10);
+      setInitialBoundsSet(true);
+      setUseControlledCenter(false); // Stop using controlled props after initial position is set
     }
-  }, [map, autoFocusPatches, shouldAutoFocusOnUserPatches, autoFocusPatchIds, filteredPatches]);
+  }, [map, isLoaded, filteredPatches, jobSites, showJobSites, autoFocusPatches, shouldAutoFocusOnUserPatches, autoFocusPatchIds, hasUserInteracted, initialBoundsSet, extractPolygonsFromGeoJSON]);
 
   // Compute label for patch
   const labelForPatch = useCallback((patch: PatchData, organiserNames: string[] | undefined) => {
@@ -428,14 +532,22 @@ function MobileMap({
     );
   }
 
+  // Use stable references for center/zoom to prevent unnecessary re-renders
+  // After initial bounds are set, we stop controlling these props
+  const stableCenter = useMemo(() => defaultCenter, []);
+  const stableZoom = useMemo(() => 10, []);
+
   return (
     <MapErrorBoundary>
       <GoogleMap 
-      mapContainerStyle={containerStyle} 
-      center={center} 
-      zoom={10}
-      onLoad={setMap}
-    >
+        mapContainerStyle={containerStyle} 
+        center={useControlledCenter ? stableCenter : undefined}
+        zoom={useControlledCenter ? stableZoom : undefined}
+        options={mapOptions}
+        onLoad={handleMapLoad}
+        onDragStart={handleDragStart}
+        onZoomChanged={handleZoomChanged}
+      >
       {/* Render Patches as Polygons */}
       {filteredPatches.map(patch => {
         if (!patch.geom_geojson) return null;

@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PROJECT_TIER_LABELS, ProjectTier } from "@/components/projects/types"
 import { ArrowDownNarrowWide, ArrowUpNarrowWide, Filter, Search, Navigation, MapPin } from "lucide-react"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { useOptimizedSearch, useMobileFocus } from "@/hooks/useOptimizedSearch"
 import { GoogleAddressInput, GoogleAddress, AddressValidationError } from "@/components/projects/GoogleAddressInput"
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner"
 
@@ -74,47 +75,33 @@ export function PatchProjectsFilterBar({ patchOptions, filters, onFiltersChange,
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null)
   const [isGettingLocation, setIsGettingLocation] = useState(false)
 
-  // Local state for search input (for debouncing)
-  const [searchInput, setSearchInput] = useState(() => searchParams.get("q") || "")
+  // Platform-optimized search state
+  const [searchValue, setSearchValue, syncToUrl] = useOptimizedSearch("")
+  const { inputRef, preserveFocus } = useMobileFocus()
+
   const searchMode = (searchParams.get("searchMode") || "name") as "name" | "address" | "closest"
   const addressQuery = searchParams.get("addressQuery") || ""
 
-  // Track if search is pending (debounced but not yet applied)
+  // Track if search is pending (only for mobile where we defer URL sync)
   const qParam = searchParams.get("q") || ""
-  const isSearchPending = searchInput !== qParam && searchMode === "name"
-
-  // Ref to store scroll position during search updates
-  const scrollPositionRef = useRef<number>(0)
+  const isSearchPending = isMobile && searchValue !== qParam && searchMode === "name"
   
-  // Debounced search update with scroll preservation
+  // Sync search with parent filters
   useEffect(() => {
-    const handler = window.setTimeout(() => {
-      // Save current scroll position
-      scrollPositionRef.current = window.pageYOffset
-
-      const currentParam = searchParams.get("q") || ""
-      if (searchInput === currentParam) return
-
-      onFiltersChange({ q: searchInput.length > 0 ? searchInput : undefined })
-
-      // Restore scroll position after update (only on mobile)
-      if (isMobile) {
-        requestAnimationFrame(() => {
-          window.scrollTo(0, scrollPositionRef.current)
-        })
+    // On desktop, searchValue is already in sync with URL
+    // On mobile, we need to trigger filter change when URL updates
+    if (isMobile) {
+      const urlValue = searchParams.get("q") || ""
+      if (urlValue !== filters.q) {
+        onFiltersChange({ q: urlValue || undefined })
       }
-    }, 300)
-
-    return () => {
-      window.clearTimeout(handler)
+    } else {
+      // Desktop: update filters when searchValue changes
+      if (searchValue !== filters.q) {
+        onFiltersChange({ q: searchValue || undefined })
+      }
     }
-  }, [searchInput, onFiltersChange, searchParams, isMobile])
-  
-  // Sync local state when URL param changes externally
-  useEffect(() => {
-    const current = searchParams.get("q") || ""
-    setSearchInput((prev) => (prev === current ? prev : current))
-  }, [searchParams])
+  }, [searchValue, searchParams.get("q")])
 
   // Check if we're in PWA mode
   useEffect(() => {
@@ -197,13 +184,23 @@ export function PatchProjectsFilterBar({ patchOptions, filters, onFiltersChange,
   const handleSearchKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault()
-      // Clear any pending debounce and trigger immediate search
-      const currentParam = searchParams.get("q") || ""
-      if (searchInput !== currentParam) {
-        onFiltersChange({ q: searchInput.length > 0 ? searchInput : undefined })
+
+      if (isMobile && syncToUrl) {
+        // On mobile, sync to URL immediately on Enter
+        syncToUrl()
+      } else {
+        // On desktop, trigger immediate filter change
+        onFiltersChange({ q: searchValue || undefined })
       }
     }
-  }, [searchInput, onFiltersChange, searchParams])
+  }, [searchValue, onFiltersChange, isMobile, syncToUrl])
+
+  // Handle input blur to sync on mobile
+  const handleSearchBlur = useCallback(() => {
+    if (isMobile && syncToUrl) {
+      syncToUrl()
+    }
+  }, [isMobile, syncToUrl])
   
   return (
     <div className="flex flex-col sm:flex-row flex-wrap items-center gap-2 sm:gap-3 rounded-md border bg-white/60 p-3">
@@ -266,12 +263,14 @@ export function PatchProjectsFilterBar({ patchOptions, filters, onFiltersChange,
               <div className="relative">
                 <Search data-testid="search-icon" className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
                 <Input
+                  ref={inputRef}
                   id="patch-project-search-mobile"
                   type="search"
                   placeholder="Search projects..."
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
+                  value={searchValue}
+                  onChange={(e) => setSearchValue(e.target.value)}
                   onKeyDown={handleSearchKeyDown}
+                  onBlur={handleSearchBlur}
                   className="pl-12 pr-12 min-h-[44px]"
                   style={{ paddingLeft: '3rem', paddingRight: '3rem' }}
                   autoComplete="off"
@@ -325,8 +324,8 @@ export function PatchProjectsFilterBar({ patchOptions, filters, onFiltersChange,
         <Input
           placeholder="Search projects..."
           className="w-full sm:w-60"
-          value={filters.q}
-          onChange={(event) => onFiltersChange({ q: event.target.value })}
+          value={searchValue}
+          onChange={(event) => setSearchValue(event.target.value)}
           autoComplete="off"
         />
       )}

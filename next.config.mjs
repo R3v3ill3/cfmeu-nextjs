@@ -1,3 +1,5 @@
+import { withSentryConfig } from "@sentry/nextjs";
+
 /** @type {import('next').NextConfig} */
 const strict = process.env.STRICT_CI === '1'
 const isProduction = process.env.NODE_ENV === 'production'
