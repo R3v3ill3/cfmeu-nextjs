@@ -1,10 +1,11 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, Suspense } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
 import type { ReactNode } from 'react'
 import { GoogleMapsProvider } from '@/providers/GoogleMapsProvider'
+import { PostHogProvider } from '@/providers/PostHogProvider'
 
 type ProvidersProps = {
   children: ReactNode
@@ -51,10 +52,14 @@ export default function Providers({ children }: ProvidersProps) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <GoogleMapsProvider>
-        {children}
-        <Toaster richColors position="top-right" />
-      </GoogleMapsProvider>
+      <Suspense fallback={null}>
+        <PostHogProvider>
+          <GoogleMapsProvider>
+            {children}
+            <Toaster richColors position="top-right" />
+          </GoogleMapsProvider>
+        </PostHogProvider>
+      </Suspense>
     </QueryClientProvider>
   )
 }

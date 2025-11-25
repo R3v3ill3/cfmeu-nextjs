@@ -80,6 +80,9 @@ function MobileMap({
   const [hasUserInteracted, setHasUserInteracted] = useState(false);
   const [initialBoundsSet, setInitialBoundsSet] = useState(false);
   const [useControlledCenter, setUseControlledCenter] = useState(true);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
 
   // Get user's accessible patches for auto-focus functionality
   const { patches: accessiblePatches, isLoading: patchesLoading, role } = useAccessiblePatches();
@@ -264,6 +267,96 @@ function MobileMap({
   const handleZoomChanged = useCallback(() => {
     setHasUserInteracted(true);
   }, []);
+
+  // Get user's current location
+  const getCurrentLocation = useCallback(() => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      setLocationError('Geolocation is not supported on this device');
+      return;
+    }
+
+    setIsGettingLocation(true);
+    setLocationError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        setUserLocation({ lat: latitude, lng: longitude });
+        setLocationError(null);
+        setIsGettingLocation(false);
+        
+        // Save permission for future use
+        localStorage.setItem('geofence-location-granted', 'true');
+        
+        // Optionally center map on user location (only if user hasn't interacted)
+        if (map && !hasUserInteracted) {
+          map.setCenter({ lat: latitude, lng: longitude });
+          const currentZoom = map.getZoom() || 10;
+          if (currentZoom < 14) {
+            map.setZoom(14); // Zoom in to show user location better
+          }
+        }
+      },
+      (error) => {
+        setIsGettingLocation(false);
+        let errorMessage = 'Unable to get your location';
+        
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage = 'Location permission denied. Please enable location services in your browser settings.';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage = 'Location information unavailable.';
+            break;
+          case error.TIMEOUT:
+            errorMessage = 'Location request timed out.';
+            break;
+        }
+        
+        setLocationError(errorMessage);
+        console.warn('Geolocation error:', error);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 300000 // 5 minutes
+      }
+    );
+  }, [map, hasUserInteracted]);
+
+  // Auto-detect location on mount if geolocation is available and permission was previously granted
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation || !isLoaded) {
+      return;
+    }
+
+    // Check if we have permission from previous session
+    const hadPermission = localStorage.getItem('geofence-location-granted') === 'true';
+    
+    if (hadPermission) {
+      // Try to get location silently
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setUserLocation({ lat: latitude, lng: longitude });
+          // Save permission for future use
+          localStorage.setItem('geofence-location-granted', 'true');
+        },
+        (error) => {
+          // If permission was denied, clear the saved state
+          if (error.code === error.PERMISSION_DENIED) {
+            localStorage.removeItem('geofence-location-granted');
+          }
+          // Silently fail - user can manually request location
+        },
+        {
+          enableHighAccuracy: false,
+          timeout: 5000,
+          maximumAge: 300000 // 5 minutes
+        }
+      );
+    }
+  }, [isLoaded]);
 
   // Handle map load - set initial position programmatically
   const handleMapLoad = useCallback((mapInstance: google.maps.Map) => {
@@ -539,15 +632,16 @@ function MobileMap({
 
   return (
     <MapErrorBoundary>
-      <GoogleMap 
-        mapContainerStyle={containerStyle} 
-        center={useControlledCenter ? stableCenter : undefined}
-        zoom={useControlledCenter ? stableZoom : undefined}
-        options={mapOptions}
-        onLoad={handleMapLoad}
-        onDragStart={handleDragStart}
-        onZoomChanged={handleZoomChanged}
-      >
+      <div className="relative w-full" style={{ height: containerStyle.height }}>
+        <GoogleMap 
+          mapContainerStyle={containerStyle} 
+          center={useControlledCenter ? stableCenter : undefined}
+          zoom={useControlledCenter ? stableZoom : undefined}
+          options={mapOptions}
+          onLoad={handleMapLoad}
+          onDragStart={handleDragStart}
+          onZoomChanged={handleZoomChanged}
+        >
       {/* Render Patches as Polygons */}
       {filteredPatches.map(patch => {
         if (!patch.geom_geojson) return null;
@@ -735,7 +829,58 @@ function MobileMap({
       })()}
 
       {/* Job site markers are now rendered via clustering effect - see useEffect above */}
-    </GoogleMap>
+      
+      {/* User location marker */}
+      {userLocation && (
+        <Marker
+          position={userLocation}
+          icon={{
+            url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
+              <svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="20" cy="20" r="12" fill="#4285F4" stroke="#ffffff" stroke-width="3" opacity="0.9"/>
+                <circle cx="20" cy="20" r="6" fill="#ffffff"/>
+                <circle cx="20" cy="20" r="18" fill="#4285F4" opacity="0.2"/>
+              </svg>
+            `),
+            scaledSize: new google.maps.Size(40, 40),
+            anchor: new google.maps.Point(20, 20)
+          }}
+          title="Your location"
+          zIndex={1000}
+        />
+      )}
+        </GoogleMap>
+        
+        {/* Location button and status */}
+        <div className="absolute bottom-4 right-4 flex flex-col gap-2 z-10 pointer-events-none">
+          {locationError && (
+            <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-800 max-w-[200px] shadow-md pointer-events-auto">
+              {locationError}
+            </div>
+          )}
+          {typeof navigator !== 'undefined' && navigator.geolocation && (
+            <button
+              onClick={getCurrentLocation}
+              disabled={isGettingLocation}
+              className="bg-white border-2 border-gray-300 rounded-full p-3 shadow-lg hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors pointer-events-auto touch-manipulation"
+              title={userLocation ? "Update your location" : "Show my location"}
+              aria-label={userLocation ? "Update your location" : "Show my location"}
+            >
+              {isGettingLocation ? (
+                <svg className="w-6 h-6 text-blue-600 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              ) : (
+                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
     </MapErrorBoundary>
   );
 }

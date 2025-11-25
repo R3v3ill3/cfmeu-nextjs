@@ -40,6 +40,8 @@ const nextConfig = {
     // Mobile optimizations
     scrollRestoration: true,
     optimizeCss: true,
+    // Sentry instrumentation hook
+    instrumentationHook: true,
   },
 
   // Webpack configuration - minimal to avoid interfering with Next.js build process
@@ -161,5 +163,34 @@ const nextConfig = {
   poweredByHeader: false,
 };
 
-export default nextConfig;
+// Sentry configuration options
+const sentryWebpackPluginOptions = {
+  // Suppress source map uploading logs during build
+  silent: true,
+
+  // Upload source maps only in production
+  sourceMaps: {
+    enable: isProduction,
+  },
+
+  // Automatically tree-shake Sentry logger statements
+  disableLogger: true,
+
+  // Hide source maps from generated client bundles
+  hideSourceMaps: true,
+
+  // Only upload source maps when SENTRY_AUTH_TOKEN is set
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+
+  // Organization and project slugs (set these in your Sentry project settings)
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+};
+
+// Wrap with Sentry if DSN is configured
+const finalConfig = process.env.NEXT_PUBLIC_SENTRY_DSN
+  ? withSentryConfig(nextConfig, sentryWebpackPluginOptions)
+  : nextConfig;
+
+export default finalConfig;
 
