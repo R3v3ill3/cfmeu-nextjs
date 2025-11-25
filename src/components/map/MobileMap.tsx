@@ -597,6 +597,12 @@ function MobileMap({
     return namePart || orgPart || undefined;
   }, [showPatchNames, showOrganisers]);
 
+  // Use stable references for center/zoom to prevent unnecessary re-renders
+  // After initial bounds are set, we stop controlling these props
+  // MUST be called before any conditional returns to follow Rules of Hooks
+  const stableCenter = useMemo(() => defaultCenter, []);
+  const stableZoom = useMemo(() => 10, []);
+
   // Handle offline state
   if (!isOnline) {
     return (
@@ -634,11 +640,6 @@ function MobileMap({
       </div>
     );
   }
-
-  // Use stable references for center/zoom to prevent unnecessary re-renders
-  // After initial bounds are set, we stop controlling these props
-  const stableCenter = useMemo(() => defaultCenter, []);
-  const stableZoom = useMemo(() => 10, []);
 
   return (
     <MapErrorBoundary>
