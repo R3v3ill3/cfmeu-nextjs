@@ -11,6 +11,9 @@ import {
   ExternalLink,
   Loader2,
   CheckCircle,
+  Plus,
+  Share2,
+  FileText,
 } from 'lucide-react'
 
 interface MappingViewProps {
@@ -94,6 +97,16 @@ export function MappingView({ projectId, projectName }: MappingViewProps) {
     },
     staleTime: 30000,
   })
+
+  // Navigate to mobile mapping workflow for adding mapping data
+  const handleAddMapping = () => {
+    window.location.href = `/mobile/projects/${projectId}/mapping`
+  }
+
+  // Navigate to full mapping sheet page
+  const handleFullMappingSheet = () => {
+    window.open(`/projects/${projectId}?tab=mappingsheets`, '_blank')
+  }
   
   return (
     <div className="p-4 space-y-4 pb-safe-bottom">
@@ -150,10 +163,13 @@ export function MappingView({ projectId, projectName }: MappingViewProps) {
               <div className="text-center py-8 bg-white rounded-xl border border-gray-200">
                 <ClipboardList className="h-10 w-10 text-gray-300 mx-auto mb-2" />
                 <p className="text-gray-500">No trades mapped yet</p>
+                <p className="text-sm text-gray-400 mt-1">
+                  Use &quot;Add Mapping&quot; below to start mapping trades
+                </p>
               </div>
             ) : (
               <div className="space-y-2">
-                {mappingData?.trades.map((trade) => (
+                {mappingData?.trades.slice(0, 5).map((trade) => (
                   <div 
                     key={trade.trade}
                     className="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between"
@@ -180,31 +196,47 @@ export function MappingView({ projectId, projectName }: MappingViewProps) {
                     )}
                   </div>
                 ))}
+                {(mappingData?.trades.length || 0) > 5 && (
+                  <p className="text-sm text-gray-500 text-center py-2">
+                    + {(mappingData?.trades.length || 0) - 5} more trades
+                  </p>
+                )}
               </div>
             )}
           </div>
         </>
       )}
       
-      {/* Actions */}
+      {/* Actions - 3 distinct options */}
       <div className="space-y-3 pt-4">
-        {/* Share Link Generator - has its own dialog trigger */}
+        {/* 1. Add Mapping - opens the mobile mapping workflow */}
+        <WizardButton
+          variant="primary"
+          size="lg"
+          fullWidth
+          onClick={handleAddMapping}
+          icon={<Plus className="h-5 w-5" />}
+        >
+          Add Mapping
+        </WizardButton>
+        
+        {/* 2. Share Mapping Sheet - generates shareable link/QR */}
         <ShareLinkGenerator
           projectId={projectId}
           projectName={projectName}
         />
         
+        {/* 3. Full Mapping Sheet - opens detailed view */}
         <WizardButton
           variant="outline"
           size="md"
           fullWidth
-          onClick={() => window.open(`/projects/${projectId}?tab=mappingsheets`, '_blank')}
-          icon={<ExternalLink className="h-4 w-4" />}
+          onClick={handleFullMappingSheet}
+          icon={<FileText className="h-4 w-4" />}
         >
-          Open Full Mapping Sheet
+          Full Mapping Sheet
         </WizardButton>
       </div>
     </div>
   )
 }
-

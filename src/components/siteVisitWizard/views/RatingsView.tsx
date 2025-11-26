@@ -8,11 +8,12 @@ import { cn } from '@/lib/utils'
 import { 
   Star, 
   Building, 
-  ExternalLink,
   Loader2,
   CheckCircle,
   AlertTriangle,
   XCircle,
+  Plus,
+  FileText,
 } from 'lucide-react'
 
 interface RatingsViewProps {
@@ -129,6 +130,16 @@ export function RatingsView({ projectId, projectName }: RatingsViewProps) {
         return 'bg-gray-50 border-gray-200'
     }
   }
+
+  // Navigate to mobile compliance audit workflow
+  const handleAddRating = () => {
+    window.location.href = `/mobile/projects/${projectId}/compliance`
+  }
+
+  // Navigate to full compliance view
+  const handleFullComplianceView = () => {
+    window.open(`/projects/${projectId}?tab=compliance`, '_blank')
+  }
   
   return (
     <div className="p-4 space-y-4 pb-safe-bottom">
@@ -176,10 +187,13 @@ export function RatingsView({ projectId, projectName }: RatingsViewProps) {
               <div className="text-center py-8 bg-white rounded-xl border border-gray-200">
                 <Star className="h-10 w-10 text-gray-300 mx-auto mb-2" />
                 <p className="text-gray-500">No employers assigned</p>
+                <p className="text-sm text-gray-400 mt-1">
+                  Use &quot;Add Rating&quot; below to start auditing employers
+                </p>
               </div>
             ) : (
               <div className="space-y-2">
-                {ratingsData?.employers.map((employer) => (
+                {ratingsData?.employers.slice(0, 5).map((employer) => (
                   <div 
                     key={employer.id}
                     className={cn(
@@ -203,31 +217,47 @@ export function RatingsView({ projectId, projectName }: RatingsViewProps) {
                     {getRatingIcon(employer.trafficLightRating)}
                   </div>
                 ))}
+                {(ratingsData?.employers.length || 0) > 5 && (
+                  <p className="text-sm text-gray-500 text-center py-2">
+                    + {(ratingsData?.employers.length || 0) - 5} more employers
+                  </p>
+                )}
               </div>
             )}
           </div>
         </>
       )}
       
-      {/* Actions */}
+      {/* Actions - 3 distinct options */}
       <div className="space-y-3 pt-4">
-        {/* Share Audit Form Generator - has its own dialog trigger */}
+        {/* 1. Add Rating - opens the mobile compliance audit workflow */}
+        <WizardButton
+          variant="primary"
+          size="lg"
+          fullWidth
+          onClick={handleAddRating}
+          icon={<Plus className="h-5 w-5" />}
+        >
+          Add Rating
+        </WizardButton>
+        
+        {/* 2. Share Audit Form - generates shareable link/QR */}
         <ShareAuditFormGenerator
           projectId={projectId}
           projectName={projectName}
         />
         
+        {/* 3. Full Compliance View - opens detailed view */}
         <WizardButton
           variant="outline"
           size="md"
           fullWidth
-          onClick={() => window.open(`/projects/${projectId}?tab=compliance`, '_blank')}
-          icon={<ExternalLink className="h-4 w-4" />}
+          onClick={handleFullComplianceView}
+          icon={<FileText className="h-4 w-4" />}
         >
-          Open Full Compliance View
+          Full Compliance View
         </WizardButton>
       </div>
     </div>
   )
 }
-

@@ -1,35 +1,20 @@
 "use client"
 
-import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/integrations/supabase/client'
-import { useToast } from '@/hooks/use-toast'
+import { toast } from 'sonner'
 import { WizardButton } from '../shared/WizardButton'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
-} from '@/components/ui/select'
-import { 
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
+import { ContactActions } from '@/components/ui/ContactActions'
 import { 
   User, 
   Phone, 
   Mail, 
-  Plus, 
-  Pencil,
   Loader2,
-  ExternalLink,
+  CheckCircle,
+  AlertCircle,
 } from 'lucide-react'
 
 interface ContactsViewProps {
@@ -37,58 +22,40 @@ interface ContactsViewProps {
   mainJobSiteId?: string | null
 }
 
-interface SiteContact {
-  id: string
-  name: string
-  role: string
-  phone: string | null
-  email: string | null
-  notes: string | null
+// The 4 fixed roles that match the mapping sheet
+type RoleKey = "project_manager" | "site_manager" | "site_delegate" | "site_hsr"
+
+const ROLE_LABELS: Record<RoleKey, string> = {
+  project_manager: "Project Manager",
+  site_manager: "Site Manager",
+  site_delegate: "Site Delegate",
+  site_hsr: "Site HSR",
 }
 
-const CONTACT_ROLES = [
-  { value: 'project_manager', label: 'Project Manager' },
-  { value: 'site_manager', label: 'Site Manager' },
-  { value: 'site_delegate', label: 'Site Delegate' },
-  { value: 'site_hsr', label: 'Site HSR' },
-  { value: 'foreman', label: 'Foreman' },
-  { value: 'other', label: 'Other' },
-]
+const FIXED_ROLES: RoleKey[] = ["project_manager", "site_manager", "site_delegate", "site_hsr"]
+
+type ContactRow = {
+  id?: string
+  role: RoleKey
+  name: string
+  email: string
+  phone: string
+}
 
 export function ContactsView({ projectId, mainJobSiteId }: ContactsViewProps) {
-  const { toast } = useToast()
   const queryClient = useQueryClient()
-  const [showAddDialog, setShowAddDialog] = useState(false)
-  const [editingContact, setEditingContact] = useState<SiteContact | null>(null)
-  
-  // Fetch contacts
-  const { data: contacts = [], isLoading } = useQuery({
-    queryKey: ['wizard-site-contacts', projectId, mainJobSiteId],
-    queryFn: async () => {
-      // Get job site IDs for this project
-      const { data: sites } = await supabase
-        .from('job_sites')
-        .select('id')
-        .eq('project_id', projectId)
-      
-      const siteIds = sites?.map(s => s.id) || []
-      if (siteIds.length === 0) return []
-      
-      const { data, error } = await supabase
-        .from('site_contacts')
-        .select('id, name, role, phone, email, notes')
-        .in('job_site_id', siteIds)
-        .order('role', { ascending: true })
-      
-      if (error) throw error
-      return (data || []) as SiteContact[]
-    },
-    staleTime: 30000,
+  const [rows, setRows] = useState<Record<RoleKey, ContactRow>>({
+    project_manager: { role: "project_manager", name: "", email: "", phone: "" },
+    site_manager: { role: "site_manager", name: "", email: "", phone: "" },
+    site_delegate: { role: "site_delegate", name: "", email: "", phone: "" },
+    site_hsr: { role: "site_hsr", name: "", email: "", phone: "" },
   })
-  
-  // Get the primary job site ID
-  const { data: primarySiteId } = useQuery({
-    queryKey: ['wizard-primary-site', projectId, mainJobSiteId],
+  const [saving, setSaving] = useState<RoleKey | null>(null)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Get the effective site ID
+  const { data: effectiveSiteId, isLoading: loadingSiteId } = useQuery({
+    queryKey: ['wizard-effective-site', projectId, mainJobSiteId],
     queryFn: async () => {
       if (mainJobSiteId) return mainJobSiteId
       
@@ -97,358 +64,274 @@ export function ContactsView({ projectId, mainJobSiteId }: ContactsViewProps) {
         .select('id')
         .eq('project_id', projectId)
         .limit(1)
-        .single()
+        .maybeSingle()
       
       return data?.id || null
     },
-    enabled: !mainJobSiteId,
   })
-  
-  const effectiveSiteId = mainJobSiteId || primarySiteId
-  
-  // Add/update contact mutation
-  const contactMutation = useMutation({
-    mutationFn: async (contact: {
-      id?: string
-      name: string
-      role: string
-      phone?: string
-      email?: string
-      notes?: string
-    }) => {
-      if (!effectiveSiteId) throw new Error('No job site found')
+
+  // Load existing contacts
+  useEffect(() => {
+    const load = async () => {
+      if (!effectiveSiteId) return
       
-      if (contact.id) {
-        // Update
+      const { data, error } = await supabase
+        .from("site_contacts")
+        .select("id, role, name, email, phone")
+        .eq("job_site_id", effectiveSiteId)
+      
+      if (error) {
+        toast.error(error.message)
+        return
+      }
+      
+      const map = { ...rows } as Record<RoleKey, ContactRow>
+      ;(data || []).forEach((r: any) => {
+        const key = r.role as RoleKey
+        if (FIXED_ROLES.includes(key)) {
+          map[key] = {
+            id: r.id as string,
+            role: key,
+            name: r.name || "",
+            email: r.email || "",
+            phone: r.phone || "",
+          }
+        }
+      })
+      setRows(map)
+    }
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveSiteId])
+
+  // Persist changes with debounce
+  const persist = useCallback(async (role: RoleKey, patch: Partial<ContactRow>) => {
+    if (!effectiveSiteId) return
+    
+    setSaving(role)
+    const row = rows[role]
+    const updatedRow = { ...row, ...patch }
+    
+    try {
+      if (row.id) {
+        // Update existing
         const { error } = await supabase
-          .from('site_contacts')
+          .from("site_contacts")
           .update({
-            name: contact.name,
-            role: contact.role,
-            phone: contact.phone || null,
-            email: contact.email || null,
-            notes: contact.notes || null,
+            name: updatedRow.name || null,
+            email: updatedRow.email || null,
+            phone: updatedRow.phone || null,
           })
-          .eq('id', contact.id)
+          .eq("id", row.id)
         
         if (error) throw error
-      } else {
-        // Insert
-        const { error } = await supabase
-          .from('site_contacts')
+      } else if (updatedRow.name || updatedRow.email || updatedRow.phone) {
+        // Insert new only if there's some data
+        const { data, error } = await supabase
+          .from("site_contacts")
           .insert({
             job_site_id: effectiveSiteId,
-            name: contact.name,
-            role: contact.role,
-            phone: contact.phone || null,
-            email: contact.email || null,
-            notes: contact.notes || null,
+            role,
+            name: updatedRow.name || null,
+            email: updatedRow.email || null,
+            phone: updatedRow.phone || null,
           })
+          .select("id")
+          .single()
         
         if (error) throw error
+        
+        // Update local state with new ID
+        setRows(prev => ({
+          ...prev,
+          [role]: { ...updatedRow, id: data.id }
+        }))
       }
-    },
-    onSuccess: () => {
+      
       queryClient.invalidateQueries({ queryKey: ['wizard-site-contacts', projectId] })
-      toast({
-        title: editingContact ? 'Contact updated' : 'Contact added',
-        description: 'Site contact has been saved.',
-      })
-      setShowAddDialog(false)
-      setEditingContact(null)
-    },
-    onError: (error) => {
-      toast({
-        title: 'Error saving contact',
-        description: error instanceof Error ? error.message : 'An error occurred',
-        variant: 'destructive',
-      })
-    },
-  })
-  
-  const getRoleLabel = (role: string) => {
-    return CONTACT_ROLES.find(r => r.value === role)?.label || role
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save contact')
+    } finally {
+      setSaving(null)
+    }
+  }, [effectiveSiteId, rows, queryClient, projectId])
+
+  // Handle field change with debounce
+  const handleFieldChange = (role: RoleKey, field: 'name' | 'email' | 'phone', value: string) => {
+    // Update local state immediately
+    setRows(prev => ({
+      ...prev,
+      [role]: { ...prev[role], [field]: value }
+    }))
+    
+    // Debounce the persist
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => {
+      persist(role, { [field]: value })
+    }, 800)
   }
-  
-  const handleCall = (phone: string) => {
-    window.location.href = `tel:${phone}`
+
+  const isLoading = loadingSiteId
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+      </div>
+    )
   }
-  
-  const handleEmail = (email: string) => {
-    window.location.href = `mailto:${email}`
+
+  if (!effectiveSiteId) {
+    return (
+      <div className="p-4 text-center py-12">
+        <AlertCircle className="h-12 w-12 text-amber-500 mx-auto mb-3" />
+        <p className="text-gray-600 font-medium">No job site found</p>
+        <p className="text-sm text-gray-500 mt-1">
+          This project doesn&apos;t have a job site configured yet.
+        </p>
+      </div>
+    )
   }
-  
+
   return (
     <div className="p-4 space-y-4 pb-safe-bottom">
-      {/* Header with add button */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-gray-900">
-          Site Contacts ({contacts.length})
+          Site Contacts
         </h2>
-        <WizardButton
-          variant="primary"
-          size="sm"
-          onClick={() => setShowAddDialog(true)}
-          icon={<Plus className="h-4 w-4" />}
-        >
-          Add Contact
-        </WizardButton>
+        {saving && (
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Saving...
+          </div>
+        )}
       </div>
-      
-      {/* Contacts list */}
-      {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-        </div>
-      ) : contacts.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
-          <User className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500 font-medium">No contacts yet</p>
-          <p className="text-sm text-gray-400 mt-1">
-            Add site contacts to track key people
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {contacts.map((contact) => (
+
+      {/* Fixed Role Cards */}
+      <div className="space-y-3">
+        {FIXED_ROLES.map((role) => {
+          const row = rows[role]
+          const hasData = row.name || row.email || row.phone
+          
+          return (
             <div 
-              key={contact.id}
-              className="bg-white rounded-xl border border-gray-200 p-4"
+              key={role}
+              className={cn(
+                "bg-white rounded-xl border p-4",
+                hasData ? "border-gray-200" : "border-dashed border-gray-300"
+              )}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-gray-900 truncate">
-                      {contact.name}
-                    </h3>
-                    <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs font-medium rounded-full">
-                      {getRoleLabel(contact.role)}
-                    </span>
+              {/* Role header */}
+              <div className="flex items-center gap-2 mb-3">
+                <span className={cn(
+                  "px-2.5 py-1 rounded-full text-xs font-semibold",
+                  hasData 
+                    ? "bg-blue-100 text-blue-700" 
+                    : "bg-gray-100 text-gray-500"
+                )}>
+                  {ROLE_LABELS[role]}
+                </span>
+                {hasData && row.id && (
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                )}
+              </div>
+
+              {/* Contact fields */}
+              <div className="space-y-3">
+                {/* Name */}
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    Name
+                  </label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      type="text"
+                      value={row.name}
+                      onChange={(e) => handleFieldChange(role, 'name', e.target.value)}
+                      placeholder={`Enter ${ROLE_LABELS[role].toLowerCase()} name`}
+                      className="pl-10 h-12 text-base"
+                    />
                   </div>
-                  
-                  {/* Contact actions */}
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    {contact.phone && (
-                      <button
-                        onClick={() => handleCall(contact.phone!)}
-                        className={cn(
-                          'inline-flex items-center gap-1.5 px-3 py-2',
-                          'bg-green-50 text-green-700 rounded-lg text-sm font-medium',
-                          'hover:bg-green-100 active:bg-green-200 transition-colors'
-                        )}
-                      >
-                        <Phone className="h-4 w-4" />
-                        {contact.phone}
-                      </button>
-                    )}
-                    {contact.email && (
-                      <button
-                        onClick={() => handleEmail(contact.email!)}
-                        className={cn(
-                          'inline-flex items-center gap-1.5 px-3 py-2',
-                          'bg-blue-50 text-blue-700 rounded-lg text-sm font-medium',
-                          'hover:bg-blue-100 active:bg-blue-200 transition-colors'
-                        )}
-                      >
-                        <Mail className="h-4 w-4" />
-                        Email
-                      </button>
-                    )}
-                  </div>
-                  
-                  {contact.notes && (
-                    <p className="text-sm text-gray-500 mt-2">
-                      {contact.notes}
-                    </p>
-                  )}
                 </div>
-                
-                <button
-                  onClick={() => {
-                    setEditingContact(contact)
-                    setShowAddDialog(true)
-                  }}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <Pencil className="h-4 w-4 text-gray-500" />
-                </button>
+
+                {/* Phone */}
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    Phone
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Input
+                        type="tel"
+                        value={row.phone}
+                        onChange={(e) => handleFieldChange(role, 'phone', e.target.value)}
+                        placeholder="Enter phone number"
+                        className="pl-10 h-12 text-base"
+                      />
+                    </div>
+                    {row.phone && (
+                      <a
+                        href={`tel:${row.phone}`}
+                        className={cn(
+                          "flex items-center justify-center w-12 h-12",
+                          "bg-green-500 text-white rounded-xl",
+                          "hover:bg-green-600 active:bg-green-700 transition-colors"
+                        )}
+                      >
+                        <Phone className="h-5 w-5" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                {/* Email */}
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    Email
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Input
+                        type="email"
+                        value={row.email}
+                        onChange={(e) => handleFieldChange(role, 'email', e.target.value)}
+                        placeholder="Enter email address"
+                        className="pl-10 h-12 text-base"
+                      />
+                    </div>
+                    {row.email && (
+                      <a
+                        href={`mailto:${row.email}`}
+                        className={cn(
+                          "flex items-center justify-center w-12 h-12",
+                          "bg-blue-500 text-white rounded-xl",
+                          "hover:bg-blue-600 active:bg-blue-700 transition-colors"
+                        )}
+                      >
+                        <Mail className="h-5 w-5" />
+                      </a>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
-          ))}
+          )
+        })}
+      </div>
+
+      {/* Summary */}
+      <div className="bg-gray-50 rounded-xl p-4 mt-6">
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-gray-600">Contacts filled:</span>
+          <span className="font-semibold text-gray-900">
+            {FIXED_ROLES.filter(role => rows[role].name || rows[role].phone || rows[role].email).length} / {FIXED_ROLES.length}
+          </span>
         </div>
-      )}
-      
-      {/* Add/Edit Contact Dialog */}
-      <ContactFormDialog
-        open={showAddDialog}
-        onOpenChange={(open) => {
-          setShowAddDialog(open)
-          if (!open) setEditingContact(null)
-        }}
-        contact={editingContact}
-        onSubmit={(data) => contactMutation.mutate(data)}
-        isSubmitting={contactMutation.isPending}
-      />
+      </div>
     </div>
   )
 }
-
-// Contact form dialog
-function ContactFormDialog({
-  open,
-  onOpenChange,
-  contact,
-  onSubmit,
-  isSubmitting,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  contact: SiteContact | null
-  onSubmit: (data: {
-    id?: string
-    name: string
-    role: string
-    phone?: string
-    email?: string
-    notes?: string
-  }) => void
-  isSubmitting: boolean
-}) {
-  const [name, setName] = useState(contact?.name || '')
-  const [role, setRole] = useState(contact?.role || 'site_manager')
-  const [phone, setPhone] = useState(contact?.phone || '')
-  const [email, setEmail] = useState(contact?.email || '')
-  const [notes, setNotes] = useState(contact?.notes || '')
-  
-  // Reset form when contact changes
-  useState(() => {
-    if (contact) {
-      setName(contact.name)
-      setRole(contact.role)
-      setPhone(contact.phone || '')
-      setEmail(contact.email || '')
-      setNotes(contact.notes || '')
-    } else {
-      setName('')
-      setRole('site_manager')
-      setPhone('')
-      setEmail('')
-      setNotes('')
-    }
-  })
-  
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!name.trim()) return
-    
-    onSubmit({
-      id: contact?.id,
-      name: name.trim(),
-      role,
-      phone: phone.trim() || undefined,
-      email: email.trim() || undefined,
-      notes: notes.trim() || undefined,
-    })
-  }
-  
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg mx-4">
-        <DialogHeader>
-          <DialogTitle>
-            {contact ? 'Edit Contact' : 'Add Contact'}
-          </DialogTitle>
-        </DialogHeader>
-        
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="contact-name">Name *</Label>
-            <Input
-              id="contact-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Enter name"
-              required
-              className="h-12"
-            />
-          </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="contact-role">Role *</Label>
-            <Select value={role} onValueChange={setRole}>
-              <SelectTrigger id="contact-role" className="h-12">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {CONTACT_ROLES.map((r) => (
-                  <SelectItem key={r.value} value={r.value}>
-                    {r.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="contact-phone">Phone</Label>
-            <Input
-              id="contact-phone"
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="Enter phone number"
-              className="h-12"
-            />
-          </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="contact-email">Email</Label>
-            <Input
-              id="contact-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Enter email address"
-              className="h-12"
-            />
-          </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="contact-notes">Notes</Label>
-            <Textarea
-              id="contact-notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Add any notes..."
-              rows={3}
-            />
-          </div>
-          
-          <div className="flex gap-3 pt-2">
-            <WizardButton
-              type="button"
-              variant="outline"
-              size="md"
-              fullWidth
-              onClick={() => onOpenChange(false)}
-              disabled={isSubmitting}
-            >
-              Cancel
-            </WizardButton>
-            <WizardButton
-              type="submit"
-              variant="primary"
-              size="md"
-              fullWidth
-              loading={isSubmitting}
-              disabled={!name.trim()}
-            >
-              {contact ? 'Save Changes' : 'Add Contact'}
-            </WizardButton>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
