@@ -56,7 +56,7 @@ import SelectiveEbaSearchManager from "@/components/projects/SelectiveEbaSearchM
 import { ProjectKeyContractorMetrics } from "@/components/projects/ProjectKeyContractorMetrics"
 import { useProjectKeyContractorMetrics } from "@/hooks/useProjectKeyContractorMetrics"
 import { useProjectAuditTarget } from "@/hooks/useProjectAuditTarget"
-import { Info, FileText, Calendar, BarChart3, Search, FileCheck } from "lucide-react"
+import { ArrowLeft, Info, FileText, Calendar, BarChart3, Search, FileCheck } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { OrganizingUniverseBadge } from "@/components/ui/OrganizingUniverseBadge"
 import { useIsMobile } from "@/hooks/use-mobile"
@@ -117,6 +117,24 @@ export default function ProjectDetailPage() {
   const router = useRouter()
   const pathname = usePathname()
   const projectId = params?.projectId as string
+  const searchParamsString = sp?.toString() ?? ''
+  const fromSiteVisit = sp?.get('fromSiteVisit') === '1'
+  const wizardBackHref = useMemo(() => {
+    if (!fromSiteVisit) return null
+    const paramsCopy = new URLSearchParams(searchParamsString)
+    const wizardParams = new URLSearchParams()
+    wizardParams.set('phase', paramsCopy.get('wizardPhase') ?? 'action-menu')
+    const view = paramsCopy.get('wizardView')
+    if (view) wizardParams.set('view', view)
+    wizardParams.set('projectId', projectId)
+    const projectNameParam = paramsCopy.get('wizardProjectName')
+    if (projectNameParam) wizardParams.set('projectName', projectNameParam)
+    const projectAddressParam = paramsCopy.get('wizardProjectAddress')
+    if (projectAddressParam) wizardParams.set('projectAddress', projectAddressParam)
+    const builderNameParam = paramsCopy.get('wizardBuilderName')
+    if (builderNameParam) wizardParams.set('builderName', builderNameParam)
+    return `/site-visit-wizard?${wizardParams.toString()}`
+  }, [fromSiteVisit, projectId, searchParamsString])
   const isMobile = useIsMobile()
   const [tab, setTab] = useState(sp.get("tab") || "mappingsheets")
 
@@ -848,6 +866,19 @@ export default function ProjectDetailPage() {
 
   return (
     <div className="p-6 space-y-6">
+      {fromSiteVisit && wizardBackHref && (
+        <div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-2 px-0 text-blue-600 hover:text-blue-700"
+            onClick={() => router.push(wizardBackHref)}
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Site Visit
+          </Button>
+        </div>
+      )}
       {/* Project Header */}
       <div className="flex items-start justify-between">
         <div className="space-y-2">

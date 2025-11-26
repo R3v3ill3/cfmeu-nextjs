@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
 import type { ReactNode } from 'react'
 import { PostHogProvider } from '@/providers/PostHogProvider'
+import { AuthProvider } from '@/hooks/useAuth'
 
 type ProvidersProps = {
   children: ReactNode
@@ -49,14 +50,18 @@ export default function Providers({ children }: ProvidersProps) {
     }
   }, [])
 
+  // AuthProvider is placed inside QueryClientProvider so it can use React Query
+  // This is a single instance that persists across all navigations
   return (
     <QueryClientProvider client={queryClient}>
-      <Suspense fallback={null}>
-        <PostHogProvider>
-          {children}
-          <Toaster richColors position="top-right" />
-        </PostHogProvider>
-      </Suspense>
+      <AuthProvider>
+        <Suspense fallback={null}>
+          <PostHogProvider>
+            {children}
+            <Toaster richColors position="top-right" />
+          </PostHogProvider>
+        </Suspense>
+      </AuthProvider>
     </QueryClientProvider>
   )
 }

@@ -1,11 +1,13 @@
 "use client"
 
-import { useState } from 'react'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useState, useCallback, useEffect, useRef } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/integrations/supabase/client'
 import { useToast } from '@/hooks/use-toast'
 import { WizardButton } from '../shared/WizardButton'
 import { cn } from '@/lib/utils'
+import { FWCSearchResult } from '@/types/fwcLookup'
+import { Progress } from '@/components/ui/progress'
 import { 
   FileCheck, 
   Building, 
@@ -31,9 +33,34 @@ interface BuilderEbaStatus {
   nominalExpiryDate: string | null
 }
 
+type ScraperJobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled"
+
+type ScraperJob = {
+  id: string
+  status: ScraperJobStatus
+  progress_total: number | null
+  progress_completed: number | null
+  created_at: string
+  updated_at: string
+}
+
+type ScraperJobEvent = {
+  id: number
+  event_type: string
+  payload: Record<string, unknown> | null
+  created_at: string
+}
+
 export function EbaView({ projectId, projectName }: EbaViewProps) {
   const { toast } = useToast()
-  const [isSearching, setIsSearching] = useState(false)
+  const [job, setJob] = useState<ScraperJob | null>(null)
+  const [jobEvents, setJobEvents] = useState<ScraperJobEvent[]>([])
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [results, setResults] = useState<FWCSearchResult[]>([])
+  
+  const pollRef = useRef<NodeJS.Timeout | null>(null)
+  const lastStatusRef = useRef<ScraperJobStatus | null>(null)
   
   // Fetch builder EBA status
   const { data: ebaData, isLoading, refetch } = useQuery({
@@ -74,7 +101,7 @@ export function EbaView({ projectId, projectName }: EbaViewProps) {
       
       // Get EBA record if exists
       const { data: ebaRecord } = await supabase
-        .from('employer_eba_records')
+        .from('company_eba_records')
         .select('fwc_document_url, nominal_expiry_date')
         .eq('employer_id', builder.id)
         .order('created_at', { ascending: false })
@@ -92,60 +119,187 @@ export function EbaView({ projectId, projectName }: EbaViewProps) {
     staleTime: 30000,
   })
   
-  // FWC search mutation
-  const fwcSearchMutation = useMutation({
-    mutationFn: async () => {
-      if (!ebaData?.builderName) throw new Error('No builder name')
-      
-      setIsSearching(true)
-      
-      const response = await fetch('/api/fwc-search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyName: ebaData.builderName }),
+  const clearPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current)
+      pollRef.current = null
+    }
+  }, [])
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      clearPolling()
+    }
+  }, [clearPolling])
+
+  const fetchJobStatus = useCallback(
+    async (jobId: string) => {
+      const response = await fetch(`/api/scraper-jobs?id=${jobId}&includeEvents=1`, {
+        cache: "no-store",
       })
-      
+
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'FWC search failed')
+        throw new Error(await response.text())
       }
-      
-      return response.json()
+
+      const data = (await response.json()) as { job: ScraperJob; events?: ScraperJobEvent[] }
+      setJob(data.job)
+      setJobEvents(data.events ?? [])
+      return data.job
     },
-    onSuccess: (data) => {
-      setIsSearching(false)
-      if (data.results && data.results.length > 0) {
+    []
+  )
+
+  const handleJobUpdate = useCallback(
+    (jobData: ScraperJob) => {
+      if (!jobData) return
+      const terminal: ScraperJobStatus[] = ["succeeded", "failed", "cancelled"]
+      if (!terminal.includes(jobData.status)) return
+
+      if (lastStatusRef.current === jobData.status) return
+      lastStatusRef.current = jobData.status
+
+      clearPolling()
+
+      if (jobData.status === "succeeded") {
+        setErrorMessage(null)
         toast({
-          title: 'EBA Found',
-          description: `Found ${data.results.length} agreement(s) for ${ebaData?.builderName}`,
+          title: "FWC lookup completed",
+          description: "EBA data has been updated. Refreshing...",
         })
-        refetch()
-      } else {
+        // Refetch EBA data after a short delay to allow database to update
+        setTimeout(() => {
+          refetch()
+        }, 1000)
+      } else if (jobData.status === "failed") {
         toast({
-          title: 'No EBA Found',
-          description: `No active agreements found for ${ebaData?.builderName}`,
+          title: "FWC lookup failed",
+          description: "The search encountered an error. Please try again.",
+          variant: "destructive",
         })
       }
     },
-    onError: (error) => {
-      setIsSearching(false)
+    [clearPolling, refetch, toast]
+  )
+
+  const startPolling = useCallback(
+    (jobId: string) => {
+      clearPolling()
+
+      const poll = async () => {
+        try {
+          const latest = await fetchJobStatus(jobId)
+          handleJobUpdate(latest)
+        } catch (error) {
+          console.error("Failed to poll FWC job", error)
+          setErrorMessage(error instanceof Error ? error.message : "Failed to poll job status")
+          clearPolling()
+        }
+      }
+
+      poll()
+      pollRef.current = setInterval(poll, 3000)
+    },
+    [clearPolling, fetchJobStatus, handleJobUpdate]
+  )
+
+  const handleQueueLookup = async () => {
+    if (!ebaData?.builderId || !ebaData?.builderName) {
       toast({
-        title: 'Search Failed',
-        description: error instanceof Error ? error.message : 'An error occurred',
-        variant: 'destructive',
+        title: "Cannot search",
+        description: "Builder information is required to search FWC.",
+        variant: "destructive",
       })
-    },
-  })
-  
+      return
+    }
+
+    setIsSubmitting(true)
+    setErrorMessage(null)
+    setResults([])
+    setJob(null)
+    setJobEvents([])
+    
+    try {
+      const body = {
+        jobType: "fwc_lookup",
+        payload: {
+          employerIds: [ebaData.builderId],
+          options: {
+            autoLink: true, // Auto-link the best match
+            searchOverrides: {
+              [ebaData.builderId]: ebaData.builderName.trim(),
+            },
+          },
+        },
+        priority: 5,
+        progressTotal: 1,
+      }
+
+      const response = await fetch("/api/scraper-jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+
+      if (!response.ok) {
+        throw new Error(await response.text())
+      }
+
+      const data = (await response.json()) as { job: ScraperJob }
+      setJob(data.job)
+      setJobEvents([])
+      toast({
+        title: "FWC lookup queued",
+        description: "The background worker will fetch the latest EBA data shortly.",
+      })
+      startPolling(data.job.id)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to queue FWC lookup"
+      setErrorMessage(message)
+      toast({ 
+        title: "Failed to queue lookup", 
+        description: message, 
+        variant: "destructive" 
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  // Extract results from job events
+  useEffect(() => {
+    if (!jobEvents.length) return
+    const latestCandidates = [...jobEvents]
+      .reverse()
+      .find((event) => event.event_type === "fwc_employer_candidates" || event.event_type === "fwc_employer_results")
+
+    if (latestCandidates && latestCandidates.payload) {
+      const payloadResults = latestCandidates.payload.results as FWCSearchResult[] | undefined
+      if (Array.isArray(payloadResults)) {
+        setResults(payloadResults)
+      }
+    }
+
+    const failureEvent = [...jobEvents]
+      .reverse()
+      .find((event) => event.event_type === "fwc_employer_failed")
+    if (failureEvent?.payload?.error) {
+      setErrorMessage(String(failureEvent.payload.error))
+    }
+  }, [jobEvents])
+
   const handleViewDocument = () => {
     if (ebaData?.fwcDocumentUrl) {
       window.open(ebaData.fwcDocumentUrl, '_blank')
     }
   }
-  
+
   const handleSearchFwc = () => {
-    fwcSearchMutation.mutate()
+    handleQueueLookup()
   }
+
+  const progressPercent = job && job.progress_total ? Math.round((job.progress_completed ?? 0) / job.progress_total * 100) : 0
   
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return null
@@ -259,16 +413,55 @@ export function EbaView({ projectId, projectName }: EbaViewProps) {
             {/* Has EBA but no document, or unknown status */}
             {(ebaData.hasEba === true && !ebaData.fwcDocumentUrl) || 
              ebaData.hasEba === null ? (
-              <WizardButton
-                variant="primary"
-                size="lg"
-                fullWidth
-                onClick={handleSearchFwc}
-                loading={isSearching}
-                icon={<Search className="h-5 w-5" />}
-              >
-                Search FWC for EBA
-              </WizardButton>
+              <>
+                {!job ? (
+                  <WizardButton
+                    variant="primary"
+                    size="lg"
+                    fullWidth
+                    onClick={handleSearchFwc}
+                    loading={isSubmitting}
+                    icon={<Search className="h-5 w-5" />}
+                  >
+                    Search FWC for EBA
+                  </WizardButton>
+                ) : (
+                  <div className="space-y-3 bg-white rounded-xl border border-gray-200 p-4">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-medium text-gray-700">Search Status</span>
+                      <span className="capitalize text-gray-600">{job.status}</span>
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      Progress: {job.progress_completed ?? 0}/{job.progress_total ?? 1} ({progressPercent}%)
+                    </div>
+                    {(["queued", "running"] as ScraperJobStatus[]).includes(job.status) && (
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Searching FWC database...</span>
+                      </div>
+                    )}
+                    <Progress value={progressPercent} className="h-2" />
+                    {errorMessage && (
+                      <p className="text-sm text-red-600">{errorMessage}</p>
+                    )}
+                    {job.status === 'succeeded' && results.length > 0 && (
+                      <div className="mt-2 text-sm text-green-600">
+                        Found {results.length} EBA agreement(s). Data has been updated.
+                      </div>
+                    )}
+                    {job.status === 'succeeded' && results.length === 0 && (
+                      <div className="mt-2 text-sm text-gray-600">
+                        No EBA agreements found for this builder.
+                      </div>
+                    )}
+                    {job.status === 'failed' && (
+                      <div className="mt-2 text-sm text-red-600">
+                        The search failed. Please try again.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
             ) : null}
             
             {/* Non-EBA builder - show different message */}
@@ -285,16 +478,41 @@ export function EbaView({ projectId, projectName }: EbaViewProps) {
             
             {/* Always show option to search FWC manually */}
             {ebaData.hasEba === false && (
-              <WizardButton
-                variant="outline"
-                size="md"
-                fullWidth
-                onClick={handleSearchFwc}
-                loading={isSearching}
-                icon={<Search className="h-4 w-4" />}
-              >
-                Search FWC Anyway
-              </WizardButton>
+              <>
+                {!job ? (
+                  <WizardButton
+                    variant="outline"
+                    size="md"
+                    fullWidth
+                    onClick={handleSearchFwc}
+                    loading={isSubmitting}
+                    icon={<Search className="h-4 w-4" />}
+                  >
+                    Search FWC Anyway
+                  </WizardButton>
+                ) : (
+                  <div className="space-y-2 bg-white rounded-xl border border-gray-200 p-3">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium text-gray-700">Search Status</span>
+                      <span className="capitalize text-gray-600">{job.status}</span>
+                    </div>
+                    {(["queued", "running"] as ScraperJobStatus[]).includes(job.status) && (
+                      <div className="flex items-center gap-2 text-xs text-gray-600">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        <span>Searching...</span>
+                      </div>
+                    )}
+                    <Progress value={progressPercent} className="h-1.5" />
+                    {job.status === 'succeeded' && (
+                      <div className="text-xs text-gray-600">
+                        {results.length > 0 
+                          ? `Found ${results.length} agreement(s)` 
+                          : 'No agreements found'}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
             )}
             
             {/* Link to full employer view */}

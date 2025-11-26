@@ -87,9 +87,14 @@ export function useEmployersServerSide(params: EmployersParams) {
   const workerEnabled = process.env.NEXT_PUBLIC_USE_WORKER_EMPLOYERS === 'true';
   const workerUrl = process.env.NEXT_PUBLIC_DASHBOARD_WORKER_URL || '';
 
+  // Include session in queryKey so query refetches when session changes
+  // This ensures we use the worker when session becomes available
+  const hasSession = !!session?.access_token;
+
   return useQuery<EmployersResponse>({
-    queryKey: ['employers-server-side', params, workerEnabled],
-    // Wait for session to load before running query to avoid token race condition
+    queryKey: ['employers-server-side', params, workerEnabled, hasSession],
+    // Wait for auth to finish loading before running query
+    // The query will re-run if session changes (due to queryKey including hasSession)
     enabled: !loading,
     queryFn: async () => {
       // Build URL parameters, only including non-default values to keep URLs clean
@@ -160,8 +165,14 @@ export function useEmployersServerSide(params: EmployersParams) {
       };
 
       // Fallback function to use Next.js API route
-      const fetchApp = async () => {
-        console.warn('⚠️ Falling back to app route for employers');
+      const fetchApp = async (reason: string) => {
+        // Only log at debug level unless it's an unexpected failure
+        if (process.env.NODE_ENV === 'development' || reason.includes('failed')) {
+          console.log('[useEmployersServerSide] Using app route', {
+            reason,
+            timestamp: new Date().toISOString()
+          });
+        }
         const response = await fetch(appUrl, { method: 'GET', headers: baseHeaders });
         if (!response.ok) {
           const errorText = await response.text();
@@ -171,24 +182,25 @@ export function useEmployersServerSide(params: EmployersParams) {
 
         // Log performance metrics
         if (data.debug?.queryTime > 1000) {
-          console.warn('⚠️ Slow query detected:', data.debug);
+          console.warn('[useEmployersServerSide] Slow query detected:', data.debug);
         }
 
         return enrichDebug(data, useWorker ? 'worker_fallback' : 'app_api');
       };
 
-      // Use app route if worker not configured
+      // If worker is not configured, use app route silently
       if (!useWorker) {
-        return fetchApp();
+        return fetchApp('Worker not configured');
       }
 
-      // Use Railway worker
-      const workerHeaders = { ...baseHeaders };
+      // Get current token - session may have become available since query was enabled
       const token = session?.access_token;
       if (!token) {
-        console.warn('⚠️ No auth token available for worker employers request; using app route');
-        return fetchApp();
+        // No token available - use app route (which handles auth via cookies)
+        return fetchApp('No auth token (session not available)');
       }
+
+      const workerHeaders = { ...baseHeaders };
       workerHeaders['Authorization'] = `Bearer ${token}`;
 
       const workerEndpoint = `${workerUrl.replace(/\/$/, '')}/v1/employers${urlPath}`;
@@ -199,31 +211,18 @@ export function useEmployersServerSide(params: EmployersParams) {
         if (!response.ok) {
           const errorText = await response.text();
           const status = response.status;
-          // Retry locally for network-ish failures (5xx or gateway issues)
-          if (status >= 500 || status === 429) {
-            console.warn(`⚠️ Worker responded with ${status}, falling back to app route`, errorText);
-            return fetchApp();
+          // Fall back to app route for server errors or auth issues
+          if (status >= 500 || status === 429 || status === 401 || status === 403) {
+            return fetchApp(`Worker responded with ${status}`);
           }
           throw new Error(`Failed to fetch employers: ${status} ${errorText}`);
         }
 
         const data = await response.json();
-
-        // Log performance and cache metrics
-        if (data.debug) {
-          const cacheStatus = response.headers.get('X-Cache') || 'UNKNOWN';
-          if (data.debug.queryTime > 1000 && cacheStatus !== 'HIT') {
-            console.warn('⚠️ Slow query detected:', { ...data.debug, cacheStatus });
-          }
-          if (cacheStatus === 'HIT') {
-            console.log('✅ Cache hit for employers query');
-          }
-        }
-
         return enrichDebug(data, 'worker');
       } catch (error) {
-        console.warn('⚠️ Worker employers request failed, falling back to app route', error);
-        return fetchApp();
+        // Network errors - fall back to app route
+        return fetchApp(`Worker request failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     },
     

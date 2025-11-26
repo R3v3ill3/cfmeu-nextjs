@@ -46,6 +46,7 @@ interface IndividualEmployerAssessmentProps {
   onSubmit: (data: EmployerAssessmentData) => Promise<void>;
   onSubmitAndNext: (data: EmployerAssessmentData) => Promise<void>;
   hasNextIncomplete: boolean;
+  mode?: 'public' | 'authenticated'; // Optional mode for future use
 }
 
 export function IndividualEmployerAssessment({
@@ -56,6 +57,7 @@ export function IndividualEmployerAssessment({
   onSubmit,
   onSubmitAndNext,
   hasNextIncomplete,
+  mode = 'public', // Default to public mode for backward compatibility
 }: IndividualEmployerAssessmentProps) {
   const [submitting, setSubmitting] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);

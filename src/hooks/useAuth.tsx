@@ -1,11 +1,13 @@
 "use client"
-import { useState, useEffect, createContext, useContext } from "react";
+import { useState, useEffect, createContext, useContext, useRef, useCallback } from "react";
+import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { User, Session } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
-const SESSION_FETCH_TIMEOUT = 10000; // Increased from 5000ms to 10000ms for better network resilience
-const MAX_RETRIES = 2;
+
+// Session recovery: if session is lost unexpectedly, wait this long before giving up
+const SESSION_RECOVERY_TIMEOUT = 5000; // 5 seconds
 
 interface AuthContextType {
   user: User | null;
@@ -22,57 +24,92 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const queryClient = useQueryClient();
+  
+  // Track if we've ever had a valid session (for recovery logic)
+  const hadSessionRef = useRef(false);
+  const recoveryAttemptedRef = useRef(false);
+  const isSubscribedRef = useRef(true);
+
+  // Session recovery function - attempts to refresh when session is unexpectedly lost
+  const attemptSessionRecovery = useCallback(async () => {
+    if (recoveryAttemptedRef.current || !hadSessionRef.current) {
+      return null;
+    }
+    
+    recoveryAttemptedRef.current = true;
+    console.log('[useAuth] Attempting session recovery...');
+    
+    try {
+      const supabase = getSupabaseBrowserClient();
+      
+      // Try to refresh the session
+      const { data, error } = await supabase.auth.refreshSession();
+      
+      if (error) {
+        console.warn('[useAuth] Session recovery failed:', error.message);
+        return null;
+      }
+      
+      if (data.session) {
+        console.log('[useAuth] Session recovered successfully');
+        return data.session;
+      }
+      
+      return null;
+    } catch (error) {
+      console.warn('[useAuth] Session recovery exception:', error);
+      return null;
+    }
+  }, []);
 
   useEffect(() => {
-    // Set up auth state listener FIRST to prevent race conditions
     const supabase = getSupabaseBrowserClient();
-    let isSubscribed = true;
-    let sessionChecked = false;
-    const getSessionWithTimeout = async (retryCount = 0): Promise<Awaited<ReturnType<typeof supabase.auth.getSession>>> => {
-      let timeoutId: ReturnType<typeof setTimeout> | null = null;
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error("Supabase session fetch timed out")), SESSION_FETCH_TIMEOUT);
-      });
-      try {
-        const result = await Promise.race([
-          supabase.auth.getSession(),
-          timeoutPromise,
-        ]) as Awaited<ReturnType<typeof supabase.auth.getSession>>;
-        return result;
-      } catch (error: any) {
-        // Check if it's a timeout error and we have retries left
-        const isTimeout = error?.message?.includes('timed out');
-        if (isTimeout && retryCount < MAX_RETRIES) {
-          const delay = Math.min(1000 * Math.pow(2, retryCount), 5000); // Exponential backoff, max 5s
-          console.warn(`[useAuth] Session fetch timeout (attempt ${retryCount + 1}/${MAX_RETRIES + 1}), retrying in ${delay}ms...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          return getSessionWithTimeout(retryCount + 1);
-        }
-        // Re-throw if not a timeout or no retries left
-        throw error;
-      } finally {
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-        }
-      }
-    };
+    isSubscribedRef.current = true;
+    let initialSessionReceived = false;
 
     console.log('[useAuth] Setting up auth state listener');
 
+    // onAuthStateChange fires IMMEDIATELY with cached session from storage
+    // This is the primary source of truth - no need to call getSession() separately
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (!isSubscribed) return;
+      async (event, newSession) => {
+        if (!isSubscribedRef.current) return;
 
         const timestamp = new Date().toISOString();
         console.log(`[useAuth] Auth state change: ${event}`, {
           timestamp,
-          hasSession: !!session,
-          userId: session?.user?.id,
-          sessionExpires: session?.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
+          hasSession: !!newSession,
+          userId: newSession?.user?.id,
+          sessionExpires: newSession?.expires_at ? new Date(newSession.expires_at * 1000).toISOString() : null,
         });
 
-        setSession(session);
-        setUser(session?.user ?? null);
+        // Track if we've ever had a session (for recovery logic)
+        if (newSession) {
+          hadSessionRef.current = true;
+          recoveryAttemptedRef.current = false; // Reset recovery flag when we get a valid session
+        }
+
+        // Handle INITIAL_SESSION event specially - this is Supabase's cached session
+        if (event === 'INITIAL_SESSION') {
+          initialSessionReceived = true;
+          setSession(newSession);
+          setUser(newSession?.user ?? null);
+          setLoading(false);
+          
+          if (!newSession && hadSessionRef.current) {
+            // We had a session before but now it's gone - try recovery
+            const recovered = await attemptSessionRecovery();
+            if (recovered && isSubscribedRef.current) {
+              setSession(recovered);
+              setUser(recovered.user);
+            }
+          }
+          return;
+        }
+
+        // For other events, update state normally
+        setSession(newSession);
+        setUser(newSession?.user ?? null);
         setLoading(false);
 
         // Invalidate auth-dependent caches on auth state changes
@@ -86,19 +123,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           });
         }
 
-        if (!session?.user) {
-          console.warn('[useAuth] Session lost - no user in session', { event, timestamp });
+        if (!newSession?.user && event !== 'SIGNED_OUT') {
+          console.warn('[useAuth] Session lost unexpectedly', { event, timestamp });
+          
+          // If we had a session and it's now gone (not from explicit sign out), try recovery
+          if (hadSessionRef.current && !recoveryAttemptedRef.current) {
+            const recovered = await attemptSessionRecovery();
+            if (recovered && isSubscribedRef.current) {
+              setSession(recovered);
+              setUser(recovered.user);
+            }
+          }
         }
 
-        if (session?.user && (event === 'SIGNED_IN' || event === 'USER_UPDATED')) {
+        if (newSession?.user && (event === 'SIGNED_IN' || event === 'USER_UPDATED')) {
           // Sync profile and apply any pending role
           try {
-            console.log('[useAuth] Applying pending user on login', { userId: session.user.id });
+            console.log('[useAuth] Applying pending user on login', { userId: newSession.user.id });
             await supabase.rpc('apply_pending_user_on_login');
             console.log('[useAuth] Successfully applied pending user');
           } catch (error) {
             console.error('[useAuth] Failed to apply pending user:', error, {
-              userId: session.user.id,
+              userId: newSession.user.id,
               errorMessage: error instanceof Error ? error.message : String(error),
             });
           }
@@ -107,12 +153,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             const { data: prof } = await supabase
               .from('profiles')
               .select('role')
-              .eq('id', session.user.id)
+              .eq('id', newSession.user.id)
               .single();
             if (prof && (prof as any).role === 'viewer') {
               // Request access via direct database call since RPC types are not available
               await supabase.from('pending_users').insert({
-                email: session.user.email || '',
+                email: newSession.user.email || '',
                 role: 'organiser',
                 notes: 'Self-signup request'
               });
@@ -124,77 +170,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     );
 
-    // Get initial session AFTER listener is ready to prevent race condition
-    const checkInitialSession = async () => {
-      console.log('[useAuth] Fetching initial session');
-      const startTime = Date.now();
-
-      try {
-        const { data: { session }, error } = await getSessionWithTimeout();
-        const duration = Date.now() - startTime;
-
-        if (!isSubscribed) return; // Component unmounted, ignore result
-
-        if (error) {
-          // Distinguish between timeout and other errors
-          const isTimeout = error?.message?.includes('timed out');
-          if (isTimeout) {
-            console.warn('[useAuth] Session fetch timed out after retries, continuing with null session', { duration });
-          } else {
-            console.error('[useAuth] Error fetching initial session:', error, { duration });
-          }
-          // Continue with null session - don't block UI
-          if (!sessionChecked) {
-            setSession(null);
-            setUser(null);
-          }
-        } else {
-          console.log('[useAuth] Initial session loaded', {
-            duration,
-            hasSession: !!session,
-            userId: session?.user?.id,
-          });
-
-          // Only set if listener hasn't already set a session
-          if (!sessionChecked) {
-            setSession(session);
-            setUser(session?.user ?? null);
-          }
-        }
-      } catch (error: any) {
-        // Handle timeout errors gracefully - don't block UI
-        const isTimeout = error?.message?.includes('timed out');
-        if (isTimeout) {
-          console.warn('[useAuth] Session fetch timed out after all retries, continuing with null session');
-        } else {
-          console.error('[useAuth] Exception fetching initial session:', error);
-        }
-        // Continue with null session - don't block UI
-        if (!sessionChecked) {
-          setSession(null);
-          setUser(null);
-        }
-      } finally {
-        if (isSubscribed) {
-          setLoading(false);
-          sessionChecked = true;
-        }
+    // Safety fallback: if onAuthStateChange doesn't fire within a reasonable time,
+    // set loading to false to prevent UI from being stuck
+    const safetyTimeout = setTimeout(() => {
+      if (!initialSessionReceived && isSubscribedRef.current) {
+        console.warn('[useAuth] Safety timeout: onAuthStateChange did not fire, setting loading=false');
+        setLoading(false);
       }
-    };
-
-    // Small delay to ensure listener is ready, then check session
-    const timeoutId = setTimeout(checkInitialSession, 100);
+    }, SESSION_RECOVERY_TIMEOUT);
 
     return () => {
       console.log('[useAuth] Cleaning up auth state listener');
-      isSubscribed = false;
-      clearTimeout(timeoutId);
+      isSubscribedRef.current = false;
+      clearTimeout(safetyTimeout);
       subscription.unsubscribe();
     };
-  }, []);
+  }, [attemptSessionRecovery, queryClient]);
 
   const signOut = async () => {
     const supabase = getSupabaseBrowserClient();
+    hadSessionRef.current = false; // Reset on explicit sign out
     await supabase.auth.signOut();
     router.replace('/auth');
   };

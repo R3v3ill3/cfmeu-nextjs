@@ -1,4 +1,3 @@
-import { AuthProvider } from '@/hooks/useAuth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Layout from '@/components/Layout'
@@ -116,20 +115,20 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       timestamp: new Date().toISOString(),
     })
   }
+  // AuthProvider is now in the root Providers component (src/app/providers.tsx)
+  // This prevents remounting on navigation between route groups
   return (
-    <AuthProvider>
-      <GoogleMapsProvider>
-        <HelpContextProvider initialPathname={currentPath || '/'} initialRole={role}>
-          <SafeRatingProvider>
-            <AdminPatchProvider>
-              <NavigationLoadingWrapper>
-                {isMobile ? <Layout>{children}</Layout> : <DesktopLayout>{children}</DesktopLayout>}
-              </NavigationLoadingWrapper>
-            </AdminPatchProvider>
-          </SafeRatingProvider>
-        </HelpContextProvider>
-      </GoogleMapsProvider>
-    </AuthProvider>
+    <GoogleMapsProvider>
+      <HelpContextProvider initialPathname={currentPath || '/'} initialRole={role}>
+        <SafeRatingProvider>
+          <AdminPatchProvider>
+            <NavigationLoadingWrapper>
+              {isMobile ? <Layout>{children}</Layout> : <DesktopLayout>{children}</DesktopLayout>}
+            </NavigationLoadingWrapper>
+          </AdminPatchProvider>
+        </SafeRatingProvider>
+      </HelpContextProvider>
+    </GoogleMapsProvider>
   )
 }
 

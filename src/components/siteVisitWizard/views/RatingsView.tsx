@@ -131,9 +131,9 @@ export function RatingsView({ projectId, projectName }: RatingsViewProps) {
     }
   }
 
-  // Navigate to mobile compliance audit workflow
+  // Navigate to employer selection page for assessments
   const handleAddRating = () => {
-    window.location.href = `/mobile/projects/${projectId}/compliance`
+    window.location.href = `/mobile/projects/${projectId}/assessments`
   }
 
   // Navigate to full compliance view

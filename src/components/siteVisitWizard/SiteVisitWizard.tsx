@@ -115,6 +115,8 @@ export function SiteVisitWizard() {
           <MappingView 
             projectId={state.selectedProject.id}
             projectName={state.selectedProject.name}
+            projectAddress={state.selectedProject.address}
+            builderName={state.selectedProject.builderName}
           />
         )
       case 'ratings':
@@ -158,7 +160,7 @@ export function SiteVisitWizard() {
         onBack={canGoBack ? goBack : undefined}
         onClose={handleRequestExit}
         showBack={canGoBack}
-        showClose={true}
+        showClose={false}
       />
       
       {/* Main content */}
@@ -174,6 +176,7 @@ export function SiteVisitWizard() {
             project={state.selectedProject}
             onViewSelect={openView}
             onPickNewProject={goToProjectSelection}
+            onExit={handleRequestExit}
           />
         ) : null}
       </main>

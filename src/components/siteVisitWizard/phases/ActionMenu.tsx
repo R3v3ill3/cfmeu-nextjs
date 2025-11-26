@@ -10,13 +10,15 @@ import {
   FileCheck, 
   Link2, 
   Building,
-  ArrowLeftRight 
+  ArrowLeftRight,
+  LogOut
 } from 'lucide-react'
 
 interface ActionMenuProps {
   project: SelectedProject
   onViewSelect: (view: WizardView) => void
   onPickNewProject: () => void
+  onExit?: () => void
 }
 
 interface ActionMenuItem {
@@ -75,7 +77,8 @@ const menuItems: ActionMenuItem[] = [
 export function ActionMenu({ 
   project, 
   onViewSelect, 
-  onPickNewProject 
+  onPickNewProject,
+  onExit
 }: ActionMenuProps) {
   return (
     <div className="p-4 space-y-6 pb-safe-bottom">
@@ -141,6 +144,19 @@ export function ActionMenu({
       >
         Pick New Project
       </WizardButton>
+      
+      {/* Exit Site Visit button */}
+      {onExit && (
+        <WizardButton
+          variant="outline"
+          size="lg"
+          fullWidth
+          onClick={onExit}
+          icon={<LogOut className="h-5 w-5" />}
+        >
+          Exit Site Visit
+        </WizardButton>
+      )}
     </div>
   )
 }

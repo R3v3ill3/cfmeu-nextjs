@@ -4,9 +4,6 @@ import { createBrowserClient } from '@supabase/ssr'
 import type { Database } from '@/types/database'
 
 let browserClient: ReturnType<typeof createBrowserClient<Database>> | null = null
-let lastHealthCheck: number = 0
-const HEALTH_CHECK_INTERVAL = 300000 // 5 minutes - less aggressive
-const HEALTH_CHECK_TIMEOUT = 10000 // 10 seconds - more lenient
 const MAX_RETRY_ATTEMPTS = 3
 const INITIAL_RETRY_DELAY = 1000 // 1 second
 
@@ -25,76 +22,14 @@ async function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Check if Supabase client is healthy by attempting a simple auth check
- */
-async function checkConnectionHealth(client: ReturnType<typeof createBrowserClient<Database>>): Promise<boolean> {
-  try {
-    const startTime = Date.now()
-    const { error } = await Promise.race([
-      client.auth.getSession(),
-      new Promise<{ error: Error }>((_, reject) => 
-        setTimeout(() => reject(new Error('Health check timeout')), HEALTH_CHECK_TIMEOUT)
-      )
-    ])
-    const duration = Date.now() - startTime
-    
-    if (error) {
-      // Only log if it's a real error, not just a timeout (which is expected under load)
-      if (!error.message.includes('timeout')) {
-        console.warn('[SupabaseClient] Health check failed:', {
-          error: error.message,
-          duration,
-          timestamp: new Date().toISOString(),
-        })
-      }
-      return false
-    }
-    
-    // Only warn if very slow (> 5 seconds)
-    if (duration > 5000) {
-      console.warn('[SupabaseClient] Health check slow:', {
-        duration,
-        timestamp: new Date().toISOString(),
-      })
-    }
-    
-    return true
-  } catch (error) {
-    // Don't log timeout errors as errors - they're expected under load
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    if (!errorMessage.includes('timeout')) {
-      console.error('[SupabaseClient] Health check exception:', {
-        error: errorMessage,
-        timestamp: new Date().toISOString(),
-      })
-    }
-    return false
-  }
-}
-
-/**
- * Get or create Supabase browser client with connection health checks
+ * Get or create Supabase browser client (singleton pattern)
+ * 
+ * NOTE: Health checks have been removed to prevent contention with auth operations.
+ * The Supabase client handles its own connection management internally, and
+ * onAuthStateChange provides real-time session updates.
  */
 export function getSupabaseBrowserClient(): ReturnType<typeof createBrowserClient<Database>> {
   if (browserClient) {
-    // Perform periodic health checks (less frequently to avoid disruption)
-    const now = Date.now()
-    if (now - lastHealthCheck > HEALTH_CHECK_INTERVAL) {
-      lastHealthCheck = now
-      // Don't await - perform async health check in background
-      // Only reset if health check fails multiple times (not on first failure)
-      checkConnectionHealth(browserClient).then(isHealthy => {
-        if (!isHealthy) {
-          // Don't reset immediately - health checks can fail under load
-          // Only log for monitoring
-          console.warn('[SupabaseClient] Health check failed (not resetting immediately)', {
-            timestamp: new Date().toISOString(),
-          })
-        }
-      }).catch(() => {
-        // Ignore health check errors - they're expected under load
-      })
-    }
     return browserClient
   }
   
@@ -115,12 +50,14 @@ export function getSupabaseBrowserClient(): ReturnType<typeof createBrowserClien
   })
   
   browserClient = createBrowserClient<Database>(url, key)
-  lastHealthCheck = Date.now()
   return browserClient
 }
 
 /**
  * Reset Supabase browser client and notify listeners
+ * 
+ * Use this sparingly - it forces recreation of the client which can
+ * disrupt ongoing operations. Prefer letting Supabase handle reconnection.
  */
 export function resetSupabaseBrowserClient(): void {
   console.log('[SupabaseClient] Resetting browser client', {
@@ -129,7 +66,6 @@ export function resetSupabaseBrowserClient(): void {
   
   // Force recreation of the browser client on next access
   browserClient = null
-  lastHealthCheck = 0
   
   resetListeners.forEach((listener) => {
     try {
@@ -142,6 +78,8 @@ export function resetSupabaseBrowserClient(): void {
 
 /**
  * Execute a query with automatic retry and exponential backoff
+ * 
+ * Use this for critical operations that should be retried on transient failures.
  */
 export async function executeWithRetry<T>(
   operation: () => Promise<T>,
@@ -186,12 +124,6 @@ export async function executeWithRetry<T>(
           timestamp: new Date().toISOString(),
         })
         
-        // Only reset client on persistent timeouts, not first attempt
-        if (isTimeout && attempt >= 2) {
-          console.warn('[SupabaseClient] Multiple timeout failures, resetting client');
-          resetSupabaseBrowserClient();
-        }
-        
         await sleep(delay)
       } else {
         console.error(`[SupabaseClient] ${operationName} failed after ${attempt} attempts`, {
@@ -205,4 +137,3 @@ export async function executeWithRetry<T>(
   
   throw lastError
 }
-

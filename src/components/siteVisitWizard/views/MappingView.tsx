@@ -1,10 +1,15 @@
 "use client"
 
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/integrations/supabase/client'
 import { WizardButton } from '../shared/WizardButton'
 import { ShareLinkGenerator } from '@/components/projects/mapping/ShareLinkGenerator'
 import { cn } from '@/lib/utils'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { MappingSheetEditor } from '@/components/projects/mapping/MappingSheetEditor'
+import { useToast } from '@/hooks/use-toast'
 import { 
   ClipboardList, 
   Building, 
@@ -19,6 +24,8 @@ import {
 interface MappingViewProps {
   projectId: string
   projectName: string
+  projectAddress?: string | null
+  builderName?: string | null
 }
 
 interface TradeSummary {
@@ -27,10 +34,13 @@ interface TradeSummary {
   hasEba: boolean
 }
 
-export function MappingView({ projectId, projectName }: MappingViewProps) {
+export function MappingView({ projectId, projectName, projectAddress, builderName }: MappingViewProps) {
+  const router = useRouter()
+  const { toast } = useToast()
+  const [isAddMappingOpen, setIsAddMappingOpen] = useState(false)
   
   // Fetch mapping summary data
-  const { data: mappingData, isLoading } = useQuery({
+  const { data: mappingData, isLoading, error } = useQuery({
     queryKey: ['wizard-mapping-summary', projectId],
     queryFn: async () => {
       // Get trade assignments
@@ -98,14 +108,29 @@ export function MappingView({ projectId, projectName }: MappingViewProps) {
     staleTime: 30000,
   })
 
-  // Navigate to mobile mapping workflow for adding mapping data
-  const handleAddMapping = () => {
-    window.location.href = `/mobile/projects/${projectId}/mapping`
-  }
+  useEffect(() => {
+    if (error) {
+      console.error('[MappingView] Failed to load mapping summary', error)
+      toast({
+        title: 'Failed to load mapping summary',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'destructive',
+      })
+    }
+  }, [error, toast])
 
   // Navigate to full mapping sheet page
   const handleFullMappingSheet = () => {
-    window.open(`/projects/${projectId}?tab=mappingsheets`, '_blank')
+    const params = new URLSearchParams({
+      tab: 'mappingsheets',
+      fromSiteVisit: '1',
+      wizardPhase: 'action-menu',
+      wizardView: 'mapping',
+      wizardProjectName: projectName,
+    })
+    if (projectAddress) params.set('wizardProjectAddress', projectAddress)
+    if (builderName) params.set('wizardBuilderName', builderName)
+    router.push(`/projects/${projectId}?${params.toString()}`)
   }
   
   return (
@@ -114,6 +139,10 @@ export function MappingView({ projectId, projectName }: MappingViewProps) {
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+        </div>
+      ) : error ? (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">
+          Unable to load mapping summary right now. Please try again.
         </div>
       ) : (
         <>
@@ -214,7 +243,7 @@ export function MappingView({ projectId, projectName }: MappingViewProps) {
           variant="primary"
           size="lg"
           fullWidth
-          onClick={handleAddMapping}
+          onClick={() => setIsAddMappingOpen(true)}
           icon={<Plus className="h-5 w-5" />}
         >
           Add Mapping
@@ -224,6 +253,16 @@ export function MappingView({ projectId, projectName }: MappingViewProps) {
         <ShareLinkGenerator
           projectId={projectId}
           projectName={projectName}
+          trigger={
+            <WizardButton
+              variant="secondary"
+              size="lg"
+              fullWidth
+              icon={<Share2 className="h-5 w-5" />}
+            >
+              Share Mapping Sheet
+            </WizardButton>
+          }
         />
         
         {/* 3. Full Mapping Sheet - opens detailed view */}
@@ -237,6 +276,20 @@ export function MappingView({ projectId, projectName }: MappingViewProps) {
           Full Mapping Sheet
         </WizardButton>
       </div>
+
+      <Dialog open={isAddMappingOpen} onOpenChange={setIsAddMappingOpen}>
+        <DialogContent className="max-w-3xl p-0 overflow-hidden">
+          <DialogHeader className="px-4 pt-4">
+            <DialogTitle>Add Mapping</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[70vh] overflow-y-auto px-4 pb-4">
+            <MappingSheetEditor
+              dataSource={{ type: 'project', projectId }}
+              variant="embedded"
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

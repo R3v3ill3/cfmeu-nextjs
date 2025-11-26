@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 export interface ShareLinkGeneratorProps {
   projectId: string;
   projectName: string;
+  trigger?: ReactNode;
 }
 
 interface ShareLinkResponse {
@@ -26,7 +27,7 @@ interface ShareLinkResponse {
   resourceId: string;
 }
 
-export function ShareLinkGenerator({ projectId, projectName }: ShareLinkGeneratorProps) {
+export function ShareLinkGenerator({ projectId, projectName, trigger }: ShareLinkGeneratorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [shareLink, setShareLink] = useState<ShareLinkResponse | null>(null);
@@ -100,10 +101,12 @@ export function ShareLinkGenerator({ projectId, projectName }: ShareLinkGenerato
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2">
-          <Share className="h-4 w-4" />
-          Share Mapping Sheet
-        </Button>
+        {trigger ?? (
+          <Button variant="outline" size="sm" className="gap-2">
+            <Share className="h-4 w-4" />
+            Share Mapping Sheet
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader className="flex-shrink-0">

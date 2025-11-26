@@ -93,9 +93,14 @@ export function useProjectsServerSide(params: ProjectsParams) {
   const workerEnabled = process.env.NEXT_PUBLIC_USE_WORKER_PROJECTS === 'true';
   const workerUrl = process.env.NEXT_PUBLIC_DASHBOARD_WORKER_URL || '';
 
+  // Include session in queryKey so query refetches when session changes
+  // This ensures we use the worker when session becomes available
+  const hasSession = !!session?.access_token;
+
   return useQuery<ProjectsResponse>({
-    queryKey: ['projects-server-side', params, workerEnabled],
-    // Wait for session to load before running query to avoid token race condition
+    queryKey: ['projects-server-side', params, workerEnabled, hasSession],
+    // Wait for auth to finish loading before running query
+    // The query will re-run if session changes (due to queryKey including hasSession)
     enabled: !loading,
     queryFn: async () => {
       // Build URL parameters, only including non-default values
@@ -180,12 +185,14 @@ export function useProjectsServerSide(params: ProjectsParams) {
         return data;
       };
 
-      const fetchApp = async () => {
-        console.warn('⚠️ Falling back to app route for projects', {
-          workerEnabled: useWorker,
-          reason: !useWorker ? 'Worker disabled by config' : 'Worker failed',
-          timestamp: new Date().toISOString()
-        });
+      const fetchApp = async (reason: string) => {
+        // Only log at debug level unless it's an unexpected failure
+        if (process.env.NODE_ENV === 'development' || reason.includes('failed')) {
+          console.log('[useProjectsServerSide] Using app route', {
+            reason,
+            timestamp: new Date().toISOString()
+          });
+        }
         const response = await fetch(appUrl, { method: 'GET', headers: baseHeaders });
         if (!response.ok) {
           const errorText = await response.text();
@@ -195,34 +202,22 @@ export function useProjectsServerSide(params: ProjectsParams) {
         return enrichDebug(data, useWorker ? 'worker_fallback' : 'app_api');
       };
 
+      // If worker is not configured, use app route silently
       if (!useWorker) {
-        console.warn('⚠️ Worker disabled by configuration', {
-          workerEnabled,
-          workerUrl,
-          envVar: 'NEXT_PUBLIC_USE_WORKER_PROJECTS',
-          timestamp: new Date().toISOString()
-        });
-        return fetchApp();
+        return fetchApp('Worker not configured');
+      }
+
+      // Get current token - session may have become available since query was enabled
+      const token = session?.access_token;
+      if (!token) {
+        // No token available - use app route (which handles auth via cookies)
+        return fetchApp('No auth token (session not available)');
       }
 
       const workerHeaders = { ...baseHeaders };
-      const token = session?.access_token;
-      if (!token) {
-        console.warn('⚠️ No auth token available for worker projects request; using app route');
-        return fetchApp();
-      }
       workerHeaders['Authorization'] = `Bearer ${token}`;
 
       const workerEndpoint = `${workerUrl.replace(/\/$/, '')}/v1/projects${urlPath}`;
-
-      // DEBUG: Log worker configuration
-      console.log('🔍 Worker Request Debug:', {
-        workerEnabled,
-        workerUrl,
-        workerEndpoint,
-        hasToken: !!token,
-        timestamp: new Date().toISOString()
-      });
 
       try {
         const response = await fetch(workerEndpoint, { method: 'GET', headers: workerHeaders });
@@ -230,36 +225,19 @@ export function useProjectsServerSide(params: ProjectsParams) {
         if (!response.ok) {
           const errorText = await response.text();
           const status = response.status;
-          // Retry locally for network-ish failures (5xx or gateway issues)
-          if (status >= 500 || status === 429) {
-            console.warn(`⚠️ Worker responded with ${status}, falling back to app route`, {
-              workerEndpoint,
-              status,
-              errorText: errorText.substring(0, 200),
-              timestamp: new Date().toISOString()
-            });
-            return fetchApp();
+          // Fall back to app route for server errors or auth issues
+          if (status >= 500 || status === 429 || status === 401 || status === 403) {
+            return fetchApp(`Worker responded with ${status}`);
           }
           throw new Error(`Failed to fetch projects: ${status} ${errorText}`);
         }
 
         const data = await response.json();
-        console.log('✅ Worker request successful', {
-          debug: data?.debug,
-          via: 'worker',
-          timestamp: new Date().toISOString()
-        });
         return enrichDebug(data, 'worker');
       } catch (error) {
-        console.warn('⚠️ Worker projects request failed, falling back to app route', {
-          error: error instanceof Error ? error.message : error,
-          workerEndpoint,
-          timestamp: new Date().toISOString()
-        });
-        return fetchApp();
+        // Network errors - fall back to app route
+        return fetchApp(`Worker request failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
-      
-      // Log performance metrics for monitoring handled inside fetch paths
     },
     
     // Reduced caching to detect worker failures faster

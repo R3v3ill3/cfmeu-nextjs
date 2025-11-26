@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { AuthProvider } from '@/hooks/useAuth'
 import Layout from '@/components/Layout'
 import DesktopLayout from '@/components/DesktopLayout'
 import { headers } from 'next/headers'
@@ -110,29 +109,28 @@ export default async function RootPage() {
     redirect('/dashboard-new')
   }
   
-  // Use the same provider structure as (app)/layout.tsx
+  // AuthProvider is now in the root Providers component (src/app/providers.tsx)
+  // This prevents remounting on navigation between route groups
   return (
-    <AuthProvider>
-      <GoogleMapsProvider>
-        <HelpContextProvider initialPathname={currentPath} initialRole={role}>
-          <SafeRatingProvider>
-            <AdminPatchProvider>
-              <NavigationLoadingWrapper>
-                {isMobile ? (
-                  <Layout>
-                    <DesktopDashboardView />
-                  </Layout>
-                ) : (
-                  <DesktopLayout>
-                    <DesktopDashboardView />
-                  </DesktopLayout>
-                )}
-              </NavigationLoadingWrapper>
-            </AdminPatchProvider>
-          </SafeRatingProvider>
-        </HelpContextProvider>
-      </GoogleMapsProvider>
-    </AuthProvider>
+    <GoogleMapsProvider>
+      <HelpContextProvider initialPathname={currentPath} initialRole={role}>
+        <SafeRatingProvider>
+          <AdminPatchProvider>
+            <NavigationLoadingWrapper>
+              {isMobile ? (
+                <Layout>
+                  <DesktopDashboardView />
+                </Layout>
+              ) : (
+                <DesktopLayout>
+                  <DesktopDashboardView />
+                </DesktopLayout>
+              )}
+            </NavigationLoadingWrapper>
+          </AdminPatchProvider>
+        </SafeRatingProvider>
+      </HelpContextProvider>
+    </GoogleMapsProvider>
   )
 }
 
