@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { withTimeout } from "@/lib/withTimeout";
-import { resetSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -87,9 +86,7 @@ export const EmployerWorkersList = ({ employerId }: EmployerWorkersListProps) =>
         if (error) throw error;
         return data as WorkerWithRoles[];
       } catch (err: any) {
-        if (err?.code === "ETIMEDOUT") {
-          resetSupabaseBrowserClient();
-        }
+        // Don't reset Supabase client on timeout - it destroys auth state
         throw err;
       }
     },
@@ -112,9 +109,7 @@ export const EmployerWorkersList = ({ employerId }: EmployerWorkersListProps) =>
         );
         return (data as any) || null
       } catch (err: any) {
-        if (err?.code === "ETIMEDOUT") {
-          resetSupabaseBrowserClient();
-        }
+        // Don't reset Supabase client on timeout - it destroys auth state
         throw err;
       }
     }

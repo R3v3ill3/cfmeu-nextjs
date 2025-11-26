@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { getSupabaseBrowserClient, resetSupabaseBrowserClient } from "@/lib/supabase/client";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -254,9 +254,8 @@ export const EmployerDetailModal = ({
         if (res.error) throw res.error;
         return (res.data?.role as string) ?? null;
       } catch (err: any) {
-        if (err?.code === "ETIMEDOUT") {
-          resetSupabaseBrowserClient();
-        }
+        // Don't reset Supabase client on timeout - it destroys auth state
+        console.warn('[EmployerDetailModal] Role fetch failed:', err?.message || err);
         throw err;
       }
     },
@@ -387,10 +386,7 @@ export const EmployerDetailModal = ({
           duration,
           timestamp: new Date().toISOString(),
         });
-        if (err?.code === "ETIMEDOUT") {
-          console.warn('[EmployerDetailModal] Timeout detected, resetting Supabase client');
-          resetSupabaseBrowserClient();
-        }
+        // Don't reset Supabase client on timeout - it destroys auth state
         throw err;
       }
     },
@@ -423,9 +419,7 @@ export const EmployerDetailModal = ({
         }
         return res.data ?? 0;
       } catch (err: any) {
-        if (err?.code === "ETIMEDOUT") {
-          resetSupabaseBrowserClient();
-        }
+        // Don't reset Supabase client on timeout - it destroys auth state
         throw err;
       }
     },
@@ -570,9 +564,7 @@ export const EmployerDetailModal = ({
         });
         return res.data;
       } catch (err: any) {
-        if (err?.code === "ETIMEDOUT") {
-          resetSupabaseBrowserClient();
-        }
+        // Don't reset Supabase client on timeout - it destroys auth state
         throw err;
       }
     },
@@ -686,7 +678,6 @@ export const EmployerDetailModal = ({
             <p className="text-sm text-red-600">Failed to load employer details. {String((employerError as any)?.message || '')}</p>
             <div className="flex items-center justify-center gap-2">
               <Button size="sm" variant="secondary" onClick={() => refetchEmployer()}>Try again</Button>
-              <Button size="sm" variant="outline" onClick={() => { resetSupabaseBrowserClient(); refetchEmployer(); }}>Reset connection</Button>
             </div>
           </div>
         ) : employer ? (

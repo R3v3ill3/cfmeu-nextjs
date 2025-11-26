@@ -56,8 +56,12 @@ export function getSupabaseBrowserClient(): ReturnType<typeof createBrowserClien
 /**
  * Reset Supabase browser client and notify listeners
  * 
- * Use this sparingly - it forces recreation of the client which can
- * disrupt ongoing operations. Prefer letting Supabase handle reconnection.
+ * ⚠️ WARNING: DO NOT call this from React components!
+ * Resetting the client destroys the auth state and subscription listeners,
+ * causing users to be logged out unexpectedly.
+ * 
+ * This should only be used in extreme circumstances (e.g., manual recovery tools).
+ * For query timeouts, simply let React Query retry - don't reset the client.
  */
 export function resetSupabaseBrowserClient(): void {
   console.log('[SupabaseClient] Resetting browser client', {

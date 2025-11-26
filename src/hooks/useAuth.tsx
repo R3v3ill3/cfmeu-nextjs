@@ -65,12 +65,49 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
     isSubscribedRef.current = true;
-    let initialSessionReceived = false;
+    let initialSessionSet = false;
 
-    console.log('[useAuth] Setting up auth state listener');
+    console.log('[useAuth] Initializing auth');
 
-    // onAuthStateChange fires IMMEDIATELY with cached session from storage
-    // This is the primary source of truth - no need to call getSession() separately
+    // IMMEDIATELY call getSession() to get cached session from storage
+    // This is synchronous if session is in memory, or reads from localStorage
+    const initializeSession = async () => {
+      try {
+        const { data: { session: initialSession }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.warn('[useAuth] Error getting initial session:', error.message);
+        }
+        
+        if (isSubscribedRef.current && !initialSessionSet) {
+          initialSessionSet = true;
+          setSession(initialSession);
+          setUser(initialSession?.user ?? null);
+          setLoading(false);
+          
+          if (initialSession) {
+            hadSessionRef.current = true;
+            console.log('[useAuth] Initial session loaded', {
+              userId: initialSession.user?.id,
+              expires: initialSession.expires_at ? new Date(initialSession.expires_at * 1000).toISOString() : null,
+            });
+          } else {
+            console.log('[useAuth] No initial session found');
+          }
+        }
+      } catch (error) {
+        console.warn('[useAuth] Exception getting initial session:', error);
+        if (isSubscribedRef.current && !initialSessionSet) {
+          initialSessionSet = true;
+          setLoading(false);
+        }
+      }
+    };
+
+    // Start loading session immediately
+    initializeSession();
+
+    // Set up listener for future auth changes (sign in, sign out, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, newSession) => {
         if (!isSubscribedRef.current) return;
@@ -80,34 +117,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           timestamp,
           hasSession: !!newSession,
           userId: newSession?.user?.id,
-          sessionExpires: newSession?.expires_at ? new Date(newSession.expires_at * 1000).toISOString() : null,
         });
 
         // Track if we've ever had a session (for recovery logic)
         if (newSession) {
           hadSessionRef.current = true;
-          recoveryAttemptedRef.current = false; // Reset recovery flag when we get a valid session
+          recoveryAttemptedRef.current = false;
         }
 
-        // Handle INITIAL_SESSION event specially - this is Supabase's cached session
+        // Handle INITIAL_SESSION event - update if we haven't set session yet
         if (event === 'INITIAL_SESSION') {
-          initialSessionReceived = true;
-          setSession(newSession);
-          setUser(newSession?.user ?? null);
-          setLoading(false);
-          
-          if (!newSession && hadSessionRef.current) {
-            // We had a session before but now it's gone - try recovery
-            const recovered = await attemptSessionRecovery();
-            if (recovered && isSubscribedRef.current) {
-              setSession(recovered);
-              setUser(recovered.user);
-            }
+          if (!initialSessionSet) {
+            initialSessionSet = true;
+            setSession(newSession);
+            setUser(newSession?.user ?? null);
+            setLoading(false);
           }
+          // If INITIAL_SESSION has no session but initializeSession found one, don't override
           return;
         }
 
-        // For other events, update state normally
+        // For other events, always update state
         setSession(newSession);
         setUser(newSession?.user ?? null);
         setLoading(false);
@@ -117,6 +147,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           console.log(`[useAuth] Invalidating auth-dependent caches due to: ${event}`);
           queryClient.invalidateQueries({ queryKey: ['user-role'] });
           queryClient.invalidateQueries({ queryKey: ['accessible-patches'] });
+          queryClient.invalidateQueries({ queryKey: ['my-role'] });
           queryClient.invalidateQueries({ predicate: (query) =>
             query.queryKey.some(key => typeof key === 'string' &&
               (key.includes('user') || key.includes('auth') || key.includes('role') || key.includes('permission')))
@@ -156,7 +187,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               .eq('id', newSession.user.id)
               .single();
             if (prof && (prof as any).role === 'viewer') {
-              // Request access via direct database call since RPC types are not available
               await supabase.from('pending_users').insert({
                 email: newSession.user.email || '',
                 role: 'organiser',
@@ -170,19 +200,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     );
 
-    // Safety fallback: if onAuthStateChange doesn't fire within a reasonable time,
-    // set loading to false to prevent UI from being stuck
-    const safetyTimeout = setTimeout(() => {
-      if (!initialSessionReceived && isSubscribedRef.current) {
-        console.warn('[useAuth] Safety timeout: onAuthStateChange did not fire, setting loading=false');
-        setLoading(false);
-      }
-    }, SESSION_RECOVERY_TIMEOUT);
-
     return () => {
       console.log('[useAuth] Cleaning up auth state listener');
       isSubscribedRef.current = false;
-      clearTimeout(safetyTimeout);
       subscription.unsubscribe();
     };
   }, [attemptSessionRecovery, queryClient]);
