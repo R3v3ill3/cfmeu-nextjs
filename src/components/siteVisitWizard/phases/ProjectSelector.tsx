@@ -167,13 +167,14 @@ export function ProjectSelector({ onProjectSelected }: ProjectSelectorProps) {
         if (projectIds.length === 0) return []
         
         // Now fetch the actual projects
+        // Use job_sites!project_id to specify the relationship (job_sites.project_id -> projects.id)
         const { data, error } = await supabase
           .from('projects')
           .select(`
             id,
             name,
             main_job_site_id,
-            job_sites (
+            job_sites!project_id (
               id,
               full_address,
               location
@@ -210,13 +211,14 @@ export function ProjectSelector({ onProjectSelected }: ProjectSelectorProps) {
       }
       
       // Now fetch the actual projects
+      // Use job_sites!project_id to specify the relationship (job_sites.project_id -> projects.id)
       const { data, error } = await supabase
         .from('projects')
         .select(`
           id,
           name,
           main_job_site_id,
-          job_sites (
+          job_sites!project_id (
             id,
             full_address,
             location
