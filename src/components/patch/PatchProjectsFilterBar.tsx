@@ -272,7 +272,6 @@ export function PatchProjectsFilterBar({ patchOptions, filters, onFiltersChange,
                   onKeyDown={handleSearchKeyDown}
                   onBlur={handleSearchBlur}
                   className="pl-12 pr-12 min-h-[44px]"
-                  style={{ paddingLeft: '3rem', paddingRight: '3rem' }}
                   autoComplete="off"
                   enterKeyHint="search"
                   inputMode="text"

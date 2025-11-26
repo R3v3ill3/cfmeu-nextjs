@@ -112,7 +112,7 @@ export function EmployerSelectionDashboard({
             placeholder="Search employers..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 max-lg:pl-10 max-lg:pr-4"
+            className="pl-10"
           />
         </div>
 

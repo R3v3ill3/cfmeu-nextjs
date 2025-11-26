@@ -73,7 +73,8 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
     const baseClasses = "flex min-h-[44px] h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 touch-manipulation"
 
     // Mobile-specific touch target compliance
-    const mobileClasses = "max-lg:px-4 max-lg:py-3 max-lg:min-h-[44px] max-lg:text-base max-lg:touch-manipulation max-lg:select-none"
+    // Use separate pl-4 and pr-4 instead of px-4 so that custom pl-* classes (for icon inputs) can override left padding
+    const mobileClasses = "max-lg:pl-4 max-lg:pr-4 max-lg:py-3 max-lg:min-h-[44px] max-lg:text-base max-lg:touch-manipulation max-lg:select-none"
 
     const variantClasses = {
       default: `${baseClasses} ${mobileClasses}`,
