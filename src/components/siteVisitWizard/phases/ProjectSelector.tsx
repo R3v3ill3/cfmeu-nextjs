@@ -190,7 +190,7 @@ export function ProjectSelector({ onProjectSelected }: ProjectSelectorProps) {
             )
           `)
           .in('id', projectIds)
-          .in('organising_universe', ['active', 'monitoring'])
+          .in('organising_universe', ['active', 'potential'])
           .order('name', { ascending: true })
           .limit(50)
         
@@ -234,7 +234,7 @@ export function ProjectSelector({ onProjectSelected }: ProjectSelectorProps) {
           )
         `)
         .in('id', projectIds)
-        .in('organising_universe', ['active', 'monitoring'])
+        .in('organising_universe', ['active', 'potential'])
         .order('name', { ascending: true })
         .limit(50)
       
