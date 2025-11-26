@@ -97,13 +97,15 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const userAgent = hdrs.get('user-agent') || undefined
   const isMobile = isMobileOrTablet(userAgent)
 
-  Sentry.configureScope((scope) => {
-    scope.setTag('appLayout.requestId', requestId)
-    scope.setContext('appLayout', {
+  try {
+    Sentry.setTag?.('appLayout.requestId', requestId)
+    Sentry.setContext?.('appLayout', {
       path: currentPath || '/',
       userAgent,
     })
-  })
+  } catch {
+    // Ignore failures if Sentry helpers are unavailable in this runtime
+  }
 
   logAppLayout('Rendering layout for (app) route group', {
     requestId,

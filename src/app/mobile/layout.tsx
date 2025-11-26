@@ -55,12 +55,14 @@ export default async function MobileLayout({ children }: { children: ReactNode }
   const requestId = hdrs.get('x-request-id') ?? randomUUID()
   const currentPath = hdrs.get('x-pathname') || ''
 
-  Sentry.configureScope((scope) => {
-    scope.setTag('mobileLayout.requestId', requestId)
-    scope.setContext('mobileLayout', {
+  try {
+    Sentry.setTag?.('mobileLayout.requestId', requestId)
+    Sentry.setContext?.('mobileLayout', {
       path: currentPath || '/',
     })
-  })
+  } catch {
+    // Ignore missing Sentry helpers on server-only bundles
+  }
 
   logMobileLayout('Rendering mobile layout', { requestId, path: currentPath || '/' })
 
