@@ -2,7 +2,6 @@
 
 import { Suspense } from 'react'
 import { SiteVisitWizard } from '@/components/siteVisitWizard/SiteVisitWizard'
-import { AuthProvider } from '@/hooks/useAuth'
 import { Loader2 } from 'lucide-react'
 
 function WizardLoadingFallback() {
@@ -18,11 +17,9 @@ function WizardLoadingFallback() {
 
 export default function SiteVisitWizardPage() {
   return (
-    <AuthProvider>
-      <Suspense fallback={<WizardLoadingFallback />}>
-        <SiteVisitWizard />
-      </Suspense>
-    </AuthProvider>
+    <Suspense fallback={<WizardLoadingFallback />}>
+      <SiteVisitWizard />
+    </Suspense>
   )
 }
 

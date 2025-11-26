@@ -110,20 +110,113 @@ export function ProjectSelector({ onProjectSelected }: ProjectSelectorProps) {
   // Fallback: Get user's patch projects
   const patchIds = patches.map(p => p.id)
   
+  // Debug logging
+  console.log('[ProjectSelector] Patches loaded:', {
+    patchCount: patches.length,
+    patchIds,
+    patchNames: patches.map(p => p.name),
+    geoState,
+    showSearch,
+  })
+  
   const { 
     data: patchProjects = [], 
-    isLoading: loadingPatchProjects 
+    isLoading: loadingPatchProjects,
+    error: patchProjectsError,
   } = useQuery({
     queryKey: ['wizard-patch-projects', patchIds],
-    enabled: patchIds.length > 0 && (geoState !== 'available' || showSearch),
+    // Always fetch when we have patches - this ensures data is ready when user switches to search
+    enabled: patchIds.length > 0,
     queryFn: async () => {
+      console.log('[ProjectSelector] Fetching projects for patches:', patchIds)
+      // First, get project IDs from the patch mapping view
+      const { data: patchMappings, error: mappingError } = await supabase
+        .from('patch_project_mapping_view')
+        .select('project_id')
+        .in('patch_id', patchIds)
+      
+      console.log('[ProjectSelector] Patch mappings result:', {
+        mappingCount: patchMappings?.length || 0,
+        mappingError: mappingError?.message,
+        sampleIds: patchMappings?.slice(0, 5).map((m: any) => m.project_id),
+      })
+      
+      if (mappingError) {
+        console.error('[ProjectSelector] Error fetching patch mappings:', mappingError)
+        // Fallback to job_sites direct query
+        console.log('[ProjectSelector] Falling back to job_sites query')
+        const { data: jobSiteMappings, error: jobSiteError } = await supabase
+          .from('job_sites')
+          .select('project_id')
+          .in('patch_id', patchIds)
+          .not('project_id', 'is', null)
+        
+        console.log('[ProjectSelector] Job sites fallback result:', {
+          count: jobSiteMappings?.length || 0,
+          error: jobSiteError?.message,
+        })
+        
+        if (jobSiteError) throw jobSiteError
+        
+        const projectIds = Array.from(new Set(
+          (jobSiteMappings || []).map((m: any) => m.project_id).filter(Boolean)
+        ))
+        
+        console.log('[ProjectSelector] Unique project IDs from fallback:', projectIds.length)
+        
+        if (projectIds.length === 0) return []
+        
+        // Now fetch the actual projects
+        const { data, error } = await supabase
+          .from('projects')
+          .select(`
+            id,
+            name,
+            main_job_site_id,
+            job_sites (
+              id,
+              full_address,
+              location
+            ),
+            project_assignments (
+              employers (
+                id,
+                name
+              ),
+              contractor_role_types (
+                code
+              )
+            )
+          `)
+          .in('id', projectIds)
+          .in('organising_universe', ['active', 'monitoring'])
+          .order('name', { ascending: true })
+          .limit(50)
+        
+        if (error) throw error
+        return formatProjects(data || [])
+      }
+      
+      // Extract unique project IDs from patch mappings
+      const projectIds = Array.from(new Set(
+        (patchMappings || []).map((m: any) => m.project_id).filter(Boolean)
+      ))
+      
+      console.log('[ProjectSelector] Unique project IDs from mappings:', projectIds.length)
+      
+      if (projectIds.length === 0) {
+        console.log('[ProjectSelector] No project IDs found in patch mappings')
+        return []
+      }
+      
+      // Now fetch the actual projects
       const { data, error } = await supabase
         .from('projects')
         .select(`
           id,
           name,
           main_job_site_id,
-          job_sites!inner (
+          job_sites (
             id,
             full_address,
             location
@@ -138,32 +231,50 @@ export function ProjectSelector({ onProjectSelected }: ProjectSelectorProps) {
             )
           )
         `)
+        .in('id', projectIds)
         .in('organising_universe', ['active', 'monitoring'])
         .order('name', { ascending: true })
         .limit(50)
       
-      if (error) throw error
+      if (error) {
+        console.error('[ProjectSelector] Error fetching projects:', error)
+        throw error
+      }
       
-      // Filter by patch - we need to check patch_project_mapping_view
-      // For simplicity, we'll return all and trust RLS
-      return (data || []).map((project: any) => {
-        const jobSite = project.job_sites?.[0]
-        const builderAssignment = project.project_assignments?.find((pa: any) => 
-          pa.contractor_role_types?.code === 'builder' || 
-          pa.contractor_role_types?.code === 'head_contractor'
-        )
-        
-        return {
-          id: project.id,
-          name: project.name,
-          address: jobSite?.full_address || jobSite?.location || null,
-          builderName: builderAssignment?.employers?.name || null,
-          mainJobSiteId: project.main_job_site_id || jobSite?.id || null,
-        }
+      const formatted = formatProjects(data || [])
+      console.log('[ProjectSelector] Projects loaded:', {
+        rawCount: data?.length || 0,
+        formattedCount: formatted.length,
+        sampleNames: formatted.slice(0, 3).map((p: any) => p.name),
       })
+      return formatted
     },
     staleTime: 30000,
   })
+  
+  // Log any errors
+  if (patchProjectsError) {
+    console.error('[ProjectSelector] Patch projects error:', patchProjectsError)
+  }
+  
+  // Helper function to format projects
+  function formatProjects(data: any[]) {
+    return data.map((project: any) => {
+      const jobSite = project.job_sites?.[0]
+      const builderAssignment = project.project_assignments?.find((pa: any) => 
+        pa.contractor_role_types?.code === 'builder' || 
+        pa.contractor_role_types?.code === 'head_contractor'
+      )
+      
+      return {
+        id: project.id,
+        name: project.name,
+        address: jobSite?.full_address || jobSite?.location || null,
+        builderName: builderAssignment?.employers?.name || null,
+        mainJobSiteId: project.main_job_site_id || jobSite?.id || null,
+      }
+    })
+  }
   
   // Filter projects by search query
   const filteredPatchProjects = searchQuery
@@ -298,15 +409,33 @@ export function ProjectSelector({ onProjectSelected }: ProjectSelectorProps) {
               Your Projects
             </h2>
             
-            {loadingPatchProjects ? (
+            {loadingPatches ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                <span className="ml-2 text-gray-500">Loading your patches...</span>
+              </div>
+            ) : patchIds.length === 0 ? (
+              <div className="text-center py-8 text-amber-600 bg-amber-50 rounded-xl p-4">
+                <AlertCircle className="h-8 w-8 mx-auto mb-2" />
+                <p className="font-medium">No patches assigned</p>
+                <p className="text-sm mt-1">You don&apos;t have any patches assigned. Contact your administrator.</p>
+              </div>
+            ) : patchProjectsError ? (
+              <div className="text-center py-8 text-red-600 bg-red-50 rounded-xl p-4">
+                <AlertCircle className="h-8 w-8 mx-auto mb-2" />
+                <p className="font-medium">Error loading projects</p>
+                <p className="text-sm mt-1">{(patchProjectsError as Error)?.message || 'Unknown error'}</p>
+              </div>
+            ) : loadingPatchProjects ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                <span className="ml-2 text-gray-500">Loading projects...</span>
               </div>
             ) : filteredPatchProjects.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 {searchQuery 
                   ? `No projects matching "${searchQuery}"`
-                  : 'No projects found'}
+                  : `No projects found in ${patches.length} patch(es)`}
               </div>
             ) : (
               <div className="space-y-2">
