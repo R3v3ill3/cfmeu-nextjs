@@ -25,6 +25,7 @@ export function SiteVisitWizard() {
     showExitDialog,
     closeSiteVisitDialog,
     canGoBack,
+    goBack,
     getPreSelectedReasonNames,
   } = useWizardState()
   
@@ -64,16 +65,6 @@ export function SiteVisitWizard() {
       handleExit()
     }
   }, [state.selectedProject, showExitDialog, handleExit])
-  
-  // Handle back navigation
-  const handleBack = useCallback(() => {
-    if (state.view) {
-      closeView()
-    } else if (state.phase === 'action-menu') {
-      // Show exit dialog when leaving action menu (prompts to record visit)
-      showExitDialog()
-    }
-  }, [state.view, state.phase, closeView, showExitDialog])
   
   // Get header title and subtitle
   const getHeaderContent = () => {
@@ -164,7 +155,7 @@ export function SiteVisitWizard() {
       <WizardHeader
         title={title}
         subtitle={subtitle}
-        onBack={canGoBack ? handleBack : undefined}
+        onBack={canGoBack ? goBack : undefined}
         onClose={handleRequestExit}
         showBack={canGoBack}
         showClose={true}

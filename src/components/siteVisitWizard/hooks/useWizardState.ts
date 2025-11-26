@@ -188,14 +188,41 @@ export function useWizardState(): UseWizardStateReturn {
     return false
   }, [state.view, state.phase])
   
+  // Use a callback that reads current state to avoid stale closures
   const goBack = useCallback(() => {
-    if (state.view !== null) {
-      closeView()
-    } else if (state.phase === 'action-menu') {
-      // Show exit dialog when leaving action menu
-      showExitDialog()
-    }
-  }, [state.view, state.phase, closeView, showExitDialog])
+    setState(currentState => {
+      // If we're in a view, close it and return to action menu
+      if (currentState.view !== null) {
+        // Close the view by updating state
+        const newState = { ...currentState, view: null as WizardView }
+        // Update URL
+        const params = new URLSearchParams()
+        params.set('phase', currentState.phase)
+        if (currentState.selectedProject) {
+          params.set('projectId', currentState.selectedProject.id)
+          params.set('projectName', encodeURIComponent(currentState.selectedProject.name))
+          if (currentState.selectedProject.address) {
+            params.set('projectAddress', encodeURIComponent(currentState.selectedProject.address))
+          }
+          if (currentState.selectedProject.builderName) {
+            params.set('builderName', encodeURIComponent(currentState.selectedProject.builderName))
+          }
+          if (currentState.selectedProject.mainJobSiteId) {
+            params.set('mainJobSiteId', currentState.selectedProject.mainJobSiteId)
+          }
+        }
+        router.replace(`/site-visit-wizard?${params.toString()}`, { scroll: false })
+        return newState
+      }
+      
+      // If we're in action-menu phase with no view, show exit dialog
+      if (currentState.phase === 'action-menu') {
+        return { ...currentState, showSiteVisitDialog: true, siteVisitDialogMode: 'exit' as const }
+      }
+      
+      return currentState
+    })
+  }, [router])
   
   // Get pre-selected reason names based on visited views
   const getPreSelectedReasonNames = useCallback((): string[] => {
