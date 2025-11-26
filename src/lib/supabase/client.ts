@@ -1,6 +1,7 @@
 'use client'
 
 import { createBrowserClient } from '@supabase/ssr'
+import * as Sentry from '@sentry/nextjs'
 import type { Database } from '@/types/database'
 
 let browserClient: ReturnType<typeof createBrowserClient<Database>> | null = null
@@ -12,6 +13,39 @@ const resetListeners: SupabaseResetListener[] = []
 
 export function registerSupabaseResetListener(listener: SupabaseResetListener) {
   resetListeners.push(listener)
+}
+
+const shouldLogVerbose = process.env.NEXT_PUBLIC_SENTRY_DEBUG === 'true' || process.env.NODE_ENV !== 'production'
+
+function logSupabaseEvent(message: string, data?: Record<string, unknown>) {
+  if (process.env.NODE_ENV !== 'test' && shouldLogVerbose) {
+    console.log(`[SupabaseClient] ${message}`, {
+      ...data,
+      timestamp: new Date().toISOString(),
+    })
+  }
+  if (typeof window !== 'undefined') {
+    Sentry.addBreadcrumb({
+      category: 'supabase-client',
+      message,
+      level: 'info',
+      data,
+    })
+  }
+}
+
+function logSupabaseError(message: string, error: unknown, data?: Record<string, unknown>) {
+  const normalized = error instanceof Error ? error : new Error(String(error))
+  console.error(`[SupabaseClient] ${message}`, {
+    ...data,
+    error: normalized.message,
+  })
+  if (typeof window !== 'undefined') {
+    Sentry.captureException(normalized, {
+      tags: { component: 'supabase-browser-client' },
+      extra: data,
+    })
+  }
 }
 
 /**
@@ -30,6 +64,9 @@ async function sleep(ms: number): Promise<void> {
  */
 export function getSupabaseBrowserClient(): ReturnType<typeof createBrowserClient<Database>> {
   if (browserClient) {
+    if (process.env.NEXT_PUBLIC_SENTRY_DEBUG === 'true') {
+      logSupabaseEvent('Reusing existing browser client')
+    }
     return browserClient
   }
   
@@ -44,9 +81,8 @@ export function getSupabaseBrowserClient(): ReturnType<typeof createBrowserClien
     return browserClient
   }
   
-  console.log('[SupabaseClient] Creating new browser client', {
-    url: url.substring(0, 30) + '...', // Log partial URL for security
-    timestamp: new Date().toISOString(),
+  logSupabaseEvent('Creating new browser client', {
+    urlPrefix: url.substring(0, 30),
   })
   
   browserClient = createBrowserClient<Database>(url, key)
@@ -64,9 +100,7 @@ export function getSupabaseBrowserClient(): ReturnType<typeof createBrowserClien
  * For query timeouts, simply let React Query retry - don't reset the client.
  */
 export function resetSupabaseBrowserClient(): void {
-  console.log('[SupabaseClient] Resetting browser client', {
-    timestamp: new Date().toISOString(),
-  })
+  logSupabaseEvent('Resetting browser client')
   
   // Force recreation of the browser client on next access
   browserClient = null
@@ -99,9 +133,9 @@ export async function executeWithRetry<T>(
       const duration = Date.now() - startTime
       
       if (attempt > 1) {
-        console.log(`[SupabaseClient] ${operationName} succeeded after ${attempt} attempts`, {
+        logSupabaseEvent(`${operationName} succeeded`, {
+          attempts: attempt,
           duration,
-          timestamp: new Date().toISOString(),
         })
       }
       
@@ -121,18 +155,20 @@ export async function executeWithRetry<T>(
       
       if (attempt < maxAttempts && (isTimeout || isNetworkError)) {
         const delay = INITIAL_RETRY_DELAY * Math.pow(2, attempt - 1)
-        console.warn(`[SupabaseClient] ${operationName} failed (attempt ${attempt}/${maxAttempts}), retrying in ${delay}ms`, {
+        logSupabaseEvent(`${operationName} failed, scheduling retry`, {
+          attempt,
+          maxAttempts,
+          delay,
           error: error instanceof Error ? error.message : String(error),
           isTimeout,
           isNetworkError,
-          timestamp: new Date().toISOString(),
         })
         
         await sleep(delay)
       } else {
-        console.error(`[SupabaseClient] ${operationName} failed after ${attempt} attempts`, {
-          error: error instanceof Error ? error.message : String(error),
-          timestamp: new Date().toISOString(),
+        logSupabaseError(`${operationName} failed`, error, {
+          attempt,
+          maxAttempts,
         })
         throw error
       }

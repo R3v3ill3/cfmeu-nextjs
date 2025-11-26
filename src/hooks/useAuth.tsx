@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { User, Session } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
+import * as Sentry from "@sentry/nextjs";
+import type { SeverityLevel } from "@sentry/types";
 
 // Session recovery: if session is lost unexpectedly, wait this long before giving up
 const SESSION_RECOVERY_TIMEOUT = 5000; // 5 seconds
@@ -29,6 +31,74 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const hadSessionRef = useRef(false);
   const recoveryAttemptedRef = useRef(false);
   const isSubscribedRef = useRef(true);
+  const sessionRef = useRef<Session | null>(null);
+
+  const logAuthEvent = useCallback(
+    (message: string, data?: Record<string, unknown>, level: SeverityLevel = "info") => {
+      const payload = { ...data, timestamp: new Date().toISOString() };
+      if (process.env.NODE_ENV !== "test") {
+        console.log(`[useAuth] ${message}`, payload);
+      }
+      if (typeof window !== "undefined") {
+        Sentry.addBreadcrumb({
+          category: "auth",
+          level,
+          message,
+          data: payload,
+        });
+      }
+    },
+    []
+  );
+
+  const logAuthError = useCallback(
+    (message: string, error: unknown, data?: Record<string, unknown>) => {
+      const normalizedError = error instanceof Error ? error : new Error(String(error));
+      const payload = {
+        ...data,
+        errorMessage: normalizedError.message,
+        name: normalizedError.name,
+      };
+      console.error(`[useAuth] ${message}`, payload);
+      if (typeof window !== "undefined") {
+        Sentry.captureException(normalizedError, {
+          tags: { component: "useAuth" },
+          extra: payload,
+        });
+      }
+      logAuthEvent(message, payload, "error");
+    },
+    [logAuthEvent]
+  );
+
+  const applyAuthState = useCallback(
+    (nextSession: Session | null, metadata?: Record<string, unknown>) => {
+      setSession(nextSession);
+      sessionRef.current = nextSession;
+      setUser(nextSession?.user ?? null);
+
+      if (typeof window !== "undefined") {
+        Sentry.setUser(
+          nextSession?.user
+            ? {
+                id: nextSession.user.id,
+                email: nextSession.user.email ?? undefined,
+              }
+            : null
+        );
+      }
+
+      if (metadata) {
+        logAuthEvent("Session state updated", {
+          source: metadata.source ?? "unknown",
+          hasSession: !!nextSession,
+          userId: nextSession?.user?.id ?? null,
+          ...metadata,
+        });
+      }
+    },
+    [logAuthEvent]
+  );
 
   // Session recovery function - attempts to refresh when session is unexpectedly lost
   const attemptSessionRecovery = useCallback(async () => {
@@ -37,7 +107,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
     
     recoveryAttemptedRef.current = true;
-    console.log('[useAuth] Attempting session recovery...');
+    logAuthEvent("Attempting session recovery", { source: "unexpected-loss" });
     
     try {
       const supabase = getSupabaseBrowserClient();
@@ -46,57 +116,64 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const { data, error } = await supabase.auth.refreshSession();
       
       if (error) {
-        console.warn('[useAuth] Session recovery failed:', error.message);
+        logAuthError("Session recovery failed", error, { stage: "refreshSession" });
         return null;
       }
       
       if (data.session) {
-        console.log('[useAuth] Session recovered successfully');
+        logAuthEvent("Session recovered successfully", {
+          source: "refreshSession",
+          userId: data.session.user?.id ?? null,
+        });
         return data.session;
       }
       
       return null;
     } catch (error) {
-      console.warn('[useAuth] Session recovery exception:', error);
+      logAuthError("Session recovery exception", error);
       return null;
     }
-  }, []);
+  }, [logAuthError, logAuthEvent]);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
     isSubscribedRef.current = true;
     let initialSessionSet = false;
 
-    console.log('[useAuth] Initializing auth');
+    logAuthEvent("Initializing auth listener");
 
     // IMMEDIATELY call getSession() to get cached session from storage
     // This is synchronous if session is in memory, or reads from localStorage
     const initializeSession = async () => {
+      const start = typeof performance !== "undefined" ? performance.now() : Date.now();
       try {
         const { data: { session: initialSession }, error } = await supabase.auth.getSession();
+        const duration = Math.round((typeof performance !== "undefined" ? performance.now() : Date.now()) - start);
         
         if (error) {
-          console.warn('[useAuth] Error getting initial session:', error.message);
+          logAuthError("Error getting initial session", error, { duration });
         }
         
         if (isSubscribedRef.current && !initialSessionSet) {
           initialSessionSet = true;
-          setSession(initialSession);
-          setUser(initialSession?.user ?? null);
+          applyAuthState(initialSession ?? null, { source: "getSession" });
           setLoading(false);
           
           if (initialSession) {
             hadSessionRef.current = true;
-            console.log('[useAuth] Initial session loaded', {
+            logAuthEvent("Initial session loaded", {
               userId: initialSession.user?.id,
-              expires: initialSession.expires_at ? new Date(initialSession.expires_at * 1000).toISOString() : null,
+              expiresAt: initialSession.expires_at
+                ? new Date(initialSession.expires_at * 1000).toISOString()
+                : null,
+              duration,
             });
           } else {
-            console.log('[useAuth] No initial session found');
+            logAuthEvent("No initial session found", { duration });
           }
         }
       } catch (error) {
-        console.warn('[useAuth] Exception getting initial session:', error);
+        logAuthError("Exception getting initial session", error);
         if (isSubscribedRef.current && !initialSessionSet) {
           initialSessionSet = true;
           setLoading(false);
@@ -113,10 +190,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (!isSubscribedRef.current) return;
 
         const timestamp = new Date().toISOString();
-        console.log(`[useAuth] Auth state change: ${event}`, {
+        logAuthEvent(`Auth state change: ${event}`, {
           timestamp,
           hasSession: !!newSession,
-          userId: newSession?.user?.id,
+          userId: newSession?.user?.id ?? null,
         });
 
         // Track if we've ever had a session (for recovery logic)
@@ -127,24 +204,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         // Handle INITIAL_SESSION event - update if we haven't set session yet
         if (event === 'INITIAL_SESSION') {
-          if (!initialSessionSet) {
+          const shouldApplyInitialSession =
+            !initialSessionSet ||
+            (!sessionRef.current && !!newSession);
+
+          if (shouldApplyInitialSession) {
             initialSessionSet = true;
-            setSession(newSession);
-            setUser(newSession?.user ?? null);
+            applyAuthState(newSession ?? null, { source: 'initial_session_event' });
+            setLoading(false);
+          } else if (!initialSessionSet) {
+            initialSessionSet = true;
             setLoading(false);
           }
-          // If INITIAL_SESSION has no session but initializeSession found one, don't override
           return;
         }
 
         // For other events, always update state
-        setSession(newSession);
-        setUser(newSession?.user ?? null);
+        applyAuthState(newSession ?? null, { source: event.toLowerCase() });
         setLoading(false);
 
         // Invalidate auth-dependent caches on auth state changes
         if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
-          console.log(`[useAuth] Invalidating auth-dependent caches due to: ${event}`);
+          logAuthEvent("Invalidating auth-dependent caches", { reason: event });
           queryClient.invalidateQueries({ queryKey: ['user-role'] });
           queryClient.invalidateQueries({ queryKey: ['accessible-patches'] });
           queryClient.invalidateQueries({ queryKey: ['my-role'] });
@@ -155,14 +236,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
 
         if (!newSession?.user && event !== 'SIGNED_OUT') {
-          console.warn('[useAuth] Session lost unexpectedly', { event, timestamp });
+          logAuthEvent('Session lost unexpectedly', { event, timestamp }, 'warning');
           
           // If we had a session and it's now gone (not from explicit sign out), try recovery
           if (hadSessionRef.current && !recoveryAttemptedRef.current) {
             const recovered = await attemptSessionRecovery();
             if (recovered && isSubscribedRef.current) {
-              setSession(recovered);
-              setUser(recovered.user);
+              applyAuthState(recovered, { source: 'recovery' });
             }
           }
         }
@@ -170,13 +250,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (newSession?.user && (event === 'SIGNED_IN' || event === 'USER_UPDATED')) {
           // Sync profile and apply any pending role
           try {
-            console.log('[useAuth] Applying pending user on login', { userId: newSession.user.id });
+            logAuthEvent('Applying pending user on login', { userId: newSession.user.id });
             await supabase.rpc('apply_pending_user_on_login');
-            console.log('[useAuth] Successfully applied pending user');
+            logAuthEvent('Successfully applied pending user');
           } catch (error) {
-            console.error('[useAuth] Failed to apply pending user:', error, {
+            logAuthError('Failed to apply pending user', error, {
               userId: newSession.user.id,
-              errorMessage: error instanceof Error ? error.message : String(error),
             });
           }
           // If user remains viewer, raise a pending request automatically
@@ -194,23 +273,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               });
             }
           } catch (error) {
-            console.warn('[useAuth] Failed to check/update viewer status:', error);
+            logAuthError('Failed to check/update viewer status', error);
           }
         }
       }
     );
 
     return () => {
-      console.log('[useAuth] Cleaning up auth state listener');
+      logAuthEvent("Cleaning up auth state listener");
       isSubscribedRef.current = false;
       subscription.unsubscribe();
     };
-  }, [attemptSessionRecovery, queryClient]);
+  }, [attemptSessionRecovery, queryClient, applyAuthState, logAuthEvent, logAuthError]);
 
   const signOut = async () => {
     const supabase = getSupabaseBrowserClient();
     hadSessionRef.current = false; // Reset on explicit sign out
+    logAuthEvent("Manual sign out requested", { userId: sessionRef.current?.user?.id ?? null });
     await supabase.auth.signOut();
+    applyAuthState(null, { source: "signout" });
     router.replace('/auth');
   };
 

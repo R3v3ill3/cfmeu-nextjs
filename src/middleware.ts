@@ -5,6 +5,14 @@ export async function middleware(req: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request: req,
   })
+  const requestId = req.headers.get('x-request-id') ?? crypto.randomUUID()
+  const path = req.nextUrl.pathname
+
+  const logMiddleware = (level: 'log' | 'warn' | 'error', message: string, data?: Record<string, unknown>) => {
+    const payload = { requestId, path, ...data, timestamp: new Date().toISOString() }
+    const method = level === 'log' ? 'log' : level
+    console[method](`[Middleware] ${message}`, payload)
+  }
 
   // Skip auth check for public routes to improve performance
   const publicPaths = ['/auth', '/auth/reset-password', '/auth/confirm', '/manifest.json', '/favicon.ico', '/apple-touch-icon.png']
@@ -84,24 +92,18 @@ export async function middleware(req: NextRequest) {
       // Call getSession first to trigger code exchange
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
       if (sessionError) {
-        console.error('[Middleware] Session error during PKCE exchange:', {
-          path: req.nextUrl.pathname,
+        logMiddleware('error', 'Session error during PKCE exchange', {
           error: sessionError,
           errorMessage: sessionError.message,
-          timestamp: new Date().toISOString(),
         });
       } else if (session) {
-        console.log('[Middleware] PKCE code exchanged successfully:', {
-          path: req.nextUrl.pathname,
+        logMiddleware('log', 'PKCE code exchanged successfully', {
           userId: session.user?.id,
-          timestamp: new Date().toISOString(),
         });
       }
     } catch (err) {
-      console.error('[Middleware] Exception during PKCE exchange:', {
-        path: req.nextUrl.pathname,
+      logMiddleware('error', 'Exception during PKCE exchange', {
         error: err instanceof Error ? err.message : String(err),
-        timestamp: new Date().toISOString(),
       });
     }
   }
@@ -115,24 +117,20 @@ export async function middleware(req: NextRequest) {
 
   // Enhanced logging for diagnostics
   if (authError) {
-    console.error('[Middleware] Auth error:', {
-      path: req.nextUrl.pathname,
+    logMiddleware('error', 'Auth error', {
       error: authError,
       errorMessage: authError.message,
       errorCode: authError.status,
       authDuration,
       hasAuthCode,
-      timestamp: new Date().toISOString(),
     });
   } else if (authDuration > 200 || hasAuthCode) {
     // Log slow auth checks and all PKCE exchanges for debugging
-    console.log('[Middleware] Auth check:', {
-      path: req.nextUrl.pathname,
+    logMiddleware('log', 'Auth check details', {
       userId: user?.id || null,
       authDuration,
       hasAuthCode,
       hasUser: !!user,
-      timestamp: new Date().toISOString(),
     });
   }
   

@@ -1,11 +1,12 @@
 'use client'
 
-import React, { useEffect, useState, Suspense } from 'react'
+import React, { useEffect, useState, Suspense, useCallback } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
 import type { ReactNode } from 'react'
 import { PostHogProvider } from '@/providers/PostHogProvider'
 import { AuthProvider } from '@/hooks/useAuth'
+import * as Sentry from '@sentry/nextjs'
 
 type ProvidersProps = {
   children: ReactNode
@@ -26,6 +27,19 @@ export default function Providers({ children }: ProvidersProps) {
     },
   }))
 
+  const logPwaEvent = useCallback((message: string, data?: Record<string, unknown>) => {
+    const payload = { ...data, timestamp: new Date().toISOString() }
+    console.log('[PWA]', message, payload)
+    if (typeof window !== 'undefined') {
+      Sentry.addBreadcrumb({
+        category: 'pwa',
+        message,
+        data: payload,
+        level: 'info',
+      })
+    }
+  }, [])
+
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
       return
@@ -34,7 +48,7 @@ export default function Providers({ children }: ProvidersProps) {
     const registerServiceWorker = async () => {
       try {
         const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' })
-        console.log('[PWA] Service worker registered')
+        logPwaEvent('Service worker registered')
 
         // Check for updates immediately and periodically
         registration.update()
@@ -48,12 +62,11 @@ export default function Providers({ children }: ProvidersProps) {
         registration.addEventListener('updatefound', () => {
           const newWorker = registration.installing
           if (!newWorker) return
-
-          console.log('[PWA] New service worker found, installing...')
+          logPwaEvent('New service worker installing')
 
           newWorker.addEventListener('statechange', () => {
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              console.log('[PWA] New service worker installed, activating...')
+              logPwaEvent('New service worker installed, requesting activation')
               // Skip waiting and claim immediately
               newWorker.postMessage({ type: 'SKIP_WAITING' })
             }
@@ -63,7 +76,7 @@ export default function Providers({ children }: ProvidersProps) {
         // Listen for messages from service worker
         navigator.serviceWorker.addEventListener('message', (event) => {
           if (event.data?.type === 'SW_UPDATED') {
-            console.log('[PWA] Service worker updated to version:', event.data.version)
+            logPwaEvent('Service worker updated', { version: event.data.version })
             // Auto-reload to get fresh content with new service worker
             window.location.reload()
           }
@@ -74,14 +87,16 @@ export default function Providers({ children }: ProvidersProps) {
         navigator.serviceWorker.addEventListener('controllerchange', () => {
           if (!refreshing) {
             refreshing = true
-            console.log('[PWA] Service worker controller changed, reloading...')
+            logPwaEvent('Service worker controller changed, reloading')
             window.location.reload()
           }
         })
 
         return () => clearInterval(updateInterval)
       } catch (error) {
-        console.error('[PWA] Failed to register service worker', error)
+        logPwaEvent('Failed to register service worker', {
+          error: error instanceof Error ? error.message : String(error),
+        })
       }
     }
 
@@ -94,7 +109,7 @@ export default function Providers({ children }: ProvidersProps) {
     return () => {
       window.removeEventListener('load', registerServiceWorker)
     }
-  }, [])
+  }, [logPwaEvent])
 
   // AuthProvider is placed inside QueryClientProvider so it can use React Query
   // This is a single instance that persists across all navigations

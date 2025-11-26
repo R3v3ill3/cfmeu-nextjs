@@ -11,6 +11,8 @@ import { AdminPatchProvider } from '@/context/AdminPatchContext'
 import { GoogleMapsProvider } from '@/providers/GoogleMapsProvider'
 import { AppRole } from '@/constants/roles'
 import { ReactNode } from 'react'
+import { randomUUID } from 'crypto'
+import * as Sentry from '@sentry/nextjs'
 
 interface UserProfile {
   id: string
@@ -21,7 +23,8 @@ interface UserProfile {
 
 async function getUserProfile(
   supabase: Awaited<ReturnType<typeof createServerSupabase>>,
-  userId: string
+  userId: string,
+  context?: { requestId: string; path?: string }
 ): Promise<UserProfile | null> {
   const startTime = Date.now()
   try {
@@ -34,31 +37,80 @@ async function getUserProfile(
     
     if (error) {
       console.error('[AppLayout] Error fetching user profile:', 
-        `userId=${userId}, error=${error.message}, code=${error.code}, duration=${duration}ms`)
+        `userId=${userId}, error=${error.message}, code=${error.code}, duration=${duration}ms, requestId=${context?.requestId}`)
+      Sentry.captureException(error, {
+        tags: { component: 'AppLayout', requestId: context?.requestId },
+        extra: { userId, duration, path: context?.path },
+      })
       return null
     }
     
     if (duration > 200) {
-      console.warn('[AppLayout] Slow profile fetch:',
-        `userId=${userId}, duration=${duration}ms, hasRole=${!!data?.role}`)
+      const payload = {
+        userId,
+        duration,
+        hasRole: !!data?.role,
+        requestId: context?.requestId,
+        path: context?.path,
+      }
+      console.warn('[AppLayout] Slow profile fetch:', payload)
+      Sentry.addBreadcrumb({
+        category: 'app-layout',
+        level: 'warning',
+        message: 'Slow profile fetch',
+        data: payload,
+      })
     }
     
     return data as UserProfile | null
   } catch (err) {
     const duration = Date.now() - startTime
     console.error('[AppLayout] Exception fetching user profile:',
-      `userId=${userId}, error=${err instanceof Error ? err.message : String(err)}, duration=${duration}ms`)
+      `userId=${userId}, error=${err instanceof Error ? err.message : String(err)}, duration=${duration}ms, requestId=${context?.requestId}`)
+    Sentry.captureException(err, {
+      tags: { component: 'AppLayout', requestId: context?.requestId },
+      extra: { userId, duration, path: context?.path },
+    })
     return null
   }
+}
+
+function logAppLayout(message: string, data?: Record<string, unknown>) {
+  const payload = { ...data, timestamp: new Date().toISOString() }
+  console.log('[AppLayout]', message, payload)
+  Sentry.addBreadcrumb({
+    category: 'app-layout',
+    level: 'info',
+    message,
+    data: payload,
+  })
 }
 
 export const dynamic = 'force-dynamic'
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const layoutStartTime = Date.now()
-  if (process.env.NODE_ENV === 'development') {
-    console.log('[AppLayout] Rendering layout for (app) route group')
-  }
+
+  const hdrs = await headers()
+  const requestId = hdrs.get('x-request-id') ?? randomUUID()
+  const currentPath = hdrs.get('x-pathname') || ''
+  const userAgent = hdrs.get('user-agent') || undefined
+  const isMobile = isMobileOrTablet(userAgent)
+
+  Sentry.configureScope((scope) => {
+    scope.setTag('appLayout.requestId', requestId)
+    scope.setContext('appLayout', {
+      path: currentPath || '/',
+      userAgent,
+    })
+  })
+
+  logAppLayout('Rendering layout for (app) route group', {
+    requestId,
+    path: currentPath || '/',
+    userAgent,
+  })
+
   const supabase = await createServerSupabase()
   
   // Step 1: Auth check
@@ -67,52 +119,57 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     const { data } = await supabase.auth.getUser()
     user = data.user
   } catch (err) {
-    console.error('[AppLayout] Auth getUser error:',
-      `error=${err instanceof Error ? err.message : String(err)}`)
+    logAppLayout('Auth getUser error', {
+      requestId,
+      error: err instanceof Error ? err.message : String(err),
+    })
   }
   
   if (!user) {
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[AppLayout] No user found, redirecting to /auth')
-    }
+    logAppLayout('No user found, redirecting to /auth', { requestId })
     redirect('/auth')
   }
   
   // Step 2: Single profile fetch (reuses same supabase client, gets all needed fields)
   // This eliminates the duplicate profile fetch that was happening before
-  const profile = await getUserProfile(supabase, user.id)
+  const profile = await getUserProfile(supabase, user.id, {
+    requestId,
+    path: currentPath || '/',
+  })
   const role = profile?.role ?? null
-  
-  const hdrs = await headers()
-  const userAgent = hdrs.get('user-agent') || undefined
-  const isMobile = isMobileOrTablet(userAgent)
-  const currentPath = hdrs.get('x-pathname') || ''
   const layoutDuration = Date.now() - layoutStartTime
 
   // SECURITY: Validate user has a valid profile with a role
   // This prevents unauthorized OAuth users from accessing the app
   if (!profile) {
     // No profile at all - redirect to auth
-    console.warn('[AppLayout] User has no profile, redirecting to auth:',
-      `userId=${user.id}`)
+    logAppLayout('User has no profile, redirecting to auth', {
+      requestId,
+      userId: user.id,
+    })
     redirect('/auth')
   } else if (!profile.is_active || !profile.role) {
     // Profile exists but is inactive or has no role - unauthorized OAuth user
-    console.warn('[AppLayout] User profile is inactive or has no role, redirecting to auth:',
-      `userId=${user.id}, email=${profile.email}, role=${profile.role}, isActive=${profile.is_active}`)
+    logAppLayout('User profile inactive or missing role, redirecting', {
+      requestId,
+      userId: user.id,
+      email: profile.email,
+      role: profile.role,
+      isActive: profile.is_active,
+    })
     // Sign out the user and redirect
     await supabase.auth.signOut()
     redirect('/auth?error=unauthorized&error_description=Your account is not authorized. Please contact your administrator.')
   }
   
   if (process.env.NODE_ENV === 'development' || layoutDuration > 500) {
-    console.log('[AppLayout] Layout rendered:', {
+    logAppLayout('Layout rendered', {
+      requestId,
       userId: user.id,
       role,
       isMobile,
       path: currentPath,
       duration: layoutDuration,
-      timestamp: new Date().toISOString(),
     })
   }
   // AuthProvider is now in the root Providers component (src/app/providers.tsx)
