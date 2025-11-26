@@ -37,7 +37,10 @@ SUPABASE_URL=your_supabase_url
 ```
 NEXT_PUBLIC_APP_URL=https://your-app.vercel.app
 NODE_ENV=production
+NODE_OPTIONS=--no-warnings
 ```
+
+**Note on NODE_OPTIONS**: This suppresses Node.js deprecation warnings from third-party dependencies (specifically `posthog-node` using deprecated `url.parse()`). See `docs/DEPRECATION_WARNING_SUPPRESSION.md` for details.
 
 ## Instructions
 

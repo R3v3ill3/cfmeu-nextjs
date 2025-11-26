@@ -356,6 +356,22 @@ Please investigate this issue, identify the root cause, and implement a fix.
    posthog.isFeatureEnabled('session-recording')
    ```
 
+### Known Suppressed Warnings
+
+Some warnings are intentionally suppressed because they come from third-party dependencies:
+
+#### DEP0169: url.parse() Deprecation (JAVASCRIPT-NEXTJS-6)
+- **Source**: `posthog-node@5.14.0` dependency
+- **Status**: Suppressed via `NODE_OPTIONS='--no-warnings'`
+- **Reason**: Third-party code, waiting for upstream fix
+- **Action**: Monitor for posthog-node updates, test periodically
+- **Documentation**: See `docs/DEPRECATION_WARNING_SUPPRESSION.md`
+
+If you see this warning reappear in Sentry:
+1. Verify `NODE_OPTIONS` environment variable is set in Vercel
+2. Check if a new deployment removed the suppression
+3. Refer to the suppression documentation for remediation steps
+
 ---
 
 ## Quick Shortcuts
@@ -386,4 +402,5 @@ When reporting an issue to Cursor agent, ensure you include:
 - [ ] Device/browser information
 - [ ] Your observations about possible cause
 - [ ] Clear request for what you need (investigate, fix, explain)
+
 

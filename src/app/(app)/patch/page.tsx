@@ -18,7 +18,8 @@ import { PatchProjectsTable } from "@/components/patch/PatchProjectsTable"
 import { PatchScansTable } from "@/components/patch/PatchScansTable"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Loader2 } from "lucide-react"
+import { Loader2, MapPin } from "lucide-react"
+import Link from "next/link"
 import { EmployerDetailModal } from "@/components/employers/EmployerDetailModal"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { usePatchScans } from "@/hooks/usePatchScans"
@@ -298,6 +299,15 @@ export default function PatchPage() {
   return (
     <RoleGuard allow={["organiser", "lead_organiser", "admin"]}>
       <div className={`space-y-4 sm:space-y-6 ${isMobile ? 'px-safe py-4 pb-safe-bottom' : 'p-6'}`}>
+        {/* Prominent Site Visit Button */}
+        <Link
+          href="/site-visit-wizard"
+          className="flex items-center justify-center gap-3 w-full py-4 px-6 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl font-semibold text-lg shadow-lg transition-all duration-200 active:scale-[0.98] touch-manipulation"
+        >
+          <MapPin className="h-6 w-6" />
+          Start Site Visit
+        </Link>
+
         {selectedPatchId && (
           <PatchOverviewHeader
             patchName={patchInfo?.name || "Patch"}

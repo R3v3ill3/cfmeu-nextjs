@@ -7,6 +7,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
   Menu, LogOut, Users, Building, MapPin, BarChart3, FolderOpen, FileCheck, Shield, AlertTriangle, QrCode, HelpCircle, Crown, Settings, TrendingUp, ArrowLeft, Home, Search, ClipboardList
 } from "lucide-react";
+import { WizardFloatingButton } from "@/components/siteVisitWizard/WizardFloatingButton";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -644,6 +645,14 @@ const Layout = ({ children, onRefresh }: LayoutProps) => {
       )}
 
       <JoinQrDialog open={joinQrOpen} onOpenChange={setJoinQrOpen} />
+      
+      {/* Site Visit Wizard FAB - show for organisers on mobile (except on pages that have their own button) */}
+      {isMobile() && !isLoadingRole && userRole && 
+       (userRole === "organiser" || userRole === "lead_organiser" || userRole === "admin") && 
+       pathname !== '/site-visit-wizard' && 
+       pathname !== '/patch' && (
+        <WizardFloatingButton />
+      )}
     </div>
   );
 };

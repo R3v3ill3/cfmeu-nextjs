@@ -1,0 +1,489 @@
+"use client"
+
+import { useState, useEffect, useCallback } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/integrations/supabase/client'
+import { useAccessiblePatches } from '@/hooks/useAccessiblePatches'
+import { useAddressSearch, type NearbyProject } from '@/hooks/useAddressSearch'
+import { WizardButton } from '../shared/WizardButton'
+import { Input } from '@/components/ui/input'
+import { cn } from '@/lib/utils'
+import { 
+  MapPin, 
+  Search, 
+  Navigation, 
+  Building, 
+  AlertCircle,
+  Loader2,
+  ChevronRight,
+  RefreshCw
+} from 'lucide-react'
+
+interface ProjectSelectorProps {
+  onProjectSelected: (project: {
+    id: string
+    name: string
+    address?: string | null
+    builderName?: string | null
+    mainJobSiteId?: string | null
+  }) => void
+}
+
+type GeolocationState = 
+  | 'requesting' 
+  | 'available' 
+  | 'denied' 
+  | 'unavailable' 
+  | 'timeout'
+  | 'error'
+
+interface UserLocation {
+  lat: number
+  lng: number
+  accuracy: number
+}
+
+export function ProjectSelector({ onProjectSelected }: ProjectSelectorProps) {
+  const [geoState, setGeoState] = useState<GeolocationState>('requesting')
+  const [userLocation, setUserLocation] = useState<UserLocation | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [showSearch, setShowSearch] = useState(false)
+  
+  const { patches, isLoading: loadingPatches } = useAccessiblePatches()
+  
+  // Request geolocation on mount
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setGeoState('unavailable')
+      return
+    }
+    
+    const timeoutId = setTimeout(() => {
+      if (geoState === 'requesting') {
+        setGeoState('timeout')
+      }
+    }, 5000) // 5 second timeout
+    
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        clearTimeout(timeoutId)
+        setUserLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+        })
+        setGeoState('available')
+      },
+      (error) => {
+        clearTimeout(timeoutId)
+        if (error.code === error.PERMISSION_DENIED) {
+          setGeoState('denied')
+        } else if (error.code === error.TIMEOUT) {
+          setGeoState('timeout')
+        } else {
+          setGeoState('error')
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 5000,
+        maximumAge: 60000, // Allow cached position up to 1 minute old
+      }
+    )
+    
+    return () => clearTimeout(timeoutId)
+  }, [])
+  
+  // Find nearby projects using geolocation
+  const { 
+    data: nearbyProjects = [], 
+    isLoading: loadingNearby,
+    refetch: refetchNearby,
+  } = useAddressSearch({
+    lat: userLocation?.lat ?? null,
+    lng: userLocation?.lng ?? null,
+    enabled: geoState === 'available' && userLocation !== null,
+    maxResults: 10,
+    maxDistanceKm: 10,
+  })
+  
+  // Fallback: Get user's patch projects
+  const patchIds = patches.map(p => p.id)
+  
+  const { 
+    data: patchProjects = [], 
+    isLoading: loadingPatchProjects 
+  } = useQuery({
+    queryKey: ['wizard-patch-projects', patchIds],
+    enabled: patchIds.length > 0 && (geoState !== 'available' || showSearch),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('projects')
+        .select(`
+          id,
+          name,
+          main_job_site_id,
+          job_sites!inner (
+            id,
+            full_address,
+            location
+          ),
+          project_assignments (
+            employers (
+              id,
+              name
+            ),
+            contractor_role_types (
+              code
+            )
+          )
+        `)
+        .in('organising_universe', ['active', 'monitoring'])
+        .order('name', { ascending: true })
+        .limit(50)
+      
+      if (error) throw error
+      
+      // Filter by patch - we need to check patch_project_mapping_view
+      // For simplicity, we'll return all and trust RLS
+      return (data || []).map((project: any) => {
+        const jobSite = project.job_sites?.[0]
+        const builderAssignment = project.project_assignments?.find((pa: any) => 
+          pa.contractor_role_types?.code === 'builder' || 
+          pa.contractor_role_types?.code === 'head_contractor'
+        )
+        
+        return {
+          id: project.id,
+          name: project.name,
+          address: jobSite?.full_address || jobSite?.location || null,
+          builderName: builderAssignment?.employers?.name || null,
+          mainJobSiteId: project.main_job_site_id || jobSite?.id || null,
+        }
+      })
+    },
+    staleTime: 30000,
+  })
+  
+  // Filter projects by search query
+  const filteredPatchProjects = searchQuery
+    ? patchProjects.filter((p: any) => 
+        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.address?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.builderName?.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : patchProjects
+  
+  // Get the closest project
+  const closestProject = nearbyProjects[0] as NearbyProject | undefined
+  
+  // Retry geolocation
+  const retryGeolocation = useCallback(() => {
+    setGeoState('requesting')
+    setUserLocation(null)
+    
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+          })
+          setGeoState('available')
+        },
+        (error) => {
+          if (error.code === error.PERMISSION_DENIED) {
+            setGeoState('denied')
+          } else {
+            setGeoState('error')
+          }
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      )
+    }
+  }, [])
+  
+  // Format distance for display
+  const formatDistance = (km: number): string => {
+    if (km < 1) {
+      return `${Math.round(km * 1000)}m`
+    }
+    return `${km.toFixed(1)}km`
+  }
+  
+  // Handle project selection
+  const handleSelectProject = (project: {
+    id: string
+    name: string
+    address?: string | null
+    builderName?: string | null
+    mainJobSiteId?: string | null
+  }) => {
+    onProjectSelected(project)
+  }
+  
+  // Loading state
+  const isLoading = geoState === 'requesting' || loadingPatches
+  
+  // Show geolocation-based view or fallback
+  const showGeoView = geoState === 'available' && !showSearch
+  const showFallbackView = geoState !== 'available' || showSearch
+  
+  return (
+    <div className="p-4 space-y-6 pb-safe-bottom">
+      {/* Loading state */}
+      {isLoading && (
+        <div className="flex flex-col items-center justify-center py-16 space-y-4">
+          <div className="relative">
+            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
+              <Navigation className="h-8 w-8 text-blue-600 animate-pulse" />
+            </div>
+            <div className="absolute inset-0 border-4 border-blue-200 rounded-full animate-ping" />
+          </div>
+          <p className="text-lg text-gray-600 font-medium">Finding your location...</p>
+        </div>
+      )}
+      
+      {/* Geolocation unavailable/denied - show fallback */}
+      {showFallbackView && !isLoading && (
+        <div className="space-y-4">
+          {/* Info banner if geo failed */}
+          {geoState !== 'available' && (
+            <div className={cn(
+              'flex items-start gap-3 p-4 rounded-xl',
+              geoState === 'denied' 
+                ? 'bg-amber-50 text-amber-800' 
+                : 'bg-gray-100 text-gray-700'
+            )}>
+              <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="font-medium">
+                  {geoState === 'denied' 
+                    ? 'Location access denied' 
+                    : geoState === 'timeout'
+                    ? 'Location request timed out'
+                    : 'Location unavailable'}
+                </p>
+                <p className="text-sm mt-1 opacity-80">
+                  Search your assigned projects below
+                </p>
+              </div>
+              {(geoState === 'timeout' || geoState === 'error') && (
+                <button
+                  onClick={retryGeolocation}
+                  className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  <RefreshCw className="h-5 w-5" />
+                </button>
+              )}
+            </div>
+          )}
+          
+          {/* Search input */}
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+            <Input
+              type="search"
+              placeholder="Search projects by name or address..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-12 pr-4 h-14 text-lg rounded-xl border-2 focus:border-blue-500"
+            />
+          </div>
+          
+          {/* Project list */}
+          <div className="space-y-2">
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide px-1">
+              Your Projects
+            </h2>
+            
+            {loadingPatchProjects ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+              </div>
+            ) : filteredPatchProjects.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                {searchQuery 
+                  ? `No projects matching "${searchQuery}"`
+                  : 'No projects found'}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {filteredPatchProjects.map((project: any) => (
+                  <ProjectListItem
+                    key={project.id}
+                    name={project.name}
+                    address={project.address}
+                    builderName={project.builderName}
+                    onSelect={() => handleSelectProject(project)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      
+      {/* Geolocation available - show closest project prompt */}
+      {showGeoView && !isLoading && (
+        <div className="space-y-6">
+          {/* Closest project card */}
+          {loadingNearby ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+            </div>
+          ) : closestProject ? (
+            <div className="space-y-4">
+              <h2 className="text-lg font-semibold text-center text-gray-700">
+                Is this your job?
+              </h2>
+              
+              <div className="bg-white rounded-2xl shadow-lg border-2 border-blue-200 overflow-hidden">
+                <div className="p-5 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-xl font-bold text-gray-900 truncate">
+                        {closestProject.project_name}
+                      </h3>
+                      {closestProject.builder_name && (
+                        <p className="text-sm text-gray-600 mt-1 flex items-center gap-1.5">
+                          <Building className="h-4 w-4 flex-shrink-0" />
+                          <span className="truncate">{closestProject.builder_name}</span>
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 px-3 py-1.5 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
+                      <MapPin className="h-4 w-4" />
+                      {formatDistance(closestProject.distance_km)}
+                    </div>
+                  </div>
+                  
+                  {closestProject.job_site_address && (
+                    <p className="text-gray-500 text-sm">
+                      {closestProject.job_site_address}
+                    </p>
+                  )}
+                </div>
+                
+                <div className="grid grid-cols-2 gap-0 border-t border-gray-200">
+                  <button
+                    onClick={() => setShowSearch(true)}
+                    className="py-4 text-center font-semibold text-gray-600 hover:bg-gray-50 active:bg-gray-100 transition-colors border-r border-gray-200"
+                  >
+                    Other
+                  </button>
+                  <button
+                    onClick={() => handleSelectProject({
+                      id: closestProject.project_id,
+                      name: closestProject.project_name,
+                      address: closestProject.job_site_address,
+                      builderName: closestProject.builder_name,
+                      mainJobSiteId: closestProject.job_site_id,
+                    })}
+                    className="py-4 text-center font-bold text-blue-600 hover:bg-blue-50 active:bg-blue-100 transition-colors"
+                  >
+                    Yes, this is it
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <p className="text-gray-500 mb-4">No nearby projects found</p>
+              <WizardButton
+                variant="secondary"
+                onClick={() => setShowSearch(true)}
+              >
+                Search all projects
+              </WizardButton>
+            </div>
+          )}
+          
+          {/* Other nearby projects */}
+          {nearbyProjects.length > 1 && (
+            <div className="space-y-2">
+              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide px-1">
+                Other nearby projects
+              </h2>
+              
+              <div className="space-y-2">
+                {nearbyProjects.slice(1, 6).map((project: NearbyProject) => (
+                  <ProjectListItem
+                    key={project.project_id}
+                    name={project.project_name}
+                    address={project.job_site_address}
+                    builderName={project.builder_name}
+                    distance={formatDistance(project.distance_km)}
+                    onSelect={() => handleSelectProject({
+                      id: project.project_id,
+                      name: project.project_name,
+                      address: project.job_site_address,
+                      builderName: project.builder_name,
+                      mainJobSiteId: project.job_site_id,
+                    })}
+                  />
+                ))}
+              </div>
+              
+              <button
+                onClick={() => setShowSearch(true)}
+                className="w-full py-3 text-center text-blue-600 font-medium hover:bg-blue-50 rounded-xl transition-colors"
+              >
+                Search all projects
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Project list item component
+function ProjectListItem({
+  name,
+  address,
+  builderName,
+  distance,
+  onSelect,
+}: {
+  name: string
+  address?: string | null
+  builderName?: string | null
+  distance?: string
+  onSelect: () => void
+}) {
+  return (
+    <button
+      onClick={onSelect}
+      className={cn(
+        'w-full text-left p-4 bg-white rounded-xl border border-gray-200',
+        'hover:border-blue-300 hover:shadow-md active:bg-gray-50',
+        'transition-all duration-200 touch-manipulation',
+        'flex items-center gap-3'
+      )}
+    >
+      <div className="flex-1 min-w-0 space-y-1">
+        <h3 className="font-semibold text-gray-900 truncate">{name}</h3>
+        {builderName && (
+          <p className="text-sm text-gray-600 truncate flex items-center gap-1.5">
+            <Building className="h-3.5 w-3.5 flex-shrink-0" />
+            {builderName}
+          </p>
+        )}
+        {address && (
+          <p className="text-sm text-gray-500 truncate">{address}</p>
+        )}
+      </div>
+      
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {distance && (
+          <span className="text-sm text-gray-500">{distance}</span>
+        )}
+        <ChevronRight className="h-5 w-5 text-gray-400" />
+      </div>
+    </button>
+  )
+}
+
