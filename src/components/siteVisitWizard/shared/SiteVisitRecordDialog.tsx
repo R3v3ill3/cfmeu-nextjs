@@ -16,8 +16,7 @@ import {
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
-import { CheckCircle, MapPin, Clock, X } from 'lucide-react'
+import { CheckCircle, MapPin, Clock } from 'lucide-react'
 
 interface SiteVisitRecordDialogProps {
   open: boolean
@@ -25,9 +24,10 @@ interface SiteVisitRecordDialogProps {
   projectId: string
   projectName: string
   mainJobSiteId?: string | null
-  mode: 'entry' | 'exit'
   onComplete?: () => void
   onSkip?: () => void
+  // Pre-selected reason names based on visited views
+  preSelectedReasonNames?: string[]
 }
 
 interface VisitReasonDefinition {
@@ -44,9 +44,9 @@ export function SiteVisitRecordDialog({
   projectId,
   projectName,
   mainJobSiteId,
-  mode,
   onComplete,
   onSkip,
+  preSelectedReasonNames = [],
 }: SiteVisitRecordDialogProps) {
   const { user } = useAuth()
   const { toast } = useToast()
@@ -54,6 +54,7 @@ export function SiteVisitRecordDialog({
   
   const [selectedReasons, setSelectedReasons] = useState<string[]>([])
   const [notes, setNotes] = useState('')
+  const [hasAutoSelected, setHasAutoSelected] = useState(false)
   
   // Fetch visit reason definitions
   const { data: reasonDefinitions = [], isLoading: loadingReasons } = useQuery({
@@ -71,11 +72,26 @@ export function SiteVisitRecordDialog({
     staleTime: 5 * 60 * 1000, // 5 minutes
   })
   
-  // Reset form when dialog opens
+  // Auto-select reasons based on preSelectedReasonNames when dialog opens and definitions are loaded
   useEffect(() => {
-    if (open) {
+    if (open && reasonDefinitions.length > 0 && preSelectedReasonNames.length > 0 && !hasAutoSelected) {
+      const matchingIds = reasonDefinitions
+        .filter(def => preSelectedReasonNames.includes(def.name))
+        .map(def => def.id)
+      
+      if (matchingIds.length > 0) {
+        setSelectedReasons(matchingIds)
+        setHasAutoSelected(true)
+      }
+    }
+  }, [open, reasonDefinitions, preSelectedReasonNames, hasAutoSelected])
+  
+  // Reset form when dialog closes
+  useEffect(() => {
+    if (!open) {
       setSelectedReasons([])
       setNotes('')
+      setHasAutoSelected(false)
     }
   }, [open])
   
@@ -186,10 +202,10 @@ export function SiteVisitRecordDialog({
         <DialogHeader className="px-6 pt-6 pb-4 bg-blue-600 text-white">
           <DialogTitle className="text-xl font-bold flex items-center gap-2">
             <MapPin className="h-6 w-6" />
-            Record Site Visit
+            Record Site Visit?
           </DialogTitle>
           <DialogDescription className="text-blue-100 mt-1">
-            {mode === 'entry' ? 'Starting visit to' : 'Ending visit at'} {projectName}
+            Would you like to log this visit to {projectName}?
           </DialogDescription>
         </DialogHeader>
         
@@ -266,7 +282,7 @@ export function SiteVisitRecordDialog({
               loading={createVisitMutation.isPending}
               icon={<CheckCircle className="h-5 w-5" />}
             >
-              Record Visit
+              Yes, Record Visit
             </WizardButton>
             
             <WizardButton
@@ -276,7 +292,7 @@ export function SiteVisitRecordDialog({
               onClick={handleSkip}
               disabled={createVisitMutation.isPending}
             >
-              Skip
+              No, Exit Without Recording
             </WizardButton>
           </div>
         </div>
@@ -284,4 +300,3 @@ export function SiteVisitRecordDialog({
     </Dialog>
   )
 }
-

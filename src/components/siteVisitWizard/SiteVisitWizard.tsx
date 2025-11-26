@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useCallback } from 'react'
+import { useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useWizardState } from './hooks/useWizardState'
 import { WizardHeader } from './shared/WizardHeader'
@@ -13,7 +13,6 @@ import { RatingsView } from './views/RatingsView'
 import { EbaView } from './views/EbaView'
 import { IncolinkView } from './views/IncolinkView'
 import { ProjectDetailsView } from './views/ProjectDetailsView'
-import { cn } from '@/lib/utils'
 
 export function SiteVisitWizard() {
   const router = useRouter()
@@ -23,14 +22,13 @@ export function SiteVisitWizard() {
     goToActionMenu,
     openView,
     closeView,
-    showEntryDialog,
     showExitDialog,
     closeSiteVisitDialog,
     canGoBack,
-    goBack,
+    getPreSelectedReasonNames,
   } = useWizardState()
   
-  // Show entry dialog when a project is selected
+  // Handle project selection - just go to action menu, no entry dialog
   const handleProjectSelected = useCallback((project: {
     id: string
     name: string
@@ -39,8 +37,7 @@ export function SiteVisitWizard() {
     mainJobSiteId?: string | null
   }) => {
     goToActionMenu(project)
-    showEntryDialog()
-  }, [goToActionMenu, showEntryDialog])
+  }, [goToActionMenu])
   
   // Handle exit from wizard
   const handleExit = useCallback(() => {
@@ -50,20 +47,16 @@ export function SiteVisitWizard() {
   // Handle site visit dialog completion
   const handleSiteVisitComplete = useCallback(() => {
     closeSiteVisitDialog()
-    if (state.siteVisitDialogMode === 'exit') {
-      handleExit()
-    }
-  }, [closeSiteVisitDialog, state.siteVisitDialogMode, handleExit])
+    handleExit()
+  }, [closeSiteVisitDialog, handleExit])
   
   // Handle site visit skip
   const handleSiteVisitSkip = useCallback(() => {
     closeSiteVisitDialog()
-    if (state.siteVisitDialogMode === 'exit') {
-      handleExit()
-    }
-  }, [closeSiteVisitDialog, state.siteVisitDialogMode, handleExit])
+    handleExit()
+  }, [closeSiteVisitDialog, handleExit])
   
-  // Confirm exit with site visit prompt
+  // Confirm exit with site visit prompt (only if a project was selected)
   const handleRequestExit = useCallback(() => {
     if (state.selectedProject) {
       showExitDialog()
@@ -77,6 +70,7 @@ export function SiteVisitWizard() {
     if (state.view) {
       closeView()
     } else if (state.phase === 'action-menu') {
+      // Show exit dialog when leaving action menu (prompts to record visit)
       showExitDialog()
     }
   }, [state.view, state.phase, closeView, showExitDialog])
@@ -193,7 +187,7 @@ export function SiteVisitWizard() {
         ) : null}
       </main>
       
-      {/* Site Visit Recording Dialog */}
+      {/* Site Visit Recording Dialog - only shown on exit */}
       {state.selectedProject && (
         <SiteVisitRecordDialog
           open={state.showSiteVisitDialog}
@@ -201,12 +195,11 @@ export function SiteVisitWizard() {
           projectId={state.selectedProject.id}
           projectName={state.selectedProject.name}
           mainJobSiteId={state.selectedProject.mainJobSiteId}
-          mode={state.siteVisitDialogMode}
           onComplete={handleSiteVisitComplete}
           onSkip={handleSiteVisitSkip}
+          preSelectedReasonNames={getPreSelectedReasonNames()}
         />
       )}
     </div>
   )
 }
-

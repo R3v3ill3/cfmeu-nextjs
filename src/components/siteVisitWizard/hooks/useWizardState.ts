@@ -27,6 +27,8 @@ export interface WizardState {
   selectedProject: SelectedProject | null
   showSiteVisitDialog: boolean
   siteVisitDialogMode: 'entry' | 'exit'
+  // Track which views have been visited for pre-selecting reasons
+  visitedViews: Set<WizardView>
 }
 
 export interface UseWizardStateReturn {
@@ -38,7 +40,6 @@ export interface UseWizardStateReturn {
   openView: (view: WizardView) => void
   closeView: () => void
   // Site visit dialog
-  showEntryDialog: () => void
   showExitDialog: () => void
   closeSiteVisitDialog: () => void
   // Project
@@ -47,6 +48,8 @@ export interface UseWizardStateReturn {
   // Utils
   canGoBack: boolean
   goBack: () => void
+  // Get pre-selected reason names based on visited views
+  getPreSelectedReasonNames: () => string[]
 }
 
 const DEFAULT_STATE: WizardState = {
@@ -54,7 +57,8 @@ const DEFAULT_STATE: WizardState = {
   view: null,
   selectedProject: null,
   showSiteVisitDialog: false,
-  siteVisitDialogMode: 'entry',
+  siteVisitDialogMode: 'exit', // Only exit mode now
+  visitedViews: new Set(),
 }
 
 export function useWizardState(): UseWizardStateReturn {
@@ -79,7 +83,8 @@ export function useWizardState(): UseWizardStateReturn {
         mainJobSiteId: searchParams.get('mainJobSiteId') || null,
       } : null,
       showSiteVisitDialog: false,
-      siteVisitDialogMode: 'entry',
+      siteVisitDialogMode: 'exit',
+      visitedViews: new Set(),
     }
   }, [searchParams])
   
@@ -121,6 +126,7 @@ export function useWizardState(): UseWizardStateReturn {
       phase: 'project-selection' as const,
       view: null as WizardView,
       selectedProject: null,
+      visitedViews: new Set() as Set<WizardView>,
     }
     setState(prev => ({ ...prev, ...newState }))
     updateUrl(newState)
@@ -136,9 +142,15 @@ export function useWizardState(): UseWizardStateReturn {
     updateUrl(newState)
   }, [updateUrl])
   
-  // View navigation
+  // View navigation - track which views are visited
   const openView = useCallback((view: WizardView) => {
-    setState(prev => ({ ...prev, view }))
+    setState(prev => {
+      const newVisitedViews = new Set(prev.visitedViews)
+      if (view) {
+        newVisitedViews.add(view)
+      }
+      return { ...prev, view, visitedViews: newVisitedViews }
+    })
     updateUrl({ view })
   }, [updateUrl])
   
@@ -147,15 +159,7 @@ export function useWizardState(): UseWizardStateReturn {
     updateUrl({ view: null })
   }, [updateUrl])
   
-  // Site visit dialog
-  const showEntryDialog = useCallback(() => {
-    setState(prev => ({ 
-      ...prev, 
-      showSiteVisitDialog: true, 
-      siteVisitDialogMode: 'entry' 
-    }))
-  }, [])
-  
+  // Site visit dialog - only exit mode now
   const showExitDialog = useCallback(() => {
     setState(prev => ({ 
       ...prev, 
@@ -193,19 +197,38 @@ export function useWizardState(): UseWizardStateReturn {
     }
   }, [state.view, state.phase, closeView, showExitDialog])
   
+  // Get pre-selected reason names based on visited views
+  const getPreSelectedReasonNames = useCallback((): string[] => {
+    const reasonNames: string[] = []
+    
+    // If visited mapping, could add a mapping-specific reason here if one exists
+    // Currently no specific mapping reason in the database
+    
+    // If visited ratings/compliance, pre-select "compliance_audit"
+    if (state.visitedViews.has('ratings')) {
+      reasonNames.push('compliance_audit')
+    }
+    
+    // If visited any views, add general_visit as a default
+    if (state.visitedViews.size > 0 && reasonNames.length === 0) {
+      reasonNames.push('general_visit')
+    }
+    
+    return reasonNames
+  }, [state.visitedViews])
+  
   return {
     state,
     goToProjectSelection,
     goToActionMenu,
     openView,
     closeView,
-    showEntryDialog,
     showExitDialog,
     closeSiteVisitDialog,
     selectProject,
     clearProject,
     canGoBack,
     goBack,
+    getPreSelectedReasonNames,
   }
 }
-
