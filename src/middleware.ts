@@ -224,7 +224,7 @@ function buildCSP(nonce: string): string {
 export const config = {
   matcher: [
     // apply on all app routes except static assets and api auth callback
-    '/((?!_next/|.*\.(?:css|js|map|png|jpg|jpeg|gif|svg|ico|woff2?)$|api/).*)',
+    '/((?!_next/|.*\.(?:css|js|map|png|jpg|jpeg|gif|svg|ico|woff2?|mp4|webm|mov|m4v|mp3|pdf)$|api/).*)',
   ],
 }
 

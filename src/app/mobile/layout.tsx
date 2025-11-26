@@ -8,17 +8,10 @@ import { GoogleMapsProvider } from '@/providers/GoogleMapsProvider'
 import { AppRole } from '@/constants/roles'
 import { ReactNode } from 'react'
 import { randomUUID } from 'crypto'
-import * as Sentry from '@sentry/nextjs'
 
 function logMobileLayout(message: string, data?: Record<string, unknown>) {
   const payload = { ...data, timestamp: new Date().toISOString() }
   console.log('[MobileLayout]', message, payload)
-  Sentry.addBreadcrumb({
-    category: 'mobile-layout',
-    message,
-    data: payload,
-    level: 'info',
-  })
 }
 
 async function getUserRole(userId: string, context?: { requestId: string; path?: string }): Promise<AppRole | null> {
@@ -28,10 +21,6 @@ async function getUserRole(userId: string, context?: { requestId: string; path?:
   const duration = Date.now() - start
 
   if (error) {
-    Sentry.captureException(error, {
-      tags: { component: 'MobileLayout', requestId: context?.requestId },
-      extra: { userId, path: context?.path, duration },
-    })
     return null
   }
 
@@ -54,15 +43,6 @@ export default async function MobileLayout({ children }: { children: ReactNode }
   const hdrs = await headers()
   const requestId = hdrs.get('x-request-id') ?? randomUUID()
   const currentPath = hdrs.get('x-pathname') || ''
-
-  try {
-    Sentry.setTag?.('mobileLayout.requestId', requestId)
-    Sentry.setContext?.('mobileLayout', {
-      path: currentPath || '/',
-    })
-  } catch {
-    // Ignore missing Sentry helpers on server-only bundles
-  }
 
   logMobileLayout('Rendering mobile layout', { requestId, path: currentPath || '/' })
 

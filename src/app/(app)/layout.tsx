@@ -12,7 +12,6 @@ import { GoogleMapsProvider } from '@/providers/GoogleMapsProvider'
 import { AppRole } from '@/constants/roles'
 import { ReactNode } from 'react'
 import { randomUUID } from 'crypto'
-import * as Sentry from '@sentry/nextjs'
 
 interface UserProfile {
   id: string
@@ -38,10 +37,6 @@ async function getUserProfile(
     if (error) {
       console.error('[AppLayout] Error fetching user profile:', 
         `userId=${userId}, error=${error.message}, code=${error.code}, duration=${duration}ms, requestId=${context?.requestId}`)
-      Sentry.captureException(error, {
-        tags: { component: 'AppLayout', requestId: context?.requestId },
-        extra: { userId, duration, path: context?.path },
-      })
       return null
     }
     
@@ -54,12 +49,6 @@ async function getUserProfile(
         path: context?.path,
       }
       console.warn('[AppLayout] Slow profile fetch:', payload)
-      Sentry.addBreadcrumb({
-        category: 'app-layout',
-        level: 'warning',
-        message: 'Slow profile fetch',
-        data: payload,
-      })
     }
     
     return data as UserProfile | null
@@ -67,10 +56,6 @@ async function getUserProfile(
     const duration = Date.now() - startTime
     console.error('[AppLayout] Exception fetching user profile:',
       `userId=${userId}, error=${err instanceof Error ? err.message : String(err)}, duration=${duration}ms, requestId=${context?.requestId}`)
-    Sentry.captureException(err, {
-      tags: { component: 'AppLayout', requestId: context?.requestId },
-      extra: { userId, duration, path: context?.path },
-    })
     return null
   }
 }
@@ -78,12 +63,6 @@ async function getUserProfile(
 function logAppLayout(message: string, data?: Record<string, unknown>) {
   const payload = { ...data, timestamp: new Date().toISOString() }
   console.log('[AppLayout]', message, payload)
-  Sentry.addBreadcrumb({
-    category: 'app-layout',
-    level: 'info',
-    message,
-    data: payload,
-  })
 }
 
 export const dynamic = 'force-dynamic'
@@ -96,16 +75,6 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const currentPath = hdrs.get('x-pathname') || ''
   const userAgent = hdrs.get('user-agent') || undefined
   const isMobile = isMobileOrTablet(userAgent)
-
-  try {
-    Sentry.setTag?.('appLayout.requestId', requestId)
-    Sentry.setContext?.('appLayout', {
-      path: currentPath || '/',
-      userAgent,
-    })
-  } catch {
-    // Ignore failures if Sentry helpers are unavailable in this runtime
-  }
 
   logAppLayout('Rendering layout for (app) route group', {
     requestId,
