@@ -31,12 +31,58 @@ export default function Providers({ children }: ProvidersProps) {
       return
     }
 
-    const registerServiceWorker = () => {
-      navigator.serviceWorker
-        .register('/sw.js', { scope: '/' })
-        .catch((error) => {
-          console.error('[PWA] Failed to register service worker', error)
+    const registerServiceWorker = async () => {
+      try {
+        const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' })
+        console.log('[PWA] Service worker registered')
+
+        // Check for updates immediately and periodically
+        registration.update()
+        
+        // Check for updates every 5 minutes
+        const updateInterval = setInterval(() => {
+          registration.update()
+        }, 5 * 60 * 1000)
+
+        // Handle service worker updates
+        registration.addEventListener('updatefound', () => {
+          const newWorker = registration.installing
+          if (!newWorker) return
+
+          console.log('[PWA] New service worker found, installing...')
+
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              console.log('[PWA] New service worker installed, activating...')
+              // Skip waiting and claim immediately
+              newWorker.postMessage({ type: 'SKIP_WAITING' })
+            }
+          })
         })
+
+        // Listen for messages from service worker
+        navigator.serviceWorker.addEventListener('message', (event) => {
+          if (event.data?.type === 'SW_UPDATED') {
+            console.log('[PWA] Service worker updated to version:', event.data.version)
+            // Auto-reload to get fresh content with new service worker
+            window.location.reload()
+          }
+        })
+
+        // When a new service worker takes over, reload to ensure fresh state
+        let refreshing = false
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (!refreshing) {
+            refreshing = true
+            console.log('[PWA] Service worker controller changed, reloading...')
+            window.location.reload()
+          }
+        })
+
+        return () => clearInterval(updateInterval)
+      } catch (error) {
+        console.error('[PWA] Failed to register service worker', error)
+      }
     }
 
     if (document.readyState === 'complete') {

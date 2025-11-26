@@ -1,13 +1,13 @@
 // Service Worker for CFMEU Employer Rating System PWA
 // Enhanced with Mobile Performance Optimizations
-// Version 2.0.1 - Fixed routing to settings page
+// Version 2.1.0 - Fixed auth issues with navigation caching
 
-const CACHE_NAME = 'cfmeu-ratings-v2.0.1'
-const STATIC_CACHE = 'cfmeu-static-v2.0.1'
-const API_CACHE = 'cfmeu-api-v2.0.1'
-const DYNAMIC_CACHE = 'cfmeu-dynamic-v2.0.1'
-const MOBILE_CACHE = 'cfmeu-mobile-v2.0.1'
-const CRITICAL_DATA_CACHE = 'cfmeu-critical-v2.0.1'
+const CACHE_NAME = 'cfmeu-ratings-v2.1.0'
+const STATIC_CACHE = 'cfmeu-static-v2.1.0'
+const API_CACHE = 'cfmeu-api-v2.1.0'
+const DYNAMIC_CACHE = 'cfmeu-dynamic-v2.1.0'
+const MOBILE_CACHE = 'cfmeu-mobile-v2.1.0'
+const CRITICAL_DATA_CACHE = 'cfmeu-critical-v2.1.0'
 
 // Critical assets to cache immediately
 const STATIC_ASSETS = [
@@ -60,7 +60,7 @@ const MOBILE_ASSETS = [
 
 // Install event - cache static assets and critical mobile data
 self.addEventListener('install', (event) => {
-  console.log('[SW] Installing service worker v2.0.0')
+  console.log('[SW] Installing service worker v2.1.0')
 
   event.waitUntil(
     Promise.all([
@@ -93,18 +93,18 @@ self.addEventListener('install', (event) => {
 
 // Activate event - clean up old caches
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activating service worker v2.0.1')
+  console.log('[SW] Activating service worker v2.1.0')
+
+  // List of current cache names to keep
+  const currentCaches = [STATIC_CACHE, API_CACHE, DYNAMIC_CACHE, MOBILE_CACHE, CRITICAL_DATA_CACHE]
 
   event.waitUntil(
     caches.keys()
       .then((cacheNames) => {
         return Promise.all(
           cacheNames.map((cacheName) => {
-            if (cacheName !== STATIC_CACHE &&
-                cacheName !== API_CACHE &&
-                cacheName !== DYNAMIC_CACHE &&
-                cacheName !== MOBILE_CACHE &&
-                cacheName !== CRITICAL_DATA_CACHE) {
+            // Delete ANY cache that isn't in our current list
+            if (!currentCaches.includes(cacheName)) {
               console.log('[SW] Deleting old cache:', cacheName)
               return caches.delete(cacheName)
             }
@@ -112,8 +112,21 @@ self.addEventListener('activate', (event) => {
         )
       })
       .then(() => {
-        console.log('[SW] Mobile-optimized service worker activated')
+        console.log('[SW] Service worker v2.1.0 activated - claiming clients')
+        // Claim clients immediately so the new SW takes control
         return self.clients.claim()
+      })
+      .then(() => {
+        // Notify all clients that they should refresh for the best experience
+        return self.clients.matchAll().then(clients => {
+          clients.forEach(client => {
+            client.postMessage({
+              type: 'SW_UPDATED',
+              version: '2.1.0',
+              message: 'Service worker updated. Please refresh for best experience.'
+            })
+          })
+        })
       })
   )
 })
@@ -206,6 +219,55 @@ async function staleWhileRevalidate(request) {
 
   // Otherwise wait for network
   return fetchPromise
+}
+
+// Network-first strategy for navigation requests (HTML pages)
+// This ensures auth state is always correct - critical for PWA
+async function networkFirstForNavigation(request) {
+  try {
+    console.log('[SW] Network-first navigation:', request.url)
+    const networkResponse = await fetch(request)
+    
+    // Don't cache HTML navigation responses - they're auth-dependent
+    // The browser will re-request on each navigation
+    return networkResponse
+  } catch (error) {
+    console.log('[SW] Navigation network failed, trying cache:', request.url)
+    
+    // Try to find any cached version as fallback for offline
+    const cache = await caches.open(DYNAMIC_CACHE)
+    const cachedResponse = await cache.match(request)
+    
+    if (cachedResponse) {
+      return cachedResponse
+    }
+    
+    // Return offline page
+    return new Response(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>CFMEU - Offline</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                 padding: 20px; text-align: center; background: #f5f5f5; }
+          .message { color: #666; margin: 20px 0; }
+          .retry-btn { background: #2563eb; color: white; border: none;
+                       padding: 12px 24px; border-radius: 8px; cursor: pointer; }
+        </style>
+      </head>
+      <body>
+        <h2>You're offline</h2>
+        <p class="message">Please check your internet connection and try again.</p>
+        <button class="retry-btn" onclick="window.location.reload()">Retry</button>
+      </body>
+      </html>
+    `, {
+      status: 503,
+      headers: { 'Content-Type': 'text/html' }
+    })
+  }
 }
 
 // Background sync for offline actions
@@ -414,10 +476,11 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // Mobile routes - cache first for offline navigation
+  // Mobile routes - NETWORK FIRST to ensure auth state is correct
+  // Only fallback to cache if offline
   if (url.pathname.startsWith('/mobile/') ||
       url.pathname.includes('/mobile/')) {
-    event.respondWith(cacheFirstForMobile(request))
+    event.respondWith(networkFirstForNavigation(request))
     return
   }
 
@@ -436,6 +499,13 @@ self.addEventListener('fetch', (event) => {
       url.pathname.includes('.svg') ||
       url.pathname.includes('.webp')) {
     event.respondWith(cacheFirst(request))
+    return
+  }
+
+  // HTML navigation requests - always network first to ensure correct auth state
+  if (request.headers.get('accept')?.includes('text/html') ||
+      request.mode === 'navigate') {
+    event.respondWith(networkFirstForNavigation(request))
     return
   }
 
