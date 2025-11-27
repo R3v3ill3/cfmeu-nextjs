@@ -8,3 +8,5 @@ onlyBuiltDependencies:
   - "sharp"
   - "unrs-resolver"
   - "@sparticuz/chromium"
+  - "@sentry/cli"
+  - "core-js"

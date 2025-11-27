@@ -262,8 +262,33 @@ Remember: Only answer based on the documentation above. If you're not sure, say 
 
   } catch (error) {
     console.error('Help chat error:', error)
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace')
+
+    // Check for specific error types
+    if (error instanceof Error) {
+      if (error.message.includes('ANTHROPIC_API_KEY')) {
+        return NextResponse.json(
+          {
+            error: 'AI service configuration error',
+            details: 'API key not configured'
+          },
+          { status: 500 }
+        )
+      }
+
+      if (error.message.includes('timeout')) {
+        return NextResponse.json(
+          {
+            error: 'Request timeout',
+            details: 'The AI service took too long to respond'
+          },
+          { status: 408 }
+        )
+      }
+    }
+
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to process help request',
         details: error instanceof Error ? error.message : 'Unknown error'
       },

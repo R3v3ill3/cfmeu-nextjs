@@ -145,13 +145,16 @@ export function AiHelpDialog({ open, onOpenChange }: AiHelpDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl h-[85vh] flex flex-col p-0">
+      <DialogContent
+        className="max-w-3xl h-[85vh] flex flex-col p-0"
+        aria-describedby="ai-help-description"
+      >
         <DialogHeader className="px-6 pt-6 pb-4 border-b">
           <DialogTitle className="flex items-center gap-2 text-xl">
             <MessageSquare className="w-5 h-5 text-primary" />
             Platform Help Assistant
           </DialogTitle>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p id="ai-help-description" className="text-sm text-muted-foreground mt-1">
             Powered by Claude AI • Ask me anything about using the platform
           </p>
         </DialogHeader>
