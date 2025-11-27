@@ -1,11 +1,13 @@
 [build]
-# Use Railpack with pnpm (matches root project)
-# Explicitly install pnpm and use it for build
+# Use Railpack with pnpm for dependency installation (matches root project)
+# pnpm is only needed during build, not at runtime
 builder = "RAILPACK"
 command = "npm install -g pnpm && pnpm install && pnpm run build"
 
 [deploy]
-startCommand = "pnpm start"
+# Use npm start (which runs "node dist/index.js" from package.json)
+# npm is available in Railway's runtime, pnpm is not needed since code is already compiled
+startCommand = "npm start"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
