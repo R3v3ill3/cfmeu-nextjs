@@ -207,13 +207,13 @@ Remember: Only answer based on the documentation above. If you're not sure, say 
     // 11. Call Claude API with timeout
     const claudeResponse = await Promise.race([
       anthropic.messages.create({
-        model: 'claude-3-5-sonnet-20241022',
+        model: "claude-sonnet-4-5-20250929",
         max_tokens: 800, // Reduced from 1024 for faster responses
         temperature: 0.1, // Low temperature for factual, consistent responses
         system: systemPrompt,
         messages: messages,
       }),
-      new Promise((_, reject) => 
+      new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Claude API timeout after 30s')), 30000)
       )
     ]) as Anthropic.Message
