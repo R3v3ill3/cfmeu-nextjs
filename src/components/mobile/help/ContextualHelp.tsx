@@ -56,7 +56,118 @@ interface ContextualHelpProps {
   className?: string
 }
 
+// Enhanced help topics with new features integration
 const HELP_TOPICS: HelpTopic[] = [
+  {
+    id: 'site-visit-wizard',
+    title: 'Site Visit Wizard',
+    description: 'Complete comprehensive site assessments efficiently',
+    category: 'workflow',
+    difficulty: 'intermediate',
+    estimatedReadTime: 5,
+    content: (
+      <div className="space-y-4">
+        <p>
+          The Site Visit Wizard combines multiple workflows into one seamless experience, helping you capture comprehensive site information efficiently.
+        </p>
+        <div>
+          <h4 className="font-medium mb-2">Wizard Steps:</h4>
+          <ul className="space-y-1 text-sm text-muted-foreground">
+            <li>• <strong>Project Selection:</strong> Choose site from your patch assignments</li>
+            <li>• <strong>Action Menu:</strong> Select what type of work you're doing</li>
+            <li>• <strong>Site Contacts:</strong> Add/update delegates and key contacts</li>
+            <li>• <strong>Mapping:</strong> Document workforce and employers</li>
+            <li>• <strong>Ratings:</strong> Assess employer using confidence scoring</li>
+            <li>• <strong>Compliance:</strong> Complete traffic light assessment</li>
+          </ul>
+        </div>
+        <div>
+          <h4 className="font-medium mb-2">Pro Tips:</h4>
+          <ul className="space-y-1 text-sm text-muted-foreground">
+            <li>• Use GPS to automatically log site entry/exit times</li>
+            <li>• Take photos before starting detailed assessments</li>
+            <li>• Work can be saved as draft if interrupted</li>
+            <li>• All data syncs when connection is restored</li>
+          </ul>
+        </div>
+      </div>
+    ),
+    prerequisites: ['mobile-project-mapping']
+  },
+  {
+    id: 'ratings-system-v2',
+    title: 'New Rating System with Confidence',
+    description: 'Enhanced employer ratings with confidence scoring and sham contracting detection',
+    category: 'workflow',
+    difficulty: 'intermediate',
+    estimatedReadTime: 7,
+    content: (
+      <div className="space-y-4">
+        <p>
+          The enhanced rating system provides more nuanced assessments through confidence scoring and sham contracting indicators.
+        </p>
+        <div>
+          <h4 className="font-medium mb-2">Confidence Scoring:</h4>
+          <ul className="space-y-1 text-sm text-muted-foreground">
+            <li>• <strong>Very High:</strong> Direct experience, multiple recent interactions</li>
+            <li>• <strong>High:</strong> Regular contact, solid understanding</li>
+            <li>• <strong>Medium:</strong> Some experience, mixed observations</li>
+            <li>• <strong>Low:</strong> Limited information, second-hand reports</li>
+          </ul>
+        </div>
+        <div>
+          <h4 className="font-medium mb-2">Sham Contracting Detection:</h4>
+          <ul className="space-y-1 text-sm text-muted-foreground">
+            <li>• Workers required to have ABN and own insurance</li>
+            <li>• Invoice-based payment instead of PAYG wages</li>
+            <li>• No entitlements like sick leave or annual leave</li>
+            <li>• Workers providing their own tools/equipment</li>
+          </ul>
+        </div>
+        <div>
+          <h4 className="font-medium mb-2">Rating Tracks:</h4>
+          <ul className="space-y-1 text-sm text-muted-foreground">
+            <li>• <strong>Project Data:</strong> Based on formal records and reports</li>
+            <li>• <strong>Organiser Expertise:</strong> Based on personal experience</li>
+            <li>• <strong>Worker Feedback:</strong> Based on member reports</li>
+          </ul>
+        </div>
+      </div>
+    )
+  },
+  {
+    id: 'gps-location-features',
+    title: 'GPS & Location Features',
+    description: 'Use location services for project discovery and navigation',
+    category: 'technical',
+    difficulty: 'beginner',
+    estimatedReadTime: 3,
+    content: (
+      <div className="space-y-4">
+        <p>
+          Location services help you find nearby projects and navigate efficiently between sites.
+        </p>
+        <div>
+          <h4 className="font-medium mb-2">Key Features:</h4>
+          <ul className="space-y-1 text-sm text-muted-foreground">
+            <li>• <strong>"Closest to Me":</strong> Shows nearest projects first</li>
+            <li>• <strong>Turn-by-turn Navigation:</strong> Get directions to sites</li>
+            <li>• <strong>Geofencing:</strong> Automatic site visit logging</li>
+            <li>• <strong>Distance-based Filtering:</strong> Find projects within radius</li>
+          </ul>
+        </div>
+        <div>
+          <h4 className="font-medium mb-2">Privacy & Permissions:</h4>
+          <ul className="space-y-1 text-sm text-muted-foreground">
+            <li>• Location is only used while app is active</li>
+            <li>• No tracking of your movements or history</li>
+            <li>• Can deny permission and still use maps manually</li>
+            <li>• Location data is not shared with third parties</li>
+          </ul>
+        </div>
+      </div>
+    )
+  },
   {
     id: 'mobile-project-mapping',
     title: 'Project Mapping',
@@ -130,6 +241,50 @@ const HELP_TOPICS: HelpTopic[] = [
           </ul>
         </div>
       </div>
+    ),
+    prerequisites: ['mobile-project-mapping']
+  },
+  {
+    id: 'delegate-task-management',
+    title: 'Delegate Task Management',
+    description: 'Assign and track tasks for union delegates via webforms',
+    category: 'workflow',
+    difficulty: 'beginner',
+    estimatedReadTime: 4,
+    content: (
+      <div className="space-y-4">
+        <p>
+          Delegate webforms allow you to assign specific tasks to union delegates and track their completion remotely.
+        </p>
+        <div>
+          <h4 className="font-medium mb-2">Creating Tasks:</h4>
+          <ul className="space-y-1 text-sm text-muted-foreground">
+            <li>• Select relevant delegate from site contacts</li>
+            <li>• Provide clear, specific task descriptions</li>
+            <li>• Set appropriate due dates and priorities</li>
+            <li>• Include context about why task matters</li>
+          </ul>
+        </div>
+        <div>
+          <h4 className="font-medium mb-2">Common Delegate Tasks:</h4>
+          <ul className="space-y-1 text-sm text-muted-foreground">
+            <li>• Monitor daily toolbox talks</li>
+            <li>• Check amenity facilities weekly</li>
+            <li>• Document new subcontractors</li>
+            <li>• Report safety incidents immediately</li>
+            <li>• Track workforce changes monthly</li>
+          </ul>
+        </div>
+        <div>
+          <h4 className="font-medium mb-2">Tracking & Follow-up:</h4>
+          <ul className="space-y-1 text-sm text-muted-foreground">
+            <li>• Automatic reminders for overdue tasks</li>
+            <li>• Photo attachments for evidence</li>
+            <li>• Comments and notes for context</li>
+            <li>• Mobile-optimized forms for easy use</li>
+          </ul>
+        </div>
+      </div>
     )
   },
   {
@@ -151,6 +306,7 @@ const HELP_TOPICS: HelpTopic[] = [
             <li>• Compliance auditing forms</li>
             <li>• Photo capture and storage</li>
             <li>• Access to previously loaded data</li>
+            <li>• Site visit wizard completion</li>
           </ul>
         </div>
         <div>
@@ -159,40 +315,48 @@ const HELP_TOPICS: HelpTopic[] = [
             <li>• Changes are saved locally when offline</li>
             <li>• Data syncs automatically when connection restored</li>
             <li>• You can manually trigger sync when online</li>
+            <li>• Conflicts are flagged for resolution</li>
           </ul>
         </div>
       </div>
     )
   },
   {
-    id: 'taking-photos',
-    title: 'Taking Site Photos',
-    description: 'Best practices for capturing site documentation photos',
-    category: 'workflow',
+    id: 'pwa-installation',
+    title: 'Install as Mobile App',
+    description: 'Add CFMEU Mobile to your home screen for app-like experience',
+    category: 'technical',
     difficulty: 'beginner',
     estimatedReadTime: 2,
     content: (
       <div className="space-y-4">
         <p>
-          Photos are important for documenting site conditions and evidence during audits and mapping.
+          Install this website as a Progressive Web App (PWA) for a native app experience with offline capabilities.
         </p>
         <div>
-          <h4 className="font-medium mb-2">Photo Guidelines:</h4>
-          <ul className="space-y-1 text-sm text-muted-foreground">
-            <li>• Take overview shots of the entire site</li>
-            <li>• Capture safety signage and notices</li>
-            <li>• Document amenities and facilities</li>
-            <li>• Include workers in break areas (with permission)</li>
-            <li>• Note specific issues or concerns</li>
+          <h4 className="font-medium mb-2">Installation Steps:</h4>
+          <ul className="space-y-2 text-sm text-muted-foreground">
+            <li>
+              <strong>iPhone/iPad:</strong><br/>
+              1. Tap Share button (square with arrow)<br/>
+              2. Scroll down and tap "Add to Home Screen"<br/>
+              3. Tap "Add" to confirm
+            </li>
+            <li>
+              <strong>Android:</strong><br/>
+              1. Tap menu button (three dots)<br/>
+              2. Tap "Install app" or "Add to Home screen"<br/>
+              3. Follow the on-screen prompts
+            </li>
           </ul>
         </div>
         <div>
-          <h4 className="font-medium mb-2">Photo Quality Tips:</h4>
+          <h4 className="font-medium mb-2">Benefits:</h4>
           <ul className="space-y-1 text-sm text-muted-foreground">
-            <li>• Ensure good lighting and clear focus</li>
-            <li>• Include context and scale when possible</li>
-            <li>• Add descriptive captions</li>
-            <li>• Take multiple angles if needed</li>
+            <li>• Full-screen app experience</li>
+            <li>• Works without internet connection</li>
+            <li>• Faster loading and smoother performance</li>
+            <li>• No app store required</li>
           </ul>
         </div>
       </div>
