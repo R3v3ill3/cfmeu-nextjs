@@ -164,7 +164,7 @@ function detectRouteMatches(text: string): string[] {
 }
 
 function extractSections(markdown: string, document: HelpDocument): HelpSection[] {
-  const lines = markdown.split(/\r?\n')
+  const lines = markdown.split(/\r?\n/)
   const sections: HelpSection[] = []
   const stack: HelpSection[] = []
   let currentSection: HelpSection | null = null

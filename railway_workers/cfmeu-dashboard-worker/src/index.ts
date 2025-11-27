@@ -1,3 +1,9 @@
+// Initialize Sentry FIRST before importing Express
+// This allows Sentry to properly instrument Express middleware
+import { initMonitoring, setupSentryErrorHandler, captureError, flushEvents } from './monitoring'
+initMonitoring()
+
+// Now import Express and other dependencies
 import express from 'express'
 import pino from 'pino'
 import { config } from './config'
@@ -5,10 +11,6 @@ import { getServiceRoleClient, getUserClientFromToken, verifyJWT } from './supab
 import { scheduleMaterializedViewRefreshes, refreshPatchProjectMappingViewInBackground, warmOrganizingMetricsCache, scheduleWeeklyDashboardSnapshots } from './refresh'
 import { cache, makeCacheKey } from './cache'
 import crypto from 'crypto'
-import { initMonitoring, setupSentryErrorHandler, captureError, flushEvents } from './monitoring'
-
-// Initialize Sentry monitoring
-initMonitoring()
 
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' })
 
