@@ -223,26 +223,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         applyAuthState(newSession ?? null, { source: event.toLowerCase() });
         setLoading(false);
 
-        // Invalidate auth-dependent caches on auth state changes
-        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
+        // Invalidate auth-dependent caches ONLY on actual sign in/out events
+        // TOKEN_REFRESHED should NOT invalidate caches - it's just a token refresh, user is still the same
+        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
           logAuthEvent("Invalidating auth-dependent caches", { reason: event });
           queryClient.invalidateQueries({ queryKey: ['user-role'] });
           queryClient.invalidateQueries({ queryKey: ['accessible-patches'] });
           queryClient.invalidateQueries({ queryKey: ['my-role'] });
-          queryClient.invalidateQueries({ predicate: (query) =>
-            query.queryKey.some(key => typeof key === 'string' &&
-              (key.includes('user') || key.includes('auth') || key.includes('role') || key.includes('permission')))
-          });
+          // Be more targeted - only invalidate queries that specifically need fresh auth
+          // Don't use broad predicates that might clear profile/project data
         }
 
         if (!newSession?.user && event !== 'SIGNED_OUT') {
-          logAuthEvent('Session lost unexpectedly', { event, timestamp }, 'warning');
-          
-          // If we had a session and it's now gone (not from explicit sign out), try recovery
-          if (hadSessionRef.current && !recoveryAttemptedRef.current) {
-            const recovered = await attemptSessionRecovery();
-            if (recovered && isSubscribedRef.current) {
-              applyAuthState(recovered, { source: 'recovery' });
+          // Only log/attempt recovery if we actually had a session before
+          // Don't treat TOKEN_REFRESHED without session as "lost" - it might just be a timing issue
+          if (hadSessionRef.current) {
+            logAuthEvent('Session lost unexpectedly', { 
+              event, 
+              timestamp,
+              previousUserId: sessionRef.current?.user?.id ?? null,
+            }, 'warning');
+            
+            // Try recovery if we haven't already
+            if (!recoveryAttemptedRef.current) {
+              const recovered = await attemptSessionRecovery();
+              if (recovered && isSubscribedRef.current) {
+                applyAuthState(recovered, { source: 'recovery' });
+              }
             }
           }
         }
