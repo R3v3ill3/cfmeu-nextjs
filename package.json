@@ -42,7 +42,7 @@
     "test:mobile:clean": "node scripts/mobile-test-runner.js clean"
   },
   "engines": {
-    "node": ">=18.18"
+    "node": "22.x"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.65.0",

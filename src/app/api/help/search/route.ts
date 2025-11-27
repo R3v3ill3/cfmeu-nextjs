@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { searchGuide, getDocumentsByType } from '@/lib/helpGuide'
 
+export const dynamic = 'force-dynamic'
+
 const MAX_RESULTS = 10
 
 export async function GET(req: NextRequest) {
