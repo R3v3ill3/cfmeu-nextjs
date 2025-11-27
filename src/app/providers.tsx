@@ -7,10 +7,17 @@ import type { ReactNode } from 'react'
 import { PostHogProvider } from '@/providers/PostHogProvider'
 import { AuthProvider } from '@/hooks/useAuth'
 import * as Sentry from '@sentry/nextjs'
+import { EmployerDetailModal } from '@/components/employers/EmployerDetailModal'
 
 type ProvidersProps = {
   children: ReactNode
 }
+
+const SHOULD_EXPOSE_QUERY_DEBUG =
+  process.env.NEXT_PUBLIC_ENABLE_QUERY_DEBUG === 'true' || process.env.NODE_ENV !== 'production'
+
+const SHOULD_ENABLE_E2E_HELPERS =
+  process.env.NEXT_PUBLIC_ENABLE_E2E_HELPERS === 'true' || process.env.NODE_ENV !== 'production'
 
 export default function Providers({ children }: ProvidersProps) {
   const [queryClient] = useState(() => new QueryClient({
@@ -26,6 +33,42 @@ export default function Providers({ children }: ProvidersProps) {
       },
     },
   }))
+
+  useEffect(() => {
+    if (!SHOULD_EXPOSE_QUERY_DEBUG || typeof window === 'undefined') {
+      return
+    }
+
+    const globalWindow = window as typeof window & {
+      __REACT_QUERY_CLIENT__?: QueryClient
+      __REACT_QUERY_DEBUG_LOG__?: Array<Record<string, unknown>>
+    }
+
+    globalWindow.__REACT_QUERY_CLIENT__ = queryClient
+    if (!Array.isArray(globalWindow.__REACT_QUERY_DEBUG_LOG__)) {
+      globalWindow.__REACT_QUERY_DEBUG_LOG__ = []
+    }
+
+    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
+      const entry = {
+        type: event.type,
+        queryHash: event.query?.queryHash,
+        queryKey: event.query?.queryKey,
+        timestamp: new Date().toISOString(),
+      }
+      globalWindow.__REACT_QUERY_DEBUG_LOG__!.push(entry)
+      if (globalWindow.__REACT_QUERY_DEBUG_LOG__!.length > 500) {
+        globalWindow.__REACT_QUERY_DEBUG_LOG__!.shift()
+      }
+    })
+
+    return () => {
+      unsubscribe()
+      if (globalWindow.__REACT_QUERY_CLIENT__ === queryClient) {
+        delete globalWindow.__REACT_QUERY_CLIENT__
+      }
+    }
+  }, [queryClient])
 
   const logPwaEvent = useCallback((message: string, data?: Record<string, unknown>) => {
     const payload = { ...data, timestamp: new Date().toISOString() }
@@ -149,11 +192,69 @@ export default function Providers({ children }: ProvidersProps) {
         <Suspense fallback={null}>
           <PostHogProvider>
             {children}
+            {SHOULD_ENABLE_E2E_HELPERS ? <DevTestHarness /> : null}
             <Toaster richColors position="top-right" />
           </PostHogProvider>
         </Suspense>
       </AuthProvider>
     </QueryClientProvider>
+  )
+}
+
+type EmployerDetailModalTab = "overview" | "eba" | "sites" | "workers" | "categories" | "aliases" | "ratings"
+
+const TEST_MODAL_FALLBACK_ID = "00000000-0000-0000-0000-000000000000"
+const TEST_MODAL_DEFAULT_TAB: EmployerDetailModalTab = "overview"
+
+function DevTestHarness() {
+  const [modalState, setModalState] = useState<{
+    open: boolean
+    employerId: string | null
+    initialTab: EmployerDetailModalTab
+  }>({
+    open: false,
+    employerId: null,
+    initialTab: TEST_MODAL_DEFAULT_TAB,
+  })
+
+  useEffect(() => {
+    if (!SHOULD_ENABLE_E2E_HELPERS || typeof window === 'undefined') {
+      return
+    }
+
+    const handleOpen = (event: Event) => {
+      const detail = (event as CustomEvent<{ employerId?: string | null; initialTab?: EmployerDetailModalTab }>).detail || {}
+      setModalState({
+        open: true,
+        employerId: detail.employerId ?? TEST_MODAL_FALLBACK_ID,
+        initialTab: detail.initialTab ?? TEST_MODAL_DEFAULT_TAB,
+      })
+    }
+
+    const handleClose = () => {
+      setModalState((prev) => ({ ...prev, open: false }))
+    }
+
+    window.addEventListener('cfmeu:test-open-employer-modal', handleOpen as EventListener)
+    window.addEventListener('cfmeu:test-close-employer-modal', handleClose as EventListener)
+
+    return () => {
+      window.removeEventListener('cfmeu:test-open-employer-modal', handleOpen as EventListener)
+      window.removeEventListener('cfmeu:test-close-employer-modal', handleClose as EventListener)
+    }
+  }, [])
+
+  if (!modalState.open) {
+    return null
+  }
+
+  return (
+    <EmployerDetailModal
+      employerId={modalState.employerId}
+      isOpen={modalState.open}
+      onClose={() => setModalState((prev) => ({ ...prev, open: false }))}
+      initialTab={modalState.initialTab}
+    />
   )
 }
 

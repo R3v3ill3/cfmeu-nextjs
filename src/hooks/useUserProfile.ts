@@ -1,80 +1,65 @@
-'use client'
+'use client';
+import { useQuery } from "@tanstack/react-query";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { QUERY_TIMEOUTS, withTimeout } from "@/lib/withTimeout";
+import { useAuth } from "./useAuth";
 
-import { useEffect, useState } from 'react'
-import { getSupabaseBrowserClient } from '@/lib/supabase/client'
-import { AppRole } from '@/constants/roles'
-
-export interface UserProfile {
-  id: string
-  role: AppRole | null
-  full_name?: string | null
-  email?: string | null
+export interface UserProfileRecord {
+  id: string;
+  role: string | null;
+  full_name: string | null;
+  email: string | null;
+  apple_email: string | null;
+  phone: string | null;
 }
 
-interface UseUserProfileResult {
-  profile: UserProfile | null
-  loading: boolean
-  error: Error | null
-}
+export const CURRENT_USER_PROFILE_QUERY_KEY = ["current-user-profile"] as const;
 
-export function useUserProfile(): UseUserProfileResult {
-  const [profile, setProfile] = useState<UserProfile | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<Error | null>(null)
+export function useUserProfile(staleTime = 5 * 60 * 1000) {
+  const { session } = useAuth();
+  const supabase = getSupabaseBrowserClient();
+  const userId = session?.user?.id;
 
-  useEffect(() => {
-    let cancelled = false
+  const query = useQuery<UserProfileRecord | null>({
+    queryKey: [...CURRENT_USER_PROFILE_QUERY_KEY, userId],
+    enabled: !!userId,
+    staleTime,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      if (!userId) return null;
 
-    async function loadProfile() {
-      try {
-        setLoading(true)
-        const supabase = getSupabaseBrowserClient()
-        const {
-          data: { user },
-          error: authError
-        } = await supabase.auth.getUser()
-        if (authError) throw authError
-        if (!user) {
-          if (!cancelled) setProfile(null)
-          return
-        }
+      const abortController = typeof AbortController !== "undefined" ? new AbortController() : undefined;
+      const builder = supabase
+        .from("profiles")
+        .select("id, full_name, email, apple_email, phone, role")
+        .eq("id", userId)
+        .maybeSingle();
 
-        const { data, error: profileError } = await supabase
-          .from('profiles')
-          .select('id, role, full_name, email')
-          .eq('id', user.id)
-          .maybeSingle()
-        if (profileError) throw profileError
-
-        if (!cancelled) {
-          setProfile(
-            data
-              ? {
-                  id: data.id,
-                  role: (data.role as AppRole) ?? null,
-                  full_name: data.full_name,
-                  email: data.email
-                }
-              : null
-          )
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err as Error)
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
+      if (abortController && typeof (builder as any).abortSignal === "function") {
+        (builder as any).abortSignal(abortController.signal);
       }
-    }
 
-    loadProfile()
+      const response = await withTimeout(
+        builder,
+        QUERY_TIMEOUTS.SIMPLE,
+        "fetch current user profile",
+        abortController ? { abortController } : undefined
+      );
 
-    return () => {
-      cancelled = true
-    }
-  }, [])
+      if ("error" in response && response.error) {
+        throw response.error;
+      }
 
-  return { profile, loading, error }
+      return (response as { data: UserProfileRecord | null }).data ?? null;
+    },
+  });
+
+  return {
+    profile: query.data ?? null,
+    role: query.data?.role ?? null,
+    isLoading: query.isLoading,
+    isFetching: query.isFetching,
+    error: query.error,
+    refetch: query.refetch,
+  };
 }

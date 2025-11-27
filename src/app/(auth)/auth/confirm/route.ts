@@ -106,11 +106,16 @@ export async function GET(request: NextRequest) {
         // Sign out the user and delete the newly created profile/auth user if it exists
         const currentUser = sessionData?.user
         if (currentUser?.id) {
-          // Delete the profile that was auto-created by the trigger
-          await supabase.from('profiles').delete().eq('id', currentUser.id).catch(console.error)
-          // Also delete the auth.users record to prevent any access
-          // Note: This requires service role, but we'll try with admin client
-          // The profile deletion should be enough due to RLS, but we sign out anyway
+          // Delete the unauthorized profile using the SECURITY DEFINER function
+          // This is needed because there's no DELETE policy on profiles
+          const { data: deleted, error: cleanupError } = await supabase.rpc('cleanup_unauthorized_oauth_profile', {
+            p_user_id: currentUser.id
+          })
+          if (cleanupError) {
+            console.error('[Auth Confirm] Failed to cleanup unauthorized profile:', cleanupError)
+          } else if (deleted) {
+            console.log('[Auth Confirm] Cleaned up unauthorized OAuth profile for user:', currentUser.id)
+          }
         }
         // Sign out BEFORE redirecting to ensure session is cleared
         await supabase.auth.signOut()
@@ -120,14 +125,16 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(redirectTo)
       }
 
-      // Check if this email matches an existing profile with a different user ID
+      // Check if this email matches an existing AUTHORIZED profile with a different user ID
       // This happens when OAuth creates a new account but the email already exists
+      // We only match profiles that have an explicitly assigned role (not NULL)
       const normalizedEmail = userEmail.toLowerCase().trim()
       const { data: existingProfile, error: profileError } = await supabase
         .from('profiles')
         .select('id, email, role, is_active')
         .or(`email.ilike.${normalizedEmail},apple_email.ilike.${normalizedEmail}`)
         .eq('is_active', true)
+        .not('role', 'is', null)
         .maybeSingle()
 
       if (profileError) {
@@ -147,9 +154,14 @@ export async function GET(request: NextRequest) {
         // Sign out the new OAuth user
         await supabase.auth.signOut()
         
-        // Try to delete the profile that was auto-created by the trigger
+        // Try to delete the profile that was auto-created by the trigger using the cleanup function
         if (currentUserId) {
-          await supabase.from('profiles').delete().eq('id', currentUserId).catch(console.error)
+          const { error: cleanupError } = await supabase.rpc('cleanup_unauthorized_oauth_profile', {
+            p_user_id: currentUserId
+          })
+          if (cleanupError) {
+            console.error('[Auth Confirm] Failed to cleanup duplicate profile:', cleanupError)
+          }
         }
         
         const redirectTo = new URL('/auth', request.url)

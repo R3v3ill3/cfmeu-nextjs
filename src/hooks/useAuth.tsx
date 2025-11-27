@@ -229,7 +229,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           logAuthEvent("Invalidating auth-dependent caches", { reason: event });
           queryClient.invalidateQueries({ queryKey: ['user-role'] });
           queryClient.invalidateQueries({ queryKey: ['accessible-patches'] });
-          queryClient.invalidateQueries({ queryKey: ['my-role'] });
+          queryClient.invalidateQueries({ queryKey: ['current-user-profile'] });
           // Be more targeted - only invalidate queries that specifically need fresh auth
           // Don't use broad predicates that might clear profile/project data
         }

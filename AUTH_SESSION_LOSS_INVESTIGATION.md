@@ -166,26 +166,106 @@ job_sites!fk_job_sites_project(...)
 
 ---
 
+### Session 3: 2025-11-27 (Ratings View Fix)
+
+#### Problem Identified
+
+**Specific Symptom**: Auth/profile loss when clicking "Add Rating" in Site Visit Wizard → Ratings view.
+
+**Root Cause**: `RatingsView.tsx` was using `window.location.href` for navigation, which:
+
+1. **Destroys the entire React tree** - All client-side state including AuthProvider is lost
+2. **Crosses route groups** - Navigates from `(app)/site-visit-wizard` to `/mobile/projects/...` (different layout trees)
+3. **Forces full re-initialization** - Both layouts perform separate server auth checks, and client needs to rebuild all state from scratch
+
+**Location**: `src/components/siteVisitWizard/views/RatingsView.tsx` line 136
+
+```typescript
+// PROBLEMATIC CODE - caused full page refresh
+const handleAddRating = () => {
+  window.location.href = `/mobile/projects/${projectId}/assessments`
+}
+```
+
+#### Why MappingView Works But RatingsView Didn't
+
+**MappingView** (working):
+- Uses `setIsAddMappingOpen(true)` to open a Dialog
+- Renders `MappingSheetEditor` inline within the same React tree
+- No navigation occurs = auth state preserved
+
+**RatingsView** (broken):
+- Used `window.location.href` for full page navigation
+- React tree completely destroyed
+- AuthProvider re-initialized from scratch
+- All React Query cache cleared
+
+#### Fix Applied
+
+Changed `RatingsView.tsx` to use the same Dialog pattern as `MappingView.tsx`:
+
+1. **Created new component**: `src/components/siteVisitWizard/views/InlineAssessmentFlow.tsx`
+   - Self-contained employer selection and assessment flow
+   - Two-step process: select employers → fill assessment form
+   - Stays entirely within the React tree
+   - Properly submits all compliance/assessment data
+
+2. **Updated RatingsView.tsx**:
+```typescript
+// NEW CODE - opens dialog instead of navigating
+const [isAddRatingOpen, setIsAddRatingOpen] = useState(false)
+const handleAddRating = () => setIsAddRatingOpen(true)
+
+// Dialog with embedded flow
+<Dialog open={isAddRatingOpen} onOpenChange={setIsAddRatingOpen}>
+  <DialogContent className="max-w-3xl p-0 overflow-hidden max-h-[90vh]">
+    <DialogHeader className="px-4 pt-4 pb-2 border-b">
+      <DialogTitle>Add Employer Rating</DialogTitle>
+    </DialogHeader>
+    <div className="overflow-y-auto">
+      <InlineAssessmentFlow
+        projectId={projectId}
+        projectName={projectName}
+        onComplete={handleAssessmentComplete}
+        onCancel={() => setIsAddRatingOpen(false)}
+      />
+    </div>
+  </DialogContent>
+</Dialog>
+```
+
+#### Files Modified in Session 3
+
+| File | Change | Status |
+|------|--------|--------|
+| `src/components/siteVisitWizard/views/RatingsView.tsx` | Changed from `window.location.href` to Dialog pattern | **Pending deployment** |
+| `src/components/siteVisitWizard/views/InlineAssessmentFlow.tsx` | New file - embedded assessment flow | **Pending deployment** |
+
+---
+
 ## Current State (2025-11-27)
 
 ### What's Working
 - Server-side auth is consistent (Vercel logs show correct user ID, 200 responses)
 - PWA created from `/auth` page works correctly
 - Middleware properly refreshes sessions when cookies exist but JWT is stale
+- MappingView (uses Dialog pattern) - auth preserved
 
-### What's Still Being Investigated
-- Profile data loss during complex navigation flows
-- The `TOKEN_REFRESHED` fix needs production testing
+### What's Been Fixed (Pending Deployment)
+- RatingsView now uses Dialog pattern instead of `window.location.href`
+- New `InlineAssessmentFlow` component handles employer selection and assessment inline
 
-### Files Modified in Session 2
+### Files Modified - All Sessions
 
 | File | Change | Status |
 |------|--------|--------|
-| `src/hooks/useAuth.tsx` | Removed TOKEN_REFRESHED from cache invalidation | **UNCOMMITTED** |
+| `src/hooks/useAuth.tsx` | Removed TOKEN_REFRESHED from cache invalidation | Committed |
 | `public/sw.js` | v2.2.0 - Only pre-cache static assets | Committed |
 | `src/middleware.ts` | Added session refresh, improved logging | Committed |
 | `src/app/providers.tsx` | Added iOS SecurityError handling for SW | Committed |
 | `src/app/api/projects/quick-list/route.ts` | Fixed PostgREST relationship | Committed |
+| `src/components/siteVisitWizard/views/RatingsView.tsx` | Dialog pattern instead of navigation | **Pending deployment** |
+| `src/components/siteVisitWizard/views/InlineAssessmentFlow.tsx` | New embedded assessment component | **Pending deployment** |
 
 ---
 
@@ -239,6 +319,11 @@ Check Vercel logs for the failing request:
 3. **Check for unexpected onAuthStateChange events**:
    - Add logging: `console.log('[useAuth] Event:', event, 'Session:', !!newSession)`
    - Look for events firing during navigation that shouldn't
+
+4. **Check for `window.location.href` usage** (CRITICAL):
+   - Search codebase: `grep -r "window.location.href" src/components`
+   - Any use in navigation flows will destroy React tree and auth state
+   - Replace with `router.push()` or Dialog pattern (preferred for wizard flows)
 
 ### Step 3: For PWA Issues
 
@@ -295,11 +380,58 @@ Check Vercel logs for the failing request:
 
 ---
 
+---
+
+## Pattern: Dialog vs Navigation for Wizard Flows
+
+### The Problem with Navigation in Wizard Flows
+
+When a wizard/multi-step flow uses navigation (`router.push()` or `window.location.href`) to move between steps:
+
+1. **React tree destruction**: Each navigation destroys the current component tree
+2. **Auth state re-initialization**: AuthProvider must re-fetch session from storage
+3. **Cache invalidation risk**: Navigation can trigger auth events that clear caches
+4. **Cross-route-group issues**: Navigating between `(app)` and `mobile` routes means different layouts, different auth checks
+
+### The Dialog Pattern Solution
+
+Instead of navigation, render the sub-flow in a Dialog/Modal:
+
+```typescript
+// DON'T DO THIS in wizard flows
+const handleAction = () => {
+  window.location.href = '/some/other/page'  // Destroys React tree!
+  // or
+  router.push('/some/other/page')  // Still causes remount
+}
+
+// DO THIS INSTEAD
+const [isOpen, setIsOpen] = useState(false)
+const handleAction = () => setIsOpen(true)
+
+<Dialog open={isOpen} onOpenChange={setIsOpen}>
+  <DialogContent>
+    <EmbeddedFlow onComplete={() => setIsOpen(false)} />
+  </DialogContent>
+</Dialog>
+```
+
+### Components Using Dialog Pattern (Reference)
+- `MappingView.tsx` - Uses `MappingSheetEditor` in Dialog
+- `RatingsView.tsx` - Uses `InlineAssessmentFlow` in Dialog (fixed in Session 3)
+
+---
+
 ## Contact & History
 
 | Date | Status | Key Finding |
 |------|--------|-------------|
 | 2025-11-26 | Initial investigation | Multiple root causes identified |
 | 2025-11-27 | Continued investigation | TOKEN_REFRESHED cache invalidation identified as likely cause |
+| 2025-11-27 | Session 3 | `window.location.href` in RatingsView identified as specific cause; fixed with Dialog pattern |
 
-**Current Status**: Testing `TOKEN_REFRESHED` fix - uncommitted change in `src/hooks/useAuth.tsx`
+**Current Status**: RatingsView Dialog pattern fix pending deployment. To test:
+1. Deploy changes to Vercel
+2. Log in as organiser → Patch → Site Visit Wizard → Ratings → Add Rating
+3. Complete or cancel assessment
+4. Verify auth/profile persists (check Settings page)

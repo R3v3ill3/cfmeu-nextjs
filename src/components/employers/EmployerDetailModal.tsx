@@ -32,6 +32,7 @@ import { getEbaStatusInfo } from "./ebaHelpers";
 import { EmployerWorkersList } from "../workers/EmployerWorkersList";
 import EmployerEditForm from "./EmployerEditForm";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserProfile } from "@/hooks/useUserProfile";
 import Link from "next/link";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { WorkerForm } from "@/components/workers/WorkerForm";
@@ -225,7 +226,8 @@ export const EmployerDetailModal = ({
   const [newAlias, setNewAlias] = useState("");
   const [editingAlias, setEditingAlias] = useState<{id: string, alias: string} | null>(null);
   const queryClient = useQueryClient();
-  const { user, loading: authLoading } = useAuth();
+  const { loading: authLoading } = useAuth();
+  const { role: currentUserRole } = useUserProfile();
   const { toast } = useToast();
   
   const isPendingReview = mode === 'pending_review';
@@ -236,33 +238,7 @@ export const EmployerDetailModal = ({
     }
   }, [initialTab, isOpen, employerId]);
 
-  const { data: myRole } = useQuery({
-    queryKey: ["my-role", user?.id],
-    queryFn: async () => {
-      if (!user?.id) return null;
-      const supabase = getSupabaseBrowserClient();
-      try {
-        const res = await withTimeout<any>(
-          supabase
-            .from("profiles")
-            .select("role")
-            .eq("id", user.id)
-            .maybeSingle(),
-          QUERY_TIMEOUTS.SIMPLE,
-          "fetch my role"
-        );
-        if (res.error) throw res.error;
-        return (res.data?.role as string) ?? null;
-      } catch (err: any) {
-        // Don't reset Supabase client on timeout - it destroys auth state
-        console.warn('[EmployerDetailModal] Role fetch failed:', err?.message || err);
-        throw err;
-      }
-    },
-    enabled: !!user?.id,
-  });
-
-  const canEdit = ["admin", "organiser", "lead_organiser", "delegate"].includes(myRole || "");
+  const canEdit = ["admin", "organiser", "lead_organiser", "delegate"].includes(currentUserRole || "");
 
   const { data: employer, isLoading, error: employerError, refetch: refetchEmployer } = useQuery({
     queryKey: ["employer-detail", employerId],
@@ -633,7 +609,11 @@ export const EmployerDetailModal = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleDialogClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" aria-describedby="employer-dialog-description">
+      <DialogContent
+        data-testid="employer-detail-modal"
+        className="max-w-4xl max-h-[90vh] overflow-y-auto"
+        aria-describedby="employer-dialog-description"
+      >
         <DialogDescription id="employer-dialog-description" className="sr-only">
           View and edit employer details, including company info, EBA, worksites, and workers.
         </DialogDescription>
