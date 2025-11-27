@@ -32,6 +32,8 @@ export function EmployerSearch({
 }: EmployerSearchProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [popoverWidth, setPopoverWidth] = useState<number | undefined>(undefined);
   
   const selectedEmployer = employers.find(emp => emp.id === value);
   
@@ -40,10 +42,19 @@ export function EmployerSearch({
     employer.name.toLowerCase().includes(search.toLowerCase())
   ).slice(0, 100); // Limit to 100 results for performance
 
+  // Measure trigger width when popover opens to maintain consistent width
+  useEffect(() => {
+    if (open && triggerRef.current) {
+      const width = triggerRef.current.offsetWidth;
+      setPopoverWidth(width);
+    }
+  }, [open]);
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
+          ref={triggerRef}
           variant="outline"
           role="combobox"
           aria-expanded={open}
@@ -64,48 +75,57 @@ export function EmployerSearch({
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-full p-0" align="start">
-        <Command>
-          <CommandInput 
-            placeholder="Search employers..." 
-            value={search}
-            onValueChange={setSearch}
-          />
-          <CommandEmpty>No employer found.</CommandEmpty>
-          <CommandGroup className="max-h-64 overflow-y-auto">
+      <PopoverContent 
+        className="p-0" 
+        align="start"
+        style={popoverWidth ? { width: `${popoverWidth}px`, minWidth: '300px', maxWidth: '400px' } : { minWidth: '300px', maxWidth: '400px' }}
+      >
+        <Command className="max-h-[400px] flex flex-col">
+          <div className="sticky top-0 z-10 bg-white">
+            <CommandInput 
+              placeholder="Search employers..." 
+              value={search}
+              onValueChange={setSearch}
+            />
+          </div>
+          <CommandEmpty className="py-6 text-center text-sm text-muted-foreground">
+            No employer found.
+          </CommandEmpty>
+          <CommandGroup className="max-h-[300px] overflow-y-auto flex-1">
             {filteredEmployers.map((employer) => (
               <CommandItem
                 key={employer.id}
                 onSelect={() => {
                   onSelect(employer.id, employer.name);
                   setOpen(false);
+                  setSearch('');
                 }}
                 className="flex items-center justify-between"
               >
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
                   <Check
                     className={cn(
-                      "mr-2 h-4 w-4",
+                      "h-4 w-4 shrink-0",
                       value === employer.id ? "opacity-100" : "opacity-0"
                     )}
                   />
                   <span className="truncate">{employer.name}</span>
                 </div>
                 {employer.enterprise_agreement_status ? (
-                  <Badge variant="default" className="text-xs ml-2">EBA</Badge>
+                  <Badge variant="default" className="text-xs ml-2 shrink-0">EBA</Badge>
                 ) : (
-                  <Badge variant="outline" className="text-xs ml-2">No EBA</Badge>
+                  <Badge variant="outline" className="text-xs ml-2 shrink-0">No EBA</Badge>
                 )}
               </CommandItem>
             ))}
             {search && filteredEmployers.length === 0 && (
-              <div className="p-2 text-sm text-muted-foreground text-center">
+              <div className="p-4 text-sm text-muted-foreground text-center">
                 No employers found matching "{search}"
               </div>
             )}
-            {filteredEmployers.length === 50 && (
+            {filteredEmployers.length === 100 && (
               <div className="p-2 text-xs text-muted-foreground text-center border-t">
-                Showing first 50 results. Type more to narrow search.
+                Showing first 100 results. Type more to narrow search.
               </div>
             )}
           </CommandGroup>
