@@ -1,7 +1,0 @@
-[build]
-command = "pnpm install && pnpm run build"
-
-[deploy]
-startCommand = "pnpm start"
-restartPolicyType = "ON_FAILURE"
-
