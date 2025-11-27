@@ -13,6 +13,8 @@ interface HelpContext {
   role?: string
   section?: string
   projectId?: string
+  isMobile?: boolean
+  documentType?: 'user-guide' | 'workflow-guide' | 'mobile-guide' | 'system-guide'
 }
 
 interface Message {
@@ -25,6 +27,11 @@ interface Source {
   title: string
   excerpt: string
   similarity: number
+  documentTitle?: string
+  documentType?: string
+  examples?: string[]
+  relatedLinks?: Array<{ label: string; url: string }>
+  mobileOnly?: boolean
 }
 
 export async function POST(request: NextRequest) {
@@ -66,51 +73,39 @@ export async function POST(request: NextRequest) {
       .single()
 
     const userRole = context.role || profile?.role || 'viewer'
+const isMobile = context.isMobile || false
 
-    // 4. Generate embedding for the question
-    // Note: Claude doesn't provide embeddings, so we use a simple approach
-    // or integrate with OpenAI just for embeddings
-    const embeddingResponse = await fetch('https://api.openai.com/v1/embeddings', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'text-embedding-3-small',
-        input: message,
-      }),
-    })
+    // 4. Search for relevant documents using enhanced help system
+    const { searchGuide, getSectionsForRoute } = await import('@/lib/helpGuide')
 
-    const embeddingData = await embeddingResponse.json()
-    const questionEmbedding = embeddingData.data[0].embedding
+    // Get route-specific sections first
+    const routeSections = getSectionsForRoute(context.page, userRole, isMobile)
 
-    // 5. Search for relevant documents in Supabase
-    const { data: relevantDocs, error: searchError } = await supabase.rpc(
-      'match_help_documents',
-      {
-        query_embedding: questionEmbedding,
-        match_threshold: 0.65,
-        match_count: 3, // Reduced from 5 to 3 to avoid context overload
-        filter_roles: [userRole, 'all'],
-        filter_page: context.page,
-      }
+    // Then search for additional relevant content
+    const searchResults = searchGuide(message, userRole, isMobile, context.documentType)
+
+    // Combine and deduplicate results
+    const allSections = [...routeSections, ...searchResults]
+    const uniqueSections = allSections.filter((section, index, self) =>
+      index === self.findIndex((s) => s.id === section.id)
+    ).slice(0, 5) // Limit to top 5 most relevant sections
+
+    // 5. Calculate confidence based on result quality
+    const hasRouteMatch = routeSections.length > 0
+    const hasSearchMatch = searchResults.length > 0
+    const hasDirectContentMatch = uniqueSections.some(section =>
+      section.title.toLowerCase().includes(message.toLowerCase()) ||
+      section.keywords.some(keyword => message.toLowerCase().includes(keyword))
     )
 
-    if (searchError) {
-      console.error('Search error:', searchError)
-      throw new Error('Failed to search help documents')
-    }
+    let confidence = 0
+    if (hasDirectContentMatch) confidence = 0.9
+    else if (hasRouteMatch && hasSearchMatch) confidence = 0.8
+    else if (hasRouteMatch || hasSearchMatch) confidence = 0.6
+    else confidence = 0.3
 
-    // 6. Calculate confidence based on similarity scores
-    const avgSimilarity = relevantDocs?.length
-      ? relevantDocs.reduce((sum: number, doc: any) => sum + doc.similarity, 0) / relevantDocs.length
-      : 0
-
-    const confidence = avgSimilarity
-
-    // 7. If confidence too low, return fallback
-    if (confidence < 0.6) {
+    // 6. If confidence too low, return fallback
+    if (confidence < 0.5) {
       const fallbackAnswer = "I don't have enough information to answer that question accurately. Please refer to the user guide at /guide or contact support for assistance."
 
       // Log low-confidence interaction via RPC
@@ -139,28 +134,38 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // 8. Build context from retrieved documents (truncate to avoid overwhelming Claude)
-    const MAX_CONTENT_LENGTH = 1200 // Limit each doc to ~1200 chars
-    const documentContext = relevantDocs
-      .map((doc: any, i: number) => {
+    // 7. Build context from retrieved help sections (enhanced with metadata)
+    const MAX_CONTENT_LENGTH = 1200 // Limit each section to ~1200 chars
+    const documentContext = uniqueSections
+      .map((section, i: number) => {
         // Truncate long content
-        const truncatedContent = doc.content.length > MAX_CONTENT_LENGTH
-          ? doc.content.substring(0, MAX_CONTENT_LENGTH) + '... [truncated for brevity]'
-          : doc.content
-        
-        let docText = `[Document ${i + 1}: ${doc.title}]\n${truncatedContent}`
-        
-        if (doc.steps && Array.isArray(doc.steps)) {
-          // Include steps but limit to first 10
-          const steps = doc.steps.slice(0, 10)
-          docText += `\n\nStep-by-step instructions:\n${steps.map((step: string, idx: number) => `${idx + 1}. ${step}`).join('\n')}`
+        const truncatedContent = section.content.length > MAX_CONTENT_LENGTH
+          ? section.content.substring(0, MAX_CONTENT_LENGTH) + '... [truncated for brevity]'
+          : section.content
+
+        let docText = `[${section.documentTitle || 'Help Guide'} - ${section.title}]\n${truncatedContent}`
+
+        // Include examples if available
+        if (section.examples && section.examples.length > 0) {
+          const examples = section.examples.slice(0, 3) // Limit to 3 examples
+          docText += `\n\nExamples:\n${examples.map((example, idx) => `${idx + 1}. ${example}`).join('\n')}`
         }
-        
+
+        // Include related links if available
+        if (section.relatedLinks && section.relatedLinks.length > 0) {
+          docText += `\n\nRelated Resources:\n${section.relatedLinks.map(link => `- ${link.label}: ${link.url}`).join('\n')}`
+        }
+
+        // Add mobile-specific context if applicable
+        if (isMobile && section.mobileOnly) {
+          docText += `\n\n[Mobil-optimized content for field use]`
+        }
+
         return docText
       })
       .join('\n\n---\n\n')
 
-    // 9. Build system prompt
+    // 8. Build enhanced system prompt with mobile context
     const systemPrompt = `You are a helpful assistant for the CFMEU Organiser Platform.
 
 CRITICAL RULES - YOU MUST FOLLOW THESE EXACTLY:
@@ -171,11 +176,14 @@ CRITICAL RULES - YOU MUST FOLLOW THESE EXACTLY:
 5. Be concise but complete
 6. Cite which document you're referencing when appropriate
 7. If asked about something outside the platform, politely redirect to platform topics
+8. ${isMobile ? 'Prioritize mobile-optimized guidance and field-appropriate instructions' : 'Provide comprehensive desktop guidance'}
 
 Current User Context:
 - Role: ${userRole}
 - Current Page: ${context.page}
 - Feature Area: ${getFeatureName(context.page)}
+- Device: ${isMobile ? 'Mobile (Field Use)' : 'Desktop'}
+- Document Type Focus: ${context.documentType || 'All documents'}
 
 Available Documentation:
 ${documentContext}
@@ -214,16 +222,21 @@ Remember: Only answer based on the documentation above. If you're not sure, say 
       ? claudeResponse.content[0].text 
       : 'Unable to generate response'
 
-    // 12. Build sources
-    const sources: Source[] = relevantDocs.map((doc: any) => ({
-      docId: doc.doc_id,
-      title: doc.title,
-      excerpt: doc.content.substring(0, 200) + (doc.content.length > 200 ? '...' : ''),
-      similarity: doc.similarity,
+    // 11. Build enhanced sources with metadata
+    const sources: Source[] = uniqueSections.map((section) => ({
+      docId: section.id,
+      title: section.title,
+      excerpt: section.content.substring(0, 200) + (section.content.length > 200 ? '...' : ''),
+      similarity: confidence, // Use overall confidence as similarity proxy
+      documentTitle: section.documentTitle,
+      documentType: section.documentId,
+      examples: section.examples?.slice(0, 2),
+      relatedLinks: section.relatedLinks,
+      mobileOnly: section.mobileOnly
     }))
 
-    // 13. Extract suggested actions from documents
-    const suggestedActions = extractSuggestedActions(context, relevantDocs)
+    // 12. Extract suggested actions from help sections
+    const suggestedActions = extractSuggestedActions(context, uniqueSections)
 
     // 14. Log interaction via RPC
     await supabase.rpc('log_help_interaction', {
@@ -282,32 +295,71 @@ function getFeatureName(page: string): string {
   return 'Platform'
 }
 
-// Helper to extract suggested actions from context and docs
-function extractSuggestedActions(context: HelpContext, docs: any[]): Array<{ label: string; path: string }> {
+// Enhanced helper to extract suggested actions from context and help sections
+function extractSuggestedActions(context: HelpContext, sections: any[]): Array<{ label: string; path: string }> {
   const actions: Array<{ label: string; path: string }> = []
 
-  // Add context-aware actions based on page
-  if (context.page === '/projects' && docs.some((d: any) => d.doc_id.includes('mapping'))) {
+  // Add context-aware actions based on page and document content
+  if (context.page.startsWith('/projects') && sections.some((s) => s.title.toLowerCase().includes('mapping'))) {
     actions.push({
-      label: 'View Project Mapping Sheets',
-      path: `/projects/${context.projectId || ''}?tab=mappingsheets`,
+      label: 'View Project Mapping',
+      path: `/projects/${context.projectId || 'current'}/mapping`,
     })
   }
 
-  if (docs.some((d: any) => d.doc_id.includes('delegate-registration'))) {
+  if (context.page.startsWith('/mobile/ratings') && sections.some((s) => s.documentId === 'ratings-system-v2')) {
     actions.push({
-      label: 'Learn About Delegate Registration',
-      path: '/guide#delegate-registration',
+      label: 'Open Ratings Wizard',
+      path: '/mobile/ratings/wizard',
     })
   }
 
-  // Add guide action if no other actions
+  if (context.page.startsWith('/site-visit-wizard') && sections.some((s) => s.title.toLowerCase().includes('workflow'))) {
+    actions.push({
+      label: 'Start Site Visit',
+      path: '/site-visit-wizard',
+    })
+  }
+
+  // Add mobile-specific actions
+  if (context.isMobile) {
+    if (sections.some((s) => s.documentId === 'mobile-app-guide')) {
+      actions.push({
+        label: 'Mobile App Guide',
+        path: '/guide#mobile-app',
+      })
+    }
+  }
+
+  // Add document-specific actions from related links
+  sections.forEach((section) => {
+    if (section.relatedLinks) {
+      section.relatedLinks.forEach((link: { label: string; url: string }) => {
+        if (!actions.some(a => a.label === link.label)) {
+          actions.push({
+            label: link.label,
+            path: link.url,
+          })
+        }
+      })
+    }
+  })
+
+  // Default actions based on role and page
   if (actions.length === 0) {
-    actions.push({
-      label: 'View User Guide',
-      path: '/guide',
-    })
+    if (context.page?.includes('mobile')) {
+      actions.push({
+        label: 'Mobile Dashboard',
+        path: '/mobile',
+      })
+    } else {
+      actions.push({
+        label: 'View User Guide',
+        path: '/guide',
+      })
+    }
   }
 
-  return actions
+  // Limit to maximum 4 actions
+  return actions.slice(0, 4)
 }

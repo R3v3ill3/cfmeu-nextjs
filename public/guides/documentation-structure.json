@@ -1,0 +1,297 @@
+{
+  "version": "2.0.0",
+  "lastUpdated": "2024-11-27",
+  "totalDocuments": 285,
+  "categories": [
+    {
+      "id": "user-guide",
+      "title": "Platform User Guide",
+      "description": "Comprehensive guide for using the CFMEU Organiser Platform",
+      "documentCount": 85,
+      "priority": 1,
+      "roleAccess": ["admin", "lead_organiser", "organiser", "delegate", "viewer"],
+      "mobileOptimized": true,
+      "documents": [
+        {
+          "id": "getting-started",
+          "title": "Getting Started",
+          "sections": 12,
+          "estimatedReadTime": "15 min"
+        },
+        {
+          "id": "dashboard-overview",
+          "title": "Dashboard Overview",
+          "sections": 8,
+          "estimatedReadTime": "10 min"
+        },
+        {
+          "id": "project-management",
+          "title": "Project Management",
+          "sections": 15,
+          "estimatedReadTime": "20 min"
+        },
+        {
+          "id": "employer-management",
+          "title": "Employer Management",
+          "sections": 18,
+          "estimatedReadTime": "25 min"
+        },
+        {
+          "id": "member-management",
+          "title": "Member Management",
+          "sections": 12,
+          "estimatedReadTime": "15 min"
+        },
+        {
+          "id": "compliance-monitoring",
+          "title": "Compliance Monitoring",
+          "sections": 20,
+          "estimatedReadTime": "30 min"
+        }
+      ]
+    },
+    {
+      "id": "site-visit-workflow",
+      "title": "Site Visit Workflow Guide",
+      "description": "Step-by-step guide for conducting effective site visits",
+      "documentCount": 45,
+      "priority": 2,
+      "roleAccess": ["admin", "lead_organiser", "organiser"],
+      "mobileOptimized": true,
+      "documents": [
+        {
+          "id": "preparation",
+          "title": "Preparation and Planning",
+          "sections": 8,
+          "estimatedReadTime": "12 min"
+        },
+        {
+          "id": "on-site-process",
+          "title": "On-Site Assessment Process",
+          "sections": 15,
+          "estimatedReadTime": "25 min"
+        },
+        {
+          "id": "contact-mapping",
+          "title": "Contact Mapping Strategy",
+          "sections": 10,
+          "estimatedReadTime": "15 min"
+        },
+        {
+          "id": "documentation",
+          "title": "Documentation and Reporting",
+          "sections": 12,
+          "estimatedReadTime": "18 min"
+        }
+      ]
+    },
+    {
+      "id": "mobile-app-guide",
+      "title": "Mobile App User Guide",
+      "description": "Comprehensive guide for using the CFMEU mobile app in the field",
+      "documentCount": 35,
+      "priority": 3,
+      "roleAccess": ["admin", "lead_organiser", "organiser"],
+      "mobileOptimized": true,
+      "documents": [
+        {
+          "id": "installation-setup",
+          "title": "Installation and Setup",
+          "sections": 6,
+          "estimatedReadTime": "8 min"
+        },
+        {
+          "id": "mobile-workflows",
+          "title": "Mobile Workflows",
+          "sections": 12,
+          "estimatedReadTime": "20 min"
+        },
+        {
+          "id": "offline-capability",
+          "title": "Offline Capability",
+          "sections": 8,
+          "estimatedReadTime": "12 min"
+        },
+        {
+          "id": "field-tools",
+          "title": "Field Tools and Features",
+          "sections": 9,
+          "estimatedReadTime": "15 min"
+        }
+      ]
+    },
+    {
+      "id": "ratings-system-v2",
+      "title": "Employer Ratings System v2",
+      "description": "Complete guide to the enhanced employer rating system",
+      "documentCount": 55,
+      "priority": 2,
+      "roleAccess": ["admin", "lead_organiser", "organiser"],
+      "mobileOptimized": true,
+      "documents": [
+        {
+          "id": "rating-overview",
+          "title": "Rating System Overview",
+          "sections": 10,
+          "estimatedReadTime": "15 min"
+        },
+        {
+          "id": "rating-tracks",
+          "title": "Rating Tracks and Categories",
+          "sections": 18,
+          "estimatedReadTime": "30 min"
+        },
+        {
+          "id": "mobile-rating-workflow",
+          "title": "Mobile Rating Workflow",
+          "sections": 12,
+          "estimatedReadTime": "20 min"
+        },
+        {
+          "id": "analysis-insights",
+          "title": "Analysis and Strategic Insights",
+          "sections": 15,
+          "estimatedReadTime": "25 min"
+        }
+      ]
+    },
+    {
+      "id": "delegate-resources",
+      "title": "Delegate Resources",
+      "description": "Training materials and resources for union delegates",
+      "documentCount": 25,
+      "priority": 4,
+      "roleAccess": ["admin", "lead_organiser", "organiser", "delegate"],
+      "mobileOptimized": true,
+      "documents": [
+        {
+          "id": "delegate-training",
+          "title": "Delegate Training Manual",
+          "sections": 15,
+          "estimatedReadTime": "45 min"
+        },
+        {
+          "id": "rights-responsibilities",
+          "title": "Rights and Responsibilities",
+          "sections": 10,
+          "estimatedReadTime": "20 min"
+        }
+      ]
+    },
+    {
+      "id": "administrative-guide",
+      "title": "Administrative Guide",
+      "description": "System administration and management documentation",
+      "documentCount": 40,
+      "priority": 5,
+      "roleAccess": ["admin", "lead_organiser"],
+      "mobileOptimized": false,
+      "documents": [
+        {
+          "id": "user-management",
+          "title": "User Management",
+          "sections": 12,
+          "estimatedReadTime": "18 min"
+        },
+        {
+          "id": "system-configuration",
+          "title": "System Configuration",
+          "sections": 15,
+          "estimatedReadTime": "25 min"
+        },
+        {
+          "id": "reporting-analytics",
+          "title": "Reporting and Analytics",
+          "sections": 13,
+          "estimatedReadTime": "22 min"
+        }
+      ]
+    }
+  ],
+  "contextualHelpMappings": {
+    "site-visit-wizard": [
+      "site-visit-workflow/preparation",
+      "site-visit-workflow/on-site-process",
+      "mobile-app-guide/mobile-workflows"
+    ],
+    "mobile/ratings/wizard": [
+      "ratings-system-v2/mobile-rating-workflow",
+      "ratings-system-v2/rating-tracks"
+    ],
+    "projects/[projectId]/mapping": [
+      "site-visit-workflow/contact-mapping",
+      "user-guide/project-management"
+    ],
+    "projects/[projectId]/compliance": [
+      "user-guide/compliance-monitoring",
+      "site-visit-workflow/documentation"
+    ],
+    "mobile/dashboard": [
+      "mobile-app-guide/installation-setup",
+      "mobile-app-guide/field-tools"
+    ]
+  },
+  "searchOptimization": {
+    "keywords": {
+      "highPriority": [
+        "site visit", "compliance", "mobile app", "ratings", "delegate",
+        "project management", "employer assessment", "safety", "union rights",
+        "organiser", "workflow", "field work", "documentation"
+      ],
+      "mediumPriority": [
+        "training", "reporting", "analytics", "configuration", "administration",
+        "user guide", "getting started", "best practices", "troubleshooting"
+      ],
+      "categorySpecific": {
+        "site-visit": ["preparation", "assessment", "contacts", "photos", "reporting"],
+        "mobile": ["offline", "sync", "battery", "GPS", "navigation", "PWA"],
+        "ratings": ["confidence", "tracks", "categories", "scoring", "analysis"],
+        "compliance": ["safety", "standards", "traffic light", "auditing", "monitoring"]
+      }
+    }
+  },
+  "mobileOptimizations": {
+    "prioritizedContent": [
+      "site-visit-workflow",
+      "mobile-app-guide",
+      "ratings-system-v2",
+      "delegate-resources"
+    ],
+    "offlineAvailable": true,
+    "touchOptimized": true,
+    "dataCompression": true,
+    "progressiveLoading": true
+  },
+  "analytics": {
+    "trackingEnabled": true,
+    "userMetrics": [
+      "documentViews",
+      "searchQueries",
+      "timeOnPage",
+      "featureUsage",
+      "helpEffectiveness"
+    ],
+    "systemMetrics": [
+      "searchPerformance",
+      "syncStatus",
+      "errorRates",
+      "deviceTypeUsage",
+      "offlineUsage"
+    ]
+  },
+  "maintenance": {
+    "updateFrequency": "monthly",
+    "reviewSchedule": "quarterly",
+    "contentFreshness": "30 days",
+    "lastReview": "2024-11-01",
+    "nextReview": "2025-02-01"
+  },
+  "accessibility": {
+    "wcagCompliance": "AA",
+    "screenReaderSupport": true,
+    "keyboardNavigation": true,
+    "highContrastMode": true,
+    "fontSizeAdjustment": true,
+    "languageSupport": ["en-AU"]
+  }
+}

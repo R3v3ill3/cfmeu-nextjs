@@ -237,7 +237,7 @@ export const CONTEXTUAL_HELP_CONFIGS: Record<string, HelpTooltipConfig[]> = {
     }
   ],
 
-  // Form Field Specific Help Configurations
+  // Enhanced Form Field Specific Help Configurations
   'form-fields': [
     {
       id: 'abn-validation',
@@ -264,6 +264,243 @@ export const CONTEXTUAL_HELP_CONFIGS: Record<string, HelpTooltipConfig[]> = {
         'International: +61 412 345 678'
       ],
       context: { page: 'various', section: 'phone-field' }
+    },
+    {
+      id: 'confidence-score-selection',
+      type: 'help',
+      title: 'Rating Confidence Score',
+      content: 'How confident are you in this assessment based on your knowledge and available evidence?',
+      detailedContent: 'Confidence scores help other organizers understand the reliability of ratings. High confidence requires direct experience or verified information. Low confidence indicates limited or second-hand information.',
+      examples: [
+        'Very High: Direct experience with this employer, multiple recent interactions',
+        'High: Regular contact, solid understanding of their operations',
+        'Medium: Some experience, mixed observations',
+        'Low: Limited information, hearsay, or outdated knowledge'
+      ],
+      context: { page: 'various', section: 'confidence-field' }
+    },
+    {
+      id: 'traffic-light-rating',
+      type: 'info',
+      title: 'Traffic Light Compliance Rating',
+      content: 'Rate site compliance using standardized traffic light indicators.',
+      detailedContent: 'The traffic light system provides consistent assessment across all sites. Green indicates good compliance, amber shows areas needing attention, and red identifies serious issues requiring immediate action.',
+      examples: [
+        'Green: Meeting all requirements, minimal concerns',
+        'Amber: Some issues, improvement needed, monitor closely',
+        'Red: Serious breaches, immediate action required, report to officials'
+      ],
+      context: { page: 'various', section: 'traffic-light-field' }
+    }
+  ],
+
+  // Project Overview and Management
+  'project-overview': [
+    {
+      id: 'project-dashboard-navigation',
+      type: 'help',
+      title: 'Project Dashboard Navigation',
+      content: 'Quick access to key project information and actions.',
+      detailedContent: 'The project dashboard provides a centralized view of all project-related information including compliance status, contacts, workforce data, and recent activities. Use the tabs to navigate between different aspects of project management.',
+      examples: [
+        'Click the Map tab to see project location and nearby sites',
+        'Use Compliance tab to view traffic light ratings and issues',
+        'Access Mapping tab for contact and workforce information',
+        'Check Activity feed for recent updates and changes'
+      ],
+      relatedLinks: [
+        { label: 'Site Visit Workflow Guide', url: '/guides/site-visit-workflow.md' }
+      ],
+      context: { page: '/projects', section: 'dashboard' }
+    },
+    {
+      id: 'project-status-indicators',
+      type: 'info',
+      title: 'Project Status Indicators',
+      content: 'Understanding project status and priority indicators.',
+      detailedContent: 'Projects are color-coded and tagged to indicate their current status, priority level, and organizing requirements. These indicators help you prioritize your organizing activities and allocate resources effectively.',
+      examples: [
+        'Red border: High priority or serious compliance issues',
+        'Amber border: Medium priority or monitoring required',
+        'Green border: Good compliance, regular monitoring',
+        'Blue border: New project or recently updated'
+      ],
+      context: { page: '/projects', section: 'status' }
+    }
+  ],
+
+  // Employer Management
+  'employer-management': [
+    {
+      id: 'employer-profile-overview',
+      type: 'help',
+      title: 'Employer Profile Overview',
+      content: 'Comprehensive view of employer performance and compliance history.',
+      detailedContent: 'Employer profiles aggregate data from all projects where the employer is active, including compliance ratings, payment history, safety records, and organizing intelligence. This holistic view helps identify patterns and plan strategic interventions.',
+      examples: [
+        'Review historical compliance trends across multiple projects',
+        'Compare performance against industry benchmarks',
+        'Identify organizing opportunities and risks',
+        'Access contact information and key personnel details'
+      ],
+      relatedLinks: [
+        { label: 'Employer Ratings System Guide', url: '/guides/ratings-system-v2.md' }
+      ],
+      context: { page: '/employers', section: 'profile' }
+    },
+    {
+      id: 'multi-project-tracking',
+      type: 'info',
+      title: 'Multi-Project Employer Tracking',
+      content: 'Monitoring employer performance across multiple active projects.',
+      detailedContent: 'Large employers often work across multiple projects simultaneously. The system aggregates employer data across all projects to provide a comprehensive view of their overall performance and compliance patterns.',
+      examples: [
+        'Track compliance issues that repeat across projects',
+        'Identify systemic problems versus project-specific issues',
+        'Monitor workforce movement between employer projects',
+        'Assess overall employer behavior and patterns'
+      ],
+      context: { page: '/employers', section: 'multi-project' }
+    }
+  ],
+
+  // Delegate Management
+  'delegate-management': [
+    {
+      id: 'delegate-task-assignment',
+      type: 'help',
+      title: 'Delegate Task Assignment',
+      content: 'Assign specific monitoring tasks to union delegates for ongoing site oversight.',
+      detailedContent: 'Delegates serve as the eyes and ears of the union between organizer visits. Assign them concrete, actionable tasks with clear deadlines and context. Provide proper training and support to ensure task completion.',
+      examples: [
+        'Monitor daily toolbox talks and safety briefings',
+        'Check amenity facilities weekly and report issues',
+        'Document new subcontractors and workforce changes',
+        'Report safety incidents immediately',
+        'Track workforce composition monthly'
+      ],
+      relatedLinks: [
+        { label: 'Delegate Task Webform', url: '/delegate-tasks/create' },
+        { label: 'Delegate Resources', url: '/guides/delegate-resources.md' }
+      ],
+      context: { page: '/delegate-tasks', section: 'assignment' }
+    },
+    {
+      id: 'delegate-performance-tracking',
+      type: 'info',
+      title: 'Delegate Performance Tracking',
+      content: 'Monitor and support delegate effectiveness in their assigned roles.',
+      detailedContent: 'Regular assessment of delegate performance helps identify training needs, provide additional support, and recognize effective delegates. Track task completion rates, quality of reports, and engagement levels.',
+      examples: [
+        'Review task completion rates and timeliness',
+        'Assess quality and detail of delegate reports',
+        'Monitor delegate engagement and communication',
+        'Identify delegates needing additional training or support',
+        'Recognize and reward high-performing delegates'
+      ],
+      context: { page: '/delegate-tasks', section: 'performance' }
+    }
+  ],
+
+  // Campaign Management
+  'campaign-management': [
+    {
+      id: 'organizing-campaign-setup',
+      type: 'help',
+      title: 'Organizing Campaign Setup',
+      content: 'Create and manage targeted organizing campaigns for specific employers or projects.',
+      detailedContent: 'Campaigns provide structure for sustained organizing efforts across multiple employers, projects, or geographic areas. Set clear objectives, timelines, and success metrics to track campaign progress and effectiveness.',
+      examples: [
+        'Define campaign scope: employer, project, or geographic focus',
+        'Set specific, measurable objectives and timelines',
+        'Identify key targets and organizing opportunities',
+        'Allocate resources and assign responsibilities',
+        'Establish success metrics and tracking methods'
+      ],
+      context: { page: '/campaigns', section: 'setup' }
+    },
+    {
+      id: 'campaign-progress-tracking',
+      type: 'info',
+      title: 'Campaign Progress Tracking',
+      content: 'Monitor campaign advancement and measure organizing effectiveness.',
+      detailedContent: 'Track key metrics including membership growth, delegate recruitment, compliance improvements, and strategic victories. Use progress data to adjust tactics and demonstrate campaign value to stakeholders.',
+      examples: [
+        'Monitor membership growth and recruitment rates',
+        'Track delegate appointments and training completion',
+        'Measure compliance improvements and violations addressed',
+        'Document industrial actions and strategic victories',
+        'Calculate return on investment for campaign resources'
+      ],
+      context: { page: '/campaigns', section: 'progress' }
+    }
+  ],
+
+  // Administrative Functions
+  'administrative-functions': [
+    {
+      id: 'user-role-management',
+      type: 'help',
+      title: 'User Role Management',
+      content: 'Assign and manage user roles and permissions across the platform.',
+      detailedContent: 'User roles determine access levels and functional permissions. Assign appropriate roles based on job responsibilities and organizational structure. Regular review of role assignments ensures security and compliance with data access policies.',
+      examples: [
+        'Admin: Full system access and user management',
+        'Lead Organiser: Multi-patch oversight and reporting',
+        'Organiser: Assigned patch access and field operations',
+        'Delegate: Limited employer access and task management',
+        'Viewer: Read-only access for specific data'
+      ],
+      context: { page: '/admin', section: 'user-roles' }
+    },
+    {
+      id: 'system-analytics-dashboard',
+      type: 'info',
+      title: 'System Analytics Dashboard',
+      content: 'Monitor platform usage, performance metrics, and organizing effectiveness.',
+      detailedContent: 'Analytics provide insights into system utilization, user engagement, and organizing outcomes. Use this data to identify training needs, optimize workflows, and demonstrate platform value to leadership and stakeholders.',
+      examples: [
+        'Track user engagement and feature adoption rates',
+        'Monitor organizing metrics and campaign effectiveness',
+        'Analyze system performance and usage patterns',
+        'Generate reports for leadership and stakeholder updates',
+        'Identify trends and opportunities for improvement'
+      ],
+      context: { page: '/admin', section: 'analytics' }
+    }
+  ],
+
+  // Coordinator Console
+  'coordinator-console': [
+    {
+      id: 'multi-patch-oversight',
+      type: 'help',
+      title: 'Multi-Patch Oversight',
+      content: 'Comprehensive view of organizing activities across multiple geographic patches.',
+      detailedContent: 'The coordinator console provides aggregated insights from multiple patches, enabling strategic oversight and resource allocation. Monitor performance trends, identify best practices, and coordinate cross-patch initiatives.',
+      examples: [
+        'Compare organizing metrics across different patches',
+        'Identify high-performing areas and successful strategies',
+        'Coordinate multi-patch campaigns and initiatives',
+        'Allocate resources based on need and opportunity',
+        'Monitor organizer performance and workload distribution'
+      ],
+      context: { page: '/lead', section: 'oversight' }
+    },
+    {
+      id: 'strategic-planning-tools',
+      type: 'info',
+      title: 'Strategic Planning Tools',
+      content: 'Advanced tools for long-term organizing strategy and resource planning.',
+      detailedContent: 'Use data-driven insights to develop comprehensive organizing strategies, set realistic targets, and plan resource allocation. Coordinate with other coordinators to align regional and national organizing objectives.',
+      examples: [
+        'Analyze market trends and organizing opportunities',
+        'Develop long-term organizing strategies and timelines',
+        'Plan resource allocation and organizer assignments',
+        'Coordinate with other regions for consistency',
+        'Set performance targets and success metrics'
+      ],
+      context: { page: '/lead', section: 'planning' }
     }
   ]
 }
@@ -301,8 +538,18 @@ export function getHelpConfigById(id: string): HelpTooltipConfig | undefined {
 export const PAGE_ROUTE_MAPPINGS: Record<string, string> = {
   '/site-visit-wizard': 'site-visit-wizard',
   '/mobile/ratings/wizard': 'mobile-ratings-wizard',
+  '/mobile/ratings': 'mobile-ratings-wizard',
   '/mobile/map/discovery': 'mobile-map-discovery',
   '/mobile': 'mobile-pwa-features',
+  '/mobile/dashboard': 'mobile-pwa-features',
+  '/mobile/projects': 'mobile-pwa-features',
   '/projects/[projectId]/mapping': 'project-mapping',
   '/projects/[projectId]/compliance': 'compliance-auditing',
+  '/projects': 'project-overview',
+  '/employers': 'employer-management',
+  '/delegate-tasks': 'delegate-management',
+  '/campaigns': 'campaign-management',
+  '/guide': 'user-guide',
+  '/admin': 'administrative-functions',
+  '/lead': 'coordinator-console'
 }
