@@ -8,6 +8,8 @@ import { useToast } from "@/hooks/use-toast"
 import { supabase } from "@/integrations/supabase/client"
 import { FWCSearchResult } from "@/types/fwcLookup"
 import { Progress } from "@/components/ui/progress"
+import { deriveStepIndexForJob, FWC_JOB_STEPS } from "@/utils/scraperJobSteps"
+import { useScraperJobRealtime } from "@/hooks/useScraperJobRealtime"
 
 type ScraperJobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled"
 
@@ -38,34 +40,53 @@ interface FwcEbaSearchModalProps {
 
 export function FwcEbaSearchModal({ isOpen, onClose, employerId, employerName, onLinkEba }: FwcEbaSearchModalProps) {
   const [searchTerm, setSearchTerm] = useState(employerName)
-  const [job, setJob] = useState<ScraperJob | null>(null)
-  const [jobEvents, setJobEvents] = useState<ScraperJobEvent[]>([])
+  const [jobId, setJobId] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [results, setResults] = useState<FWCSearchResult[]>([])
   const [isLinking, setIsLinking] = useState(false)
   const { toast } = useToast()
 
-  const pollRef = useRef<NodeJS.Timeout | null>(null)
   const lastStatusRef = useRef<ScraperJobStatus | null>(null)
 
-  const clearPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current)
-      pollRef.current = null
-    }
-  }, [])
+  // Real-time job updates
+  const {
+    job,
+    events: jobEvents,
+    isRealtimeActive,
+    isPolling,
+    error: jobError,
+  } = useScraperJobRealtime({
+    jobId,
+    enabled: !!jobId && isOpen,
+    pollingInterval: 2000,
+    onJobComplete: useCallback(
+      (jobData: ScraperJob) => {
+        if (lastStatusRef.current === jobData.status) return
+        lastStatusRef.current = jobData.status
+
+        if (jobData.status === "succeeded") {
+          setErrorMessage(null)
+        } else if (jobData.status === "failed") {
+          toast({
+            title: "FWC lookup failed",
+            description: "Check the job timeline for details and try again.",
+            variant: "destructive",
+          })
+        }
+      },
+      [toast]
+    ),
+  })
 
   const resetState = useCallback(() => {
-    clearPolling()
-    setJob(null)
-    setJobEvents([])
+    setJobId(null)
     setResults([])
     setErrorMessage(null)
     setIsLinking(false)
     lastStatusRef.current = null
     setSearchTerm(employerName)
-  }, [clearPolling, employerName])
+  }, [employerName])
 
   useEffect(() => {
     if (!isOpen) {
@@ -73,68 +94,12 @@ export function FwcEbaSearchModal({ isOpen, onClose, employerId, employerName, o
     }
   }, [isOpen, resetState])
 
-  const fetchJobStatus = useCallback(
-    async (jobId: string) => {
-      const response = await fetch(`/api/scraper-jobs?id=${jobId}&includeEvents=1`, {
-        cache: "no-store",
-      })
-
-      if (!response.ok) {
-        throw new Error(await response.text())
-      }
-
-      const data = (await response.json()) as { job: ScraperJob; events?: ScraperJobEvent[] }
-      setJob(data.job)
-      setJobEvents(data.events ?? [])
-      return data.job
-    },
-    []
-  )
-
-  const handleJobUpdate = useCallback(
-    (jobData: ScraperJob) => {
-      if (!jobData) return
-      const terminal: ScraperJobStatus[] = ["succeeded", "failed", "cancelled"]
-      if (!terminal.includes(jobData.status)) return
-
-      if (lastStatusRef.current === jobData.status) return
-      lastStatusRef.current = jobData.status
-
-      clearPolling()
-
-      if (jobData.status === "succeeded") {
-        setErrorMessage(null)
-      } else if (jobData.status === "failed") {
-        toast({
-          title: "FWC lookup failed",
-          description: "Check the job timeline for details and try again.",
-          variant: "destructive",
-        })
-      }
-    },
-    [clearPolling, onLinkEba, toast]
-  )
-
-  const startPolling = useCallback(
-    (jobId: string) => {
-      clearPolling()
-
-      const poll = async () => {
-        try {
-          const latest = await fetchJobStatus(jobId)
-          handleJobUpdate(latest)
-        } catch (error) {
-          console.error("Failed to poll FWC job", error)
-          setErrorMessage(error instanceof Error ? error.message : "Failed to poll job status")
-          clearPolling()
-        }
-      }
-
-      poll()
-      pollRef.current = setInterval(poll, 3000)
-    },
-    [clearPolling, fetchJobStatus, handleJobUpdate]
-  )
+  // Update error message if job error occurs
+  useEffect(() => {
+    if (jobError) {
+      setErrorMessage(jobError.message)
+    }
+  }, [jobError])
 
   const handleQueueLookup = async () => {
     setIsSubmitting(true)
@@ -167,13 +132,11 @@ export function FwcEbaSearchModal({ isOpen, onClose, employerId, employerName, o
       }
 
     const data = (await response.json()) as { job: ScraperJob }
-    setJob(data.job)
-    setJobEvents([])
+    setJobId(data.job.id)
     toast({
       title: "FWC lookup queued",
       description: "The background worker will fetch the latest EBA data shortly.",
-      })
-      startPolling(data.job.id)
+    })
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to queue FWC lookup"
       setErrorMessage(message)
@@ -185,18 +148,8 @@ export function FwcEbaSearchModal({ isOpen, onClose, employerId, employerName, o
 
   const progressPercent = job && job.progress_total ? Math.round((job.progress_completed ?? 0) / job.progress_total * 100) : 0
 
-  // User-friendly steps for display only (no functional change)
-  const jobSteps = ["Queued", "Searching FWC", "Processing Results", "Finalizing"] as const
-  const deriveStepIndexForJob = (status: ScraperJobStatus, percent: number) => {
-    if (status === "queued") return 0
-    if (status === "running") {
-      if (percent < 10) return 0
-      if (percent < 90) return 1
-      return 2
-    }
-    return 3
-  }
-  const currentStepIndex = deriveStepIndexForJob(job?.status ?? "queued", progressPercent)
+  // Event-based step derivation for better UX
+  const currentStepIndex = deriveStepIndexForJob(job, jobEvents)
 
   useEffect(() => {
     if (!jobEvents.length) return
@@ -312,7 +265,7 @@ export function FwcEbaSearchModal({ isOpen, onClose, employerId, employerName, o
               </div>
               <div className="mt-3">
                 <div className="flex items-center justify-between">
-                  {jobSteps.map((label, idx) => {
+                  {FWC_JOB_STEPS.map((label, idx) => {
                     const isCompleted = idx < currentStepIndex
                     const isCurrent = idx === currentStepIndex
                     return (

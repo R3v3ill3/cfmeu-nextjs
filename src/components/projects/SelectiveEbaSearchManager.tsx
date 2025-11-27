@@ -33,6 +33,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from "@/components/ui/use-toast";
 import { getTradeOptionsByStage, getAllStages, getStageLabel, type TradeStage } from '@/utils/tradeUtils'
 import { FWCSearchResult, FwcLookupJobOptions } from '@/types/fwcLookup'
+import { deriveStepIndexForJob, FWC_JOB_STEPS } from '@/utils/scraperJobSteps'
+import { useScraperJobRealtime } from '@/hooks/useScraperJobRealtime'
 
 // Types for contractor roles and assignments
 interface ContractorRole {
@@ -142,8 +144,7 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
   
   // Loading and search states
   const [isLoading, setIsLoading] = useState(true);
-  const [currentJob, setCurrentJob] = useState<ScraperJob | null>(null)
-  const [jobEvents, setJobEvents] = useState<ScraperJobEvent[]>([])
+  const [jobId, setJobId] = useState<string | null>(null)
   const [searchResults, setSearchResults] = useState<Record<string, { isSearching: boolean; results: FWCSearchResult[]; error?: string }>>({});
 
   // UI state
@@ -162,6 +163,37 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
   const tradeOptionsByStage = useMemo(() => getTradeOptionsByStage(), []);
   const allStages = useMemo(() => getAllStages(), []);
 
+  // Real-time job updates
+  const {
+    job: currentJob,
+    events: jobEvents,
+  } = useScraperJobRealtime({
+    jobId,
+    enabled: !!jobId,
+    pollingInterval: 2000,
+    onJobComplete: useCallback((job: ScraperJob) => {
+      loadProjectEmployers();
+
+      const title =
+        job.status === 'succeeded'
+          ? 'EBA Search Complete'
+          : job.status === 'failed'
+          ? 'EBA Search Failed'
+          : 'EBA Search Cancelled';
+
+      const description =
+        job.status === 'succeeded'
+          ? 'Background lookup finished. Employer data will refresh with the latest EBA information.'
+          : job.last_error || 'The background lookup finished with issues. Review the timeline for details.';
+
+      toast({
+        title,
+        description,
+        variant: job.status === 'succeeded' ? 'default' : 'destructive',
+      });
+    }, [loadProjectEmployers, toast]),
+  })
+
   const progressCompleted = currentJob?.progress_completed ?? 0
   const progressTotal = currentJob?.progress_total ?? 0
   const progressPercent = progressTotal > 0 ? Math.round((progressCompleted / progressTotal) * 100) : 0
@@ -174,21 +206,8 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
     cancelled: 'Cancelled',
   }
 
-  // Simplified job step display for user-facing progress feedback (UI-only)
-  const jobSteps = ['Queued', 'Searching FWC', 'Processing Results', 'Finalizing'] as const
-
-  const deriveStepIndexForJob = (status: ScraperJobStatus, percent: number) => {
-    if (status === 'queued') return 0
-    if (status === 'running') {
-      if (percent < 10) return 0
-      if (percent < 90) return 1
-      return 2
-    }
-    // succeeded, failed, cancelled
-    return 3
-  }
-
-  const currentStepIndex = deriveStepIndexForJob(currentJob?.status ?? 'queued', progressPercent)
+  // Event-based step derivation for better UX
+  const currentStepIndex = deriveStepIndexForJob(currentJob, jobEvents)
 
   const formatTimestamp = useCallback((value: string | null | undefined) => {
     if (!value) return '—'
@@ -529,8 +548,7 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
 
       const { job } = (await response.json()) as { job: ScraperJob }
 
-      setCurrentJob(job)
-      setJobEvents([])
+      setJobId(job.id)
       setActiveTab('results')
 
       toast({
@@ -548,85 +566,6 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
     }
   };
 
-  const fetchJobDetails = useCallback(async (jobId: string) => {
-    const response = await fetch(`/api/scraper-jobs?id=${jobId}&includeEvents=1`, {
-      cache: 'no-store',
-    });
-
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
-
-    const data = (await response.json()) as { job: ScraperJob; events?: ScraperJobEvent[] };
-    setCurrentJob(data.job);
-    setJobEvents(data.events ?? []);
-    return data.job;
-  }, []);
-
-  useEffect(() => {
-    if (!currentJob) return;
-    const terminalStatuses: ScraperJobStatus[] = ['succeeded', 'failed', 'cancelled'];
-    if (terminalStatuses.includes(currentJob.status)) return;
-
-    let cancelled = false;
-
-    const poll = async () => {
-      try {
-        await fetchJobDetails(currentJob.id);
-      } catch (error) {
-        if (!cancelled) {
-          console.error('Failed to poll scraper job:', error);
-        }
-      }
-    };
-
-    const interval = setInterval(poll, 4000);
-    void poll();
-
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [currentJob?.id, currentJob?.status, fetchJobDetails]);
-
-  const lastNotifiedJobRef = useRef<{ id: string; status: ScraperJobStatus } | null>(null);
-
-  useEffect(() => {
-    if (!currentJob) {
-      lastNotifiedJobRef.current = null;
-      return;
-    }
-
-    const terminalStatuses: ScraperJobStatus[] = ['succeeded', 'failed', 'cancelled'];
-    if (!terminalStatuses.includes(currentJob.status)) return;
-
-    const previous = lastNotifiedJobRef.current;
-    if (previous && previous.id === currentJob.id && previous.status === currentJob.status) {
-      return;
-    }
-
-    lastNotifiedJobRef.current = { id: currentJob.id, status: currentJob.status };
-
-    loadProjectEmployers();
-
-    const title =
-      currentJob.status === 'succeeded'
-        ? 'EBA Search Complete'
-        : currentJob.status === 'failed'
-        ? 'EBA Search Failed'
-        : 'EBA Search Cancelled';
-
-    const description =
-      currentJob.status === 'succeeded'
-        ? 'Background lookup finished. Employer data will refresh with the latest EBA information.'
-        : currentJob.last_error || 'The background lookup finished with issues. Review the timeline for details.';
-
-    toast({
-      title,
-      description,
-      variant: currentJob.status === 'succeeded' ? 'default' : 'destructive',
-    });
-  }, [currentJob?.id, currentJob?.status, currentJob?.last_error, loadProjectEmployers, toast]);
 
   // Create EBA record from search result
   const createEbaRecord = useCallback(async (employerId: string, result: FWCSearchResult) => {
@@ -1175,7 +1114,7 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
                 {/* User-friendly stepper (replaces debug details) */}
                 <div className="mt-2">
                   <div className="flex items-center justify-between">
-                    {jobSteps.map((label, idx) => {
+                    {FWC_JOB_STEPS.map((label, idx) => {
                       const isCompleted = idx < currentStepIndex
                       const isCurrent = idx === currentStepIndex
                       return (

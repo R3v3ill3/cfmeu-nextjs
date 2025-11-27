@@ -19,6 +19,7 @@ import {
   AlertCircle,
   FileText,
 } from 'lucide-react'
+import { useScraperJobRealtime } from '@/hooks/useScraperJobRealtime'
 
 interface EbaViewProps {
   projectId: string
@@ -53,14 +54,55 @@ type ScraperJobEvent = {
 
 export function EbaView({ projectId, projectName }: EbaViewProps) {
   const { toast } = useToast()
-  const [job, setJob] = useState<ScraperJob | null>(null)
-  const [jobEvents, setJobEvents] = useState<ScraperJobEvent[]>([])
+  const [jobId, setJobId] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [results, setResults] = useState<FWCSearchResult[]>([])
   
-  const pollRef = useRef<NodeJS.Timeout | null>(null)
   const lastStatusRef = useRef<ScraperJobStatus | null>(null)
+
+  // Real-time job updates
+  const {
+    job,
+    events: jobEvents,
+    error: jobError,
+  } = useScraperJobRealtime({
+    jobId,
+    enabled: !!jobId,
+    pollingInterval: 2000,
+    onJobComplete: useCallback(
+      (jobData: ScraperJob) => {
+        if (lastStatusRef.current === jobData.status) return
+        lastStatusRef.current = jobData.status
+
+        if (jobData.status === "succeeded") {
+          setErrorMessage(null)
+          toast({
+            title: "FWC lookup completed",
+            description: "EBA data has been updated. Refreshing...",
+          })
+          // Refetch EBA data after a short delay to allow database to update
+          setTimeout(() => {
+            refetch()
+          }, 1000)
+        } else if (jobData.status === "failed") {
+          toast({
+            title: "FWC lookup failed",
+            description: "The search encountered an error. Please try again.",
+            variant: "destructive",
+          })
+        }
+      },
+      [refetch, toast]
+    ),
+  })
+
+  // Update error message if job error occurs
+  useEffect(() => {
+    if (jobError) {
+      setErrorMessage(jobError.message)
+    }
+  }, [jobError])
   
   // Fetch builder EBA status
   const { data: ebaData, isLoading, refetch } = useQuery({
@@ -127,82 +169,6 @@ export function EbaView({ projectId, projectName }: EbaViewProps) {
   }, [])
 
   // Cleanup polling on unmount
-  useEffect(() => {
-    return () => {
-      clearPolling()
-    }
-  }, [clearPolling])
-
-  const fetchJobStatus = useCallback(
-    async (jobId: string) => {
-      const response = await fetch(`/api/scraper-jobs?id=${jobId}&includeEvents=1`, {
-        cache: "no-store",
-      })
-
-      if (!response.ok) {
-        throw new Error(await response.text())
-      }
-
-      const data = (await response.json()) as { job: ScraperJob; events?: ScraperJobEvent[] }
-      setJob(data.job)
-      setJobEvents(data.events ?? [])
-      return data.job
-    },
-    []
-  )
-
-  const handleJobUpdate = useCallback(
-    (jobData: ScraperJob) => {
-      if (!jobData) return
-      const terminal: ScraperJobStatus[] = ["succeeded", "failed", "cancelled"]
-      if (!terminal.includes(jobData.status)) return
-
-      if (lastStatusRef.current === jobData.status) return
-      lastStatusRef.current = jobData.status
-
-      clearPolling()
-
-      if (jobData.status === "succeeded") {
-        setErrorMessage(null)
-        toast({
-          title: "FWC lookup completed",
-          description: "EBA data has been updated. Refreshing...",
-        })
-        // Refetch EBA data after a short delay to allow database to update
-        setTimeout(() => {
-          refetch()
-        }, 1000)
-      } else if (jobData.status === "failed") {
-        toast({
-          title: "FWC lookup failed",
-          description: "The search encountered an error. Please try again.",
-          variant: "destructive",
-        })
-      }
-    },
-    [clearPolling, refetch, toast]
-  )
-
-  const startPolling = useCallback(
-    (jobId: string) => {
-      clearPolling()
-
-      const poll = async () => {
-        try {
-          const latest = await fetchJobStatus(jobId)
-          handleJobUpdate(latest)
-        } catch (error) {
-          console.error("Failed to poll FWC job", error)
-          setErrorMessage(error instanceof Error ? error.message : "Failed to poll job status")
-          clearPolling()
-        }
-      }
-
-      poll()
-      pollRef.current = setInterval(poll, 3000)
-    },
-    [clearPolling, fetchJobStatus, handleJobUpdate]
-  )
 
   const handleQueueLookup = async () => {
     if (!ebaData?.builderId || !ebaData?.builderName) {
@@ -217,8 +183,7 @@ export function EbaView({ projectId, projectName }: EbaViewProps) {
     setIsSubmitting(true)
     setErrorMessage(null)
     setResults([])
-    setJob(null)
-    setJobEvents([])
+    setJobId(null)
     
     try {
       const body = {
@@ -247,13 +212,11 @@ export function EbaView({ projectId, projectName }: EbaViewProps) {
       }
 
       const data = (await response.json()) as { job: ScraperJob }
-      setJob(data.job)
-      setJobEvents([])
+      setJobId(data.job.id)
       toast({
         title: "FWC lookup queued",
         description: "The background worker will fetch the latest EBA data shortly.",
       })
-      startPolling(data.job.id)
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to queue FWC lookup"
       setErrorMessage(message)

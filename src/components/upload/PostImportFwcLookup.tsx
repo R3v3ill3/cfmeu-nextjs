@@ -25,6 +25,7 @@ import {
   ImportResults,
 } from '@/types/fwcLookup'
 import { toast } from '@/hooks/use-toast'
+import { useScraperJobRealtime } from '@/hooks/useScraperJobRealtime'
 
 type ScraperJobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
 
@@ -69,15 +70,34 @@ export function PostImportFwcLookup({
   const [eligibleEmployers, setEligibleEmployers] = useState<EligibleEmployer[]>([])
   const [selectedEmployers, setSelectedEmployers] = useState<Set<string>>(new Set())
   const [isAnalyzing, setIsAnalyzing] = useState(true)
-  const [currentJob, setCurrentJob] = useState<ScraperJob | null>(null)
+  const [jobId, setJobId] = useState<string | null>(null)
   const [jobSummary, setJobSummary] = useState<FwcLookupJobSummary | null>(null)
-  const [isJobRunning, setIsJobRunning] = useState(false)
   const [jobOptions, setJobOptions] = useState<FwcLookupJobOptions>({
     priority: 'normal',
     batchSize: 3,
     skipExisting: true,
     autoSelectBest: true,
   })
+
+  // Real-time job updates
+  const { job: currentJob } = useScraperJobRealtime({
+    jobId,
+    enabled: !!jobId,
+    pollingInterval: 2000,
+    onJobComplete: useCallback((job: ScraperJob) => {
+      const summary = buildSummary(job)
+      setJobSummary(summary)
+      onComplete?.(summary)
+
+      toast({
+        title: job.status === 'succeeded' ? 'FWC Lookup Complete' : 'FWC Lookup Finished',
+        description: `Processed ${summary.processedEmployers}/${summary.totalEmployers} employers`,
+        variant: job.status === 'failed' ? 'destructive' : 'default',
+      })
+    }, [buildSummary, onComplete, toast]),
+  })
+
+  const isJobRunning = currentJob?.status === 'queued' || currentJob?.status === 'running'
 
   const buildSummary = useCallback((job: ScraperJob): FwcLookupJobSummary => {
     const statusMap: Record<ScraperJobStatus, FwcLookupJobSummary['status']> = {
@@ -107,54 +127,6 @@ export function PostImportFwcLookup({
     }
   }, [])
 
-  const fetchJob = useCallback(async (jobId: string) => {
-    const response = await fetch(`/api/scraper-jobs?id=${jobId}&includeEvents=1`, {
-      cache: 'no-store',
-    })
-
-    if (!response.ok) {
-      const message = await response.text()
-      throw new Error(message || 'Failed to fetch job status')
-    }
-
-    return (await response.json()) as { job: ScraperJob }
-  }, [])
-
-  useEffect(() => {
-    if (!currentJob || !isJobRunning) {
-      return
-    }
-
-    let cancelled = false
-
-    const interval = setInterval(async () => {
-      try {
-        const { job } = await fetchJob(currentJob.id)
-        if (cancelled) return
-        setCurrentJob(job)
-
-        if (job.status === 'succeeded' || job.status === 'failed' || job.status === 'cancelled') {
-          setIsJobRunning(false)
-          const summary = buildSummary(job)
-          setJobSummary(summary)
-          onComplete?.(summary)
-
-          toast({
-            title: job.status === 'succeeded' ? 'FWC Lookup Complete' : 'FWC Lookup Finished',
-            description: `Processed ${summary.processedEmployers}/${summary.totalEmployers} employers`,
-            variant: job.status === 'failed' ? 'destructive' : 'default',
-          })
-        }
-      } catch (error) {
-        console.error('Failed to poll scraper job:', error)
-      }
-    }, 2000)
-
-    return () => {
-      cancelled = true
-      clearInterval(interval)
-    }
-  }, [currentJob, isJobRunning, buildSummary, fetchJob, onComplete, toast])
 
   const analyzeEligibleEmployers = useCallback(async () => {
     setIsAnalyzing(true);
@@ -244,8 +216,7 @@ export function PostImportFwcLookup({
 
       const { job } = (await response.json()) as { job: ScraperJob }
 
-      setCurrentJob(job)
-      setIsJobRunning(true)
+      setJobId(job.id)
       setJobSummary(null)
 
       toast({
@@ -280,8 +251,7 @@ export function PostImportFwcLookup({
       }
 
       const { job } = (await response.json()) as { job: ScraperJob }
-      setCurrentJob(job)
-      setIsJobRunning(false)
+      setJobId(job.id)
 
       toast({
         title: 'FWC Lookup Cancelled',

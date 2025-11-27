@@ -134,7 +134,7 @@ export default function SiteVisitsPage() {
           .from("site_visit")
           .select("id, created_at, job_site_id, employer_id, job_sites(id,name,full_address,location), employers(id,name)")
           .order("created_at", { ascending: false })
-          .limit(200)
+          .limit(1000)
 
         // Apply site filtering for non-admins
         if (allowedSiteIds && allowedSiteIds.size > 0) {
