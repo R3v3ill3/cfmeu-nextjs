@@ -81,7 +81,7 @@
       "name": "Record Site Visit",
       "short_name": "New Visit",
       "description": "Quickly record a site visit",
-      "url": "/site-visits?openForm=true",
+      "url": "/site-visit-wizard",
       "icons": [{ "src": "/favicon.svg", "sizes": "96x96" }]
     },
     {

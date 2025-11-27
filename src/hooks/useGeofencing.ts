@@ -389,6 +389,7 @@ export function useGeofencing(enabled: boolean = false) {
   }, [isSupported])
 
   // Record nearby site for in-app alerts/toasts
+  // Stores data in sessionStorage for the site-visit-wizard to pre-select the project
   const recordNearbySite = useCallback((site: JobSiteLocation) => {
     if (isSiteInCooldown(site.id)) return
 

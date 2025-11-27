@@ -67,7 +67,25 @@ export function GeofencingSetup() {
         action: {
           label: "Record visit",
           onClick: () => {
-            window.location.href = "/site-visits?openForm=true"
+            // Store pending site visit data for wizard
+            try {
+              sessionStorage.setItem(
+                "pendingSiteVisit",
+                JSON.stringify({
+                  job_site_id: lastNotification.siteId,
+                  project_id: lastNotification.projectId,
+                })
+              )
+            } catch (error) {
+              console.warn("Unable to store pending site visit:", error)
+            }
+            // Redirect to wizard with project details
+            const params = new URLSearchParams({
+              projectId: lastNotification.projectId,
+              projectName: lastNotification.projectName,
+              mainJobSiteId: lastNotification.siteId,
+            })
+            window.location.href = `/site-visit-wizard?${params.toString()}`
           },
         },
         duration: 5000,
@@ -292,6 +310,7 @@ export function GeofencingSetup() {
                       size="sm"
                       variant="secondary"
                       onClick={() => {
+                        // Store pending site visit data for wizard
                         try {
                           sessionStorage.setItem(
                             "pendingSiteVisit",
@@ -303,7 +322,13 @@ export function GeofencingSetup() {
                         } catch (error) {
                           console.warn("Unable to store pending site visit", error)
                         }
-                        window.location.href = "/site-visits?openForm=true"
+                        // Redirect to wizard with project details
+                        const params = new URLSearchParams({
+                          projectId: site.project_id,
+                          projectName: site.project_name,
+                          mainJobSiteId: site.id,
+                        })
+                        window.location.href = `/site-visit-wizard?${params.toString()}`
                       }}
                     >
                       Start visit

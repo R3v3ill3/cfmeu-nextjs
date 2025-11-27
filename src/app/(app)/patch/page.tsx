@@ -262,13 +262,41 @@ export default function PatchPage() {
 
   const handleProjectAction = (
     action: "visit-sheet" | "worker-list" | "employer-compliance",
-    _projectId: string,
+    projectId: string,
     jobSiteId?: string | null
   ) => {
     if (!jobSiteId) return
+    
+    // Find the project to get its details
+    const project = projects.find(p => p.id === projectId)
+    
     switch (action) {
       case "visit-sheet":
-        window.open(`/site-visits/new?siteId=${jobSiteId}`, "_blank")
+        if (isMobile) {
+          // Mobile: Navigate to site-visit-wizard with project parameters
+          if (project) {
+            const params = new URLSearchParams()
+            params.set('projectId', project.id)
+            params.set('projectName', encodeURIComponent(project.name))
+            if (project.full_address) {
+              params.set('projectAddress', encodeURIComponent(project.full_address))
+            }
+            if (project.builder_name) {
+              params.set('builderName', encodeURIComponent(project.builder_name))
+            }
+            if (jobSiteId) {
+              params.set('mainJobSiteId', jobSiteId)
+            }
+            params.set('phase', 'action-menu')
+            router.push(`/site-visit-wizard?${params.toString()}`)
+          } else {
+            // Fallback if project not found
+            router.push(`/site-visit-wizard?projectId=${projectId}&phase=action-menu`)
+          }
+        } else {
+          // Desktop: Navigate to project's site-visits tab
+          router.push(`/projects/${projectId}?tab=site-visits`)
+        }
         break
       case "worker-list":
         window.location.href = `/workers?siteId=${jobSiteId}`
