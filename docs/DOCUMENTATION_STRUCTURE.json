@@ -1,13 +1,14 @@
 {
   "meta": {
-    "version": "1.0.0",
-    "lastUpdated": "2025-09-29",
-    "totalDocuments": 245
+    "version": "2.0.0",
+    "lastUpdated": "2025-11-27",
+    "totalDocuments": 285
   },
   "categories": [
     "getting-started",
     "core-features",
     "workflows",
+    "mobile",
     "admin-tools",
     "reference",
     "troubleshooting"
@@ -360,6 +361,325 @@
       "keywords": ["error", "import", "upload", "failed", "troubleshoot"],
       "content": "Common import errors and solutions:\n\n**Template Mismatch Error**\n- Cause: CSV/Excel doesn't match expected format\n- Solution: Re-export from source using standard template, ensure column headers match exactly\n\n**Worker Not Running**\n- Cause: Railway worker is offline\n- Solution: Check Railway dashboard, restart worker if needed\n\n**Duplicate Employer**\n- Cause: Employer already exists with same ABN\n- Solution: Use 'Merge Employers' function to consolidate duplicates before import\n\n**Invalid Date Format**\n- Cause: Dates not in expected format\n- Solution: Ensure dates are DD/MM/YYYY or ISO format (YYYY-MM-DD)\n\n**File Too Large**\n- Cause: File exceeds 1MB limit (BCI worker)\n- Solution: Split file into smaller batches or filter data\n\n**Authorization Error**\n- Cause: User lacks required role\n- Solution: Verify you have lead_organiser or admin role",
       "related": ["bci-import-workflow", "data-upload"]
+    },
+    {
+      "id": "site-visit-wizard-overview",
+      "title": "Site Visit Wizard Overview",
+      "category": "mobile",
+      "roles": ["organiser", "lead_organiser", "admin"],
+      "pages": ["/mobile/projects/[id]", "/projects/[id]"],
+      "keywords": ["site visit", "wizard", "mobile", "field", "workflow"],
+      "content": "The Site Visit Wizard is a mobile-optimized interface that streamlines the entire site visit process for field organisers. It provides a two-phase interface with geolocation-based project detection and quick action selection.",
+      "steps": [
+        "Open project page on mobile device",
+        "Tap floating Site Visit Wizard button",
+        "Select or confirm current project location",
+        "Choose visit reason from action menu",
+        "Complete workflow steps with auto-save"
+      ],
+      "related": ["site-visit-mapping-workflow", "site-visit-compliance-audit", "mobile-pwa-installation"],
+      "screenshots": ["/images/help/site-visit-wizard-mobile.png", "/images/help/site-visit-action-menu.png"]
+    },
+    {
+      "id": "mobile-pwa-installation",
+      "title": "Installing the Mobile PWA",
+      "category": "getting-started",
+      "roles": ["all"],
+      "pages": ["/", "/mobile"],
+      "keywords": ["pwa", "install", "mobile", "iphone", "android", "progressive web app"],
+      "content": "Install the CFMEU Organiser app as a Progressive Web App (PWA) on your mobile device for offline capability and native app experience. The PWA works offline, sends push notifications, and provides access to device features.",
+      "steps": [
+        "iOS: Open Safari, navigate to app URL, tap Share → Add to Home Screen",
+        "Android: Open Chrome, look for Install icon in address bar",
+        "Tap Install/Add to complete installation",
+        "Grant requested permissions (Location, Camera, Notifications)",
+        "Open app from home screen icon"
+      ],
+      "related": ["offline-usage-sync", "mobile-dashboard-navigation", "gps-location-features"],
+      "screenshots": ["/images/help/pwa-install-ios.png", "/images/help/pwa-install-android.png"]
+    },
+    {
+      "id": "mobile-dashboard-navigation",
+      "title": "Mobile Dashboard Navigation",
+      "category": "mobile",
+      "roles": ["all"],
+      "pages": ["/mobile/dashboard", "/"],
+      "keywords": ["mobile dashboard", "navigation", "touch", "interface"],
+      "content": "The mobile dashboard provides touch-optimized navigation with bottom tab bar, swipe gestures, and large touch targets designed for construction site use. Features include patch cards, quick actions, and responsive layout.",
+      "related": ["mobile-pwa-installation", "site-visit-wizard-overview", "gps-location-features"],
+      "screenshots": ["/images/help/mobile-dashboard.png", "/images/help/mobile-navigation.png"]
+    },
+    {
+      "id": "site-visit-mapping-workflow",
+      "title": "Site Visit Mapping Workflow",
+      "category": "workflows",
+      "roles": ["organiser", "lead_organiser", "admin"],
+      "pages": ["/mobile/projects/[id]/mapping", "/projects/[id]/mapping"],
+      "keywords": ["mapping", "workflow", "employers", "workers", "delegates"],
+      "content": "Complete workflow for mapping project workforce, identifying employers, and registering union delegates during site visits. Includes photo capture, voice notes, and offline capability.",
+      "steps": [
+        "Start Site Visit Wizard and select Mapping workflow",
+        "Document total workforce count and trade breakdown",
+        "Identify and record primary contractor and subcontractors",
+        "Map union members and potential delegates",
+        "Capture photos and add voice notes as evidence",
+        "Review and submit with auto-save protection"
+      ],
+      "related": ["site-visit-wizard-overview", "delegate-registration-workflow", "mobile-camera-features"],
+      "screenshots": ["/images/help/mapping-workflow-mobile.png"]
+    },
+    {
+      "id": "site-visit-compliance-audit",
+      "title": "Site Visit Compliance Audit Workflow",
+      "category": "workflows",
+      "roles": ["organiser", "lead_organiser", "admin"],
+      "pages": ["/mobile/projects/[id]/compliance", "/projects/[id]/compliance"],
+      "keywords": ["compliance", "audit", "traffic light", "ratings", "sham contracting"],
+      "content": "Mobile-optimized compliance audit workflow with traffic light rating system, sham contracting detection, and evidence capture. Includes CBUS/Incolink verification and automated compliance checks.",
+      "steps": [
+        "Start Site Visit Wizard and select Compliance Audit",
+        "Complete 4-point traffic light rating assessment",
+        "Check CBUS payment compliance and timeliness",
+        "Verify Incolink payments and superannuation",
+        "Assess sham contracting risk indicators",
+        "Document evidence with photos and notes",
+        "Submit automated rating with confidence scoring"
+      ],
+      "related": ["ratings-system-v2-overview", "sham-contracting-detection", "site-visit-wizard-overview"],
+      "screenshots": ["/images/help/compliance-audit-mobile.png"]
+    },
+    {
+      "id": "ratings-system-v2-overview",
+      "title": "Ratings System v2 Overview",
+      "category": "core-features",
+      "roles": ["organiser", "lead_organiser", "admin"],
+      "pages": ["/employers/[id]/ratings", "/mobile/employers/[id]/ratings"],
+      "keywords": ["ratings", "v2", "two-track", "weighting", "confidence scoring"],
+      "content": "Advanced employer assessment framework combining quantitative project data analysis (70% weight) with qualitative organiser expertise (30% weight). Features evidence-based weighting, confidence scoring, and sham contracting protection.",
+      "related": ["sham-contracting-detection", "site-visit-compliance-audit", "mobile-rating-workflow"],
+      "technical": {
+        "methodology": "Two-track weighted assessment system",
+        "weights": "Project Data: 70%, Organiser Expertise: 30%",
+        "scoring": "Traffic light system with confidence levels"
+      }
+    },
+    {
+      "id": "sham-contracting-detection",
+      "title": "Sham Contracting Detection",
+      "category": "core-features",
+      "roles": ["organiser", "lead_organiser", "admin"],
+      "pages": ["/employers/[id]/ratings", "/projects/[id]/compliance"],
+      "keywords": ["sham contracting", "detection", "hard block", "compliance"],
+      "content": "Automated sham contracting detection system with 'hard block' features that prevent green ratings for non-compliant employers. Includes pattern recognition, evidence requirements, and audit trails.",
+      "steps": [
+        "Complete compliance audit or expertise assessment",
+        "Locate sham contracting detection section",
+        "Toggle detection switch for identified concerns",
+        "Provide detailed evidence with specific examples",
+        "Attach supporting documentation and photos",
+        "Submit with automatic rating cap applied"
+      ],
+      "related": ["ratings-system-v2-overview", "site-visit-compliance-audit", "troubleshooting-sham-contracting"],
+      "screenshots": ["/images/help/sham-detection-mobile.png"]
+    },
+    {
+      "id": "delegate-task-management",
+      "title": "Delegate Task Management System",
+      "category": "workflows",
+      "roles": ["organiser", "lead_organiser", "delegate", "admin"],
+      "pages": ["/delegate/tasks", "/mobile/delegate/tasks", "/campaigns/[id]/tasks"],
+      "keywords": ["delegate", "tasks", "webform", "assignment", "tracking"],
+      "content": "System for assigning tasks to union delegates through secure webforms. Features task creation, assignment, progress tracking, and completion verification with mobile-optimized delegate interface.",
+      "steps": [
+        "Create task from campaign or project page",
+        "Select delegate(s) for assignment",
+        "Configure task requirements and deadlines",
+        "Generate secure webform link",
+        "Delegate receives task and completes via mobile form",
+        "Track progress and verify completion"
+      ],
+      "related": ["share-links", "campaign-activity-builder", "mobile-pwa-installation"],
+      "screenshots": ["/images/help/delegate-task-management.png"]
+    },
+    {
+      "id": "offline-usage-sync",
+      "title": "Offline Usage and Data Sync",
+      "category": "mobile",
+      "roles": ["all"],
+      "pages": ["*"],
+      "keywords": ["offline", "sync", "cache", "queue", "background"],
+      "content": "Comprehensive offline capability allowing full functionality without internet connection. Features intelligent data caching, automatic sync queue, conflict resolution, and background updates.",
+      "related": ["mobile-pwa-installation", "site-visit-wizard-overview", "troubleshooting-offline-issues"],
+      "technical": {
+        "architecture": "Service Worker with IndexedDB storage",
+        "syncStrategy": "Queue-based with conflict resolution",
+        "cachePolicy": "Intelligent prefetch based on user assignments"
+      }
+    },
+    {
+      "id": "gps-location-features",
+      "title": "GPS and Location-Based Features",
+      "category": "mobile",
+      "roles": ["organiser", "lead_organiser", "admin"],
+      "pages": ["/mobile/map", "/", "/dashboard"],
+      "keywords": ["gps", "location", "geofencing", "navigation", "closest to me"],
+      "content": "Location-based features including 'Closest to me' project discovery, turn-by-turn navigation, geofencing alerts, and automatic site check-in. Works offline with cached location data.",
+      "steps": [
+        "Enable location services when prompted",
+        "Use 'Closest to me' to find nearby projects",
+        "Tap project pin for quick actions and navigation",
+        "Automatic check-in when entering project geofence",
+        "View distance calculations in real-time"
+      ],
+      "related": ["mobile-dashboard-navigation", "site-visit-wizard-overview", "mobile-pwa-installation"],
+      "screenshots": ["/images/help/gps-features.png"]
+    },
+    {
+      "id": "mobile-camera-features",
+      "title": "Mobile Camera and Photo Features",
+      "category": "mobile",
+      "roles": ["organiser", "lead_organiser", "admin"],
+      "pages": ["/mobile/projects/[id]/*"],
+      "keywords": ["camera", "photos", "evidence", "capture", "compression"],
+      "content": "Mobile-optimized camera integration for evidence capture during site visits. Features automatic photo compression, timestamping, geotagging, and organization by project and category.",
+      "related": ["site-visit-mapping-workflow", "site-visit-compliance-audit", "mobile-pwa-installation"],
+      "screenshots": ["/images/help/camera-features.png"]
+    },
+    {
+      "id": "voice-input-dictation",
+      "title": "Voice Input and Dictation",
+      "category": "mobile",
+      "roles": ["organiser", "lead_organiser", "admin"],
+      "pages": ["/mobile/projects/[id]/*"],
+      "keywords": ["voice", "dictation", "input", "speech", "notes"],
+      "content": "Voice input capabilities for hands-free data entry on construction sites. Supports dictation for notes, worker comments, and observations with automatic transcription and editing.",
+      "related": ["site-visit-mapping-workflow", "offline-usage-sync", "mobile-form-optimization"]
+    },
+    {
+      "id": "mobile-form-optimization",
+      "title": "Mobile Form Optimization",
+      "category": "mobile",
+      "roles": ["all"],
+      "pages": ["/mobile/*"],
+      "keywords": ["forms", "mobile", "touch", "validation", "auto-save"],
+      "content": "Touch-optimized forms with large buttons (minimum 44px), auto-save every 30 seconds, voice input support, and intelligent validation. Designed for construction site use with gloves and varying light conditions.",
+      "related": ["voice-input-dictation", "offline-usage-sync", "site-visit-wizard-overview"],
+      "screenshots": ["/images/help/mobile-forms.png"]
+    },
+    {
+      "id": "getting-started-mobile-quickstart",
+      "title": "Mobile Quick Start Guide (5 Minutes)",
+      "category": "getting-started",
+      "roles": ["organiser", "lead_organiser", "admin"],
+      "pages": ["/getting-started"],
+      "keywords": ["quick start", "mobile", "setup", "5 minutes", "beginner"],
+      "content": "Rapid onboarding guide for new field organisers. Covers PWA installation, first login, dashboard overview, finding closest project, and completing first site visit using the Site Visit Wizard.",
+      "steps": [
+        "Install PWA on your mobile device (2 minutes)",
+        "Sign in and grant permissions (1 minute)",
+        "Review dashboard and patch assignments (1 minute)",
+        "Find closest project using GPS (30 seconds)",
+        "Complete first site visit with wizard (2 minutes)"
+      ],
+      "related": ["mobile-pwa-installation", "mobile-dashboard-navigation", "site-visit-wizard-overview"],
+      "screenshots": ["/images/help/quick-start-mobile.png"]
+    },
+    {
+      "id": "mobile-rating-workflow",
+      "title": "Mobile Rating Assessment Workflow",
+      "category": "workflows",
+      "roles": ["organiser", "lead_organiser", "admin"],
+      "pages": ["/mobile/employers/[id]/rating", "/mobile/projects/[id]/compliance"],
+      "keywords": ["mobile rating", "assessment", "workflow", "touch optimized"],
+      "content": "Mobile-first rating workflow with touch-optimized interface, real-time confidence scoring, and instant feedback. Features simplified controls for construction site use and offline capability.",
+      "steps": [
+        "Access rating form from employer or project page",
+        "Complete Track 1: Project Data Analysis (auto-populated)",
+        "Complete Track 2: Organiser Expertise Assessment",
+        "Review calculated rating with confidence score",
+        "Address any sham contracting alerts if present",
+        "Submit with automatic sync when online"
+      ],
+      "related": ["ratings-system-v2-overview", "sham-contracting-detection", "mobile-form-optimization"],
+      "screenshots": ["/images/help/mobile-rating-workflow.png"]
+    },
+    {
+      "id": "integration-incolink-mobile",
+      "title": "Incolink Integration (Mobile View)",
+      "category": "reference",
+      "roles": ["lead_organiser", "admin"],
+      "pages": ["/mobile/admin/incolink", "/admin"],
+      "keywords": ["incolink", "integration", "mobile", "sync", "workers"],
+      "content": "Mobile-optimized interface for Incolink data synchronization. View sync status, trigger updates, and review worker placement matches from mobile devices with progress indicators.",
+      "related": ["incolink-sync", "offline-usage-sync", "mobile-dashboard-navigation"]
+    },
+    {
+      "id": "integration-fwc-mobile",
+      "title": "FWC EBA Lookup (Mobile View)",
+      "category": "reference",
+      "roles": ["lead_organiser", "admin"],
+      "pages": ["/mobile/admin/fwc", "/admin"],
+      "keywords": ["fwc", "eba", "lookup", "mobile", "agreements"],
+      "content": "Mobile interface for Fair Work Commission EBA searches. Monitor lookup progress, review found agreements, and update employer records from mobile devices with real-time status updates.",
+      "related": ["fwc-lookup", "eba-tracking", "mobile-dashboard-navigation"]
+    },
+    {
+      "id": "troubleshooting-mobile-issues",
+      "title": "Troubleshooting Mobile Issues",
+      "category": "troubleshooting",
+      "roles": ["all"],
+      "pages": ["/mobile/help", "/troubleshooting"],
+      "keywords": ["mobile", "troubleshooting", "offline", "sync", "performance"],
+      "content": "Common mobile issues and solutions: PWA installation problems, GPS not working, offline sync failures, camera permissions, and performance optimization. Includes device-specific troubleshooting for iPhone and Android.",
+      "related": ["offline-usage-sync", "mobile-pwa-installation", "gps-location-features"]
+    },
+    {
+      "id": "troubleshooting-offline-issues",
+      "title": "Troubleshooting Offline and Sync Issues",
+      "category": "troubleshooting",
+      "roles": ["all"],
+      "pages": ["/troubleshooting"],
+      "keywords": ["offline", "sync", "queue", "conflict", "storage"],
+      "content": "Detailed troubleshooting for offline functionality: sync queue stuck, storage full, data conflicts, background sync not working, and connectivity issues. Includes manual sync options and data recovery procedures.",
+      "steps": [
+        "Check network connectivity status",
+        "Review sync queue for stuck items",
+        "Clear browser cache if storage is full",
+        "Manually trigger sync if needed",
+        "Restart app if background sync fails",
+        "Contact support for data recovery if needed"
+      ],
+      "related": ["offline-usage-sync", "troubleshooting-mobile-issues"]
+    },
+    {
+      "id": "troubleshooting-sham-contracting",
+      "title": "Troubleshooting Sham Contracting Detection",
+      "category": "troubleshooting",
+      "roles": ["organiser", "lead_organiser", "admin"],
+      "pages": ["/help/sham-contracting"],
+      "keywords": ["sham contracting", "false positives", "appeals", "disputes"],
+      "content": "Guide for handling sham contracting detection issues: false positives, evidence requirements, appeals process, dispute resolution, and clearing incorrect flags. Includes documentation standards and review procedures.",
+      "related": ["sham-contracting-detection", "ratings-system-v2-overview"]
+    },
+    {
+      "id": "mobile-security-features",
+      "title": "Mobile Security and Privacy Features",
+      "category": "reference",
+      "roles": ["all"],
+      "pages": ["/help/security", "/settings"],
+      "keywords": ["security", "privacy", "permissions", "data protection"],
+      "content": "Mobile security features including secure token storage, encrypted offline data, biometric authentication, permission management, and secure data transmission. Covers GDPR compliance and data privacy protections.",
+      "related": ["mobile-pwa-installation", "offline-usage-sync", "troubleshooting-mobile-issues"]
+    },
+    {
+      "id": "mobile-accessibility-features",
+      "title": "Mobile Accessibility Features",
+      "category": "reference",
+      "roles": ["all"],
+      "pages": ["/help/accessibility"],
+      "keywords": ["accessibility", "a11y", "screen reader", "voice", "haptic"],
+      "content": "Accessibility features for mobile users: screen reader support, voice navigation, high contrast mode, large text options, haptic feedback, and reduced motion settings. Designed for users with varying accessibility needs.",
+      "related": ["voice-input-dictation", "mobile-form-optimization", "mobile-dashboard-navigation"]
     }
   ]
 }

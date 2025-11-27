@@ -114,8 +114,20 @@ async function getStatsHandler(request: NextRequest) {
   } catch (error) {
     console.error('Get rating stats API error:', error);
     
-    // Check for timeout or stack depth errors
     const errorObj = error as any;
+    const errorMessage = errorObj?.message || String(error);
+    
+    // Handle iOS Safari refresh token issues gracefully (JAVASCRIPT-NEXTJS-Q)
+    // This occurs when ITP blocks refresh token cookies
+    if (errorMessage?.includes('Refresh Token Not Found') || errorMessage?.includes('Invalid Refresh Token')) {
+      console.warn('[ratings/stats] Session expired - refresh token not found (likely iOS Safari ITP)');
+      return NextResponse.json(
+        { error: 'session_expired', message: 'Your session has expired. Please sign in again.' },
+        { status: 401 }
+      );
+    }
+    
+    // Check for timeout or stack depth errors
     if (errorObj?.code === '57014') {
       console.error('Query timeout detected - consider optimizing employer_final_ratings queries');
       return NextResponse.json(

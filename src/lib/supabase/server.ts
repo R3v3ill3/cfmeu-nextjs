@@ -43,13 +43,16 @@ export async function createServerSupabase(): Promise<SupabaseClient<Database>> 
         },
         set(name: string, value: string, options: CookieOptions) {
           try {
+            // iOS Safari ITP requires secure cookies and proper sameSite handling
+            // Using 'lax' for first-party context which is compatible with most browsers
+            // Always set secure=true for auth cookies to prevent ITP issues
             cookieStore.set({ 
               name, 
               value, 
               ...options, 
               path: '/',
               sameSite: 'lax',
-              secure: process.env.NODE_ENV === 'production',
+              secure: true, // Always secure for auth cookies (fixes iOS Safari ITP)
             })
           } catch {}
         },

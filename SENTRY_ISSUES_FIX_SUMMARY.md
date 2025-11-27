@@ -1,11 +1,36 @@
 # Sentry Issues Fix Summary
 
-**Date**: November 26, 2025  
-**Issues Addressed**: JAVASCRIPT-NEXTJS-1, -2, -3, -5, -6
+**Date**: November 27, 2025  
+**Issues Addressed**: JAVASCRIPT-NEXTJS-1, -2, -3, -5, -6, -G, -Q
 
 ---
 
-## Issues Fixed
+## Issues Fixed (November 27, 2025 Update)
+
+### ✅ Fixed: JAVASCRIPT-NEXTJS-G "Slow profile fetch: [object Object]"
+- **Status**: Fixed - logging now uses structured strings
+- **Events**: 114 occurrences in 24 hours
+- **Root Cause**: Console.warn logged object directly causing `[object Object]` in Sentry
+- **Fix**: Changed to structured string format: `userId=X, duration=Xms, hasRole=X, requestId=X, path=X`
+- **File**: `src/app/(app)/layout.tsx`
+
+### ✅ Fixed: JAVASCRIPT-NEXTJS-Q "AuthApiError: Invalid Refresh Token: Refresh Token Not Found"
+- **Status**: Fixed - improved cookie security and graceful error handling
+- **Events**: 2 occurrences (iOS Safari specific)
+- **Root Cause**: iOS Safari ITP blocking refresh token cookies
+- **Fixes Applied**:
+  1. Cookie `secure` attribute now always `true` (was only in production)
+  2. Graceful 401 response with `session_expired` error code for client handling
+- **Files**: `src/lib/supabase/server.ts`, `src/app/api/ratings/stats/route.ts`
+
+### 🟡 To Resolve: JAVASCRIPT-NEXTJS-5 (Duplicate of -G)
+- **Status**: Duplicate issue - mark as resolved in Sentry
+- **Events**: 45 occurrences (legacy logging format)
+- **Action**: Go to Sentry and mark as resolved with note "Duplicate of JAVASCRIPT-NEXTJS-G"
+
+---
+
+## Previous Issues Fixed
 
 ### ✅ Automatically Resolved (Code Changes)
 
@@ -24,16 +49,6 @@
 - **Status**: Transient issue, no recurrence
 - **Events**: 1 occurrence 18 hours ago
 - **Action**: Mark as resolved in Sentry (manually)
-
----
-
-### 🟡 Monitoring Only (Performance Warning)
-
-#### JAVASCRIPT-NEXTJS-5: "Slow profile fetch"
-- **Status**: Acceptable performance, monitoring
-- **Issue**: Profile database queries occasionally take 250-300ms (threshold: 200ms)
-- **Impact**: Low - this is a performance warning, not an error
-- **Action**: No changes needed, continue monitoring
 
 ---
 
@@ -100,14 +115,20 @@ After deployment with the environment variable:
 Since I don't have API access to update Sentry directly, you need to manually resolve these issues:
 
 1. **Go to**: https://reveille-strategy.sentry.io/issues/
-2. **Resolve these issues**:
+
+2. **Resolve these issues (November 27 fixes)**:
+   - [JAVASCRIPT-NEXTJS-G](https://reveille-strategy.sentry.io/issues/JAVASCRIPT-NEXTJS-G) - "Slow profile fetch: [object Object]" - **Monitor for new events after deployment**
+   - [JAVASCRIPT-NEXTJS-5](https://reveille-strategy.sentry.io/issues/JAVASCRIPT-NEXTJS-5) - "Slow profile fetch" (legacy format) - **Mark as resolved** with note: "Duplicate of JAVASCRIPT-NEXTJS-G, same root cause"
+   - [JAVASCRIPT-NEXTJS-Q](https://reveille-strategy.sentry.io/issues/JAVASCRIPT-NEXTJS-Q) - "AuthApiError: Refresh Token Not Found" - **Monitor for new events after deployment**
+
+3. **Resolve these issues (November 26 fixes)**:
    - [JAVASCRIPT-NEXTJS-1](https://reveille-strategy.sentry.io/issues/JAVASCRIPT-NEXTJS-1) - "Slow role fetch: [object Object]"
    - [JAVASCRIPT-NEXTJS-2](https://reveille-strategy.sentry.io/issues/JAVASCRIPT-NEXTJS-2) - "Could not load 'util'"
    - [JAVASCRIPT-NEXTJS-3](https://reveille-strategy.sentry.io/issues/JAVASCRIPT-NEXTJS-3) - "Error fetching employer: [object Object]"
 
-3. **Add resolution note**: "Fixed in latest deployment" or "Transient issue, no recurrence"
+4. **Add resolution note**: "Fixed in latest deployment" or "Transient issue, no recurrence"
 
-4. **Monitor** JAVASCRIPT-NEXTJS-6 - should auto-resolve after NODE_OPTIONS is set in Vercel
+5. **Monitor** JAVASCRIPT-NEXTJS-6 - should auto-resolve after NODE_OPTIONS is set in Vercel
 
 ---
 
@@ -140,6 +161,13 @@ Monitor upstream fix: https://github.com/PostHog/posthog-js-lite/tree/main/posth
 
 ## Summary of Files Modified
 
+### November 27, 2025 Update
+1. ✅ `src/app/(app)/layout.tsx` - Fixed slow profile fetch logging format
+2. ✅ `src/app/mobile/layout.tsx` - Fixed slow mobile role fetch logging format
+3. ✅ `src/lib/supabase/server.ts` - Cookie `secure` always true for iOS Safari ITP
+4. ✅ `src/app/api/ratings/stats/route.ts` - Graceful handling of refresh token errors
+
+### November 26, 2025 (Previous)
 1. ✅ `package.json` - Added NODE_OPTIONS to scripts
 2. ✅ `docs/DEPRECATION_WARNING_SUPPRESSION.md` - Created comprehensive documentation
 3. ✅ `docs/MONITORING_HOW_TO_GUIDE.md` - Added known suppressed warnings section

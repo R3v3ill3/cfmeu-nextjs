@@ -25,12 +25,9 @@ async function getUserRole(userId: string, context?: { requestId: string; path?:
   }
 
   if (duration > 200) {
-    logMobileLayout('Slow mobile role fetch', {
-      requestId: context?.requestId,
-      userId,
-      duration,
-      path: context?.path,
-    })
+    // Log as structured string to avoid [object Object] in Sentry
+    const logMessage = `userId=${userId}, duration=${duration}ms, requestId=${context?.requestId}, path=${context?.path}`
+    console.warn('[MobileLayout] Slow mobile role fetch:', logMessage)
   }
 
   if (!data) return null

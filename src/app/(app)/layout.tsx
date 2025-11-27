@@ -41,14 +41,10 @@ async function getUserProfile(
     }
     
     if (duration > 200) {
-      const payload = {
-        userId,
-        duration,
-        hasRole: !!data?.role,
-        requestId: context?.requestId,
-        path: context?.path,
-      }
-      console.warn('[AppLayout] Slow profile fetch:', payload)
+      // Log as structured string to avoid [object Object] in Sentry
+      // Format: key=value pairs for consistent parsing
+      const logMessage = `userId=${userId}, duration=${duration}ms, hasRole=${!!data?.role}, requestId=${context?.requestId}, path=${context?.path}`
+      console.warn('[AppLayout] Slow profile fetch:', logMessage)
     }
     
     return data as UserProfile | null
