@@ -2,291 +2,304 @@
 
 ## Problem Summary
 
-**Issue**: Users with role "organiser" experience intermittent permission errors and authentication loss when navigating between pages (e.g., Projects → Patch). The session/user becomes null, causing RLS permission errors and data failing to load.
+**Issue**: Users with role "organiser" experience intermittent permission errors and authentication loss when navigating between pages (e.g., Projects → Patch → Site Visit Wizard → back). The session/user becomes null on the CLIENT side, causing RLS permission errors and data failing to load.
+
+**Key Insight (2025-11-27)**: Server-side auth is consistently working (Vercel logs show authenticated requests), but client-side React state loses the profile/session data during complex navigation flows.
 
 **Environment**: 
 - Production deployed on Vercel (main app) + Railway (workers)
 - Occurs in both desktop and mobile browser views
 - Also affects PWA (home screen web app)
+- Tested with user role: organiser (also reproduced with admin)
 
-**User Impact**: Navigation between pages causes loss of user identification, requiring page refresh or re-login to restore session.
+**User Impact**: Navigation between pages causes loss of user profile data on the client, requiring page refresh to restore. Symptoms include:
+- Profile information missing from Settings page
+- Project data not loading
+- Components showing loading states indefinitely
 
 ---
 
-## Original Console Errors
+## Investigation Sessions
 
+### Session 1: 2025-11-26 (Initial Investigation)
+
+#### Original Console Errors
 ```
-[SupabaseClient] Health check failed (not resetting immediately) {timestamp: '2025-11-26T04:48:19.427Z'}
-
+[SupabaseClient] Health check failed (not resetting immediately)
 [useAuth] Session fetch timeout (attempt 1/3), retrying in 1000ms...
-
 [useAuth] Safety timeout: onAuthStateChange did not fire, setting loading=false
-
-[withTimeout] Timeout occurred for fetch my role {timeoutMs: 10000, actualDuration: 10003, label: 'fetch my role', timestamp: '2025-11-26T05:25:49.358Z'}
-
-[SupabaseClient] Resetting browser client {timestamp: '2025-11-26T05:25:49.360Z'}
-[SupabaseClient] Creating new browser client {timestamp: '2025-11-26T05:25:49.360Z'}
+[withTimeout] Timeout occurred for fetch my role
+[SupabaseClient] Resetting browser client
 ```
 
----
+#### Root Causes Identified
+1. **AuthProvider Remounting**: Multiple AuthProvider instances in different layouts
+2. **Aggressive Timeout Logic**: Custom timeout wrapper causing premature session=null
+3. **Health Check Contention**: Periodic `getSession()` calls competing with auth ops
+4. **Component-Level Client Reset**: Components calling `resetSupabaseBrowserClient()` on timeouts
+5. **PWA Caching Issues**: Service worker caching auth-protected HTML pages
 
-## Root Cause Analysis
-
-### Identified Issues
-
-1. **AuthProvider Remounting**: `AuthProvider` was placed in multiple route group layouts (`(app)/layout.tsx`, `mobile/layout.tsx`, `page.tsx`), causing it to remount on every navigation between route groups. Each remount triggered fresh `getSession()` calls.
-
-2. **Aggressive Timeout Logic**: The `useAuth` hook had a custom timeout wrapper around `getSession()` calls with retry logic. If Supabase was slow to respond (which happens under load), the timeout would fire before Supabase completed, setting session to null.
-
-3. **Health Check Contention**: `getSupabaseBrowserClient()` was performing periodic health checks that called `getSession()`, creating contention with auth operations.
-
-4. **Component-Level Client Reset**: `EmployerDetailModal.tsx` and `EmployerWorkersList.tsx` were calling `resetSupabaseBrowserClient()` on query timeouts, which destroyed the auth state and created a new client without the previous session.
-
-5. **PWA Caching Stale Pages**: The service worker used `cacheFirstForMobile` for HTML navigation requests, serving old cached pages with broken auth code instead of fetching fresh pages.
+#### Fixes Applied (Session 1)
+- Centralized AuthProvider to root `providers.tsx`
+- Removed timeout wrapper from useAuth
+- Removed health check from Supabase client
+- Removed `resetSupabaseBrowserClient()` calls from components
+- Updated service worker to network-first for navigation
 
 ---
 
-## Attempted Fixes (All Deployed, Issue Persists)
+### Session 2: 2025-11-27 (Current Session)
 
-### Fix 1: Centralized AuthProvider
+#### New Issues Identified
 
-**Files Changed**:
-- `src/app/providers.tsx` - Added AuthProvider wrapper
-- `src/app/(app)/layout.tsx` - Removed AuthProvider
-- `src/app/mobile/layout.tsx` - Removed AuthProvider
-- `src/app/page.tsx` - Removed AuthProvider
+##### Issue A: TOKEN_REFRESHED Triggering Cache Invalidation (CRITICAL)
+**Location**: `src/hooks/useAuth.tsx` lines 226-236
 
-**Rationale**: Single AuthProvider instance at root level prevents remounting on navigation.
-
-**Code**:
-```tsx
-// src/app/providers.tsx
-return (
-  <QueryClientProvider client={queryClient}>
-    <AuthProvider>
-      <Suspense fallback={null}>
-        <PostHogProvider>
-          {children}
-          <Toaster richColors position="top-right" />
-        </PostHogProvider>
-      </Suspense>
-    </AuthProvider>
-  </QueryClientProvider>
-)
+**Problem**: The `onAuthStateChange` handler was invalidating React Query caches on `TOKEN_REFRESHED` events:
+```typescript
+// OLD CODE - PROBLEMATIC
+if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
+  queryClient.invalidateQueries({ queryKey: ['user-role'] });
+  queryClient.invalidateQueries({ queryKey: ['accessible-patches'] });
+  queryClient.invalidateQueries({ queryKey: ['my-role'] });
+  queryClient.invalidateQueries({ predicate: (query) =>
+    query.queryKey.some(key => typeof key === 'string' &&
+      (key.includes('user') || key.includes('auth') || key.includes('role') || key.includes('permission')))
+  });
+}
 ```
 
-### Fix 2: Refactored useAuth Hook
+**Why This Caused Issues**:
+- Supabase automatically refreshes tokens in the background during navigation
+- Each `TOKEN_REFRESHED` event triggered cache invalidation
+- The broad predicate `key.includes('user')` invalidated queries like `settings-current-user` (profile data)
+- Complex navigation (back/forward) triggered more token refreshes = more cache clears
 
-**File Changed**: `src/hooks/useAuth.tsx`
-
-**Changes**:
-- Removed aggressive `getSessionWithTimeout` wrapper with retry logic
-- Now calls `getSession()` immediately on mount (not waiting for `onAuthStateChange`)
-- Relies on `onAuthStateChange` for subsequent auth state changes
-- Added session recovery mechanism that attempts `refreshSession()` when session is unexpectedly lost
-- Added cache invalidation for auth-dependent queries on auth events
-
-**Key Code**:
-```tsx
-useEffect(() => {
-  const supabase = getSupabaseBrowserClient();
-  
-  // IMMEDIATELY call getSession() to get cached session from storage
-  const initializeSession = async () => {
-    try {
-      const { data: { session: initialSession }, error } = await supabase.auth.getSession();
-      // ... set state
-    } catch (error) {
-      // ... handle error
-    }
-  };
-
-  initializeSession();
-
-  // Set up listener for future auth changes
-  const { data: { subscription } } = supabase.auth.onAuthStateChange(
-    async (event, newSession) => {
-      // ... handle auth events
-    }
-  );
-
-  return () => subscription.unsubscribe();
-}, []);
+**Fix Applied**:
+```typescript
+// NEW CODE - FIXED
+if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+  queryClient.invalidateQueries({ queryKey: ['user-role'] });
+  queryClient.invalidateQueries({ queryKey: ['accessible-patches'] });
+  queryClient.invalidateQueries({ queryKey: ['my-role'] });
+  // Removed broad predicate - was clearing too much data
+}
 ```
 
-### Fix 3: Removed Health Check from Supabase Client
+##### Issue B: Service Worker Pre-Caching Auth-Protected Routes
+**Location**: `public/sw.js`
 
-**File Changed**: `src/lib/supabase/client.ts`
-
-**Changes**:
-- Removed `checkConnectionHealth()` function that was calling `getSession()` periodically
-- Simplified `getSupabaseBrowserClient()` to just return the singleton client
-- Added warning comment to `resetSupabaseBrowserClient()` that it should NOT be called from components
-
-### Fix 4: Removed Client Reset Calls from Components
-
-**Files Changed**:
-- `src/components/employers/EmployerDetailModal.tsx` - Removed 5 calls to `resetSupabaseBrowserClient()`
-- `src/components/workers/EmployerWorkersList.tsx` - Removed 2 calls to `resetSupabaseBrowserClient()`
-
-**Rationale**: These calls were triggered on query timeouts, destroying auth state for the entire app.
-
-### Fix 5: Improved Worker Request Hooks
-
-**Files Changed**:
-- `src/hooks/useProjectsServerSide.ts`
-- `src/hooks/useEmployersServerSide.ts`
-
-**Changes**:
-- Added `hasSession` to queryKey so queries refetch when session changes
-- Reduced console warning noise
-- Better handling of auth fallback scenarios (401/403 now fall back gracefully to app routes)
-
-### Fix 6: Updated Service Worker
-
-**File Changed**: `public/sw.js`
-
-**Changes**:
-- Bumped version from `2.0.1` to `2.1.0` to invalidate old caches
-- Changed mobile route handling from `cacheFirstForMobile` to `networkFirstForNavigation`
-- All HTML navigation requests now use network-first strategy
-- Added `SW_UPDATED` message to clients when service worker updates
-
-### Fix 7: Enhanced Service Worker Registration
-
-**File Changed**: `src/app/providers.tsx`
-
-**Changes**:
-- Auto-checks for service worker updates on load
-- Checks for updates every 5 minutes
-- Auto-reloads when controller changes
-- Sends `SKIP_WAITING` to new service worker
-
----
-
-## Current State of Auth Flow
-
-### How Auth Should Work:
-1. `AuthProvider` mounts once at root level
-2. `getSession()` is called immediately to get cached session from localStorage/cookies
-3. `onAuthStateChange` listener is set up for future changes
-4. Session state is maintained across all navigations
-5. API calls use the session token from context
-
-### What Might Still Be Happening:
-1. Something is still causing the Supabase client to lose its session
-2. The `onAuthStateChange` listener might not be firing correctly
-3. There might be cookie/storage issues in the PWA context
-4. Server components in layouts might be doing auth checks that interfere
-
----
-
-## Key Files for Further Investigation
-
-### Auth-Related:
-- `src/hooks/useAuth.tsx` - Main auth context provider
-- `src/lib/supabase/client.ts` - Supabase browser client singleton
-- `src/lib/supabase/server.ts` - Server-side Supabase client
-- `src/lib/supabase/middleware.ts` - Auth middleware
-
-### Layouts (Server Components):
-- `src/app/(app)/layout.tsx` - Main app layout (does server-side auth check)
-- `src/app/mobile/layout.tsx` - Mobile layout (does server-side auth check)
-- `src/app/page.tsx` - Root page (does server-side auth check)
-
-### Components That Query User Data:
-- `src/components/employers/EmployerDetailModal.tsx`
-- `src/components/workers/EmployerWorkersList.tsx`
-- Any component using `useAuth()` hook
-
-### PWA:
-- `public/sw.js` - Service worker
-- `public/manifest.json` - PWA manifest
-
----
-
-## Relevant Vercel Logs
-
-```
-[AppLayout] Slow profile fetch: userId=006284d3-fdc6-499c-9122-c5675df8d605, duration=249ms, hasRole=true
+**Problem**: The service worker was trying to pre-cache auth-protected routes during installation:
+```javascript
+// OLD CODE - PROBLEMATIC
+const STATIC_ASSETS = [
+  '/',           // Requires auth
+  '/settings',   // Requires auth
+  '/dashboard',  // Requires auth
+  '/site-visits', // Requires auth
+  ...
+]
 ```
 
-This suggests server-side auth is working, but something is happening on the client side.
+When creating a fresh PWA (before login):
+1. SW registers and calls `cache.addAll(STATIC_ASSETS)`
+2. Auth-protected routes redirect to `/auth` or fail
+3. `cache.addAll()` fails if ANY request fails
+4. SW installation fails or caches wrong content (redirect pages)
+
+**Fix Applied** (v2.2.0):
+```javascript
+// NEW CODE - FIXED
+const STATIC_ASSETS = [
+  '/manifest.json',
+  '/favicon.ico',
+  '/favicon.svg',
+  '/icons/icon-192x192.png',
+  '/icons/icon-512x512.png',
+  '/auth'  // Only public page
+]
+```
+
+##### Issue C: PWA Cookie Isolation
+**Discovery**: Creating PWA from `/auth` page works; creating from protected page fails.
+
+**Root Cause**: iOS Safari PWAs run in isolated storage context - they don't inherit cookies from the browser session.
+
+**When creating PWA after login (from protected page)**:
+1. User is logged in with cookies in Safari
+2. User adds to Home Screen
+3. PWA is created but has NO cookies (isolated context)
+4. When opened, PWA has no auth → app fails or shows wrong state
+
+**When creating PWA from /auth**:
+1. PWA starts at /auth
+2. User logs in WITHIN the PWA context
+3. Cookies are set in PWA's storage
+4. Everything works
+
+**Recommendation**: Users should create PWAs from the `/auth` page, then log in within the app.
+
+##### Issue D: PostgREST Ambiguous Relationship Error
+**Location**: `src/app/api/projects/quick-list/route.ts`
+
+**Problem**: Query using `job_sites!inner` failed because `projects` has two relationships to `job_sites`:
+1. `projects.main_job_site_id` → `job_sites.id`
+2. `job_sites.project_id` → `projects.id`
+
+**Error**: `Could not embed because more than one relationship was found for 'projects' and 'job_sites'`
+
+**Fix Applied**:
+```typescript
+// Changed from ambiguous:
+job_sites!inner(...)
+
+// To explicit FK reference:
+job_sites!fk_job_sites_project(...)
+```
+
+##### Issue E: Middleware Logging Noise
+**Location**: `src/middleware.ts`
+
+**Problem**: Unauthenticated requests (bots, preview checks, SW pre-caching) were logged as errors, creating noise in Vercel logs.
+
+**Fix Applied**: Only log as error when Supabase cookies exist but auth fails (actual session loss). Unauthenticated requests (no cookies) are silently ignored.
 
 ---
 
-## Possible Remaining Issues
+## Current State (2025-11-27)
 
-1. **Server Component Auth Checks**: The layouts do server-side auth checks using `getSupabaseServerClient()`. This creates a server-side session that might not sync properly with client-side session.
+### What's Working
+- Server-side auth is consistent (Vercel logs show correct user ID, 200 responses)
+- PWA created from `/auth` page works correctly
+- Middleware properly refreshes sessions when cookies exist but JWT is stale
 
-2. **Cookie Synchronization**: Supabase SSR uses cookies for session. The server might be setting cookies that don't match client state.
+### What's Still Being Investigated
+- Profile data loss during complex navigation flows
+- The `TOKEN_REFRESHED` fix needs production testing
 
-3. **React Query Cache Conflicts**: Auth-dependent queries might be using stale cached data.
+### Files Modified in Session 2
 
-4. **Middleware Interference**: Check if `middleware.ts` is doing anything that affects session cookies.
-
-5. **PWA Storage Context**: Standalone PWAs might have different storage/cookie access than browser tabs.
-
----
-
-## Debugging Steps for Next Agent
-
-1. **Add Console Logging**: Add detailed logging to track:
-   - When `AuthProvider` mounts/unmounts
-   - When `getSession()` is called and what it returns
-   - When `onAuthStateChange` fires and with what event
-   - When session state changes
-
-2. **Check Server Logs**: Look at Vercel function logs to see if server-side auth is consistent.
-
-3. **Inspect Cookies**: Check if Supabase auth cookies (`sb-*`) are being set/cleared correctly.
-
-4. **Compare Browser vs PWA**: Test if the issue is more severe in PWA vs browser.
-
-5. **Check Middleware**: Review `src/lib/supabase/middleware.ts` for any session manipulation.
-
-6. **Review Server Components**: Check if server-side `getUser()` calls in layouts are affecting client session.
+| File | Change | Status |
+|------|--------|--------|
+| `src/hooks/useAuth.tsx` | Removed TOKEN_REFRESHED from cache invalidation | **UNCOMMITTED** |
+| `public/sw.js` | v2.2.0 - Only pre-cache static assets | Committed |
+| `src/middleware.ts` | Added session refresh, improved logging | Committed |
+| `src/app/providers.tsx` | Added iOS SecurityError handling for SW | Committed |
+| `src/app/api/projects/quick-list/route.ts` | Fixed PostgREST relationship | Committed |
 
 ---
 
-## Environment Details
+## Key Files Reference
 
-- **Framework**: Next.js 14 with App Router
-- **Auth**: Supabase Auth with SSR package (`@supabase/ssr`)
-- **State Management**: React Query (`@tanstack/react-query`)
-- **Deployment**: Vercel (serverless) + Railway (workers)
-- **Database**: Supabase PostgreSQL with Row Level Security (RLS)
+### Auth System
+| File | Purpose |
+|------|---------|
+| `src/hooks/useAuth.tsx` | Client-side auth context provider |
+| `src/lib/supabase/client.ts` | Browser Supabase client singleton |
+| `src/lib/supabase/server.ts` | Server-side Supabase client |
+| `src/middleware.ts` | Auth middleware (runs on every request) |
+| `src/integrations/supabase/client.ts` | Legacy shim that re-exports from `@/lib/supabase/client` |
 
----
+### Layouts (Server Components)
+| File | Purpose |
+|------|---------|
+| `src/app/(app)/layout.tsx` | Main app layout - server-side auth check |
+| `src/app/mobile/layout.tsx` | Mobile layout - server-side auth check |
+| `src/app/page.tsx` | Root page - redirects organisers to /patch |
+| `src/app/providers.tsx` | Root providers including AuthProvider |
 
-## User Roles & RLS
-
-- Users have roles: `admin`, `lead_organiser`, `organiser`, `delegate`, `viewer`
-- RLS policies restrict data access based on user ID and assigned patches
-- When session is lost, RLS denies all queries (permission errors)
-
----
-
-## Files Modified in This Session
-
-1. `src/app/providers.tsx` - Added AuthProvider, enhanced SW registration
-2. `src/app/(app)/layout.tsx` - Removed AuthProvider
-3. `src/app/mobile/layout.tsx` - Removed AuthProvider
-4. `src/app/page.tsx` - Removed AuthProvider
-5. `src/hooks/useAuth.tsx` - Complete rewrite
-6. `src/lib/supabase/client.ts` - Removed health check
-7. `src/hooks/useProjectsServerSide.ts` - Improved session handling
-8. `src/hooks/useEmployersServerSide.ts` - Improved session handling
-9. `src/components/employers/EmployerDetailModal.tsx` - Removed client reset calls
-10. `src/components/workers/EmployerWorkersList.tsx` - Removed client reset calls
-11. `public/sw.js` - Changed to network-first for navigation
+### Service Worker
+| File | Purpose |
+|------|---------|
+| `public/sw.js` | PWA service worker (v2.2.0) |
 
 ---
 
-## Contact
+## Debugging Guide for Future Agents
 
-Created: 2025-11-26
-Last Updated: 2025-11-26
-Issue Status: **UNRESOLVED** - Fixes deployed but problem persists
+### Step 1: Determine If Issue Is Server or Client Side
 
+Check Vercel logs for the failing request:
+- **200 with userId present**: Server auth is working → Issue is CLIENT-SIDE
+- **401/403**: Server auth failed → Check middleware, cookies
+- **Auth error with sbCookieCount: 0**: No cookies sent → Expected for unauthenticated requests
+- **Auth error with sbCookieCount > 0**: Cookies exist but auth failed → Session loss issue
 
+### Step 2: For Client-Side Issues
+
+1. **Check if TOKEN_REFRESHED is causing problems**:
+   - Look for `[useAuth] Auth state change: TOKEN_REFRESHED` in console
+   - If this appears followed by data disappearing, the cache invalidation is the issue
+
+2. **Check React Query cache**:
+   - Open React Query DevTools
+   - Look for queries being invalidated unexpectedly
+   - Check if `settings-current-user` or profile queries are being cleared
+
+3. **Check for unexpected onAuthStateChange events**:
+   - Add logging: `console.log('[useAuth] Event:', event, 'Session:', !!newSession)`
+   - Look for events firing during navigation that shouldn't
+
+### Step 3: For PWA Issues
+
+1. **Test creating PWA from /auth page** - this should work
+2. **Clear Safari cache** before testing: Settings → Safari → Clear History and Website Data
+3. **Check service worker version**: Should be 2.2.0
+4. **Look for SecurityError in console**: iOS Safari may block SW registration
+
+### Step 4: For Server-Side Issues
+
+1. **Check middleware logs** for session refresh attempts
+2. **Verify cookies are being sent**: Look for `sbCookieCount` in logs
+3. **Check if session refresh succeeds**: Look for "Session recovered via refresh"
+
+---
+
+## Technical Context
+
+### Supabase Auth Events
+| Event | When It Fires | Should Invalidate Cache? |
+|-------|--------------|-------------------------|
+| `INITIAL_SESSION` | On page load | No |
+| `SIGNED_IN` | After login | Yes |
+| `SIGNED_OUT` | After logout | Yes |
+| `TOKEN_REFRESHED` | Background token refresh | **NO** (user is same) |
+| `USER_UPDATED` | Profile changes | Maybe |
+
+### Cookie Names
+- `sb-<project-ref>-auth-token` - Main auth token cookie
+- Multiple `sb-*` cookies may exist
+
+### React Query Keys That Should NOT Be Invalidated on TOKEN_REFRESHED
+- `settings-current-user` - Profile data
+- `user-projects` - User's projects
+- Any query with `user` in the key (the old broad predicate was clearing these)
+
+---
+
+## Reproduction Steps
+
+### To Reproduce Profile Loss (Pre-Fix)
+1. Sign in as organiser
+2. Navigate: Site Visit Wizard → Mapping → Employer Search
+3. Press Back multiple times
+4. Navigate to Ratings → Employer Rating
+5. Press Back
+6. Check Settings page - profile info may be missing
+
+### To Test Fix
+1. Commit the `useAuth.tsx` change
+2. Deploy to production
+3. Repeat the reproduction steps
+4. Profile should persist through navigation
+
+---
+
+## Contact & History
+
+| Date | Status | Key Finding |
+|------|--------|-------------|
+| 2025-11-26 | Initial investigation | Multiple root causes identified |
+| 2025-11-27 | Continued investigation | TOKEN_REFRESHED cache invalidation identified as likely cause |
+
+**Current Status**: Testing `TOKEN_REFRESHED` fix - uncommitted change in `src/hooks/useAuth.tsx`

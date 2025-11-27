@@ -1,10 +1,13 @@
 "use client"
 
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/integrations/supabase/client'
 import { WizardButton } from '../shared/WizardButton'
 import { ShareAuditFormGenerator } from '@/components/projects/compliance/ShareAuditFormGenerator'
 import { cn } from '@/lib/utils'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { InlineAssessmentFlow } from './InlineAssessmentFlow'
 import { 
   Star, 
   Building, 
@@ -29,9 +32,11 @@ interface EmployerRating {
 }
 
 export function RatingsView({ projectId, projectName }: RatingsViewProps) {
+  const queryClient = useQueryClient()
+  const [isAddRatingOpen, setIsAddRatingOpen] = useState(false)
   
   // Fetch employer ratings
-  const { data: ratingsData, isLoading } = useQuery({
+  const { data: ratingsData, isLoading, refetch } = useQuery({
     queryKey: ['wizard-employer-ratings', projectId],
     queryFn: async () => {
       // Get employers assigned to this project
@@ -131,9 +136,17 @@ export function RatingsView({ projectId, projectName }: RatingsViewProps) {
     }
   }
 
-  // Navigate to employer selection page for assessments
+  // Open inline assessment dialog (stays within React tree to preserve auth state)
   const handleAddRating = () => {
-    window.location.href = `/mobile/projects/${projectId}/assessments`
+    setIsAddRatingOpen(true)
+  }
+
+  // Handle assessment completion
+  const handleAssessmentComplete = () => {
+    setIsAddRatingOpen(false)
+    // Refresh the ratings data
+    refetch()
+    queryClient.invalidateQueries({ queryKey: ['wizard-employer-ratings', projectId] })
   }
 
   // Navigate to full compliance view
@@ -258,6 +271,23 @@ export function RatingsView({ projectId, projectName }: RatingsViewProps) {
           Full Compliance View
         </WizardButton>
       </div>
+
+      {/* Inline Assessment Dialog - stays within React tree to preserve auth state */}
+      <Dialog open={isAddRatingOpen} onOpenChange={setIsAddRatingOpen}>
+        <DialogContent className="max-w-3xl p-0 overflow-hidden max-h-[90vh]">
+          <DialogHeader className="px-4 pt-4 pb-2 border-b">
+            <DialogTitle>Add Employer Rating</DialogTitle>
+          </DialogHeader>
+          <div className="overflow-y-auto">
+            <InlineAssessmentFlow
+              projectId={projectId}
+              projectName={projectName}
+              onComplete={handleAssessmentComplete}
+              onCancel={() => setIsAddRatingOpen(false)}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
