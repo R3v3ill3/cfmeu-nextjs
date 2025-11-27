@@ -47,6 +47,8 @@ export async function GET(request: NextRequest) {
     const patchId = searchParams.get('patch_id') || undefined;
 
     // Build query for minimal project data
+    // Use explicit FK reference to disambiguate the relationship
+    // (projects has both main_job_site_id -> job_sites and job_sites.project_id -> projects)
     let query = supabase
       .from('projects')
       .select(`
@@ -54,7 +56,7 @@ export async function GET(request: NextRequest) {
         name,
         stage,
         tier,
-        job_sites!inner(
+        job_sites!fk_job_sites_project(
           id,
           street_address,
           suburb,
@@ -125,6 +127,7 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
 
 
 

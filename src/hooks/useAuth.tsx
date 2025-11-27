@@ -286,6 +286,58 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [attemptSessionRecovery, queryClient, applyAuthState, logAuthEvent, logAuthError]);
 
+  // Visibility change listener - proactively re-validate session when page becomes visible
+  // This handles cases where the session may have been lost while the tab was in background
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    const handleVisibilityChange = async () => {
+      // Only check when becoming visible and we previously had a session
+      if (document.visibilityState !== 'visible' || !hadSessionRef.current) {
+        return;
+      }
+
+      const supabase = getSupabaseBrowserClient();
+      
+      try {
+        const { data: { session: currentSession }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          logAuthEvent('Visibility check: error getting session', { 
+            errorMessage: error.message,
+          }, 'warning');
+        }
+        
+        // If we had a session but now don't, and we haven't already tried recovery
+        if (!currentSession && hadSessionRef.current && !recoveryAttemptedRef.current) {
+          logAuthEvent('Visibility check: session lost, attempting recovery', {
+            hadSession: true,
+            recoveryAttempted: recoveryAttemptedRef.current,
+          });
+          
+          const recovered = await attemptSessionRecovery();
+          if (recovered && isSubscribedRef.current) {
+            applyAuthState(recovered, { source: 'visibility_recovery' });
+          }
+        } else if (currentSession && !sessionRef.current) {
+          // Edge case: we have a session now but didn't before (maybe cookie was restored)
+          logAuthEvent('Visibility check: session restored externally', {
+            userId: currentSession.user?.id,
+          });
+          applyAuthState(currentSession, { source: 'visibility_restore' });
+        }
+      } catch (err) {
+        logAuthError('Visibility check exception', err);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [attemptSessionRecovery, applyAuthState, logAuthEvent, logAuthError]);
+
   const signOut = async () => {
     const supabase = getSupabaseBrowserClient();
     hadSessionRef.current = false; // Reset on explicit sign out

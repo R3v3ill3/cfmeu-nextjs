@@ -109,11 +109,16 @@ export async function middleware(req: NextRequest) {
   }
 
   // Get user after potential code exchange
-  const {
+  let {
     data: { user },
     error: authError,
   } = await supabase.auth.getUser()
-  const authDuration = Date.now() - authStartTime;
+  let authDuration = Date.now() - authStartTime;
+
+  // Check for Supabase auth cookies to help diagnose session issues
+  const allCookies = req.cookies.getAll()
+  const sbCookies = allCookies.filter(c => c.name.startsWith('sb-'))
+  const hasSbCookies = sbCookies.length > 0
 
   // Enhanced logging for diagnostics
   if (authError) {
@@ -123,7 +128,81 @@ export async function middleware(req: NextRequest) {
       errorCode: authError.status,
       authDuration,
       hasAuthCode,
+      // Diagnostic: log cookie state to help debug session loss
+      sbCookieCount: sbCookies.length,
+      sbCookieNames: sbCookies.map(c => c.name),
+      hasSbCookies,
     });
+    
+    // If auth error but cookies exist, try to refresh the session
+    // This can recover from stale JWT tokens
+    if (hasSbCookies) {
+      logMiddleware('log', 'Attempting session refresh due to auth error with existing cookies');
+      try {
+        const refreshStartTime = Date.now();
+        const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+        const refreshDuration = Date.now() - refreshStartTime;
+        
+        if (refreshError) {
+          logMiddleware('warn', 'Session refresh failed', {
+            errorMessage: refreshError.message,
+            refreshDuration,
+          });
+        } else if (refreshData.session) {
+          // Session refreshed successfully, get user again
+          const { data: userData, error: userError } = await supabase.auth.getUser();
+          if (!userError && userData.user) {
+            user = userData.user;
+            authError = null;
+            authDuration = Date.now() - authStartTime;
+            logMiddleware('log', 'Session recovered via refresh', {
+              userId: user.id,
+              totalDuration: authDuration,
+              refreshDuration,
+            });
+          }
+        }
+      } catch (refreshException) {
+        logMiddleware('error', 'Exception during session refresh', {
+          error: refreshException instanceof Error ? refreshException.message : String(refreshException),
+        });
+      }
+    }
+  } else if (!user && hasSbCookies) {
+    // No error but also no user, yet we have cookies - try refresh
+    logMiddleware('log', 'No user but sb cookies present, attempting session refresh', {
+      sbCookieCount: sbCookies.length,
+      sbCookieNames: sbCookies.map(c => c.name),
+    });
+    
+    try {
+      const refreshStartTime = Date.now();
+      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+      const refreshDuration = Date.now() - refreshStartTime;
+      
+      if (refreshError) {
+        logMiddleware('warn', 'Session refresh failed (no user)', {
+          errorMessage: refreshError.message,
+          refreshDuration,
+        });
+      } else if (refreshData.session) {
+        // Session refreshed, get user
+        const { data: userData, error: userError } = await supabase.auth.getUser();
+        if (!userError && userData.user) {
+          user = userData.user;
+          authDuration = Date.now() - authStartTime;
+          logMiddleware('log', 'Session recovered via refresh (no user case)', {
+            userId: user.id,
+            totalDuration: authDuration,
+            refreshDuration,
+          });
+        }
+      }
+    } catch (refreshException) {
+      logMiddleware('error', 'Exception during session refresh (no user)', {
+        error: refreshException instanceof Error ? refreshException.message : String(refreshException),
+      });
+    }
   } else if (authDuration > 200 || hasAuthCode) {
     // Log slow auth checks and all PKCE exchanges for debugging
     logMiddleware('log', 'Auth check details', {
@@ -131,6 +210,7 @@ export async function middleware(req: NextRequest) {
       authDuration,
       hasAuthCode,
       hasUser: !!user,
+      sbCookieCount: sbCookies.length,
     });
   }
   

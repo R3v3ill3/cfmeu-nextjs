@@ -94,9 +94,39 @@ export default function Providers({ children }: ProvidersProps) {
 
         return () => clearInterval(updateInterval)
       } catch (error) {
-        logPwaEvent('Failed to register service worker', {
-          error: error instanceof Error ? error.message : String(error),
-        })
+        // Handle different error types gracefully
+        // iOS Safari PWA context can throw SecurityError when SW registration is blocked
+        const errorName = error instanceof Error ? error.name : 'UnknownError'
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        
+        if (errorName === 'SecurityError') {
+          // SecurityError on iOS Safari - SW registration blocked by security policy
+          // This can happen in PWA/standalone mode on iOS - auth should still work
+          logPwaEvent('Service worker registration blocked by security policy', {
+            errorName,
+            errorMessage,
+            userAgent: navigator.userAgent,
+          })
+          // Don't throw - continue without SW, auth will work via cookies
+          console.warn('[PWA] Service worker registration blocked by security policy - continuing without SW')
+        } else if (errorName === 'TypeError' && errorMessage.includes('load failed')) {
+          // TypeError with "load failed" - script couldn't be fetched
+          // This can happen on iOS Safari due to caching or network issues
+          logPwaEvent('Service worker script load failed', {
+            errorName,
+            errorMessage,
+            userAgent: navigator.userAgent,
+          })
+          console.warn('[PWA] Service worker script load failed - continuing without SW')
+        } else {
+          // Other errors - log but don't throw to prevent breaking the app
+          logPwaEvent('Failed to register service worker', {
+            errorName,
+            errorMessage,
+            userAgent: navigator.userAgent,
+          })
+          console.error('[PWA] Service worker registration failed:', errorMessage)
+        }
       }
     }
 
