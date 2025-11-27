@@ -105,6 +105,54 @@ function resolveHelpDocuments(): HelpDocument[] {
       documentType: 'system-guide',
       roleAccess: ['admin', 'lead_organiser', 'organiser'],
       mobileOptimized: true
+    },
+    {
+      id: 'traffic-light-rating',
+      title: 'Traffic Light Rating System User Guide',
+      relativePath: 'TRAFFIC_LIGHT_RATING_USER_GUIDE.md',
+      documentType: 'system-guide',
+      roleAccess: ['admin', 'lead_organiser', 'organiser', 'delegate', 'viewer'],
+      mobileOptimized: true
+    },
+    {
+      id: 'traffic-light-rating-abridged',
+      title: 'Traffic Light Rating System Guide (Abridged)',
+      relativePath: 'TRAFFIC_LIGHT_RATING_USER_GUIDE_ABRIDGED.md',
+      documentType: 'system-guide',
+      roleAccess: ['admin', 'lead_organiser', 'organiser', 'delegate', 'viewer'],
+      mobileOptimized: true
+    },
+    {
+      id: 'site-visit-integration',
+      title: 'Site Visit Integration Documentation',
+      relativePath: 'docs/SITE_VISIT_INTEGRATION_COMPLETE.md',
+      documentType: 'workflow-guide',
+      roleAccess: ['admin', 'lead_organiser', 'organiser'],
+      mobileOptimized: true
+    },
+    {
+      id: 'mobile-workflow-plan',
+      title: 'Mobile Workflow Implementation Plan',
+      relativePath: 'MOBILE_WORKFLOW_IMPLEMENTATION_PLAN.md',
+      documentType: 'workflow-guide',
+      roleAccess: ['admin', 'lead_organiser', 'organiser'],
+      mobileOptimized: true
+    },
+    {
+      id: 'rating-system-integration',
+      title: 'Rating System Integration Guide',
+      relativePath: 'RATING_SYSTEM_INTEGRATION.md',
+      documentType: 'system-guide',
+      roleAccess: ['admin', 'lead_organiser', 'organiser'],
+      mobileOptimized: true
+    },
+    {
+      id: 'pending-employers-guide',
+      title: 'Pending Employers Implementation Guide',
+      relativePath: 'PENDING_EMPLOYERS_IMPLEMENTATION_GUIDE.md',
+      documentType: 'workflow-guide',
+      roleAccess: ['admin', 'lead_organiser', 'organiser'],
+      mobileOptimized: true
     }
   ]
 
