@@ -120,23 +120,21 @@ export async function middleware(req: NextRequest) {
   const sbCookies = allCookies.filter(c => c.name.startsWith('sb-'))
   const hasSbCookies = sbCookies.length > 0
 
-  // Enhanced logging for diagnostics
+  // Enhanced logging for diagnostics - only log errors when cookies exist but auth fails
+  // (indicates actual session loss, not just unauthenticated requests)
   if (authError) {
-    logMiddleware('error', 'Auth error', {
-      error: authError,
-      errorMessage: authError.message,
-      errorCode: authError.status,
-      authDuration,
-      hasAuthCode,
-      // Diagnostic: log cookie state to help debug session loss
-      sbCookieCount: sbCookies.length,
-      sbCookieNames: sbCookies.map(c => c.name),
-      hasSbCookies,
-    });
-    
-    // If auth error but cookies exist, try to refresh the session
-    // This can recover from stale JWT tokens
     if (hasSbCookies) {
+      // This is the important case: user had cookies but auth failed - potential session loss
+      logMiddleware('error', 'Auth error with existing cookies (potential session loss)', {
+        errorMessage: authError.message,
+        errorCode: authError.status,
+        authDuration,
+        hasAuthCode,
+        sbCookieCount: sbCookies.length,
+        sbCookieNames: sbCookies.map(c => c.name),
+      });
+      
+      // Try to refresh the session - this can recover from stale JWT tokens
       logMiddleware('log', 'Attempting session refresh due to auth error with existing cookies');
       try {
         const refreshStartTime = Date.now();
@@ -168,6 +166,8 @@ export async function middleware(req: NextRequest) {
         });
       }
     }
+    // If no cookies, this is just an unauthenticated request (bot, preview check, etc.)
+    // Don't log as error - this is expected behavior
   } else if (!user && hasSbCookies) {
     // No error but also no user, yet we have cookies - try refresh
     logMiddleware('log', 'No user but sb cookies present, attempting session refresh', {

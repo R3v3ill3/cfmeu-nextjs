@@ -51,7 +51,7 @@ export function EmployerSearch({
   }, [open]);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen} modal={false}>
       <PopoverTrigger asChild>
         <Button
           ref={triggerRef}
@@ -78,10 +78,22 @@ export function EmployerSearch({
       <PopoverContent 
         className="p-0" 
         align="start"
-        style={popoverWidth ? { width: `${popoverWidth}px`, minWidth: '300px', maxWidth: '400px' } : { minWidth: '300px', maxWidth: '400px' }}
+        side="bottom"
+        sideOffset={4}
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        style={popoverWidth ? { 
+          width: `${popoverWidth}px`, 
+          minWidth: '300px', 
+          maxWidth: '400px',
+          height: '400px', // Fixed height prevents repositioning
+        } : { 
+          minWidth: '300px', 
+          maxWidth: '400px',
+          height: '400px', // Fixed height prevents repositioning
+        }}
       >
-        <Command className="max-h-[400px] flex flex-col">
-          <div className="sticky top-0 z-10 bg-white">
+        <Command className="h-[400px] flex flex-col">
+          <div className="sticky top-0 z-10 bg-white border-b">
             <CommandInput 
               placeholder="Search employers..." 
               value={search}
@@ -91,7 +103,7 @@ export function EmployerSearch({
           <CommandEmpty className="py-6 text-center text-sm text-muted-foreground">
             No employer found.
           </CommandEmpty>
-          <CommandGroup className="max-h-[300px] overflow-y-auto flex-1">
+          <CommandGroup className="flex-1 overflow-y-auto min-h-0">
             {filteredEmployers.map((employer) => (
               <CommandItem
                 key={employer.id}

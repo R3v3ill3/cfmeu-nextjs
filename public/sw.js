@@ -1,34 +1,26 @@
 // Service Worker for CFMEU Employer Rating System PWA
 // Enhanced with Mobile Performance Optimizations
-// Version 2.1.0 - Fixed auth issues with navigation caching
+// Version 2.2.0 - Fixed pre-caching auth-protected routes causing installation failures
 
-const CACHE_NAME = 'cfmeu-ratings-v2.1.0'
-const STATIC_CACHE = 'cfmeu-static-v2.1.0'
-const API_CACHE = 'cfmeu-api-v2.1.0'
-const DYNAMIC_CACHE = 'cfmeu-dynamic-v2.1.0'
-const MOBILE_CACHE = 'cfmeu-mobile-v2.1.0'
-const CRITICAL_DATA_CACHE = 'cfmeu-critical-v2.1.0'
+const CACHE_NAME = 'cfmeu-ratings-v2.2.0'
+const STATIC_CACHE = 'cfmeu-static-v2.2.0'
+const API_CACHE = 'cfmeu-api-v2.2.0'
+const DYNAMIC_CACHE = 'cfmeu-dynamic-v2.2.0'
+const MOBILE_CACHE = 'cfmeu-mobile-v2.2.0'
+const CRITICAL_DATA_CACHE = 'cfmeu-critical-v2.2.0'
 
-// Critical assets to cache immediately
+// ONLY truly static assets that don't require authentication
+// Auth-protected routes will be cached dynamically after user logs in
 const STATIC_ASSETS = [
-  '/',
-  '/settings',
-  '/dashboard',
-  '/site-visits',
-  '/projects',
-  '/mobile/site-visits',
-  '/mobile/site-visits/new',
   '/manifest.json',
-  '/_next/static/css/',
-  '/_next/static/chunks/',
   '/favicon.ico',
   '/favicon.svg',
   '/icons/icon-192x192.png',
   '/icons/icon-512x512.png',
-  '/styles/mobile.css'
+  '/auth'  // Auth page is public
 ]
 
-// API endpoints to cache with network-first strategy
+// API endpoints to cache with network-first strategy (after user is authenticated)
 const API_ENDPOINTS = [
   '/api/employers',
   '/api/ratings',
@@ -37,7 +29,7 @@ const API_ENDPOINTS = [
   '/api/employers/eba-quick-list'
 ]
 
-// Critical mobile endpoints for offline access
+// Critical mobile endpoints for offline access (cached dynamically after auth)
 const CRITICAL_MOBILE_APIS = [
   '/api/employers/quick-list',
   '/api/projects/quick-list',
@@ -45,55 +37,46 @@ const CRITICAL_MOBILE_APIS = [
   '/api/employers/bulk-aliases'
 ]
 
-// Mobile-specific assets
+// Mobile-specific static assets only (no auth-protected routes)
 const MOBILE_ASSETS = [
-  '/settings',
-  '/mobile/projects',
-  '/mobile/employers',
-  '/mobile/site-visits',
-  '/mobile/site-visits/new',
-  '/site-visits',
-  '/manifest.json',
-  '/_next/static/chunks/framework-*.js',
-  '/_next/static/chunks/main-*.js'
+  '/manifest.json'
 ]
 
-// Install event - cache static assets and critical mobile data
+// Install event - cache ONLY truly static assets (no auth-protected routes)
 self.addEventListener('install', (event) => {
-  console.log('[SW] Installing service worker v2.1.0')
+  console.log('[SW] Installing service worker v2.2.0')
 
   event.waitUntil(
-    Promise.all([
-      // Cache static assets
-      caches.open(STATIC_CACHE)
-        .then((cache) => {
-          console.log('[SW] Caching static assets')
-          return cache.addAll(STATIC_ASSETS)
-        }),
-
-      // Cache mobile-specific assets
-      caches.open(MOBILE_CACHE)
-        .then((cache) => {
-          console.log('[SW] Caching mobile assets')
-          return cache.addAll(MOBILE_ASSETS.filter(asset => !asset.includes('*')))
-        }),
-
-      // Pre-cache critical mobile data for offline access
-      preCacheCriticalMobileData()
-    ])
+    // Only cache truly static assets that don't require authentication
+    // Auth-protected routes will be cached dynamically when user navigates after login
+    caches.open(STATIC_CACHE)
+      .then((cache) => {
+        console.log('[SW] Caching static assets (auth-free only)')
+        // Use individual cache.add() calls to handle failures gracefully
+        return Promise.allSettled(
+          STATIC_ASSETS.map(asset => 
+            cache.add(asset).catch(err => {
+              console.warn(`[SW] Failed to cache ${asset}:`, err.message)
+              return null // Continue even if one asset fails
+            })
+          )
+        )
+      })
       .then(() => {
-        console.log('[SW] Mobile optimization caches ready')
+        console.log('[SW] Static assets cached, skipping waiting')
         return self.skipWaiting()
       })
       .catch((error) => {
-        console.error('[SW] Failed to cache mobile assets:', error)
+        console.error('[SW] Failed to cache static assets:', error)
+        // Still skip waiting to activate the SW even on cache failure
+        return self.skipWaiting()
       })
   )
 })
 
 // Activate event - clean up old caches
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activating service worker v2.1.0')
+  console.log('[SW] Activating service worker v2.2.0')
 
   // List of current cache names to keep
   const currentCaches = [STATIC_CACHE, API_CACHE, DYNAMIC_CACHE, MOBILE_CACHE, CRITICAL_DATA_CACHE]
@@ -112,7 +95,7 @@ self.addEventListener('activate', (event) => {
         )
       })
       .then(() => {
-        console.log('[SW] Service worker v2.1.0 activated - claiming clients')
+        console.log('[SW] Service worker v2.2.0 activated - claiming clients')
         // Claim clients immediately so the new SW takes control
         return self.clients.claim()
       })
@@ -122,7 +105,7 @@ self.addEventListener('activate', (event) => {
           clients.forEach(client => {
             client.postMessage({
               type: 'SW_UPDATED',
-              version: '2.1.0',
+              version: '2.2.0',
               message: 'Service worker updated. Please refresh for best experience.'
             })
           })
