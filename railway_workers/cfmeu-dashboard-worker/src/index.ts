@@ -15,46 +15,12 @@ const logger = pino({ level: process.env.LOG_LEVEL || 'info' })
 const app = express()
 
 app.use(express.json())
-
-// CORS middleware with proper origin validation
 app.use((req, res, next) => {
-  const requestOrigin = req.header('Origin')
-  const { corsOrigins } = config
-  
-  // Determine if the request origin is allowed
-  let allowedOrigin: string | null = null
-  if (corsOrigins === '*') {
-    // Allow all origins
-    allowedOrigin = '*'
-  } else if (requestOrigin && corsOrigins.includes(requestOrigin)) {
-    // Origin is in the allowed list - reflect it back
-    allowedOrigin = requestOrigin
-  } else if (!requestOrigin) {
-    // No Origin header (e.g., server-to-server, curl) - allow with first configured origin
-    allowedOrigin = corsOrigins[0] || '*'
-  }
-  
-  if (allowedOrigin) {
-    res.header('Access-Control-Allow-Origin', allowedOrigin)
-    // Vary header is required when reflecting origin
-    if (allowedOrigin !== '*') {
-      res.header('Vary', 'Origin')
-    }
-  }
-  
+  // Basic configurable CORS suitable for local dev; tighten for prod
+  res.header('Access-Control-Allow-Origin', config.corsOrigin)
   res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-  
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(204)
-  }
-  
-  // If origin was provided but not allowed, continue but log it
-  if (requestOrigin && !allowedOrigin) {
-    logger.warn({ requestOrigin, corsOrigins }, 'CORS: Request from unauthorized origin')
-  }
-  
+  if (req.method === 'OPTIONS') return res.sendStatus(204)
   next()
 })
 
