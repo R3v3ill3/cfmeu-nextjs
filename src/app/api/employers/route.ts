@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
 import type { Database } from '@/types/database';
-import { withRateLimit, RATE_LIMIT_PRESETS } from '@/lib/rateLimit';
+import { withRateLimit } from '@/lib/rateLimit';
+import { parseBooleanParam } from '@/lib/api/paramUtils';
+import { getEmployersByPatches } from '@/lib/employers/patchFiltering';
 
 // Helper function to escape ILIKE special characters (%, _, \)
 function escapeLikePattern(str: string): string {
@@ -14,15 +16,32 @@ const ROLE_SET = new Set<AllowedRole>(ALLOWED_ROLES);
 
 export const dynamic = 'force-dynamic'
 
+function buildPaginationMeta(page: number, pageSize: number, totalCount: number) {
+  const totalPages = totalCount === 0 ? 0 : Math.ceil(totalCount / pageSize);
+  return {
+    page,
+    pageSize,
+    totalCount,
+    totalPages,
+    hasNextPage: page * pageSize < totalCount,
+    hasPrevPage: page > 1
+  };
+}
+
 // Feature flag: Use materialized view for optimized search
 // Set to 'false' to rollback to old behavior instantly
 const USE_MATERIALIZED_VIEW = process.env.NEXT_PUBLIC_USE_EMPLOYER_MAT_VIEW !== 'false';
 
 // Helper function to fetch enhanced employer data (projects, organisers, incolink IDs)
+// OPTIMIZED: Batch fetch all data in single queries to avoid N+1 issues
 type EmployerAnalyticsRow = Database['public']['Views']['employer_analytics']['Row'];
 type ProjectAssignmentRow = Database['public']['Tables']['project_assignments']['Row'];
 
 async function fetchEnhancedEmployerData(supabase: Awaited<ReturnType<typeof createServerSupabase>>, employerIds: string[]) {
+  if (employerIds.length === 0) {
+    return {};
+  }
+
   const enhancedData: Record<string, {
     incolink_id: string | null;
     projects: Array<{
@@ -49,40 +68,70 @@ async function fetchEnhancedEmployerData(supabase: Awaited<ReturnType<typeof cre
   });
 
   try {
-    // Fetch incolink IDs
-    const { data: incolinkData } = await supabase
-      .from('employers')
-      .select('id, incolink_id')
-      .in('id', employerIds)
-      .not('incolink_id', 'is', null);
+    const start = Date.now()
 
-    (incolinkData || []).forEach((row: any) => {
+    const [incolinkResult, projectAssignmentsResult] = await Promise.all([
+      supabase
+        .from('employers')
+        .select('id, incolink_id')
+        .in('id', employerIds)
+        .not('incolink_id', 'is', null),
+      supabase
+        .from('project_assignments')
+        .select(`
+          employer_id,
+          assignment_type,
+          projects!inner(id, name, tier),
+          contractor_role_types!inner(code),
+          trade_types!inner(code)
+        `)
+        .in('employer_id', employerIds)
+    ])
+
+    const projectIds = Array.from(
+      new Set(
+        (projectAssignmentsResult.data || [])
+          .map((row: any) => row.projects?.id)
+          .filter(Boolean)
+      )
+    )
+
+    let jobSitesWithPatchesResult: { data: any[] | null; error?: any } = { data: [] }
+
+    if (projectIds.length > 0) {
+      jobSitesWithPatchesResult = await supabase
+        .from('job_sites')
+        .select(`
+          project_id,
+          patches!inner(
+            id,
+            name,
+            organisers!inner(id, first_name, surname)
+          )
+        `)
+        .in('project_id', projectIds)
+    }
+
+    // Process incolink data
+    (incolinkResult.data || []).forEach((row: any) => {
       if (enhancedData[row.id]) {
         enhancedData[row.id].incolink_id = row.incolink_id;
       }
     });
 
-    // Fetch project assignments with roles and trades
-    const { data: projectData } = await supabase
-      .from('project_assignments')
-      .select(`
-        employer_id,
-        assignment_type,
-        projects!inner(id, name, tier),
-        contractor_role_types(code),
-        trade_types(code)
-      `)
-      .in('employer_id', employerIds);
-
-    // Group by employer and project
+    // Process project assignments data (pre-aggregated to avoid grouping)
     const projectsByEmployer: Record<string, Record<string, any>> = {};
-    (projectData || []).forEach((row: any) => {
+    const projectIdsByEmployer: Record<string, Set<string>> = {};
+
+    (projectAssignmentsResult.data || []).forEach((row: any) => {
       if (!projectsByEmployer[row.employer_id]) {
         projectsByEmployer[row.employer_id] = {};
+        projectIdsByEmployer[row.employer_id] = new Set();
       }
-      
+
       const projectId = row.projects.id;
-      if (!projectsByEmployer[row.employer_id][projectId]) {
+      if (!projectIdsByEmployer[row.employer_id].has(projectId)) {
+        projectIdsByEmployer[row.employer_id].add(projectId);
         projectsByEmployer[row.employer_id][projectId] = {
           id: projectId,
           name: row.projects.name,
@@ -94,14 +143,14 @@ async function fetchEnhancedEmployerData(supabase: Awaited<ReturnType<typeof cre
 
       // Add roles and trades
       if (row.assignment_type === 'contractor_role' && row.contractor_role_types) {
-        const roleCode = row.contractor_role_types?.code;
+        const roleCode = row.contractor_role_types.code;
         if (roleCode && !projectsByEmployer[row.employer_id][projectId].roles.includes(roleCode)) {
           projectsByEmployer[row.employer_id][projectId].roles.push(roleCode);
         }
       }
 
       if (row.assignment_type === 'trade_work' && row.trade_types) {
-        const tradeCode = row.trade_types?.code;
+        const tradeCode = row.trade_types.code;
         if (tradeCode && !projectsByEmployer[row.employer_id][projectId].trades.includes(tradeCode)) {
           projectsByEmployer[row.employer_id][projectId].trades.push(tradeCode);
         }
@@ -115,62 +164,50 @@ async function fetchEnhancedEmployerData(supabase: Awaited<ReturnType<typeof cre
       }
     });
 
-    // Fetch organisers for these projects
-    const allProjectIds = Object.values(projectsByEmployer)
-      .flatMap(projects => Object.keys(projects));
+    // Process organisers data (pre-aggregated by project)
+    const organisersByProject: Record<string, Map<string, any>> = {};
 
-    if (allProjectIds.length > 0) {
-      const { data: organiserData } = await supabase
-        .from('job_sites')
-        .select(`
-          project_id,
-          patches!inner(
-            id,
-            name,
-            organisers(id, first_name, surname)
-          )
-        `)
-        .in('project_id', allProjectIds);
+    (jobSitesWithPatchesResult.data || []).forEach((row: any) => {
+      if (!organisersByProject[row.project_id]) {
+        organisersByProject[row.project_id] = new Map();
+      }
 
-      // Map organisers back to employers
-      const organisersByProject: Record<string, any[]> = {};
-      (organiserData || []).forEach((row: any) => {
-        if (!organisersByProject[row.project_id]) {
-          organisersByProject[row.project_id] = [];
-        }
-        if (row.patches && row.patches.organisers) {
-          row.patches.organisers.forEach((organiser: any) => {
-            const orgData = {
+      if (row.patches?.organisers) {
+        row.patches.organisers.forEach((organiser: any) => {
+          const orgKey = `${organiser.id}_${row.patches.name}`;
+          if (!organisersByProject[row.project_id].has(orgKey)) {
+            organisersByProject[row.project_id].set(orgKey, {
               id: organiser.id,
               name: `${organiser.first_name} ${organiser.surname}`.trim(),
               patch_name: row.patches.name
-            };
-            // Avoid duplicates
-            if (!organisersByProject[row.project_id].find(o => o.id === orgData.id)) {
-              organisersByProject[row.project_id].push(orgData);
+            });
+          }
+        });
+      }
+    });
+
+    // Add organisers to enhanced data
+    Object.entries(projectsByEmployer).forEach(([employerId, projects]) => {
+      const uniqueOrganisers: any[] = [];
+      const seenOrganiserIds = new Set<string>();
+
+      Object.keys(projects).forEach(projectId => {
+        if (organisersByProject[projectId]) {
+          Array.from(organisersByProject[projectId].values()).forEach((org: any) => {
+            if (!seenOrganiserIds.has(org.id)) {
+              seenOrganiserIds.add(org.id);
+              uniqueOrganisers.push(org);
             }
           });
         }
       });
 
-      // Add organisers to enhanced data
-      Object.entries(projectsByEmployer).forEach(([employerId, projects]) => {
-        const uniqueOrganisers: any[] = [];
-        Object.keys(projects).forEach(projectId => {
-          if (organisersByProject[projectId]) {
-            organisersByProject[projectId].forEach((org: any) => {
-              if (!uniqueOrganisers.find(o => o.id === org.id)) {
-                uniqueOrganisers.push(org);
-              }
-            });
-          }
-        });
-        
-        if (enhancedData[employerId]) {
-          enhancedData[employerId].organisers = uniqueOrganisers;
-        }
-      });
-    }
+      if (enhancedData[employerId]) {
+        enhancedData[employerId].organisers = uniqueOrganisers;
+      }
+    });
+
+    console.log(`🚀 Enhanced data fetch completed for ${employerIds.length} employers in ${Date.now() - start}ms`);
 
   } catch (error) {
     console.error('Error fetching enhanced employer data:', error);
@@ -178,56 +215,6 @@ async function fetchEnhancedEmployerData(supabase: Awaited<ReturnType<typeof cre
   }
 
   return enhancedData;
-}
-
-// Helper function to get employers by patch assignments
-async function getEmployersByPatches(supabase: Awaited<ReturnType<typeof createServerSupabase>>, patchIds: string[]) {
-  if (patchIds.length === 0) return { employerIds: [], employerMap: new Map() };
-
-  try {
-    // Get employers that have job sites in the specified patches
-    const { data: siteEmployers, error: siteError } = await supabase
-      .from('site_employers')
-      .select('employer_id, job_sites!inner(patch_id)')
-      .in('job_sites.patch_id', patchIds);
-
-    if (siteError) {
-      console.warn('Warning: Failed to fetch site employers for patch filtering:', siteError);
-      return { employerIds: [], employerMap: new Map() };
-    }
-
-    // Get employers assigned to projects in the specified patches
-    const { data: projectEmployers, error: projectError } = await supabase
-      .from('project_assignments')
-      .select('employer_id, projects!inner(job_sites!inner(patch_id))')
-      .in('projects.job_sites.patch_id', patchIds);
-
-    if (projectError) {
-      console.warn('Warning: Failed to fetch project employers for patch filtering:', projectError);
-      return { employerIds: [], employerMap: new Map() };
-    }
-
-    // Combine and deduplicate employer IDs
-    const employerIdsSet = new Set<string>();
-
-    (siteEmployers || []).forEach((row: any) => {
-      if (row.employer_id) employerIdsSet.add(row.employer_id);
-    });
-
-    (projectEmployers || []).forEach((row: any) => {
-      if (row.employer_id) employerIdsSet.add(row.employer_id);
-    });
-
-    const employerIds = Array.from(employerIdsSet);
-    const employerMap = new Map(employerIds.map(id => [id, true]));
-
-    console.log(`🔍 Employers API: Patch filtering found ${employerIds.length} employers in ${patchIds.length} patches`);
-
-    return { employerIds, employerMap };
-  } catch (error) {
-    console.error('Error in getEmployersByPatches:', error);
-    return { employerIds: [], employerMap: new Map() };
-  }
 }
 
 // Request/Response types matching the existing client-side interface
@@ -317,11 +304,17 @@ export interface EmployersResponse {
     pageSize: number;
     totalCount: number;
     totalPages: number;
+    hasNextPage: boolean;
+    hasPrevPage: boolean;
   };
   debug?: {
     queryTime: number;
     cacheHit: boolean;
     appliedFilters: Record<string, any>;
+    usedMaterializedView?: boolean;
+    aliasSearchUsed?: boolean;
+    patchFilteringUsed?: boolean;
+    patchFilteringMethod?: string;
   };
 }
 
@@ -365,8 +358,7 @@ async function getEmployersHandler(request: NextRequest) {
     const sort = (searchParams.get('sort') || 'name') as EmployersRequest['sort'];
     const dir = (searchParams.get('dir') || 'asc') as EmployersRequest['dir'];
     const q = searchParams.get('q') || undefined;
-    const engagedParam = searchParams.get('engaged');
-    const engaged = engagedParam === '1'; // Changed: Show all by default (null/undefined = false)
+    const engaged = parseBooleanParam(searchParams.get('engaged'));
     const eba = (searchParams.get('eba') || 'all') as EmployersRequest['eba'];
     const type = (searchParams.get('type') || 'all') as EmployersRequest['type'];
     const categoryType = (searchParams.get('categoryType') || 'all') as 'contractor_role' | 'trade' | 'all';
@@ -385,8 +377,8 @@ async function getEmployersHandler(request: NextRequest) {
     const patchIds = patchParam ? patchParam.split(',').map(s => s.trim()).filter(Boolean) : [];
 
     // If there's a search query and aliases are requested, use the alias-aware search RPC
-    let data: any[] | null;
-    let error: any;
+    let data: any[] = [];
+    let error: any = null;
     let count: number | null = null;
 
     const useAliasSearch = q && includeAliases;
@@ -500,10 +492,10 @@ async function getEmployersHandler(request: NextRequest) {
         patchFilteringEmployerIds = employerIds;
 
         if (employerIds.length === 0) {
-          // No employers found in specified patches - return empty result
+          const emptyPagination = buildPaginationMeta(page, pageSize, 0);
           const response: EmployersResponse = {
             employers: [],
-            pagination: { page, pageSize, totalCount: 0, totalPages: 0 },
+            pagination: emptyPagination,
             debug: {
               queryTime: Date.now() - startTime,
               cacheHit: false,
@@ -716,7 +708,7 @@ async function getEmployersHandler(request: NextRequest) {
           const employerMap = new Map((employerRows || []).map((row: any) => [row.id, row]));
           data = analyticsRows
             .map((row: any) => {
-              const base = employerMap.get(row.employer_id);
+              const base = employerMap.get(row.employer_id) as any;
               if (!base) return null;
 
               return {
@@ -923,18 +915,12 @@ async function getEmployersHandler(request: NextRequest) {
     }
 
     const totalCount = count || 0;
-    const totalPages = Math.ceil(totalCount / pageSize);
-
+    const paginationMeta = buildPaginationMeta(page, pageSize, totalCount);
     const queryTime = Date.now() - startTime;
 
     const response: EmployersResponse = {
       employers,
-      pagination: {
-        page,
-        pageSize,
-        totalCount,
-        totalPages
-      },
+      pagination: paginationMeta,
       debug: {
         queryTime,
         cacheHit: false, // TODO: Implement caching in future

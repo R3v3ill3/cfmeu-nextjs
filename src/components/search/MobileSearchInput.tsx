@@ -13,7 +13,17 @@ import {
   History,
   TrendingUp,
   ChevronRight,
-  Loader2
+  Loader2,
+  Filter,
+  ChevronDown,
+  ChevronUp,
+  MapPin,
+  AlertTriangle,
+  Building,
+  Users,
+  Star,
+  Clock,
+  Shield
 } from 'lucide-react';
 
 // Voice search interface
@@ -30,6 +40,30 @@ interface SearchSuggestion {
   type: 'history' | 'trending' | 'suggestion';
   category?: string;
   count?: number;
+}
+
+// Advanced filter interfaces
+interface SearchFilters {
+  entityTypes: string[];
+  projectStage?: string;
+  complianceRating?: string;
+  ebaStatus?: string;
+  distance?: number;
+  dateRange?: {
+    start: string;
+    end: string;
+  };
+  tags?: string[];
+  priority?: 'low' | 'medium' | 'high';
+}
+
+interface QuickFilterPreset {
+  id: string;
+  name: string;
+  icon: React.ElementType;
+  description: string;
+  filters: Partial<SearchFilters>;
+  color: string;
 }
 
 export interface MobileSearchInputProps {
@@ -65,6 +99,15 @@ export interface MobileSearchInputProps {
   debouncedSearch?: boolean;
   debounceMs?: number;
 
+  // Advanced filtering
+  enableAdvancedFilters?: boolean;
+  filters?: SearchFilters;
+  onFiltersChange?: (filters: SearchFilters) => void;
+  quickFilterPresets?: QuickFilterPreset[];
+  onQuickFilterSelect?: (preset: QuickFilterPreset) => void;
+  enableFilterPersistence?: boolean;
+  filterStorageKey?: string;
+
   // Styling
   className?: string;
   inputClassName?: string;
@@ -95,6 +138,13 @@ export const MobileSearchInput: React.FC<MobileSearchInputProps> = ({
   onCancel,
   debouncedSearch = true,
   debounceMs = 300,
+  enableAdvancedFilters = true,
+  filters = { entityTypes: [] },
+  onFiltersChange,
+  quickFilterPresets = [],
+  onQuickFilterSelect,
+  enableFilterPersistence = true,
+  filterStorageKey = 'mobile-search-filters',
   className,
   inputClassName,
   variant = 'default',
@@ -106,6 +156,11 @@ export const MobileSearchInput: React.FC<MobileSearchInputProps> = ({
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [debouncedValue, setDebouncedValue] = useState(value);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
+
+  // Advanced filtering state
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [activeFilters, setActiveFilters] = useState<SearchFilters>(filters);
+  const [activeQuickFilter, setActiveQuickFilter] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -181,6 +236,101 @@ export const MobileSearchInput: React.FC<MobileSearchInputProps> = ({
       inputRef.current.focus();
     }
   }, [autoFocus]);
+
+  // Initialize default quick filter presets
+  useEffect(() => {
+    if (quickFilterPresets.length === 0) {
+      // Set default presets if none provided
+      const defaultPresets: QuickFilterPreset[] = [
+        {
+          id: 'active-projects',
+          name: 'Active Projects',
+          icon: Building,
+          description: 'Projects currently under construction',
+          filters: {
+            entityTypes: ['projects'],
+            projectStage: 'construction'
+          },
+          color: 'bg-blue-500'
+        },
+        {
+          id: 'nearby-projects',
+          name: 'Nearby Projects',
+          icon: MapPin,
+          description: 'Projects within 10km of your location',
+          filters: {
+            entityTypes: ['projects'],
+            distance: 10
+          },
+          color: 'bg-green-500'
+        },
+        {
+          id: 'high-risk',
+          name: 'High Risk',
+          icon: AlertTriangle,
+          description: 'Projects with compliance issues',
+          filters: {
+            entityTypes: ['projects'],
+            complianceRating: 'red',
+            priority: 'high'
+          },
+          color: 'bg-red-500'
+        },
+        {
+          id: 'recent-visits',
+          name: 'Recent Visits',
+          icon: Clock,
+          description: 'Projects visited in the last 7 days',
+          filters: {
+            entityTypes: ['projects'],
+            dateRange: {
+              start: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+              end: new Date().toISOString().split('T')[0]
+            }
+          },
+          color: 'bg-purple-500'
+        }
+      ];
+
+      // These would be passed as props normally, but for now we'll use them internally
+      // onQuickFilterSelect?.(defaultPresets[0]); // Optionally activate first preset
+    }
+  }, [quickFilterPresets]);
+
+  // Filter persistence in localStorage
+  useEffect(() => {
+    if (enableFilterPersistence && typeof window !== 'undefined') {
+      // Load saved filters
+      try {
+        const savedFilters = localStorage.getItem(filterStorageKey);
+        if (savedFilters) {
+          const parsedFilters = JSON.parse(savedFilters);
+          setActiveFilters(parsedFilters);
+          onFiltersChange?.(parsedFilters);
+        }
+      } catch (error) {
+        console.warn('Failed to load saved filters:', error);
+      }
+    }
+  }, [enableFilterPersistence, filterStorageKey, onFiltersChange]);
+
+  // Save filters to localStorage when they change
+  useEffect(() => {
+    if (enableFilterPersistence && typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(filterStorageKey, JSON.stringify(activeFilters));
+      } catch (error) {
+        console.warn('Failed to save filters:', error);
+      }
+    }
+  }, [activeFilters, enableFilterPersistence, filterStorageKey]);
+
+  // Sync filters with props
+  useEffect(() => {
+    if (JSON.stringify(filters) !== JSON.stringify(activeFilters)) {
+      setActiveFilters(filters);
+    }
+  }, [filters]);
 
   // Handle voice recognition
   const startVoiceRecognition = useCallback(() => {
@@ -286,6 +436,41 @@ export const MobileSearchInput: React.FC<MobileSearchInputProps> = ({
     inputRef.current?.focus();
   }, [onChange, onSuggestionSelect, enableHistory, searchHistory, onHistorySelect]);
 
+  // Filter management functions
+  const updateFilter = useCallback((filterUpdates: Partial<SearchFilters>) => {
+    const newFilters = { ...activeFilters, ...filterUpdates };
+    setActiveFilters(newFilters);
+    onFiltersChange?.(newFilters);
+  }, [activeFilters, onFiltersChange]);
+
+  const clearAllFilters = useCallback(() => {
+    const clearedFilters: SearchFilters = { entityTypes: [] };
+    setActiveFilters(clearedFilters);
+    setActiveQuickFilter(null);
+    onFiltersChange?.(clearedFilters);
+  }, [onFiltersChange]);
+
+  const applyQuickFilter = useCallback((preset: QuickFilterPreset) => {
+    setActiveQuickFilter(preset.id);
+    const newFilters = { ...activeFilters, ...preset.filters };
+    setActiveFilters(newFilters);
+    onFiltersChange?.(newFilters);
+    onQuickFilterSelect?.(preset);
+  }, [activeFilters, onFiltersChange, onQuickFilterSelect]);
+
+  const hasActiveFilters = useCallback(() => {
+    return (
+      activeFilters.entityTypes.length > 0 ||
+      !!activeFilters.projectStage ||
+      !!activeFilters.complianceRating ||
+      !!activeFilters.ebaStatus ||
+      !!activeFilters.distance ||
+      !!activeFilters.dateRange ||
+      (activeFilters.tags && activeFilters.tags.length > 0) ||
+      !!activeFilters.priority
+    );
+  }, [activeFilters]);
+
   // Get filtered suggestions
   const getFilteredSuggestions = useCallback((): SearchSuggestion[] => {
     if (!showSuggestionsPanel || !value.trim()) return [];
@@ -326,6 +511,62 @@ export const MobileSearchInput: React.FC<MobileSearchInputProps> = ({
 
   return (
     <div className={cn('relative w-full', className)}>
+      {/* Quick filter presets */}
+      {enableAdvancedFilters && (quickFilterPresets.length > 0 || activeQuickFilter) && (
+        <div className="mb-3 flex gap-2 overflow-x-auto pb-2 px-1 no-scrollbar">
+          {(quickFilterPresets.length > 0 ? quickFilterPresets : [
+            {
+              id: 'active-projects',
+              name: 'Active Projects',
+              icon: Building,
+              description: 'Projects currently under construction',
+              filters: { entityTypes: ['projects'], projectStage: 'construction' },
+              color: 'bg-blue-500'
+            },
+            {
+              id: 'nearby-projects',
+              name: 'Nearby Projects',
+              icon: MapPin,
+              description: 'Projects within 10km',
+              filters: { entityTypes: ['projects'], distance: 10 },
+              color: 'bg-green-500'
+            },
+            {
+              id: 'high-risk',
+              name: 'High Risk',
+              icon: AlertTriangle,
+              description: 'Compliance issues',
+              filters: { entityTypes: ['projects'], complianceRating: 'red', priority: 'high' },
+              color: 'bg-red-500'
+            }
+          ]).map((preset) => {
+            const Icon = preset.icon;
+            const isActive = activeQuickFilter === preset.id;
+
+            return (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => isActive ? clearAllFilters() : applyQuickFilter(preset)}
+                className={cn(
+                  'flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200 touch-manipulation min-h-[44px]',
+                  isActive
+                    ? `${preset.color} text-white shadow-md`
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
+                )}
+                title={preset.description}
+              >
+                <Icon className="w-4 h-4 flex-shrink-0" />
+                <span>{preset.name}</span>
+                {isActive && (
+                  <X className="w-3 h-3 ml-1" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Search input container */}
       <div className={cn(
         'relative flex items-center border rounded-xl transition-all duration-200',
@@ -374,6 +615,28 @@ export const MobileSearchInput: React.FC<MobileSearchInputProps> = ({
 
         {/* Action buttons */}
         <div className="absolute right-2 flex items-center gap-1">
+          {/* Advanced filters button */}
+          {enableAdvancedFilters && !disabled && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+              className={cn(
+                'w-10 h-10 min-w-[44px] min-h-[44px]',
+                'text-gray-400 hover:text-gray-600',
+                hasActiveFilters() && 'text-blue-500 hover:text-blue-600',
+                'touch-manipulation'
+              )}
+              aria-label={showAdvancedFilters ? 'Hide filters' : 'Show filters'}
+            >
+              <Filter className="w-5 h-5" />
+              {hasActiveFilters() && (
+                <div className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full" />
+              )}
+            </Button>
+          )}
+
           {/* Voice search button */}
           {enableVoiceSearch && !disabled && (
             <Button
@@ -532,6 +795,228 @@ export const MobileSearchInput: React.FC<MobileSearchInputProps> = ({
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Advanced filters panel */}
+      {enableAdvancedFilters && showAdvancedFilters && (
+        <div className={cn(
+          'absolute top-full left-0 right-0 mt-2 bg-white border border-gray-200 rounded-xl shadow-lg z-40',
+          'max-h-[60vh] overflow-y-auto',
+          'touch-manipulation'
+        )}>
+          {/* Filters header */}
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-gray-600" />
+              <span className="text-sm font-medium text-gray-900">Advanced Filters</span>
+              {hasActiveFilters() && (
+                <div className="w-2 h-2 bg-blue-500 rounded-full" />
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {hasActiveFilters() && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearAllFilters}
+                  className="text-xs text-red-600 hover:text-red-700 touch-manipulation"
+                >
+                  Clear All
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowAdvancedFilters(false)}
+                className="w-8 h-8 text-gray-400 hover:text-gray-600 touch-manipulation"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Filters content */}
+          <div className="p-4 space-y-4">
+            {/* Entity types filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Search in
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { value: 'projects', label: 'Projects', icon: Building },
+                  { value: 'employers', label: 'Employers', icon: Users },
+                  { value: 'workers', label: 'Workers', icon: Users },
+                  { value: 'sites', label: 'Sites', icon: MapPin },
+                ].map((option) => {
+                  const Icon = option.icon;
+                  const isSelected = activeFilters.entityTypes.includes(option.value);
+
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => {
+                        const newTypes = isSelected
+                          ? activeFilters.entityTypes.filter(t => t !== option.value)
+                          : [...activeFilters.entityTypes, option.value];
+                        updateFilter({ entityTypes: newTypes });
+                      }}
+                      className={cn(
+                        'flex items-center gap-2 px-3 py-2 text-sm rounded-lg border transition-colors touch-manipulation min-h-[44px]',
+                        isSelected
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                      )}
+                    >
+                      <Icon className="w-4 h-4" />
+                      <span>{option.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Project stage filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Project Stage
+              </label>
+              <select
+                value={activeFilters.projectStage || ''}
+                onChange={(e) => updateFilter({ projectStage: e.target.value || undefined })}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 touch-manipulation"
+              >
+                <option value="">All stages</option>
+                <option value="pre_construction">Pre Construction</option>
+                <option value="construction">Under Construction</option>
+                <option value="archived">Archived</option>
+                <option value="future">Future</option>
+              </select>
+            </div>
+
+            {/* Compliance rating filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Compliance Rating
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { value: 'green', label: 'Green', color: 'bg-green-500' },
+                  { value: 'amber', label: 'Amber', color: 'bg-yellow-500' },
+                  { value: 'red', label: 'Red', color: 'bg-red-500' },
+                ].map((rating) => {
+                  const isSelected = activeFilters.complianceRating === rating.value;
+
+                  return (
+                    <button
+                      key={rating.value}
+                      type="button"
+                      onClick={() => updateFilter({
+                        complianceRating: isSelected ? undefined : rating.value
+                      })}
+                      className={cn(
+                        'flex items-center justify-center gap-2 px-3 py-2 text-sm rounded-lg border transition-colors touch-manipulation min-h-[44px]',
+                        isSelected
+                          ? 'border-gray-900 bg-gray-900 text-white'
+                          : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                      )}
+                    >
+                      <div className={cn('w-3 h-3 rounded-full', rating.color)} />
+                      <span>{rating.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Distance filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Distance (km)
+              </label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min="1"
+                  max="50"
+                  value={activeFilters.distance || 10}
+                  onChange={(e) => updateFilter({ distance: parseInt(e.target.value) })}
+                  className="flex-1"
+                />
+                <span className="text-sm text-gray-600 min-w-[40px] text-right">
+                  {activeFilters.distance || 10}km
+                </span>
+                {activeFilters.distance && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => updateFilter({ distance: undefined })}
+                    className="w-6 h-6 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-3 h-3" />
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Priority filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Priority
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { value: 'low', label: 'Low', icon: Star, color: 'text-gray-400' },
+                  { value: 'medium', label: 'Medium', icon: Star, color: 'text-yellow-500' },
+                  { value: 'high', label: 'High', icon: AlertTriangle, color: 'text-red-500' },
+                ].map((priority) => {
+                  const Icon = priority.icon;
+                  const isSelected = activeFilters.priority === priority.value;
+
+                  return (
+                    <button
+                      key={priority.value}
+                      type="button"
+                      onClick={() => updateFilter({
+                        priority: isSelected ? undefined : priority.value as 'low' | 'medium' | 'high'
+                      })}
+                      className={cn(
+                        'flex items-center justify-center gap-1 px-3 py-2 text-sm rounded-lg border transition-colors touch-manipulation min-h-[44px]',
+                        isSelected
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                      )}
+                    >
+                      <Icon className={cn('w-4 h-4', priority.color)} />
+                      <span>{priority.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* EBA status filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                EBA Status
+              </label>
+              <select
+                value={activeFilters.ebaStatus || ''}
+                onChange={(e) => updateFilter({ ebaStatus: e.target.value || undefined })}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 touch-manipulation"
+              >
+                <option value="">All statuses</option>
+                <option value="yes">Has EBA</option>
+                <option value="no">No EBA</option>
+                <option value="pending">EBA Pending</option>
+              </select>
+            </div>
+          </div>
         </div>
       )}
 

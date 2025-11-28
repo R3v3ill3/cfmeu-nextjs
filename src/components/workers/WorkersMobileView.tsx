@@ -119,7 +119,7 @@ export function WorkersMobileView() {
         .from('employers')
         .select('id, name, tier')
         .order('name')
-        .limit(200)
+        .limit(1000)
       if (error) throw error
       return data || []
     }

@@ -25,7 +25,7 @@ export default function ActivitiesPage() {
         .from("worker_activity_ratings")
         .select("id, created_at, rating_type, rating_value, workers(first_name,surname), employers(name), job_sites(name)")
         .order("created_at", { ascending: false })
-        .limit(200)
+        .limit(1000)
       if (ratErr) throw ratErr
       return rat || []
     }
