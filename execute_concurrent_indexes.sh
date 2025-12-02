@@ -82,3 +82,6 @@ psql "$CONNECTION_STRING" -f "$SQL_FILE"
 echo ""
 echo "✓ Index creation completed!"
 
+
+
+

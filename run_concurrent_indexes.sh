@@ -51,3 +51,6 @@ psql "$DATABASE_URL" -f "$SQL_FILE"
 echo ""
 echo "Index creation completed!"
 
+
+
+

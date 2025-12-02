@@ -26,3 +26,6 @@ WHERE full_address IS NOT NULL;
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_job_sites_location_text_trgm
 ON job_sites USING gin (location gin_trgm_ops);
 
+
+
+

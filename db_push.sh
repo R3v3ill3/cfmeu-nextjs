@@ -4,7 +4,9 @@
 # This script works around the link password issue by using --db-url
 
 PROJECT_REF="jzuoawqxqmrsftbtjkzv"
-DB_PASSWORD="R3v3ill3_Strategy"
+# Password with special characters URL-encoded (! = %21)
+# Original password: !R3v3ill3-Strategy!
+DB_PASSWORD='%21R3v3ill3-Strategy%21'
 DB_URL="postgresql://postgres.${PROJECT_REF}:${DB_PASSWORD}@aws-0-ap-southeast-2.pooler.supabase.com:5432/postgres"
 
 echo "🚀 Pushing Supabase migrations with updated password..."
