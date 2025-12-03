@@ -25,6 +25,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 type ProjectData = {
   id: string;
@@ -79,6 +80,7 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
   const { startNavigation } = useNavigationLoading();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
 
   // Get unified contractor data
   const { data: mappingData, isLoading: isLoadingContractors } = useMappingSheetData(projectData.id);
@@ -261,43 +263,53 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
   };
 
   return (
-    <div className="print-border p-4">
-      {/* Paper-style header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Image src="/cfmeu-logo.png" alt="CFMEU" width={120} height={40} className="object-contain" />
-          <div>
-            <div className="text-xl font-black tracking-tight">Mapping Sheets</div>
-            <div className="text-xs text-muted-foreground leading-snug">Organiser: {projectData.organisers || "—"}</div>
+    <div className={`print-border ${isMobile ? 'px-3 py-4 pb-safe-bottom' : 'p-4'}`}>
+      {/* Paper-style header - mobile responsive */}
+      <div className={`${isMobile ? 'space-y-3' : 'flex items-center justify-between'}`}>
+        <div className={`flex items-center ${isMobile ? 'gap-2' : 'gap-3'}`}>
+          <Image 
+            src="/cfmeu-logo.png" 
+            alt="CFMEU" 
+            width={isMobile ? 80 : 120} 
+            height={isMobile ? 27 : 40} 
+            className="object-contain flex-shrink-0" 
+          />
+          <div className="min-w-0">
+            <div className={`${isMobile ? 'text-base' : 'text-xl'} font-black tracking-tight`}>Mapping Sheets</div>
+            <div className="text-xs text-muted-foreground leading-snug truncate">
+              Organiser: {projectData.organisers || "—"}
+            </div>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className={`${isMobile ? 'flex flex-wrap items-center gap-2' : 'flex items-center gap-3'}`}>
           <div className="no-print flex items-center gap-2">
             <Button
               onClick={() => setShowUploadDialog(true)}
               variant="outline"
               size="sm"
-              className="gap-2"
+              className={`gap-2 ${isMobile ? 'min-h-[44px] text-xs px-3' : ''}`}
             >
-              <Upload className="h-4 w-4" />
-              Upload Scanned Sheet
+              <Upload className="h-4 w-4 flex-shrink-0" />
+              {isMobile ? 'Upload' : 'Upload Scanned Sheet'}
             </Button>
             <ShareLinkGenerator projectId={projectData.id} projectName={projectData.name} />
           </div>
-          <div className="text-right text-xs">
-            <div>Form MS-01</div>
-            <div className="text-muted-foreground">Rev {new Date().getFullYear()}</div>
-          </div>
+          {!isMobile && (
+            <div className="text-right text-xs">
+              <div>Form MS-01</div>
+              <div className="text-muted-foreground">Rev {new Date().getFullYear()}</div>
+            </div>
+          )}
         </div>
       </div>
       
       {/* Project Header with Tier */}
-      <div className="border-b border-gray-200 pb-4 mb-4">
-        <h2 className="text-2xl font-bold mb-2">{projectData.name}</h2>
-        <div className="flex items-center gap-3 flex-wrap">
-          <ProjectTierBadge tier={projectData.tier || null} size="md" />
+      <div className={`border-b border-gray-200 ${isMobile ? 'pb-3 mb-3 mt-3' : 'pb-4 mb-4'}`}>
+        <h2 className={`${isMobile ? 'text-lg' : 'text-2xl'} font-bold mb-2 break-words`}>{projectData.name}</h2>
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          <ProjectTierBadge tier={projectData.tier || null} size={isMobile ? "sm" : "md"} />
           {formatCurrency(projectData.value) && (
-            <span className="text-lg text-muted-foreground">
+            <span className={`${isMobile ? 'text-sm' : 'text-lg'} text-muted-foreground`}>
               {formatCurrency(projectData.value)}
             </span>
           )}
@@ -305,29 +317,40 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
         </div>
       </div>
 
-      <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4">
+      <div className={`mt-2 grid grid-cols-1 md:grid-cols-3 ${isMobile ? 'gap-4' : 'gap-x-6 gap-y-4'}`}>
         {/* Row 1 */}
         <div className="md:col-span-2">
-          <label className="text-sm font-semibold">Project Name</label>
-          <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={projectData.name || ""} onChange={(e) => scheduleUpdate({ name: e.target.value })} placeholder="" />
+          <label className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold block mb-1`}>Project Name</label>
+          <Input 
+            className={`rounded-none border-0 border-b border-black focus-visible:ring-0 px-0 ${isMobile ? 'text-base min-h-[44px]' : ''}`} 
+            value={projectData.name || ""} 
+            onChange={(e) => scheduleUpdate({ name: e.target.value })} 
+            placeholder="" 
+          />
         </div>
         <div>
-          <label className="text-sm font-semibold">Project Value (AUD)</label>
+          <label className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold block mb-1`}>Project Value (AUD)</label>
           <Input
-            className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0"
+            className={`rounded-none border-0 border-b border-black focus-visible:ring-0 px-0 ${isMobile ? 'text-base min-h-[44px]' : ''}`}
             value={formatCurrency(projectData.value)}
             onChange={(e) => {
               const parsed = parseCurrencyInput(e.target.value);
               scheduleUpdate({ value: parsed });
             }}
             placeholder=""
+            inputMode="numeric"
           />
         </div>
 
         {/* Row 2 */}
         <div className="md:col-span-3">
-          <label className="text-sm font-semibold">Address</label>
-          <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={projectData.address || ""} onChange={(e) => saveAddress(e.target.value)} placeholder="" />
+          <label className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold block mb-1`}>Address</label>
+          <Input 
+            className={`rounded-none border-0 border-b border-black focus-visible:ring-0 px-0 ${isMobile ? 'text-base min-h-[44px]' : ''}`} 
+            value={projectData.address || ""} 
+            onChange={(e) => saveAddress(e.target.value)} 
+            placeholder="" 
+          />
         </div>
 
         {/* Row 3 - Dynamic Contractor Roles */}
@@ -371,12 +394,12 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
                 </div>
                 {/* Show action buttons for BCI matches that need review */}
                 {contractor.matchStatus === 'auto_matched' && (
-                  <div className="flex items-center gap-2 mt-2 no-print">
+                  <div className={`flex items-center gap-2 mt-2 no-print ${isMobile ? 'flex-wrap' : ''}`}>
                     <Button
                       size="sm"
                       variant="outline"
                       onClick={() => handleConfirmMatch(contractor.id)}
-                      className="gap-1 h-7 text-xs"
+                      className={`gap-1 text-xs ${isMobile ? 'min-h-[44px] px-3' : 'h-7'}`}
                     >
                       <Check className="h-3 w-3" />
                       Confirm
@@ -385,7 +408,7 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
                       size="sm"
                       variant="outline"
                       onClick={() => setChangingRoleId(contractor.id)}
-                      className="gap-1 h-7 text-xs"
+                      className={`gap-1 text-xs ${isMobile ? 'min-h-[44px] px-3' : 'h-7'}`}
                     >
                       <RefreshCw className="h-3 w-3" />
                       Change
@@ -394,7 +417,7 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
                       size="sm"
                       variant="outline"
                       onClick={() => handleRemoveRole(contractor.id)}
-                      className="gap-1 h-7 text-xs hover:bg-red-50 hover:text-red-600 hover:border-red-300"
+                      className={`gap-1 text-xs hover:bg-red-50 hover:text-red-600 hover:border-red-300 ${isMobile ? 'min-h-[44px] px-3' : 'h-7'}`}
                     >
                       <X className="h-3 w-3" />
                       Remove
@@ -499,12 +522,12 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
                     </div>
                     {/* Show action buttons for BCI matches that need review */}
                     {contractor.matchStatus === 'auto_matched' && (
-                      <div className="flex items-center gap-2 mt-2 no-print">
+                      <div className={`flex items-center gap-2 mt-2 no-print ${isMobile ? 'flex-wrap' : ''}`}>
                         <Button
                           size="sm"
                           variant="outline"
                           onClick={() => handleConfirmMatch(contractor.id)}
-                          className="gap-1 h-7 text-xs"
+                          className={`gap-1 text-xs ${isMobile ? 'min-h-[44px] px-3' : 'h-7'}`}
                         >
                           <Check className="h-3 w-3" />
                           Confirm
@@ -513,7 +536,7 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
                           size="sm"
                           variant="outline"
                           onClick={() => setChangingRoleId(contractor.id)}
-                          className="gap-1 h-7 text-xs"
+                          className={`gap-1 text-xs ${isMobile ? 'min-h-[44px] px-3' : 'h-7'}`}
                         >
                           <RefreshCw className="h-3 w-3" />
                           Change
@@ -522,7 +545,7 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
                           size="sm"
                           variant="outline"
                           onClick={() => handleRemoveRole(contractor.id)}
-                          className="gap-1 h-7 text-xs hover:bg-red-50 hover:text-red-600 hover:border-red-300"
+                          className={`gap-1 text-xs hover:bg-red-50 hover:text-red-600 hover:border-red-300 ${isMobile ? 'min-h-[44px] px-3' : 'h-7'}`}
                         >
                           <X className="h-3 w-3" />
                           Remove
@@ -537,21 +560,29 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
         )}
         
         <AccordionItem value="project-details">
-          <AccordionTrigger className="text-sm font-semibold">Project Details</AccordionTrigger>
+          <AccordionTrigger className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold`}>Project Details</AccordionTrigger>
           <AccordionContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4 pt-2">
+            <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 ${isMobile ? 'gap-4' : 'gap-x-6 gap-y-4'} pt-2`}>
               <div>
-                <label className="text-sm font-semibold">Proposed start date</label>
-                <DateInput className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={projectData.proposed_start_date || ""} onChange={(e) => scheduleUpdate({ proposed_start_date: e.target.value })} />
+                <label className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold block mb-1`}>Proposed start date</label>
+                <DateInput 
+                  className={`rounded-none border-0 border-b border-black focus-visible:ring-0 px-0 ${isMobile ? 'min-h-[44px]' : ''}`} 
+                  value={projectData.proposed_start_date || ""} 
+                  onChange={(e) => scheduleUpdate({ proposed_start_date: e.target.value })} 
+                />
               </div>
               <div>
-                <label className="text-sm font-semibold">Proposed finish date</label>
-                <DateInput className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={projectData.proposed_finish_date || ""} onChange={(e) => scheduleUpdate({ proposed_finish_date: e.target.value })} />
+                <label className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold block mb-1`}>Proposed finish date</label>
+                <DateInput 
+                  className={`rounded-none border-0 border-b border-black focus-visible:ring-0 px-0 ${isMobile ? 'min-h-[44px]' : ''}`} 
+                  value={projectData.proposed_finish_date || ""} 
+                  onChange={(e) => scheduleUpdate({ proposed_finish_date: e.target.value })} 
+                />
               </div>
               <div>
-                <label className="text-sm font-semibold">Funding Type</label>
+                <label className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold block mb-1`}>Funding Type</label>
                 <Select value={projectData.project_type || ""} onValueChange={(v) => scheduleUpdate({ project_type: v })}>
-                  <SelectTrigger>
+                  <SelectTrigger className={isMobile ? 'min-h-[44px]' : ''}>
                     <SelectValue placeholder="Select" />
                   </SelectTrigger>
                   <SelectContent>
@@ -562,42 +593,59 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
                 </Select>
               </div>
               <div>
-                <label className="text-sm font-semibold">State Funding (AUD)</label>
-                <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={String(projectData.state_funding ?? 0)} onChange={(e) => scheduleUpdate({ state_funding: Number(e.target.value.replace(/[^0-9.]/g, "")) })} />
+                <label className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold block mb-1`}>State Funding (AUD)</label>
+                <Input 
+                  className={`rounded-none border-0 border-b border-black focus-visible:ring-0 px-0 ${isMobile ? 'min-h-[44px]' : ''}`} 
+                  value={String(projectData.state_funding ?? 0)} 
+                  onChange={(e) => scheduleUpdate({ state_funding: Number(e.target.value.replace(/[^0-9.]/g, "")) })} 
+                  inputMode="numeric"
+                />
               </div>
               <div>
-                <label className="text-sm font-semibold">Federal Funding (AUD)</label>
-                <Input className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={String(projectData.federal_funding ?? 0)} onChange={(e) => scheduleUpdate({ federal_funding: Number(e.target.value.replace(/[^0-9.]/g, "")) })} />
+                <label className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold block mb-1`}>Federal Funding (AUD)</label>
+                <Input 
+                  className={`rounded-none border-0 border-b border-black focus-visible:ring-0 px-0 ${isMobile ? 'min-h-[44px]' : ''}`} 
+                  value={String(projectData.federal_funding ?? 0)} 
+                  onChange={(e) => scheduleUpdate({ federal_funding: Number(e.target.value.replace(/[^0-9.]/g, "")) })} 
+                  inputMode="numeric"
+                />
               </div>
               <div className="no-print">
-                  <label className="text-sm font-semibold">Preferred email for ROE</label>
-                  <Input type="email" className="rounded-none border-0 border-b border-black focus-visible:ring-0 px-0" value={projectData.roe_email || ""} onChange={(e) => scheduleUpdate({ roe_email: e.target.value })} placeholder="" />
+                <label className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold block mb-1`}>Preferred email for ROE</label>
+                <Input 
+                  type="email" 
+                  className={`rounded-none border-0 border-b border-black focus-visible:ring-0 px-0 ${isMobile ? 'min-h-[44px]' : ''}`} 
+                  value={projectData.roe_email || ""} 
+                  onChange={(e) => scheduleUpdate({ roe_email: e.target.value })} 
+                  placeholder="" 
+                  inputMode="email"
+                />
               </div>
             </div>
           </AccordionContent>
         </AccordionItem>
       </Accordion>
 
-      <div className="no-print grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mt-4 text-sm p-4 border rounded-lg bg-muted/20">
+      <div className={`no-print grid ${isMobile ? 'grid-cols-2 gap-3' : 'grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4'} mt-4 ${isMobile ? 'text-xs p-3' : 'text-sm p-4'} border rounded-lg bg-muted/20`}>
         {/* Actual Worker Counts */}
-        <div className="space-y-1">
-          <div className="font-medium">Total workers</div>
+        <div className="space-y-0.5">
+          <div className={`font-medium ${isMobile ? 'text-xs' : ''}`}>{isMobile ? 'Workers' : 'Total workers'}</div>
           <div className="text-muted-foreground">{projectData.workerTotals?.totalWorkers ?? '—'}</div>
         </div>
-        <div className="space-y-1">
-          <div className="font-medium">Total members</div>
+        <div className="space-y-0.5">
+          <div className={`font-medium ${isMobile ? 'text-xs' : ''}`}>{isMobile ? 'Members' : 'Total members'}</div>
           <div className="text-muted-foreground">{projectData.workerTotals?.totalMembers ?? '—'}</div>
         </div>
-        <div className="space-y-1">
-          <div className="font-medium">Total leaders</div>
+        <div className="space-y-0.5">
+          <div className={`font-medium ${isMobile ? 'text-xs' : ''}`}>{isMobile ? 'Leaders' : 'Total leaders'}</div>
           <div className="text-muted-foreground">{projectData.workerTotals?.totalLeaders ?? '—'}</div>
         </div>
 
         {/* Estimated Worker Breakdown */}
-        <div className="space-y-1">
-          <div className="font-medium">Est. workforce</div>
+        <div className="space-y-0.5">
+          <div className={`font-medium ${isMobile ? 'text-xs' : ''}`}>Est. workforce</div>
           <div className="text-muted-foreground">{projectData.estimatedWorkerTotals?.totalEstimatedWorkers ?? '—'}</div>
-          {projectData.estimatedWorkerTotals && (
+          {projectData.estimatedWorkerTotals && !isMobile && (
             <div className="text-xs text-muted-foreground">
               FT: {projectData.estimatedWorkerTotals.totalFullTimeWorkers} |
               C: {projectData.estimatedWorkerTotals.totalCasualWorkers} |
@@ -605,8 +653,8 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
             </div>
           )}
         </div>
-        <div className="space-y-1">
-          <div className="font-medium">Est. members</div>
+        <div className="space-y-0.5">
+          <div className={`font-medium ${isMobile ? 'text-xs' : ''}`}>Est. members</div>
           <div className="text-muted-foreground">{projectData.estimatedWorkerTotals?.totalEstimatedMembers ?? '—'}</div>
           {projectData.estimatedWorkerTotals && projectData.estimatedWorkerTotals.membershipPercentage > 0 && (
             <div className="text-xs text-muted-foreground">
@@ -614,14 +662,15 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
             </div>
           )}
         </div>
-        <div className="space-y-1">
-          <div className="font-medium">Membership status</div>
+        <div className="space-y-0.5">
+          <div className={`font-medium ${isMobile ? 'text-xs' : ''}`}>{isMobile ? 'Status' : 'Membership status'}</div>
           <div className="text-muted-foreground">
             {projectData.estimatedWorkerTotals ? (
               <>
-                {projectData.estimatedWorkerTotals.membershipCheckedCount}/{projectData.estimatedWorkerTotals.totalContractors} checked
+                {projectData.estimatedWorkerTotals.membershipCheckedCount}/{projectData.estimatedWorkerTotals.totalContractors}
+                {!isMobile && ' checked'}
                 <div className="text-xs text-muted-foreground">
-                  {projectData.estimatedWorkerTotals.membershipCompletionRate.toFixed(1)}% complete
+                  {projectData.estimatedWorkerTotals.membershipCompletionRate.toFixed(1)}%{!isMobile && ' complete'}
                 </div>
               </>
             ) : '—'}
@@ -629,16 +678,16 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
         </div>
 
         {/* EBA and Project Info */}
-        <div className="space-y-1">
-          <div className="font-medium">EBA coverage</div>
-          <div className="text-muted-foreground">{projectData.ebaStats ? `${projectData.ebaStats.ebaCount} / ${projectData.ebaStats.employerCount}` : "—"}</div>
+        <div className="space-y-0.5">
+          <div className={`font-medium ${isMobile ? 'text-xs' : ''}`}>EBA coverage</div>
+          <div className="text-muted-foreground">{projectData.ebaStats ? `${projectData.ebaStats.ebaCount}/${projectData.ebaStats.employerCount}` : "—"}</div>
         </div>
-        <div className="space-y-1">
-          <div className="font-medium">Last site visit</div>
+        <div className="space-y-0.5">
+          <div className={`font-medium ${isMobile ? 'text-xs' : ''}`}>{isMobile ? 'Last visit' : 'Last site visit'}</div>
           <div className="text-muted-foreground">{projectData.lastVisit || "—"}</div>
         </div>
-        <div className="space-y-1">
-          <div className="font-medium">Patch</div>
+        <div className="space-y-0.5">
+          <div className={`font-medium ${isMobile ? 'text-xs' : ''}`}>Patch</div>
           <div className="text-muted-foreground truncate">
             {projectData.patches.length > 0 ? `${projectData.patches[0]?.name}${projectData.patches.length > 1 ? ` +${projectData.patches.length - 1}` : ''}` : '—'}
           </div>
@@ -696,35 +745,35 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
               }
             }}
           >
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+            <DialogContent className={`${isMobile ? 'w-[95vw] max-w-[95vw] rounded-lg px-4 py-5' : 'max-w-2xl'} max-h-[85vh] overflow-hidden flex flex-col`}>
               <DialogHeader>
-                <DialogTitle>Change {contractorRole.roleLabel}</DialogTitle>
-                <DialogDescription>
-                  Search and select a new employer for this role. Current: {contractorRole.employerName}
+                <DialogTitle className={isMobile ? 'text-base' : ''}>Change {contractorRole.roleLabel}</DialogTitle>
+                <DialogDescription className={isMobile ? 'text-xs' : ''}>
+                  Search and select a new employer for this role.{!isMobile && ` Current: ${contractorRole.employerName}`}
                 </DialogDescription>
               </DialogHeader>
 
               <div className="space-y-4 flex-1 overflow-hidden flex flex-col">
                 {/* Search Input */}
                 <div>
-                  <Label htmlFor="employer-search">Search Employers</Label>
+                  <Label htmlFor="employer-search" className={isMobile ? 'text-sm' : ''}>Search Employers</Label>
                   <div className="relative">
-                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="employer-search"
                       placeholder="Search by company name..."
                       value={employerSearchTerm}
                       onChange={(e) => setEmployerSearchTerm(e.target.value)}
-                      className="pl-8"
-                      autoFocus
+                      className={`pl-9 ${isMobile ? 'min-h-[44px] text-base' : ''}`}
+                      autoFocus={!isMobile}
                     />
                   </div>
                 </div>
 
                 {/* Employer List */}
-                <div className="border rounded-lg flex-1 overflow-y-auto">
+                <div className="border rounded-lg flex-1 overflow-y-auto -mx-1 px-1">
                   {filteredEmployers.length === 0 ? (
-                    <div className="p-4 text-center text-gray-500">
+                    <div className={`p-4 text-center text-gray-500 ${isMobile ? 'text-sm' : ''}`}>
                       {employerSearchTerm ? 'No employers found. Try different search terms.' : 'Start typing to search employers.'}
                     </div>
                   ) : (
@@ -732,19 +781,19 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
                       {filteredEmployers.slice(0, 50).map(emp => (
                         <div
                           key={emp.id}
-                          className="p-3 cursor-pointer transition-colors hover:bg-gray-50"
+                          className={`cursor-pointer transition-colors hover:bg-gray-50 active:bg-gray-100 ${isMobile ? 'p-4 min-h-[48px]' : 'p-3'}`}
                           onClick={() => handleChangeRole(emp.id)}
                         >
-                          <div className="flex items-center justify-between">
-                            <div className="font-medium">{emp.name}</div>
+                          <div className="flex items-center justify-between gap-2">
+                            <div className={`font-medium ${isMobile ? 'text-sm' : ''} truncate`}>{emp.name}</div>
                             {emp.enterprise_agreement_status && emp.enterprise_agreement_status !== 'no_eba' && (
-                              <Badge variant="secondary" className="text-xs">Has EBA</Badge>
+                              <Badge variant="secondary" className="text-xs flex-shrink-0">EBA</Badge>
                             )}
                           </div>
                         </div>
                       ))}
                       {filteredEmployers.length > 50 && (
-                        <div className="p-3 text-sm text-center text-muted-foreground">
+                        <div className={`p-3 text-center text-muted-foreground ${isMobile ? 'text-xs' : 'text-sm'}`}>
                           Showing first 50 results. Refine your search to see more.
                         </div>
                       )}

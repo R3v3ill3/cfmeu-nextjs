@@ -380,6 +380,16 @@ body {
   }
 }
 
+/* Hide scrollbar but allow scrolling - useful for horizontal tab lists */
+.scrollbar-hide {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
 /* iPhone viewport fixes */
 @media screen and (max-width: 767px) {
   /* Prevent horizontal scrolling on iPhone */

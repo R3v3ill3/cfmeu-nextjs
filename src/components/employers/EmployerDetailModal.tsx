@@ -672,15 +672,57 @@ export const EmployerDetailModal = ({
           ) : (
             <>
             <Tabs value={activeTab} onValueChange={(v: string) => setActiveTab(v as "overview" | "eba" | "sites" | "workers" | "categories" | "aliases" | "ratings")} className="space-y-6">
-              <TabsList className="grid w-full grid-cols-7">
-                <TabsTrigger value="overview">Overview</TabsTrigger>
-                <TabsTrigger value="eba">EBA Details</TabsTrigger>
-                <TabsTrigger value="categories">Categories</TabsTrigger>
-                <TabsTrigger value="sites">Worksites</TabsTrigger>
-                <TabsTrigger value="workers">Workers</TabsTrigger>
-                <TabsTrigger value="aliases">Aliases</TabsTrigger>
-                <TabsTrigger value="ratings">Traffic Light Rating</TabsTrigger>
-              </TabsList>
+              {/* Mobile: Horizontally scrollable tabs */}
+              <div className="w-full overflow-x-auto -mx-1 px-1 scrollbar-hide">
+                <TabsList className="inline-flex h-auto min-w-max gap-1 p-1 bg-muted rounded-lg">
+                  <TabsTrigger 
+                    value="overview" 
+                    className="px-3 py-2 text-xs sm:text-sm whitespace-nowrap min-h-[36px] sm:min-h-[40px]"
+                  >
+                    Overview
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="eba" 
+                    className="px-3 py-2 text-xs sm:text-sm whitespace-nowrap min-h-[36px] sm:min-h-[40px]"
+                  >
+                    <span className="sm:hidden">EBA</span>
+                    <span className="hidden sm:inline">EBA Details</span>
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="categories" 
+                    className="px-3 py-2 text-xs sm:text-sm whitespace-nowrap min-h-[36px] sm:min-h-[40px]"
+                  >
+                    <span className="sm:hidden">Cats</span>
+                    <span className="hidden sm:inline">Categories</span>
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="sites" 
+                    className="px-3 py-2 text-xs sm:text-sm whitespace-nowrap min-h-[36px] sm:min-h-[40px]"
+                  >
+                    <span className="sm:hidden">Sites</span>
+                    <span className="hidden sm:inline">Worksites</span>
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="workers" 
+                    className="px-3 py-2 text-xs sm:text-sm whitespace-nowrap min-h-[36px] sm:min-h-[40px]"
+                  >
+                    Workers
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="aliases" 
+                    className="px-3 py-2 text-xs sm:text-sm whitespace-nowrap min-h-[36px] sm:min-h-[40px]"
+                  >
+                    Aliases
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="ratings" 
+                    className="px-3 py-2 text-xs sm:text-sm whitespace-nowrap min-h-[36px] sm:min-h-[40px]"
+                  >
+                    <span className="sm:hidden">Rating</span>
+                    <span className="hidden sm:inline">Traffic Light</span>
+                  </TabsTrigger>
+                </TabsList>
+              </div>
 
               <TabsContent value="overview" className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

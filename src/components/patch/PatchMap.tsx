@@ -28,20 +28,75 @@ interface Patch {
   code: string;
   type: string;
   status: string;
-  geom: string;
+  geom: string; // WKT format expected by GoogleMap
+}
+
+interface PatchWithGeoJSON {
+  id: string;
+  name: string;
+  code: string;
+  type: string;
+  status: string;
+  geom_geojson: GeoJSONGeometry | null;
+}
+
+interface GeoJSONGeometry {
+  type: 'Polygon' | 'MultiPolygon';
+  coordinates: number[][][] | number[][][][];
+}
+
+// Convert GeoJSON geometry to WKT format for GoogleMap component
+function geoJSONToWKT(geojson: GeoJSONGeometry | null): string | null {
+  if (!geojson) return null;
+  
+  const formatRing = (ring: number[][]): string => {
+    return ring.map(coord => `${coord[0]} ${coord[1]}`).join(', ');
+  };
+  
+  if (geojson.type === 'Polygon') {
+    const coords = geojson.coordinates as number[][][];
+    const rings = coords.map(ring => `(${formatRing(ring)})`).join(', ');
+    return `POLYGON(${rings})`;
+  }
+  
+  if (geojson.type === 'MultiPolygon') {
+    const coords = geojson.coordinates as number[][][][];
+    const polygons = coords.map(polygon => {
+      const rings = polygon.map(ring => `(${formatRing(ring)})`).join(', ');
+      return `(${rings})`;
+    }).join(', ');
+    return `MULTIPOLYGON(${polygons})`;
+  }
+  
+  return null;
 }
 
 export function PatchMap({ patchId, height = '400px' }: PatchMapProps) {
+  // Query from patches_with_geojson view which includes ALL patch types (not just 'geo')
   const { data: patch, isLoading, error } = useQuery({
     queryKey: ['patch-map-data', patchId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .rpc('get_patches_with_geometry_text')
+        .from('patches_with_geojson')
+        .select('id, name, code, type, status, geom_geojson')
         .eq('id', patchId)
         .single();
 
       if (error) throw error;
-      return data as Patch;
+      
+      const patchData = data as PatchWithGeoJSON;
+      
+      // Convert GeoJSON to WKT format for the GoogleMap component
+      const wktGeom = geoJSONToWKT(patchData.geom_geojson);
+      
+      return {
+        id: patchData.id,
+        name: patchData.name,
+        code: patchData.code,
+        type: patchData.type,
+        status: patchData.status,
+        geom: wktGeom || ''
+      } as Patch;
     }
   });
 

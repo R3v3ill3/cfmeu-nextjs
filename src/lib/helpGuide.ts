@@ -133,7 +133,7 @@ function resolveHelpDocuments(): HelpDocument[] {
     {
       id: 'mobile-workflow-plan',
       title: 'Mobile Workflow Implementation Plan',
-      relativePath: 'MOBILE_WORKFLOW_IMPLEMENTATION_PLAN.md',
+      relativePath: 'docs/MOBILE_WORKFLOW_IMPLEMENTATION_PLAN.md',
       documentType: 'workflow-guide',
       roleAccess: ['admin', 'lead_organiser', 'organiser'],
       mobileOptimized: true
@@ -141,7 +141,7 @@ function resolveHelpDocuments(): HelpDocument[] {
     {
       id: 'rating-system-integration',
       title: 'Rating System Integration Guide',
-      relativePath: 'RATING_SYSTEM_INTEGRATION.md',
+      relativePath: 'docs/RATING_SYSTEM_INTEGRATION.md',
       documentType: 'system-guide',
       roleAccess: ['admin', 'lead_organiser', 'organiser'],
       mobileOptimized: true
@@ -149,7 +149,7 @@ function resolveHelpDocuments(): HelpDocument[] {
     {
       id: 'pending-employers-guide',
       title: 'Pending Employers Implementation Guide',
-      relativePath: 'PENDING_EMPLOYERS_IMPLEMENTATION_GUIDE.md',
+      relativePath: 'docs/PENDING_EMPLOYERS_IMPLEMENTATION_GUIDE.md',
       documentType: 'workflow-guide',
       roleAccess: ['admin', 'lead_organiser', 'organiser'],
       mobileOptimized: true

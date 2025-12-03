@@ -90,7 +90,30 @@ export default function Providers({ children }: ProvidersProps) {
 
     const registerServiceWorker = async () => {
       try {
-        const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' })
+        const swUrl = '/sw.js'
+        
+        // Pre-flight check: verify sw.js is accessible before attempting registration
+        // This prevents unhandled rejections on iOS Safari when the script fails to load
+        try {
+          const preflight = await fetch(swUrl, { method: 'HEAD' })
+          if (!preflight.ok) {
+            logPwaEvent('Service worker script not accessible', { 
+              status: preflight.status,
+              userAgent: navigator.userAgent 
+            })
+            console.warn('[PWA] Service worker script not accessible - continuing without SW')
+            return
+          }
+        } catch (preflightError) {
+          logPwaEvent('Service worker preflight check failed', {
+            error: preflightError instanceof Error ? preflightError.message : String(preflightError),
+            userAgent: navigator.userAgent
+          })
+          console.warn('[PWA] Service worker preflight check failed - continuing without SW')
+          return
+        }
+        
+        const registration = await navigator.serviceWorker.register(swUrl, { scope: '/' })
         logPwaEvent('Service worker registered')
 
         // Check for updates immediately and periodically
