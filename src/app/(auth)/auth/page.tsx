@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import { clearResetFlag } from '@/lib/auth/hardReset'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,7 +15,20 @@ export default function AuthPage() {
   const [error, setError] = useState<string | null>(null)
   const [resetLoading, setResetLoading] = useState(false)
   const [resetSuccess, setResetSuccess] = useState(false)
+  const [showResetMessage, setShowResetMessage] = useState(false)
   const router = useRouter()
+
+  // Check for hard reset indicator
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('reset') === '1') {
+      setShowResetMessage(true)
+      clearResetFlag()
+      // Auto-hide after 5 seconds
+      const timer = setTimeout(() => setShowResetMessage(false), 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [])
 
   // Check for error messages from OAuth callback
   useEffect(() => {
@@ -137,6 +151,14 @@ export default function AuthPage() {
         </div>
         
         <h1 className="text-2xl font-semibold text-center">Sign in</h1>
+        
+        {/* App Reset Message */}
+        {showResetMessage && (
+          <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-md text-sm">
+            <p className="font-medium">App has been reset</p>
+            <p className="text-xs mt-1">All local data has been cleared. Please sign in again.</p>
+          </div>
+        )}
         
         {/* Apple Sign In Button */}
         <div className="space-y-2">

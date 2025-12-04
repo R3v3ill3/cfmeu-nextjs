@@ -1,5 +1,6 @@
   "use client"
 
+import { useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { useNavigationLoading } from "@/hooks/useNavigationLoading"
 import { MapPin, Building2 } from "lucide-react"
@@ -33,6 +34,7 @@ const tierLabels = {
 }
 
 export function ProjectDisplayCell({ projects, displayMode }: ProjectDisplayCellProps) {
+  const router = useRouter()
   const { startNavigation } = useNavigationLoading()
 
   if (projects.length === 0) {
@@ -50,7 +52,7 @@ export function ProjectDisplayCell({ projects, displayMode }: ProjectDisplayCell
             className="cursor-pointer whitespace-nowrap hover:bg-secondary/80"
             onClick={() => {
               startNavigation(`/projects/${p.id}`)
-              setTimeout(() => { window.location.href = `/projects/${p.id}` }, 50)
+              router.push(`/projects/${p.id}`)
             }}
             title={p.name}
           >
@@ -71,7 +73,7 @@ export function ProjectDisplayCell({ projects, displayMode }: ProjectDisplayCell
               <button
                 onClick={() => {
                   startNavigation(`/projects/${p.id}`)
-                  setTimeout(() => { window.location.href = `/projects/${p.id}` }, 50)
+                  router.push(`/projects/${p.id}`)
                 }}
                 className="font-medium text-sm hover:underline text-primary"
                 title={p.name}

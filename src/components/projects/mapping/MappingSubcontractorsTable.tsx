@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/integrations/supabase/client";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -116,6 +117,7 @@ const updateWorkerBreakdown = async (
 };
 
 export function MappingSubcontractorsTable({ projectId }: { projectId: string }) {
+  const router = useRouter();
   // Fetch key trades dynamically from database (replaces hard-coded list)
   const { tradeSet: KEY_CONTRACTOR_TRADES } = useKeyContractorTradesSet();
   const [rowsByTrade, setRowsByTrade] = useState<Record<string, Row[]>>({});
@@ -433,7 +435,7 @@ export function MappingSubcontractorsTable({ projectId }: { projectId: string })
     return (
       <button
         className="underline text-left"
-        onClick={() => { try { window.location.href = `/employers/${row.employer_id}` } catch {} }}
+        onClick={() => { try { router.push(`/employers/${row.employer_id}`) } catch {} }}
         title="Open employer to edit EBA status"
       >
         {text}

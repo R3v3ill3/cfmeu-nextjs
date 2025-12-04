@@ -349,7 +349,7 @@ export default function CreateProjectDialog() {
         setOpen(false);
         resetForm();
         try {
-          window.location.href = `/projects/${id}`
+          router.push(`/projects/${id}`)
         } catch (navErr) {
           console.error('Navigation error:', navErr);
           toast.error("Project created but failed to navigate. Please refresh the page.");

@@ -299,10 +299,10 @@ export default function PatchPage() {
         }
         break
       case "worker-list":
-        window.location.href = `/workers?siteId=${jobSiteId}`
+        router.push(`/workers?siteId=${jobSiteId}`)
         break
       case "employer-compliance":
-        window.location.href = `/employers?siteId=${jobSiteId}&view=compliance`
+        router.push(`/employers?siteId=${jobSiteId}&view=compliance`)
         break
     }
   }

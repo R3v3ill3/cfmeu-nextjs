@@ -7,6 +7,14 @@ import { useAuth } from "@/hooks/useAuth"
 import { useUserRole } from "@/hooks/useUserRole"
 import { Button } from "@/components/ui/button"
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
@@ -23,7 +31,7 @@ import {
   SidebarTrigger,
   SidebarInput,
 } from "@/components/ui/sidebar"
-import { LogOut, Users, Building, FolderOpen, FileCheck, Shield, BarChart3, Settings, Home, MapPin, Crown, QrCode, Search as SearchIcon, HelpCircle, AlertTriangle, ClipboardList } from "lucide-react"
+import { LogOut, Users, Building, FolderOpen, FileCheck, Shield, BarChart3, Settings, Home, MapPin, Crown, QrCode, Search as SearchIcon, HelpCircle, AlertTriangle, ClipboardList, RotateCcw } from "lucide-react"
 import AdminPatchSelector from "@/components/admin/AdminPatchSelector"
 import { useNavigationVisibility } from "@/hooks/useNavigationVisibility"
 import { useNavigationLoading } from "@/hooks/useNavigationLoading"
@@ -32,6 +40,7 @@ import { HelpLauncher } from '@/components/help/HelpLauncher'
 import { AiHelpDialog } from '@/components/help/AiHelpDialog'
 import { MessageSquare } from 'lucide-react'
 import { useAdminPatchContext } from "@/context/AdminPatchContext"
+import { performHardReset } from "@/lib/auth/hardReset"
 
 const cfmeuLogoLight = "/favicon.svg" as unknown as string
 
@@ -138,6 +147,8 @@ function useVisibleNavItems(userRole: string | null, isLoadingRole: boolean, cac
 
 export default function DesktopLayout({ children }: { children: ReactNode }) {
   const [aiHelpOpen, setAiHelpOpen] = useState(false)
+  const [forceLogoutDialogOpen, setForceLogoutDialogOpen] = useState(false)
+  const [isResetting, setIsResetting] = useState(false)
   const pathname = usePathname()
   const { user, signOut } = useAuth()
   const { role: userRole, isLoading: isLoadingRole, error: roleError } = useUserRole()
@@ -380,11 +391,23 @@ export default function DesktopLayout({ children }: { children: ReactNode }) {
                 <div className="text-xs text-muted-foreground">Signed in as</div>
                 <div className="truncate text-sm font-medium">{user?.email}</div>
               </div>
-              <Button variant="outline" size="sm" onClick={signOut} className="gap-2">
-                <LogOut className="h-3 w-3" />
-                <span className="group-data-[collapsible=icon]:hidden">Logout</span>
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button variant="outline" size="sm" onClick={signOut} className="gap-2">
+                  <LogOut className="h-3 w-3" />
+                  <span className="group-data-[collapsible=icon]:hidden">Logout</span>
+                </Button>
+              </div>
             </div>
+            {/* Force Logout - nuclear option when normal logout fails */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full text-destructive hover:text-destructive hover:bg-destructive/10 group-data-[collapsible=icon]:hidden"
+              onClick={() => setForceLogoutDialogOpen(true)}
+            >
+              <RotateCcw className="mr-2 h-3 w-3" />
+              Force Logout
+            </Button>
           </div>
         </SidebarFooter>
       </Sidebar>
@@ -450,6 +473,62 @@ export default function DesktopLayout({ children }: { children: ReactNode }) {
       </SidebarInset>
       <JoinQrDialog open={joinQrOpen} onOpenChange={setJoinQrOpen} />
       <AiHelpDialog open={aiHelpOpen} onOpenChange={setAiHelpOpen} />
+      
+      {/* Force Logout Confirmation Dialog */}
+      <Dialog open={forceLogoutDialogOpen} onOpenChange={setForceLogoutDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Force Logout
+            </DialogTitle>
+            <DialogDescription className="space-y-3 pt-2">
+              <p>
+                This will clear all app data and log you out completely.
+              </p>
+              <p className="font-medium">
+                Use this if you're stuck and normal Logout doesn't work.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                You will need to sign in again after this action.
+              </p>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setForceLogoutDialogOpen(false)}
+              disabled={isResetting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                setIsResetting(true)
+                try {
+                  await performHardReset()
+                } catch (error) {
+                  console.error('Force logout failed:', error)
+                }
+              }}
+              disabled={isResetting}
+            >
+              {isResetting ? (
+                <>
+                  <RotateCcw className="mr-2 h-4 w-4 animate-spin" />
+                  Resetting...
+                </>
+              ) : (
+                <>
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  Force Logout
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </SidebarProvider>
   )
 }

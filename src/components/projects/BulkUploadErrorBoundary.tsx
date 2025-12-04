@@ -1,7 +1,7 @@
 'use client'
 
-import {  Component, ErrorInfo, ReactNode  } from 'react'
-import { AlertTriangle, RefreshCw, Upload, Brain, FileText, Loader2 } from 'lucide-react'
+import { Component, ErrorInfo, ReactNode } from 'react'
+import { AlertTriangle, RefreshCw, Upload, Brain, FileText, Loader2, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import {
@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { performHardReset } from '@/lib/auth/hardReset'
 
 interface Props {
   children: ReactNode
@@ -192,7 +193,11 @@ class BulkUploadErrorBoundary extends Component<Props, State> {
       isRetrying: false,
     })
 
-    // Navigate back to upload step
+    // Navigate back to projects page with a full page reload
+    // NOTE: Using window.location.href intentionally in error boundary because:
+    // 1. The React tree may be in a broken state after an error
+    // 2. A full page reload provides a clean recovery
+    // 3. Class components cannot use hooks like useRouter()
     if (typeof window !== 'undefined') {
       window.location.href = '/projects'
     }
@@ -279,6 +284,20 @@ class BulkUploadErrorBoundary extends Component<Props, State> {
                   <li key={index}>{suggestion}</li>
                 ))}
               </ul>
+            </div>
+
+            <div className="border-t pt-4 mt-4">
+              <p className="text-xs text-muted-foreground mb-2">
+                If you're stuck and can't navigate away:
+              </p>
+              <Button 
+                variant="ghost" 
+                onClick={() => performHardReset()} 
+                className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
+              >
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Force Logout & Reset App
+              </Button>
             </div>
           </DialogContent>
         </Dialog>

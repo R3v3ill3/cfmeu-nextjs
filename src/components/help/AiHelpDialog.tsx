@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { useHelpContext } from '@/context/HelpContext'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -37,6 +38,7 @@ interface AiHelpDialogProps {
 }
 
 export function AiHelpDialog({ open, onOpenChange }: AiHelpDialogProps) {
+  const router = useRouter()
   const { scope } = useHelpContext()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
@@ -240,7 +242,7 @@ export function AiHelpDialog({ open, onOpenChange }: AiHelpDialogProps) {
                         size="sm"
                         className="w-full justify-between"
                         onClick={() => {
-                          window.location.href = action.path
+                          router.push(action.path)
                           onOpenChange(false)
                         }}
                       >

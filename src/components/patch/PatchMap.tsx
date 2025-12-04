@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -72,6 +73,8 @@ function geoJSONToWKT(geojson: GeoJSONGeometry | null): string | null {
 }
 
 export function PatchMap({ patchId, height = '400px' }: PatchMapProps) {
+  const router = useRouter();
+  
   // Query from patches_with_geojson view which includes ALL patch types (not just 'geo')
   const { data: patch, isLoading, error } = useQuery({
     queryKey: ['patch-map-data', patchId],
@@ -278,7 +281,7 @@ export function PatchMap({ patchId, height = '400px' }: PatchMapProps) {
 
   const handleProjectClick = (projectId: string) => {
     // Navigate to the project detail page
-    window.location.href = `/projects/${projectId}`;
+    router.push(`/projects/${projectId}`);
   };
 
   return (

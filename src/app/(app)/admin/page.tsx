@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useState, useEffect, Suspense, lazy } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
@@ -10,7 +11,6 @@ import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { useAuth } from "@/hooks/useAuth"
 import { useUserRole } from "@/hooks/useUserRole"
-import { useSearchParams } from "next/navigation"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { ChevronDown, Users, ShieldCheck, Map, Database, Navigation, Activity } from "lucide-react"
@@ -49,6 +49,7 @@ function TabLoadingState() {
 }
 
 export default function AdminPage() {
+  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [addDraftOpen, setAddDraftOpen] = useState(false)
   const [lookupOpen, setLookupOpen] = useState(false)
@@ -703,7 +704,7 @@ export default function AdminPage() {
                     <Button
                       variant="link"
                       className="p-0 h-auto"
-                      onClick={() => window.location.href = '/admin/key-trades'}
+                      onClick={() => router.push('/admin/key-trades')}
                     >
                       Open Key Trades Manager →
                     </Button>

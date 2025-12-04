@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
@@ -13,6 +14,7 @@ import { toast } from "sonner"
 import { useGeofencingPermission } from "@/lib/geofencing/GeofencingPermissionManager"
 
 export function GeofencingSetup() {
+  const router = useRouter()
   const [enabled, setEnabled] = useState(false)
   const [testMode, setTestMode] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -85,7 +87,7 @@ export function GeofencingSetup() {
               projectName: lastNotification.projectName,
               mainJobSiteId: lastNotification.siteId,
             })
-            window.location.href = `/site-visit-wizard?${params.toString()}`
+            router.push(`/site-visit-wizard?${params.toString()}`)
           },
         },
         duration: 5000,
@@ -328,7 +330,7 @@ export function GeofencingSetup() {
                           projectName: site.project_name,
                           mainJobSiteId: site.id,
                         })
-                        window.location.href = `/site-visit-wizard?${params.toString()}`
+                        router.push(`/site-visit-wizard?${params.toString()}`)
                       }}
                     >
                       Start visit

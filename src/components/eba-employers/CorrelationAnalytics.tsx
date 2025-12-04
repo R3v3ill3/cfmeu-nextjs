@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent } from "@/components/ui/card"
@@ -28,6 +29,7 @@ export function CorrelationAnalytics({
   includeDerived,
   includeManual
 }: CorrelationAnalyticsProps) {
+  const router = useRouter()
   const { startNavigation } = useNavigationLoading()
   
   const [activeMode, setActiveMode] = useLocalStorage<CorrelationType>(
@@ -150,7 +152,7 @@ function WorkingTogetherView({ data, startNavigation }: any) {
                       className="h-auto py-1 px-2 text-xs"
                       onClick={() => {
                         startNavigation(`/projects/${project.id}`)
-                        setTimeout(() => window.location.href = `/projects/${project.id}`, 50)
+                        router.push(`/projects/${project.id}`)
                       }}
                     >
                       {project.name}

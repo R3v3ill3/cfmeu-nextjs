@@ -1,7 +1,7 @@
 'use client'
 
-import {  Component, ErrorInfo, ReactNode  } from 'react'
-import { AlertTriangle, RefreshCw, Home } from 'lucide-react'
+import { Component, ErrorInfo, ReactNode } from 'react'
+import { AlertTriangle, RefreshCw, Home, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { performHardReset } from '@/lib/auth/hardReset'
 
 interface Props {
   children: ReactNode
@@ -75,6 +76,11 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   handleGoHome = () => {
+    // NOTE: Using window.location.href intentionally here because:
+    // 1. This is an error boundary - the React tree may be in a broken state
+    // 2. A full page reload provides a clean recovery
+    // 3. Class components cannot use hooks like useRouter()
+    // The auth system's session recovery (via Gemini's fixes) will restore the session on reload.
     window.location.href = '/projects'
   }
 
@@ -130,6 +136,20 @@ class ErrorBoundary extends Component<Props, State> {
                 <li>Try a smaller PDF file</li>
                 <li>Contact support if needed</li>
               </ul>
+            </div>
+
+            <div className="border-t pt-4 mt-4">
+              <p className="text-xs text-muted-foreground mb-2">
+                If you're stuck and can't navigate away:
+              </p>
+              <Button 
+                variant="ghost" 
+                onClick={() => performHardReset()} 
+                className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
+              >
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Force Logout & Reset App
+              </Button>
             </div>
           </DialogContent>
         </Dialog>

@@ -1,6 +1,7 @@
 'use client'
 
-import {  useEffect, useRef  } from 'react'
+import { useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Dialog,
   DialogContent,
@@ -277,6 +278,7 @@ function UploadStep({
   canProceed: boolean
   error: string | null
 }) {
+  const router = useRouter()
   const { getRootProps, getInputProps, isDragActive, fileInfo } = pdfProcessing
 
   return (
@@ -337,7 +339,7 @@ function UploadStep({
       )}
 
       <div className="flex justify-end gap-2">
-        <Button variant="outline" onClick={() => window.location.href = '/projects'}>
+        <Button variant="outline" onClick={() => router.push('/projects')}>
           Cancel
         </Button>
         <Button onClick={onProceed} disabled={!canProceed}>
@@ -635,6 +637,7 @@ function ProcessingStep({
   onCancel: () => void
   onRetry: () => void
 }) {
+  const router = useRouter()
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-center py-8">
@@ -694,7 +697,7 @@ function ProcessingStep({
         <div className="flex justify-center gap-2">
           <Button
             variant="outline"
-            onClick={() => window.location.href = `/projects/batches/${batchId}`}
+            onClick={() => router.push(`/projects/batches/${batchId}`)}
           >
             View Batch Status
           </Button>
@@ -737,6 +740,7 @@ function CompleteStep({
   completedScans: number
   onClose: () => void
 }) {
+  const router = useRouter()
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-center py-8">
@@ -770,7 +774,7 @@ function CompleteStep({
         <Button variant="outline" onClick={onClose}>
           Close
         </Button>
-        <Button onClick={() => (window.location.href = `/projects/batches/${batchId}`)}>
+        <Button onClick={() => router.push(`/projects/batches/${batchId}`)}>
           View Batch Details
         </Button>
       </div>

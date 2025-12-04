@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -20,6 +21,7 @@ import {
   Volume2,
   VolumeX
 } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { useRealtimeAssessment } from "./RealtimeAssessmentProvider"
 import { format, formatDistanceToNow } from "date-fns"
@@ -57,6 +59,7 @@ export function RealtimeNotificationSystem({
   enableSound = true,
   className
 }: RealtimeNotificationSystemProps) {
+  const router = useRouter()
   const { isConnected, subscribeToEmployer, subscribeToProject } = useRealtimeAssessment()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [isExpanded, setIsExpanded] = useState(false)
@@ -126,13 +129,13 @@ export function RealtimeNotificationSystem({
         action: metadata?.actionUrl ? {
           label: 'View',
           onClick: () => {
-            // Navigate to action URL
-            window.location.href = metadata.actionUrl
+            // Navigate to action URL using router to preserve React state
+            router.push(metadata.actionUrl!)
           }
         } : undefined
       })
     }
-  }, [maxNotifications, playNotificationSound])
+  }, [maxNotifications, playNotificationSound, router])
 
   // Mark notification as read
   const markAsRead = useCallback((notificationId: string) => {
@@ -410,7 +413,7 @@ export function RealtimeNotificationSystem({
                                   size="sm"
                                   onClick={(e) => {
                                     e.stopPropagation()
-                                    window.location.href = notification.metadata!.actionUrl!
+                                    router.push(notification.metadata!.actionUrl!)
                                   }}
                                 >
                                   {notification.actionLabel}

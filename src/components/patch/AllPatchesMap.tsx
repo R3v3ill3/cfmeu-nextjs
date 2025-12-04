@@ -1,16 +1,15 @@
 'use client';
 
-;
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MapPin, ExternalLink } from 'lucide-react';
+import { MapPin, ExternalLink, Palette } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { GoogleMap } from '@/components/ui/GoogleMap';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Palette } from 'lucide-react';
 import { getProjectColor, getColorSchemeLegend } from '@/utils/projectColors';
 
 interface AllPatchesMapProps {
@@ -43,6 +42,7 @@ export function AllPatchesMap({
   selectedPatchIds = [],
   onPatchClick 
 }: AllPatchesMapProps) {
+  const router = useRouter();
   const [projectColorBy, setProjectColorBy] = useState<'tier' | 'organising_universe' | 'stage' | 'builder_eba' | 'default'>('builder_eba')
   // Fetch all active geo patches
   const { data: patches = [], isLoading: patchesLoading } = useQuery({
@@ -173,7 +173,7 @@ export function AllPatchesMap({
 
   const handleProjectClick = (projectId: string) => {
     // Navigate to the project detail page
-    window.location.href = `/projects/${projectId}`;
+    router.push(`/projects/${projectId}`);
   };
 
   const handlePatchClickInternal = (patchId: string) => {
@@ -183,7 +183,7 @@ export function AllPatchesMap({
       // Default behavior: navigate to patch page with selection
       const currentUrl = new URL(window.location.href);
       currentUrl.searchParams.set('patch', patchId);
-      window.location.href = currentUrl.toString();
+      router.push(currentUrl.pathname + currentUrl.search);
     }
   };
 

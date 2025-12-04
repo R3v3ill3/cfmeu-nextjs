@@ -5,7 +5,15 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
-  Menu, LogOut, Users, Building, MapPin, BarChart3, FolderOpen, FileCheck, Shield, AlertTriangle, QrCode, HelpCircle, Crown, Settings, TrendingUp, ArrowLeft, Home, Search, ClipboardList
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Menu, LogOut, Users, Building, MapPin, BarChart3, FolderOpen, FileCheck, Shield, AlertTriangle, QrCode, HelpCircle, Crown, Settings, TrendingUp, ArrowLeft, Home, Search, ClipboardList, RotateCcw
 } from "lucide-react";
 import { WizardFloatingButton } from "@/components/siteVisitWizard/WizardFloatingButton";
 import Link from "next/link";
@@ -19,6 +27,7 @@ import { HelpLauncher } from "@/components/help/HelpLauncher";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useAdminPatchContext } from "@/context/AdminPatchContext";
+import { performHardReset } from "@/lib/auth/hardReset";
 
 // Simple mobile detection
 const isMobile = () => {
@@ -50,6 +59,8 @@ const Layout = ({ children, onRefresh }: LayoutProps) => {
   const { visibility } = useNavigationVisibility();
   const { isNavigating, startNavigation } = useNavigationLoading();
   const [joinQrOpen, setJoinQrOpen] = useState(false);
+  const [forceLogoutDialogOpen, setForceLogoutDialogOpen] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   const { toast } = useToast();
   const [roleErrorNotified, setRoleErrorNotified] = useState(false);
   const adminPatchContext = useAdminPatchContext();
@@ -464,6 +475,20 @@ const Layout = ({ children, onRefresh }: LayoutProps) => {
                     <LogOut className="mr-2 h-4 w-4" />
                     Sign Out
                   </Button>
+                  
+                  {/* Force Logout - nuclear option when normal logout fails */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full min-h-[44px] text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => {
+                      setIsOpen(false)
+                      setForceLogoutDialogOpen(true)
+                    }}
+                  >
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    Force Logout
+                  </Button>
                 </div>
               </div>
             </SheetContent>
@@ -645,6 +670,65 @@ const Layout = ({ children, onRefresh }: LayoutProps) => {
       )}
 
       <JoinQrDialog open={joinQrOpen} onOpenChange={setJoinQrOpen} />
+      
+      {/* Force Logout Confirmation Dialog */}
+      <Dialog open={forceLogoutDialogOpen} onOpenChange={setForceLogoutDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Force Logout
+            </DialogTitle>
+            <DialogDescription className="space-y-3 pt-2">
+              <p>
+                This will clear all app data and log you out completely.
+              </p>
+              <p className="font-medium">
+                Use this if you're stuck and normal Sign Out doesn't work.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                You will need to sign in again after this action.
+              </p>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setForceLogoutDialogOpen(false)}
+              disabled={isResetting}
+              className="w-full sm:w-auto"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                setIsResetting(true)
+                try {
+                  await performHardReset()
+                } catch (error) {
+                  console.error('Force logout failed:', error)
+                  // performHardReset will redirect even on error
+                }
+              }}
+              disabled={isResetting}
+              className="w-full sm:w-auto"
+            >
+              {isResetting ? (
+                <>
+                  <RotateCcw className="mr-2 h-4 w-4 animate-spin" />
+                  Resetting...
+                </>
+              ) : (
+                <>
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  Force Logout
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       
       {/* Site Visit Wizard FAB - show for organisers on mobile (except on pages that have their own button) */}
       {isMobile() && !isLoadingRole && userRole && 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Card,
   CardContent,
@@ -83,6 +84,7 @@ interface BatchManagementDashboardProps {
 }
 
 export function BatchManagementDashboard({ open, onOpenChange }: BatchManagementDashboardProps) {
+  const router = useRouter()
   const [batches, setBatches] = useState<BatchUpload[]>([])
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
@@ -458,7 +460,7 @@ export function BatchManagementDashboard({ open, onOpenChange }: BatchManagement
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => window.location.href = `/projects/batches/${batch.id}`}
+                            onClick={() => router.push(`/projects/batches/${batch.id}`)}
                           >
                             <FileText className="h-4 w-4" />
                           </Button>
@@ -589,7 +591,7 @@ export function BatchManagementDashboard({ open, onOpenChange }: BatchManagement
                   <Button variant="outline" onClick={() => setDetailDialogOpen(false)}>
                     Close
                   </Button>
-                  <Button onClick={() => window.location.href = `/projects/batches/${selectedBatch.id}`}>
+                  <Button onClick={() => router.push(`/projects/batches/${selectedBatch.id}`)}>
                     View Full Details
                   </Button>
                 </div>

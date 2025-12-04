@@ -100,7 +100,7 @@ export function EbaEmployerMobileCard({ employer, rating, onViewDetails }: EbaEm
                 onClick={(e) => {
                   e.stopPropagation()
                   startNavigation(`/projects/${project.id}`)
-                  setTimeout(() => window.location.href = `/projects/${project.id}`, 50)
+                  router.push(`/projects/${project.id}`)
                 }}
               >
                 {project.name}

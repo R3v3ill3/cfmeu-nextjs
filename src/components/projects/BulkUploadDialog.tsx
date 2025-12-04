@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { useDropzone } from 'react-dropzone'
 import { PDFDocument } from 'pdf-lib'
 import {
@@ -103,6 +104,7 @@ interface SavedProgress {
 }
 
 export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) {
+  const router = useRouter()
   const [step, setStep] = useState<Step>('upload')
   const [file, setFile] = useState<File | null>(null)
   const [pdfBytes, setPdfBytes] = useState<Uint8Array | null>(null)
@@ -1280,7 +1282,7 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
                 <div className="flex justify-center gap-2">
                   <Button
                     variant="outline"
-                    onClick={() => window.location.href = `/projects/batches/${batchId}`}
+                    onClick={() => router.push(`/projects/batches/${batchId}`)}
                   >
                     View Batch Status
                   </Button>
@@ -1383,7 +1385,7 @@ export function BulkUploadDialog({ open, onOpenChange }: BulkUploadDialogProps) 
                 <Button variant="outline" onClick={handleClose}>
                   Close
                 </Button>
-                <Button onClick={() => (window.location.href = `/projects/batches/${batchId}`)}>
+                <Button onClick={() => router.push(`/projects/batches/${batchId}`)}>
                   View Batch Details
                 </Button>
               </div>
