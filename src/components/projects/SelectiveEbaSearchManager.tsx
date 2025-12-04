@@ -163,52 +163,6 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
   const tradeOptionsByStage = useMemo(() => getTradeOptionsByStage(), []);
   const allStages = useMemo(() => getAllStages(), []);
 
-  // Real-time job updates
-  const {
-    job: currentJob,
-    events: jobEvents,
-  } = useScraperJobRealtime({
-    jobId,
-    enabled: !!jobId,
-    pollingInterval: 2000,
-    onJobComplete: useCallback((job: ScraperJob) => {
-      loadProjectEmployers();
-
-      const title =
-        job.status === 'succeeded'
-          ? 'EBA Search Complete'
-          : job.status === 'failed'
-          ? 'EBA Search Failed'
-          : 'EBA Search Cancelled';
-
-      const description =
-        job.status === 'succeeded'
-          ? 'Background lookup finished. Employer data will refresh with the latest EBA information.'
-          : job.last_error || 'The background lookup finished with issues. Review the timeline for details.';
-
-      toast({
-        title,
-        description,
-        variant: job.status === 'succeeded' ? 'default' : 'destructive',
-      });
-    }, [loadProjectEmployers, toast]),
-  })
-
-  const progressCompleted = currentJob?.progress_completed ?? 0
-  const progressTotal = currentJob?.progress_total ?? 0
-  const progressPercent = progressTotal > 0 ? Math.round((progressCompleted / progressTotal) * 100) : 0
-
-  const statusLabels: Record<ScraperJobStatus, string> = {
-    queued: 'Queued',
-    running: 'Running',
-    succeeded: 'Completed',
-    failed: 'Failed',
-    cancelled: 'Cancelled',
-  }
-
-  // Event-based step derivation for better UX
-  const currentStepIndex = deriveStepIndexForJob(currentJob, jobEvents)
-
   const formatTimestamp = useCallback((value: string | null | undefined) => {
     if (!value) return '—'
     try {
@@ -219,6 +173,7 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
   }, [])
 
   // Load project employers with their roles and trade assignments
+  // NOTE: This must be defined BEFORE useScraperJobRealtime to avoid TDZ errors
   const loadProjectEmployers = useCallback(async () => {
     if (!projectId) return;
     
@@ -396,6 +351,53 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
       setIsLoading(false);
     }
   }, [projectId, toast]);
+
+  // Real-time job updates
+  // NOTE: This must be defined AFTER loadProjectEmployers to avoid TDZ errors
+  const {
+    job: currentJob,
+    events: jobEvents,
+  } = useScraperJobRealtime({
+    jobId,
+    enabled: !!jobId,
+    pollingInterval: 2000,
+    onJobComplete: useCallback((job: ScraperJob) => {
+      loadProjectEmployers();
+
+      const title =
+        job.status === 'succeeded'
+          ? 'EBA Search Complete'
+          : job.status === 'failed'
+          ? 'EBA Search Failed'
+          : 'EBA Search Cancelled';
+
+      const description =
+        job.status === 'succeeded'
+          ? 'Background lookup finished. Employer data will refresh with the latest EBA information.'
+          : job.last_error || 'The background lookup finished with issues. Review the timeline for details.';
+
+      toast({
+        title,
+        description,
+        variant: job.status === 'succeeded' ? 'default' : 'destructive',
+      });
+    }, [loadProjectEmployers, toast]),
+  })
+
+  const progressCompleted = currentJob?.progress_completed ?? 0
+  const progressTotal = currentJob?.progress_total ?? 0
+  const progressPercent = progressTotal > 0 ? Math.round((progressCompleted / progressTotal) * 100) : 0
+
+  const statusLabels: Record<ScraperJobStatus, string> = {
+    queued: 'Queued',
+    running: 'Running',
+    succeeded: 'Completed',
+    failed: 'Failed',
+    cancelled: 'Cancelled',
+  }
+
+  // Event-based step derivation for better UX
+  const currentStepIndex = deriveStepIndexForJob(currentJob, jobEvents)
 
   // Apply filters to employer list
   useEffect(() => {
