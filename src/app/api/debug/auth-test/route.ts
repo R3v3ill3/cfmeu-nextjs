@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { generateTemporaryPassword, prepareUserMetadata } from '@/utils/auth-utils'
+import { withRateLimit, RATE_LIMIT_PRESETS } from '@/lib/rateLimit'
 
 export const dynamic = 'force-dynamic'
 
-export async function POST(request: NextRequest) {
+export const POST = withRateLimit(async (request: NextRequest) => {
   try {
     console.log('🧪 Testing auth creation...')
 
@@ -76,4 +77,4 @@ export async function POST(request: NextRequest) {
       stack: error.stack
     }, { status: 500 })
   }
-}
+}, RATE_LIMIT_PRESETS.AUTH)

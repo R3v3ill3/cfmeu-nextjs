@@ -297,13 +297,15 @@ export const RATE_LIMIT_PRESETS = {
   } as RateLimitConfig,
 
   /**
-   * Strict limit for authentication endpoints
-   * 10 requests per minute
+   * Rate limit for authentication endpoints
+   * Increased from 10 to 20 requests per minute to handle session recovery attempts
+   * Multi-agent investigation identified that session recovery requires multiple retries
+   * Added burst allowance of 5 to accommodate recovery scenarios without blocking legitimate users
    */
   AUTH: {
-    maxRequests: 10,
+    maxRequests: 20, // Increased from 10 for recovery attempts
     windowSeconds: 60,
-    burstAllowance: 0,
+    burstAllowance: 5, // Allow burst for session recovery scenarios
   } as RateLimitConfig,
 };
 

@@ -32,6 +32,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const recoveryAttemptedRef = useRef(false);
   const isSubscribedRef = useRef(true);
   const sessionRef = useRef<Session | null>(null);
+  const recoveryTimeoutRef = useRef<NodeJS.Timeout>();
 
   const logAuthEvent = useCallback(
     (message: string, data?: Record<string, unknown>, level: SeverityLevel = "info") => {
@@ -135,6 +136,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [logAuthError, logAuthEvent]);
 
+  // Debounced recovery scheduler - prevents concurrent recovery attempts
+  const scheduleRecovery = useCallback(() => {
+    if (recoveryAttemptedRef.current) return; // Already attempted
+    if (recoveryTimeoutRef.current) return; // Already scheduled
+
+    logAuthEvent("Scheduling debounced session recovery", { delay: 1000 });
+
+    recoveryTimeoutRef.current = setTimeout(() => {
+      attemptSessionRecovery();
+      recoveryTimeoutRef.current = undefined;
+    }, 1000); // 1-second debounce to prevent race conditions
+  }, [attemptSessionRecovery, logAuthEvent]);
+
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
     isSubscribedRef.current = true;
@@ -200,6 +214,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (newSession) {
           hadSessionRef.current = true;
           recoveryAttemptedRef.current = false;
+
+          // Clear any pending recovery timeout since we now have a valid session
+          if (recoveryTimeoutRef.current) {
+            clearTimeout(recoveryTimeoutRef.current);
+            recoveryTimeoutRef.current = undefined;
+            logAuthEvent("Cleared pending recovery timeout - valid session restored");
+          }
         }
 
         // Handle INITIAL_SESSION event - update if we haven't set session yet
@@ -246,10 +267,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             
             // Try recovery if we haven't already
             if (!recoveryAttemptedRef.current) {
-              const recovered = await attemptSessionRecovery();
-              if (recovered && isSubscribedRef.current) {
-                applyAuthState(recovered, { source: 'recovery' });
-              }
+              scheduleRecovery();
             }
           }
         }
@@ -290,8 +308,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       logAuthEvent("Cleaning up auth state listener");
       isSubscribedRef.current = false;
       subscription.unsubscribe();
+
+      // Clear any pending recovery timeout
+      if (recoveryTimeoutRef.current) {
+        clearTimeout(recoveryTimeoutRef.current);
+        recoveryTimeoutRef.current = undefined;
+      }
     };
-  }, [attemptSessionRecovery, queryClient, applyAuthState, logAuthEvent, logAuthError]);
+  }, [scheduleRecovery, queryClient, applyAuthState, logAuthEvent, logAuthError]);
 
   // Visibility change listener - proactively re-validate session when page becomes visible
   // This handles cases where the session may have been lost while the tab was in background
@@ -317,15 +341,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         
         // If we had a session but now don't, and we haven't already tried recovery
         if (!currentSession && hadSessionRef.current && !recoveryAttemptedRef.current) {
-          logAuthEvent('Visibility check: session lost, attempting recovery', {
+          logAuthEvent('Visibility check: session lost, scheduling recovery', {
             hadSession: true,
             recoveryAttempted: recoveryAttemptedRef.current,
           });
-          
-          const recovered = await attemptSessionRecovery();
-          if (recovered && isSubscribedRef.current) {
-            applyAuthState(recovered, { source: 'visibility_recovery' });
-          }
+
+          scheduleRecovery();
         } else if (currentSession && !sessionRef.current) {
           // Edge case: we have a session now but didn't before (maybe cookie was restored)
           logAuthEvent('Visibility check: session restored externally', {
@@ -343,11 +364,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [attemptSessionRecovery, applyAuthState, logAuthEvent, logAuthError]);
+  }, [scheduleRecovery, applyAuthState, logAuthEvent, logAuthError]);
 
   const signOut = async () => {
     const supabase = getSupabaseBrowserClient();
     hadSessionRef.current = false; // Reset on explicit sign out
+    recoveryAttemptedRef.current = false; // Reset recovery attempt flag
+
+    // Clear any pending recovery timeout on sign out
+    if (recoveryTimeoutRef.current) {
+      clearTimeout(recoveryTimeoutRef.current);
+      recoveryTimeoutRef.current = undefined;
+    }
+
     logAuthEvent("Manual sign out requested", { userId: sessionRef.current?.user?.id ?? null });
     await supabase.auth.signOut();
     applyAuthState(null, { source: "signout" });

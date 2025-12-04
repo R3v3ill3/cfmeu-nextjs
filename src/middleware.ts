@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { trackConnection, releaseConnection, recordConnectionError, getConnectionStats } from '@/lib/db-connection-monitor'
 
 export async function middleware(req: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -8,11 +9,27 @@ export async function middleware(req: NextRequest) {
   const requestId = req.headers.get('x-request-id') ?? crypto.randomUUID()
   const path = req.nextUrl.pathname
 
+  // Track connection for middleware monitoring
+  const middlewareConnectionId = trackConnection('middleware', `middleware-${requestId}`)
+
   const logMiddleware = (level: 'log' | 'warn' | 'error', message: string, data?: Record<string, unknown>) => {
     const payload = { requestId, path, ...data, timestamp: new Date().toISOString() }
     const method = level === 'log' ? 'log' : level
     console[method](`[Middleware] ${message}`, payload)
   }
+
+  // Log connection stats at request start (only in debug mode)
+  if (process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_SENTRY_DEBUG === 'true') {
+    const stats = getConnectionStats()
+    logMiddleware('log', 'Connection stats at request start', {
+      poolUtilization: Math.round(stats.poolUtilization * 100),
+      totalActive: stats.totalActiveConnections,
+      healthStatus: stats.healthStatus
+    })
+  }
+
+  // Wrap the entire middleware in try-catch for connection monitoring
+  try {
 
   // Skip auth check for public routes to improve performance
   const publicPaths = ['/auth', '/auth/reset-password', '/auth/confirm', '/manifest.json', '/favicon.ico', '/apple-touch-icon.png']
@@ -38,7 +55,10 @@ export async function middleware(req: NextRequest) {
                 ...options,
                 path: '/',
                 sameSite: 'lax',
-                secure: process.env.NODE_ENV === 'production',
+                // CRITICAL: Always use secure cookies for auth to fix iOS Safari PWA failures
+                // iOS Safari ITP treats non-secure cookies as third-party even in first-party context
+                // Conditional secure flag based on NODE_ENV causes authentication inconsistencies
+                secure: true,
               })
             )
           },
@@ -52,6 +72,9 @@ export async function middleware(req: NextRequest) {
     supabaseResponse.headers.set('x-nonce', nonce)
     const csp = buildCSP(nonce)
     supabaseResponse.headers.set('Content-Security-Policy', csp)
+
+    // Release connection for public path
+    releaseConnection('middleware', middlewareConnectionId)
     return supabaseResponse
   }
 
@@ -73,7 +96,10 @@ export async function middleware(req: NextRequest) {
               ...options,
               path: '/',
               sameSite: 'lax',
-              secure: process.env.NODE_ENV === 'production',
+              // CRITICAL: Always use secure cookies for auth to fix iOS Safari PWA failures
+              // iOS Safari ITP treats non-secure cookies as third-party even in first-party context
+              // Conditional secure flag based on NODE_ENV causes authentication inconsistencies
+              secure: true,
             })
           )
         },
@@ -123,6 +149,9 @@ export async function middleware(req: NextRequest) {
   // Enhanced logging for diagnostics - only log errors when cookies exist but auth fails
   // (indicates actual session loss, not just unauthenticated requests)
   if (authError) {
+    // Record auth errors in connection monitor
+    recordConnectionError('middleware', authError, 'auth.getUser()')
+
     if (hasSbCookies) {
       // This is the important case: user had cookies but auth failed - potential session loss
       logMiddleware('error', 'Auth error with existing cookies (potential session loss)', {
@@ -142,6 +171,7 @@ export async function middleware(req: NextRequest) {
         const refreshDuration = Date.now() - refreshStartTime;
         
         if (refreshError) {
+          recordConnectionError('middleware', refreshError, 'auth.refreshSession()')
           logMiddleware('warn', 'Session refresh failed', {
             errorMessage: refreshError.message,
             refreshDuration,
@@ -227,6 +257,17 @@ export async function middleware(req: NextRequest) {
   // Build and set CSP with nonce
   const csp = buildCSP(nonce)
   supabaseResponse.headers.set('Content-Security-Policy', csp)
+
+  } catch (error) {
+    // Record any middleware errors for connection monitoring
+    recordConnectionError('middleware', error as Error, 'middleware-execution')
+    logMiddleware('error', 'Middleware execution error', {
+      error: error instanceof Error ? error.message : String(error)
+    })
+  } finally {
+    // Always release the middleware connection
+    releaseConnection('middleware', middlewareConnectionId)
+  }
 
   return supabaseResponse
 }

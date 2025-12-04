@@ -1,8 +1,9 @@
 import { type EmailOtpType } from '@supabase/supabase-js'
 import { type NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
+import { withRateLimit, RATE_LIMIT_PRESETS } from '@/lib/rateLimit'
 
-export async function GET(request: NextRequest) {
+export const GET = withRateLimit(async (request: NextRequest) => {
   const { searchParams } = new URL(request.url)
   const token_hash = searchParams.get('token_hash')
   const type = searchParams.get('type') as EmailOtpType | null
@@ -211,6 +212,6 @@ export async function GET(request: NextRequest) {
   redirectTo.searchParams.set('error', 'missing_params')
   redirectTo.searchParams.set('error_description', 'Missing authentication parameters')
   return NextResponse.redirect(redirectTo)
-}
+}, RATE_LIMIT_PRESETS.AUTH)
 
 

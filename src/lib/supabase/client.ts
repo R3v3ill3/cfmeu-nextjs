@@ -3,8 +3,9 @@
 import { createBrowserClient } from '@supabase/ssr'
 import * as Sentry from '@sentry/nextjs'
 import type { Database } from '@/types/database'
+import { connectionMonitor, trackConnection, releaseConnection, recordConnectionError } from '@/lib/db-connection-monitor'
 
-let browserClient: ReturnType<typeof createBrowserClient<Database>> | null = null
+let browserClient: (ReturnType<typeof createBrowserClient<Database>> & { __connectionId?: string }) | null = null
 const MAX_RETRY_ATTEMPTS = 3
 const INITIAL_RETRY_DELAY = 1000 // 1 second
 
@@ -84,8 +85,89 @@ export function getSupabaseBrowserClient(): ReturnType<typeof createBrowserClien
   logSupabaseEvent('Creating new browser client', {
     urlPrefix: url.substring(0, 30),
   })
-  
+
   browserClient = createBrowserClient<Database>(url, key)
+
+  // Track connection for monitoring
+  const connectionId = trackConnection('browser-client')
+
+  // Add connection monitoring hooks
+  browserClient.__connectionId = connectionId
+
+  // Wrap key methods for monitoring
+  const originalFrom = browserClient.from
+  browserClient.from = function(...args: any[]) {
+    try {
+      const result = originalFrom.apply(this, args)
+      // Monitor query execution
+      const originalThen = result.then
+      result.then = function(onFulfilled: any, onRejected: any) {
+        return originalThen.call(this,
+          (data: any) => {
+            try {
+              if (data?.error) {
+                recordConnectionError('browser-client', data.error, `from(${args[0]})`)
+              }
+            } catch (e) {
+              // Ignore monitoring errors
+            }
+            return onFulfilled ? onFulfilled(data) : data
+          },
+          (error: any) => {
+            try {
+              recordConnectionError('browser-client', error, `from(${args[0]})`)
+            } catch (e) {
+              // Ignore monitoring errors
+            }
+            return onRejected ? onRejected(error) : error
+          }
+        )
+      }
+      return result
+    } catch (error) {
+      recordConnectionError('browser-client', error as Error, `from(${args[0]})`)
+      throw error
+    }
+  }
+
+  // Track auth operations
+  const originalAuth = browserClient.auth
+  if (originalAuth && typeof originalAuth.getUser === 'function') {
+    const originalGetUser = originalAuth.getUser
+    originalAuth.getUser = function(...args: any[]) {
+      try {
+        const result = originalGetUser.apply(this, args)
+        const originalThen = result.then
+        result.then = function(onFulfilled: any, onRejected: any) {
+          return originalThen.call(this,
+            (data: any) => {
+              try {
+                if (data?.error) {
+                  recordConnectionError('browser-client', data.error, 'auth.getUser()')
+                }
+              } catch (e) {
+                // Ignore monitoring errors
+              }
+              return onFulfilled ? onFulfilled(data) : data
+            },
+            (error: any) => {
+              try {
+                recordConnectionError('browser-client', error, 'auth.getUser()')
+              } catch (e) {
+                // Ignore monitoring errors
+              }
+              return onRejected ? onRejected(error) : error
+            }
+          )
+        }
+        return result
+      } catch (error) {
+        recordConnectionError('browser-client', error as Error, 'auth.getUser()')
+        throw error
+      }
+    }
+  }
+
   return browserClient
 }
 
@@ -101,10 +183,15 @@ export function getSupabaseBrowserClient(): ReturnType<typeof createBrowserClien
  */
 export function resetSupabaseBrowserClient(): void {
   logSupabaseEvent('Resetting browser client')
-  
+
+  // Release connection from monitoring
+  if (browserClient && browserClient.__connectionId) {
+    releaseConnection('browser-client', browserClient.__connectionId)
+  }
+
   // Force recreation of the browser client on next access
   browserClient = null
-  
+
   resetListeners.forEach((listener) => {
     try {
       listener()

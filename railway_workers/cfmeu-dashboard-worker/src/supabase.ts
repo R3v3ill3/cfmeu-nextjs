@@ -5,8 +5,22 @@ type Database = any
 
 let cachedServiceClient: SupabaseClient<Database> | null = null
 
+// Import connection monitoring (will be available in production)
+let connectionMonitor: any = null
+try {
+  connectionMonitor = require('../../../../src/lib/db-connection-monitor')
+} catch (error) {
+  // Connection monitor not available in worker environment
+}
+
 export function getServiceRoleClient() {
   if (!cachedServiceClient) {
+    // Track connection if monitor is available
+    let connectionId: string | undefined
+    if (connectionMonitor) {
+      connectionId = connectionMonitor.trackConnection('dashboard-worker')
+    }
+
     cachedServiceClient = createClient<Database>(
       config.supabaseUrl,
       config.supabaseServiceKey,
@@ -22,6 +36,48 @@ export function getServiceRoleClient() {
         }
       }
     )
+
+    // Store connection ID for tracking
+    ;(cachedServiceClient as any).__connectionId = connectionId
+
+    // Add error tracking if monitor is available
+    if (connectionMonitor) {
+      const originalFrom = cachedServiceClient.from
+      cachedServiceClient.from = function(table: string) {
+        try {
+          const query = originalFrom.call(this, table)
+
+          // Track query errors
+          const originalThen = query.then || Promise.prototype.then
+          query.then = function(onFulfilled: any, onRejected: any) {
+            return originalThen.call(this,
+              (data: any) => {
+                try {
+                  if (data?.error) {
+                    connectionMonitor.recordConnectionError('dashboard-worker', data.error, `from(${table})`)
+                  }
+                } catch (e) {
+                  // Ignore monitoring errors
+                }
+                return onFulfilled ? onFulfilled(data) : data
+              },
+              (error: any) => {
+                try {
+                  connectionMonitor.recordConnectionError('dashboard-worker', error, `from(${table})`)
+                } catch (e) {
+                  // Ignore monitoring errors
+                }
+                return onRejected ? onRejected(error) : error
+              }
+            )
+          }
+          return query
+        } catch (error) {
+          connectionMonitor.recordConnectionError('dashboard-worker', error as Error, `from(${table})`)
+          throw error
+        }
+      }
+    }
   }
   return cachedServiceClient
 }
@@ -29,6 +85,11 @@ export function getServiceRoleClient() {
 // Add cleanup function for graceful shutdown
 export function closeServiceRoleClient() {
   if (cachedServiceClient) {
+    // Release connection from monitoring
+    if (connectionMonitor && cachedServiceClient.__connectionId) {
+      connectionMonitor.releaseConnection('dashboard-worker', cachedServiceClient.__connectionId)
+    }
+
     // Supabase client doesn't have explicit close, but clear reference
     cachedServiceClient = null
   }

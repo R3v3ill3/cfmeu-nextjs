@@ -4,6 +4,7 @@
  */
 
 import { featureFlags } from '../feature-flags'
+import { getConnectionStats, connectionMonitor } from '../db-connection-monitor'
 
 export interface HealthCheckResult {
   status: 'healthy' | 'degraded' | 'unhealthy'
@@ -110,19 +111,38 @@ export class MonitoringService {
     this.registerHealthCheck('database', async () => {
       const start = Date.now()
       try {
-        // This would be implemented with actual database health check
-        // For now, simulate database check
-        await new Promise(resolve => setTimeout(resolve, 50))
+        // Get actual connection statistics from connection monitor
+        const connectionStats = getConnectionStats()
         const duration = Date.now() - start
+
+        // Determine status based on connection pool utilization
+        let status: 'pass' | 'warn' | 'fail' = 'pass'
+        if (connectionStats.healthStatus === 'critical') {
+          status = 'fail'
+        } else if (connectionStats.healthStatus === 'warning') {
+          status = 'warn'
+        } else if (duration > 1000) {
+          status = 'fail'
+        } else if (duration > 500) {
+          status = 'warn'
+        }
 
         return {
           name: 'database',
-          status: duration < 500 ? 'pass' : duration < 1000 ? 'warn' : 'fail',
+          status,
           duration,
-          message: `Database connection ${duration < 500 ? 'healthy' : 'slow'}`,
+          message: `Database connections: ${connectionStats.totalActiveConnections} active, ${Math.round(connectionStats.poolUtilization * 100)}% utilized`,
           details: {
             responseTime: duration,
-            connections: { active: 5, idle: 15, total: 20 }
+            connections: {
+              active: connectionStats.totalActiveConnections,
+              total: connectionStats.totalConnections,
+              utilization: Math.round(connectionStats.poolUtilization * 100),
+              services: Object.keys(connectionStats.services).length
+            },
+            healthStatus: connectionStats.healthStatus,
+            recentAlerts: connectionStats.alerts.length,
+            peakUsage: connectionStats.peakUsage
           },
           threshold: { warning: 500, critical: 1000 }
         }
@@ -131,7 +151,55 @@ export class MonitoringService {
           name: 'database',
           status: 'fail',
           duration: Date.now() - start,
-          message: `Database connection failed: ${error}`,
+          message: `Database health check failed: ${error}`,
+          details: { error: error instanceof Error ? error.message : 'Unknown error' }
+        }
+      }
+    })
+
+    // Connection pool health check
+    this.registerHealthCheck('connection-pool', async () => {
+      const start = Date.now()
+      try {
+        const connectionStats = getConnectionStats()
+        const duration = Date.now() - start
+
+        let status: 'pass' | 'warn' | 'fail' = 'pass'
+        let message = 'Connection pool healthy'
+
+        if (connectionStats.poolUtilization >= 0.95) {
+          status = 'fail'
+          message = `Connection pool at critical capacity: ${Math.round(connectionStats.poolUtilization * 100)}%`
+        } else if (connectionStats.poolUtilization >= 0.8) {
+          status = 'warn'
+          message = `Connection pool approaching capacity: ${Math.round(connectionStats.poolUtilization * 100)}%`
+        }
+
+        return {
+          name: 'connection-pool',
+          status,
+          duration,
+          message,
+          details: {
+            poolUtilization: Math.round(connectionStats.poolUtilization * 100),
+            activeConnections: connectionStats.totalActiveConnections,
+            services: Object.entries(connectionStats.services).map(([name, metrics]) => ({
+              name,
+              active: metrics.activeConnections,
+              utilization: Math.round((metrics.activeConnections / metrics.maxPoolSize) * 100)
+            })),
+            recentErrors: connectionStats.alerts.filter(alert =>
+              alert.type === 'critical' && Date.now() - alert.timestamp < 5 * 60 * 1000
+            ).length
+          },
+          threshold: { warning: 80, critical: 95 }
+        }
+      } catch (error) {
+        return {
+          name: 'connection-pool',
+          status: 'fail',
+          duration: Date.now() - start,
+          message: `Connection pool check failed: ${error}`,
           details: { error: error instanceof Error ? error.message : 'Unknown error' }
         }
       }
@@ -279,6 +347,34 @@ export class MonitoringService {
         { metric: 'ratingSystem.status', operator: 'eq', value: 0 }
       ]
     })
+
+    // Connection pool critical alert
+    this.registerAlert('connection-pool-critical', {
+      name: 'Database Connection Pool Critical',
+      enabled: true,
+      threshold: 95,
+      comparison: 'gte',
+      severity: 'critical',
+      cooldown: 5,
+      channels: ['email', 'slack'],
+      conditions: [
+        { metric: 'database.poolUtilization', operator: 'gte', value: 95 }
+      ]
+    })
+
+    // Connection pool warning alert
+    this.registerAlert('connection-pool-warning', {
+      name: 'Database Connection Pool High Usage',
+      enabled: true,
+      threshold: 80,
+      comparison: 'gte',
+      severity: 'warning',
+      cooldown: 10,
+      channels: ['slack'],
+      conditions: [
+        { metric: 'database.poolUtilization', operator: 'gte', value: 80 }
+      ]
+    })
   }
 
   registerHealthCheck(name: string, check: () => Promise<HealthCheck>) {
@@ -370,8 +466,20 @@ export class MonitoringService {
   async getSystemMetrics(): Promise<SystemMetrics> {
     const uptime = Date.now() - this.startTime
 
-    // Simulate metrics collection
-    // In production, this would collect real metrics from various sources
+    // Get real connection statistics
+    const connectionStats = getConnectionStats()
+
+    // Calculate actual database connection pool metrics
+    const maxPoolSize = Array.from(connectionStats.services.values())
+      .reduce((sum, metrics) => sum + metrics.maxPoolSize, 0)
+    const activeConnections = connectionStats.totalActiveConnections
+    const idleConnections = Math.max(0, maxPoolSize - activeConnections)
+
+    // Get recent errors from all services
+    const recentErrors = Array.from(connectionStats.services.values())
+      .flatMap(metrics => metrics.errors)
+      .filter(error => Date.now() - error.timestamp < 60 * 60 * 1000) // Last hour
+
     return {
       timestamp: new Date().toISOString(),
       environment: process.env.NODE_ENV || 'development',
@@ -387,14 +495,16 @@ export class MonitoringService {
       },
       database: {
         connectionPool: {
-          active: Math.floor(Math.random() * 10) + 1,
-          idle: Math.floor(Math.random() * 20) + 5,
-          total: 25
+          active: activeConnections,
+          idle: idleConnections,
+          total: maxPoolSize
         },
         queryStats: {
           avgResponseTime: Math.random() * 100 + 50, // 50-150ms
-          slowQueries: Math.floor(Math.random() * 5), // 0-5
-          failedQueries: Math.floor(Math.random() * 2) // 0-2
+          slowQueries: recentErrors.filter(error =>
+            error.message.includes('timeout') || error.message.includes('slow')
+          ).length,
+          failedQueries: recentErrors.length
         }
       },
       api: {
