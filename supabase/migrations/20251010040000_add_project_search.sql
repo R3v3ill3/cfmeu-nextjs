@@ -45,3 +45,5 @@ GRANT EXECUTE ON FUNCTION public.search_all_projects(text) TO authenticated;
 -- Add comment
 COMMENT ON FUNCTION public.search_all_projects(text) IS 'Search projects by name, address, project number, or builder name. Returns up to 50 results prioritized by match quality.';
 
+
+

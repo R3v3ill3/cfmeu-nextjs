@@ -74,3 +74,5 @@ echo "  1. If migrations are out of sync, you may need to manually apply untrack
 echo "  2. Files with .applied extension were manually applied - they're safe to ignore"
 echo "  3. Run: supabase db push --include-all to push out-of-order migrations"
 
+
+

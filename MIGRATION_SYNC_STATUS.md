@@ -86,3 +86,5 @@ ORDER BY version;
 
 ✅ **Your migrations are NOT out of sync** - everything is properly applied and tracked. The "up to date" message is correct. You just need to commit the untracked migration files to git for proper version control.
 
+
+

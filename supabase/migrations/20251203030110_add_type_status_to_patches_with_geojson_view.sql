@@ -17,3 +17,5 @@ CREATE OR REPLACE VIEW "public"."patches_with_geojson" WITH ("security_invoker"=
     "updated_by"
    FROM "public"."patches" "p";
 
+
+
