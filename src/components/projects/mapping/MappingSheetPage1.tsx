@@ -76,7 +76,7 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
   const [isEmployerDetailOpen, setIsEmployerDetailOpen] = useState(false);
   const [changingRoleId, setChangingRoleId] = useState<string | null>(null);
   const [employerSearchTerm, setEmployerSearchTerm] = useState('');
-  const [allEmployers, setAllEmployers] = useState<Array<{ id: string; name: string; enterprise_agreement_status?: string }>>([]);
+  const [allEmployers, setAllEmployers] = useState<Array<{ id: string; name: string; enterprise_agreement_status?: boolean | null }>>([]);
   const { startNavigation } = useNavigationLoading();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -88,9 +88,9 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
   const scheduleUpdate = (patch: Partial<ProjectData>) => {
     setSaveStatus('dirty');
     if (savedMessageTimerRef.current) clearTimeout(savedMessageTimerRef.current);
-    
+
     onProjectUpdate(patch);
-    
+
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       setSaveStatus('saving');
@@ -263,16 +263,16 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
   };
 
   return (
-    <div className={`print-border ${isMobile ? 'px-3 py-4 pb-safe-bottom' : 'p-4'}`}>
+    <div className={`print-border max-w-full overflow-hidden ${isMobile ? 'px-3 py-4 pb-safe-bottom' : 'p-4'}`}>
       {/* Paper-style header - mobile responsive */}
       <div className={`${isMobile ? 'space-y-3' : 'flex items-center justify-between'}`}>
         <div className={`flex items-center ${isMobile ? 'gap-2' : 'gap-3'}`}>
-          <Image 
-            src="/cfmeu-logo.png" 
-            alt="CFMEU" 
-            width={isMobile ? 80 : 120} 
-            height={isMobile ? 27 : 40} 
-            className="object-contain flex-shrink-0" 
+          <Image
+            src="/cfmeu-logo.png"
+            alt="CFMEU"
+            width={isMobile ? 80 : 120}
+            height={isMobile ? 27 : 40}
+            className="object-contain flex-shrink-0"
           />
           <div className="min-w-0">
             <div className={`${isMobile ? 'text-base' : 'text-xl'} font-black tracking-tight`}>Mapping Sheets</div>
@@ -302,7 +302,7 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
           )}
         </div>
       </div>
-      
+
       {/* Project Header with Tier */}
       <div className={`border-b border-gray-200 ${isMobile ? 'pb-3 mb-3 mt-3' : 'pb-4 mb-4'}`}>
         <h2 className={`${isMobile ? 'text-lg' : 'text-2xl'} font-bold mb-2 break-words`}>{projectData.name}</h2>
@@ -321,11 +321,11 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
         {/* Row 1 */}
         <div className="md:col-span-2">
           <label className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold block mb-1`}>Project Name</label>
-          <Input 
-            className={`rounded-none border-0 border-b border-black focus-visible:ring-0 px-0 ${isMobile ? 'text-base min-h-[44px]' : ''}`} 
-            value={projectData.name || ""} 
-            onChange={(e) => scheduleUpdate({ name: e.target.value })} 
-            placeholder="" 
+          <Input
+            className={`rounded-none border-0 border-b border-black focus-visible:ring-0 px-0 ${isMobile ? 'text-base min-h-[44px]' : ''}`}
+            value={projectData.name || ""}
+            onChange={(e) => scheduleUpdate({ name: e.target.value })}
+            placeholder=""
           />
         </div>
         <div>
@@ -345,11 +345,11 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
         {/* Row 2 */}
         <div className="md:col-span-3">
           <label className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold block mb-1`}>Address</label>
-          <Input 
-            className={`rounded-none border-0 border-b border-black focus-visible:ring-0 px-0 ${isMobile ? 'text-base min-h-[44px]' : ''}`} 
-            value={projectData.address || ""} 
-            onChange={(e) => saveAddress(e.target.value)} 
-            placeholder="" 
+          <Input
+            className={`rounded-none border-0 border-b border-black focus-visible:ring-0 px-0 ${isMobile ? 'text-base min-h-[44px]' : ''}`}
+            value={projectData.address || ""}
+            onChange={(e) => saveAddress(e.target.value)}
+            placeholder=""
           />
         </div>
 
@@ -368,11 +368,10 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
                         setSelectedEmployerId(contractor.employerId!);
                         setIsEmployerDetailOpen(true);
                       }}
-                      className={`rounded-none border-0 border-b border-black px-0 flex-1 text-left underline hover:text-primary ${
-                        contractor.matchStatus === 'auto_matched'
-                          ? 'italic text-gray-500'
-                          : ''
-                      }`}
+                      className={`rounded-none border-0 border-b border-black px-0 flex-1 text-left underline hover:text-primary ${contractor.matchStatus === 'auto_matched'
+                        ? 'italic text-gray-500'
+                        : ''
+                        }`}
                     >
                       {contractor.employerName || "—"}
                     </button>
@@ -384,8 +383,8 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
                   {/* Show auto-match indicator */}
                   {contractor.employerName && (
                     <AutoMatchIndicator
-                      matchStatus={contractor.matchStatus}
-                      dataSource={contractor.dataSource}
+                      matchStatus={contractor.matchStatus as 'auto_matched' | 'confirmed' | 'needs_review' | 'delegate_confirmed' | 'incorrect_via_delegate' | undefined}
+                      dataSource={contractor.dataSource as 'manual' | 'bci_import' | 'other_import' | 'public_form' | undefined}
                       matchConfidence={contractor.matchConfidence}
                       matchNotes={contractor.matchNotes}
                       className="text-xs ml-1"
@@ -485,11 +484,10 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
                             setSelectedEmployerId(contractor.employerId!);
                             setIsEmployerDetailOpen(true);
                           }}
-                          className={`rounded-none border-0 border-b border-black px-0 flex-1 text-left underline hover:text-primary ${
-                            contractor.matchStatus === 'auto_matched'
-                              ? 'italic text-gray-500'
-                              : ''
-                          }`}
+                          className={`rounded-none border-0 border-b border-black px-0 flex-1 text-left underline hover:text-primary ${contractor.matchStatus === 'auto_matched'
+                            ? 'italic text-gray-500'
+                            : ''
+                            }`}
                         >
                           {contractor.employerName || "—"}
                         </button>
@@ -512,8 +510,8 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
                       {/* Show auto-match indicator */}
                       {contractor.employerName && (
                         <AutoMatchIndicator
-                          matchStatus={contractor.matchStatus}
-                          dataSource={contractor.dataSource}
+                          matchStatus={contractor.matchStatus as 'auto_matched' | 'confirmed' | 'needs_review' | 'delegate_confirmed' | 'incorrect_via_delegate' | undefined}
+                          dataSource={contractor.dataSource as 'manual' | 'bci_import' | 'other_import' | 'public_form' | undefined}
                           matchConfidence={contractor.matchConfidence}
                           matchNotes={contractor.matchNotes}
                           className="text-xs ml-1"
@@ -558,25 +556,25 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
             </AccordionContent>
           </AccordionItem>
         )}
-        
+
         <AccordionItem value="project-details">
           <AccordionTrigger className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold`}>Project Details</AccordionTrigger>
           <AccordionContent>
             <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 ${isMobile ? 'gap-4' : 'gap-x-6 gap-y-4'} pt-2`}>
               <div>
                 <label className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold block mb-1`}>Proposed start date</label>
-                <DateInput 
-                  className={`rounded-none border-0 border-b border-black focus-visible:ring-0 px-0 ${isMobile ? 'min-h-[44px]' : ''}`} 
-                  value={projectData.proposed_start_date || ""} 
-                  onChange={(e) => scheduleUpdate({ proposed_start_date: e.target.value })} 
+                <DateInput
+                  className={`rounded-none border-0 border-b border-black focus-visible:ring-0 px-0 ${isMobile ? 'min-h-[44px]' : ''}`}
+                  value={projectData.proposed_start_date || ""}
+                  onChange={(e) => scheduleUpdate({ proposed_start_date: e.target.value })}
                 />
               </div>
               <div>
                 <label className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold block mb-1`}>Proposed finish date</label>
-                <DateInput 
-                  className={`rounded-none border-0 border-b border-black focus-visible:ring-0 px-0 ${isMobile ? 'min-h-[44px]' : ''}`} 
-                  value={projectData.proposed_finish_date || ""} 
-                  onChange={(e) => scheduleUpdate({ proposed_finish_date: e.target.value })} 
+                <DateInput
+                  className={`rounded-none border-0 border-b border-black focus-visible:ring-0 px-0 ${isMobile ? 'min-h-[44px]' : ''}`}
+                  value={projectData.proposed_finish_date || ""}
+                  onChange={(e) => scheduleUpdate({ proposed_finish_date: e.target.value })}
                 />
               </div>
               <div>
@@ -594,30 +592,30 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
               </div>
               <div>
                 <label className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold block mb-1`}>State Funding (AUD)</label>
-                <Input 
-                  className={`rounded-none border-0 border-b border-black focus-visible:ring-0 px-0 ${isMobile ? 'min-h-[44px]' : ''}`} 
-                  value={String(projectData.state_funding ?? 0)} 
-                  onChange={(e) => scheduleUpdate({ state_funding: Number(e.target.value.replace(/[^0-9.]/g, "")) })} 
+                <Input
+                  className={`rounded-none border-0 border-b border-black focus-visible:ring-0 px-0 ${isMobile ? 'min-h-[44px]' : ''}`}
+                  value={String(projectData.state_funding ?? 0)}
+                  onChange={(e) => scheduleUpdate({ state_funding: Number(e.target.value.replace(/[^0-9.]/g, "")) })}
                   inputMode="numeric"
                 />
               </div>
               <div>
                 <label className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold block mb-1`}>Federal Funding (AUD)</label>
-                <Input 
-                  className={`rounded-none border-0 border-b border-black focus-visible:ring-0 px-0 ${isMobile ? 'min-h-[44px]' : ''}`} 
-                  value={String(projectData.federal_funding ?? 0)} 
-                  onChange={(e) => scheduleUpdate({ federal_funding: Number(e.target.value.replace(/[^0-9.]/g, "")) })} 
+                <Input
+                  className={`rounded-none border-0 border-b border-black focus-visible:ring-0 px-0 ${isMobile ? 'min-h-[44px]' : ''}`}
+                  value={String(projectData.federal_funding ?? 0)}
+                  onChange={(e) => scheduleUpdate({ federal_funding: Number(e.target.value.replace(/[^0-9.]/g, "")) })}
                   inputMode="numeric"
                 />
               </div>
               <div className="no-print">
                 <label className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold block mb-1`}>Preferred email for ROE</label>
-                <Input 
-                  type="email" 
-                  className={`rounded-none border-0 border-b border-black focus-visible:ring-0 px-0 ${isMobile ? 'min-h-[44px]' : ''}`} 
-                  value={projectData.roe_email || ""} 
-                  onChange={(e) => scheduleUpdate({ roe_email: e.target.value })} 
-                  placeholder="" 
+                <Input
+                  type="email"
+                  className={`rounded-none border-0 border-b border-black focus-visible:ring-0 px-0 ${isMobile ? 'min-h-[44px]' : ''}`}
+                  value={projectData.roe_email || ""}
+                  onChange={(e) => scheduleUpdate({ roe_email: e.target.value })}
+                  placeholder=""
                   inputMode="email"
                 />
               </div>
@@ -697,7 +695,7 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
       <MappingSiteContactsTable projectId={projectData.id} mainSiteId={projectData.main_job_site_id} />
 
       <div className="text-sm text-muted-foreground mt-2" aria-live="polite"><SaveStatus /></div>
-      
+
       {/* Upload Scanned Mapping Sheet Dialog */}
       {showUploadDialog && (
         <UploadMappingSheetDialog
@@ -786,7 +784,7 @@ export function MappingSheetPage1({ projectData, onProjectUpdate, onAddressUpdat
                         >
                           <div className="flex items-center justify-between gap-2">
                             <div className={`font-medium ${isMobile ? 'text-sm' : ''} truncate`}>{emp.name}</div>
-                            {emp.enterprise_agreement_status && emp.enterprise_agreement_status !== 'no_eba' && (
+                            {emp.enterprise_agreement_status === true && (
                               <Badge variant="secondary" className="text-xs flex-shrink-0">EBA</Badge>
                             )}
                           </div>

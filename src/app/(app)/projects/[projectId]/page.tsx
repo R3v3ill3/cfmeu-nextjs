@@ -975,46 +975,44 @@ export default function ProjectDetailPage() {
       )}
 
       <Tabs value={tab} onValueChange={setTab}>
-        <div className={`${isMobile ? '-mx-6 px-6 overflow-x-auto pb-2' : ''}`}>
-          <TabsList className={`h-auto bg-transparent p-0 gap-2 border-0 ${isMobile ? 'flex-nowrap w-max' : 'w-full flex-wrap sm:flex-nowrap'}`}>
-            {/* Sites tab trigger hidden; accessible via Overview 'Sites' link */}
-            <TabsTrigger
-              value="mappingsheets"
-              className="flex items-center gap-2 px-4 py-2.5 text-base font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20"
-            >
-              <FileText className="h-4 w-4" />
-              <span className="whitespace-nowrap">Mapping Sheets</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="site-visits"
-              className="flex items-center gap-2 px-4 py-2.5 text-base font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20"
-            >
-              <Calendar className="h-4 w-4" />
-              <span className="whitespace-nowrap">Site Visits</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="wallcharts"
-              className="flex items-center gap-2 px-4 py-2.5 text-base font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20"
-            >
-              <BarChart3 className="h-4 w-4" />
-              <span className="whitespace-nowrap">Wallcharts</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="eba-search"
-              className="flex items-center gap-2 px-4 py-2.5 text-base font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20"
-            >
-              <Search className="h-4 w-4" />
-              <span className="whitespace-nowrap">EBA Search</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="audit-compliance"
-              className="flex items-center gap-2 px-4 py-2.5 text-base font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20"
-            >
-              <FileCheck className="h-4 w-4" />
-              <span className="whitespace-nowrap">Audit & Compliance</span>
-            </TabsTrigger>
-          </TabsList>
-        </div>
+        <TabsList className="h-auto bg-transparent p-0 gap-1.5 w-full flex-wrap border-0">
+          {/* Sites tab trigger hidden; accessible via Overview 'Sites' link */}
+          <TabsTrigger
+            value="mappingsheets"
+            className={`flex items-center gap-1.5 ${isMobile ? 'px-2.5 py-1.5 text-xs' : 'px-4 py-2.5 text-base'} font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20`}
+          >
+            <FileText className="h-4 w-4" />
+            {isMobile ? 'Mapping' : 'Mapping Sheets'}
+          </TabsTrigger>
+          <TabsTrigger
+            value="site-visits"
+            className={`flex items-center gap-1.5 ${isMobile ? 'px-2.5 py-1.5 text-xs' : 'px-4 py-2.5 text-base'} font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20`}
+          >
+            <Calendar className="h-4 w-4" />
+            {isMobile ? 'Visits' : 'Site Visits'}
+          </TabsTrigger>
+          <TabsTrigger
+            value="wallcharts"
+            className={`flex items-center gap-1.5 ${isMobile ? 'px-2.5 py-1.5 text-xs' : 'px-4 py-2.5 text-base'} font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20`}
+          >
+            <BarChart3 className="h-4 w-4" />
+            {isMobile ? 'Charts' : 'Wallcharts'}
+          </TabsTrigger>
+          <TabsTrigger
+            value="eba-search"
+            className={`flex items-center gap-1.5 ${isMobile ? 'px-2.5 py-1.5 text-xs' : 'px-4 py-2.5 text-base'} font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20`}
+          >
+            <Search className="h-4 w-4" />
+            EBA
+          </TabsTrigger>
+          <TabsTrigger
+            value="audit-compliance"
+            className={`flex items-center gap-1.5 ${isMobile ? 'px-2.5 py-1.5 text-xs' : 'px-4 py-2.5 text-base'} font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20`}
+          >
+            <FileCheck className="h-4 w-4" />
+            Audit
+          </TabsTrigger>
+        </TabsList>
 
         <TabsContent value="mappingsheets">
           {projectLoading || mappingDataLoading ? (

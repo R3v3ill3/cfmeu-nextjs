@@ -1,6 +1,6 @@
 'use client';
 
-import {  useState, useEffect, useCallback, useMemo, useRef  } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -128,7 +128,7 @@ type ScraperJobEvent = {
 export default function SelectiveEbaSearchManager({ projectId, onClose }: SelectiveEbaSearchManagerProps) {
   // Fetch key trades dynamically from database (replaces hard-coded list)
   const { tradeSet: KEY_CONTRACTOR_TRADES } = useKeyContractorTradesSet();
-  
+
   // State management
   const [employers, setEmployers] = useState<SelectableEmployer[]>([]);
   const [filteredEmployers, setFilteredEmployers] = useState<SelectableEmployer[]>([]);
@@ -141,7 +141,7 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
     includeUnassigned: false,
     keyContractorsOnly: false
   });
-  
+
   // Loading and search states
   const [isLoading, setIsLoading] = useState(true);
   const [jobId, setJobId] = useState<string | null>(null)
@@ -150,7 +150,7 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
   // UI state
   const [activeTab, setActiveTab] = useState('selection');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
-  
+
   // Manual search state
   const [manualSearchOpen, setManualSearchOpen] = useState<string | null>(null); // employerId being manually searched
   const [manualSearchTerm, setManualSearchTerm] = useState('');
@@ -176,7 +176,7 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
   // NOTE: This must be defined BEFORE useScraperJobRealtime to avoid TDZ errors
   const loadProjectEmployers = useCallback(async () => {
     if (!projectId) return;
-    
+
     setIsLoading(true);
     try {
       // Get contractor role assignments (using project_assignments table)
@@ -329,10 +329,10 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
       employerMap.forEach((employer, employerId) => {
         // Check if employer has key contractor roles
         const hasKeyRole = employer.roles.some(role => KEY_CONTRACTOR_ROLES.has(role.roleType));
-        
+
         // Check if employer has key contractor trades
         const hasKeyTrade = employer.trades.some(trade => KEY_CONTRACTOR_TRADES.has(trade.tradeType));
-        
+
         // Update key contractor status
         employer.isKeyContractor = hasKeyRole || hasKeyTrade;
       });
@@ -368,8 +368,8 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
         job.status === 'succeeded'
           ? 'EBA Search Complete'
           : job.status === 'failed'
-          ? 'EBA Search Failed'
-          : 'EBA Search Cancelled';
+            ? 'EBA Search Failed'
+            : 'EBA Search Cancelled';
 
       const description =
         job.status === 'succeeded'
@@ -417,7 +417,7 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
 
     // Filter by roles
     if (filters.roles.size > 0) {
-      filtered = filtered.filter(emp => 
+      filtered = filtered.filter(emp =>
         emp.roles.some(role => filters.roles.has(role.roleType)) ||
         (filters.includeUnassigned && emp.roles.length === 0)
       );
@@ -425,7 +425,7 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
 
     // Filter by trades
     if (filters.trades.size > 0) {
-      filtered = filtered.filter(emp => 
+      filtered = filtered.filter(emp =>
         emp.trades.some(trade => filters.trades.has(trade.tradeType)) ||
         (filters.includeUnassigned && emp.trades.length === 0)
       );
@@ -433,7 +433,7 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
 
     // Filter by stages
     if (filters.stages.size > 0) {
-      filtered = filtered.filter(emp => 
+      filtered = filtered.filter(emp =>
         emp.trades.some(trade => filters.stages.has(trade.stage)) ||
         (filters.includeUnassigned && emp.trades.length === 0)
       );
@@ -517,7 +517,7 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
     }
 
     const employerIds = Array.from(selectedEmployers);
-    
+
     try {
       const jobOptions: FwcLookupJobOptions = {
         priority: 'normal',
@@ -598,7 +598,7 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
 
       // Refresh the employer list to reflect changes
       await loadProjectEmployers();
-      
+
       toast({
         title: 'EBA Record Created',
         description: `Successfully created EBA record for ${result.title}`,
@@ -627,7 +627,7 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
       });
 
       const data = await response.json();
-      
+
       if (response.ok && data.results?.length > 0) {
         setSearchResults(prev => ({
           ...prev,
@@ -636,7 +636,7 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
             results: data.results
           }
         }));
-        
+
         toast({
           title: 'Manual Search Complete',
           description: `Found ${data.results.length} potential EBA matches for "${searchTerm}"`
@@ -650,7 +650,7 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
             error: data.error || 'No EBA results found'
           }
         }));
-        
+
         toast({
           title: 'No Results',
           description: `No EBA matches found for "${searchTerm}"`,
@@ -667,7 +667,7 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
           error: error instanceof Error ? error.message : 'Search failed'
         }
       }));
-      
+
       toast({
         title: 'Search Failed',
         description: 'Manual EBA search encountered an error',
@@ -692,11 +692,11 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
   // Render employer selection card
   const renderEmployerCard = (employer: SelectableEmployer) => {
     const isSelected = selectedEmployers.has(employer.id);
-    const statusVariant = employer.ebaStatus === 'active' ? 'default' : 
-                         employer.ebaStatus === 'pending' ? 'secondary' : 'destructive';
+    const statusVariant = employer.ebaStatus === 'active' ? 'default' :
+      employer.ebaStatus === 'pending' ? 'secondary' : 'destructive';
     const isProcessed = processedEmployers.has(employer.id);
     const hasSearchResults = searchResults[employer.id];
-    
+
     return (
       <Card key={employer.id} className={`border transition-all ${isSelected ? 'border-blue-500 bg-blue-50' : ''} ${isProcessed ? 'opacity-75' : ''}`}>
         <CardContent className="p-4">
@@ -713,7 +713,7 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
                   <h4 className="font-medium">{employer.name}</h4>
                   <Badge variant={statusVariant} className="text-xs">
                     {employer.ebaStatus === 'active' ? 'Active EBA' :
-                     employer.ebaStatus === 'pending' ? 'EBA Pending' : 'No EBA'}
+                      employer.ebaStatus === 'pending' ? 'EBA Pending' : 'No EBA'}
                   </Badge>
                   {employer.isKeyContractor && (
                     <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
@@ -726,7 +726,7 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
                     </Badge>
                   )}
                 </div>
-                
+
                 {/* Role assignments */}
                 {employer.roles.length > 0 && (
                   <div className="mb-2">
@@ -745,7 +745,7 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
                     </div>
                   </div>
                 )}
-                
+
                 {/* Trade assignments */}
                 {employer.trades.length > 0 && (
                   <div>
@@ -766,11 +766,11 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
                     </div>
                   </div>
                 )}
-                
+
                 {employer.roles.length === 0 && employer.trades.length === 0 && (
                   <div className="text-xs text-gray-500">No specific role or trade assignments</div>
                 )}
-                
+
                 {/* Search Results */}
                 {hasSearchResults && (
                   <div className="mt-3 p-3 bg-gray-50 rounded border">
@@ -780,7 +780,7 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
                         <span className="text-sm">Searching FWC database...</span>
                       </div>
                     )}
-                    
+
                     {!hasSearchResults.isSearching && (
                       <div>
                         {hasSearchResults.error && (
@@ -789,7 +789,7 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
                             <AlertDescription>{hasSearchResults.error}</AlertDescription>
                           </Alert>
                         )}
-                        
+
                         {hasSearchResults.results.length > 0 && (
                           <div className="space-y-2">
                             <p className="text-sm font-medium text-green-700">
@@ -1023,16 +1023,16 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
           {/* Employer Selection */}
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <CardTitle className="flex items-center gap-2">
                   <Building2 className="h-5 w-5" />
                   {filteredEmployers.length} Employers Match Criteria
                 </CardTitle>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={selectAllFiltered}>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" className="min-h-[44px]" onClick={selectAllFiltered}>
                     Select All ({filteredEmployers.length})
                   </Button>
-                  <Button variant="outline" size="sm" onClick={selectNone}>
+                  <Button variant="outline" size="sm" className="min-h-[44px]" onClick={selectNone}>
                     Select None
                   </Button>
                 </div>
@@ -1122,13 +1122,12 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
                       return (
                         <div key={label} className="flex items-center flex-1 min-w-0">
                           <div
-                            className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-medium ${
-                              isCompleted
+                            className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-medium ${isCompleted
                                 ? 'bg-green-600 text-white'
                                 : isCurrent
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-gray-200 text-gray-600'
-                            }`}
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-gray-200 text-gray-600'
+                              }`}
                           >
                             {idx + 1}
                           </div>
@@ -1223,7 +1222,7 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
                   disabled={isManualSearching}
                 />
               </div>
-              
+
               <div className="flex justify-end gap-2">
                 <Button
                   variant="outline"

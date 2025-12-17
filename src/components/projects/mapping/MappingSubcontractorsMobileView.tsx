@@ -113,14 +113,14 @@ export function MappingSubcontractorsMobileView({ projectId }: MappingSubcontrac
   const { tradeSet: KEY_CONTRACTOR_TRADES } = useKeyContractorTradesSet()
   const { data: mappingData, isLoading } = useMappingSheetData(projectId)
   const { data: complianceData = [] } = useEmployerCompliance(projectId)
-  
+
   const [rowsByTrade, setRowsByTrade] = useState<Record<string, Row[]>>({})
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set())
   const [showFilters, setShowFilters] = useState(false)
   const [showKeyContractorsOnly, setShowKeyContractorsOnly] = useState(true)
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed'>('all')
   const [assignmentFilter, setAssignmentFilter] = useState<'all' | 'assigned_only' | 'unassigned_only'>('all')
-  
+
   // Dialog states
   const [manageOpen, setManageOpen] = useState(false)
   const [activeRow, setActiveRow] = useState<Row | null>(null)
@@ -134,9 +134,9 @@ export function MappingSubcontractorsMobileView({ projectId }: MappingSubcontrac
   // Build rows from mapping data
   useEffect(() => {
     if (!mappingData) return
-    
+
     const tradesByStage = getTradeOptionsByStage()
-    
+
     const assignments: Row[] = mappingData.tradeContractors.map((tc) => ({
       key: `${tc.stage}|${tc.tradeType}|${tc.id}`,
       stage: tc.stage,
@@ -167,7 +167,7 @@ export function MappingSubcontractorsMobileView({ projectId }: MappingSubcontrac
     }))
 
     const newRowsByTrade: Record<string, Row[]> = {}
-    
+
     getAllStages().forEach(stage => {
       tradesByStage[stage].forEach(trade => {
         const tradeAssignments = assignments.filter(a => a.trade_value === trade.value)
@@ -187,7 +187,7 @@ export function MappingSubcontractorsMobileView({ projectId }: MappingSubcontrac
         }
       })
     })
-    
+
     setRowsByTrade(newRowsByTrade)
   }, [mappingData])
 
@@ -264,11 +264,11 @@ export function MappingSubcontractorsMobileView({ projectId }: MappingSubcontrac
 
   const updateStatus = async (row: Row, newStatus: TradeStatus) => {
     if (!row.id) return
-    
+
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
-      
+
       if (row.id.startsWith('assignment_trade:')) {
         const assignmentId = row.id.replace('assignment_trade:', '')
         await (supabase as any)
@@ -290,7 +290,7 @@ export function MappingSubcontractorsMobileView({ projectId }: MappingSubcontrac
           })
           .eq('id', tradeId)
       }
-      
+
       setRowsByTrade(prev => {
         const newRows = { ...prev }
         const tradeRows = newRows[row.trade_value] || []
@@ -306,7 +306,7 @@ export function MappingSubcontractorsMobileView({ projectId }: MappingSubcontrac
         newRows[row.trade_value] = tradeRows
         return newRows
       })
-      
+
       toast.success('Status updated')
     } catch (e: any) {
       toast.error(e?.message || 'Failed to update status')
@@ -329,7 +329,7 @@ export function MappingSubcontractorsMobileView({ projectId }: MappingSubcontrac
         const legacyId = row.id.replace('project_trade:', '')
         await supabase.from("project_contractor_trades").delete().eq("id", legacyId)
       }
-      
+
       setRowsByTrade(prev => {
         const newRows = { ...prev }
         const tradeRows = (newRows[row.trade_value] || []).filter(r => r.key !== row.key)
@@ -354,13 +354,13 @@ export function MappingSubcontractorsMobileView({ projectId }: MappingSubcontrac
   const upsertRow = async (r: Row, stage: TradeStage, employerId: string, employerName: string) => {
     try {
       if (!employerId) return
-      
+
       const { data: tradeType } = await supabase
         .from("trade_types")
         .select("id")
         .eq("code", r.trade_value)
         .single()
-        
+
       if (!tradeType) {
         toast.error(`Trade type "${r.trade_value}" not found`)
         return
@@ -399,7 +399,7 @@ export function MappingSubcontractorsMobileView({ projectId }: MappingSubcontrac
         if (error) throw error
         r.id = `assignment_trade:${(data as any).id}`
       }
-      
+
       const { data: emp } = await supabase.from("employers").select("enterprise_agreement_status").eq("id", employerId).maybeSingle()
       const newRow: Row = {
         ...r,
@@ -446,13 +446,18 @@ export function MappingSubcontractorsMobileView({ projectId }: MappingSubcontrac
       trades: [],
       other: [],
     }
-    
+
     Object.entries(filteredRowsByTrade).forEach(([trade, rows]) => {
       rows.forEach(row => {
-        grouped[row.stage].push(row)
+        if (grouped[row.stage]) {
+          grouped[row.stage].push(row)
+        } else {
+          // Fallback to 'other' if stage is not recognized
+          grouped.other.push(row)
+        }
       })
     })
-    
+
     return grouped
   }, [filteredRowsByTrade])
 
@@ -468,10 +473,10 @@ export function MappingSubcontractorsMobileView({ projectId }: MappingSubcontrac
     const isExpanded = expandedCards.has(row.key)
     const hasEba = row.eba === true
     const noEba = row.eba === false
-    
+
     return (
-      <Card 
-        key={row.key} 
+      <Card
+        key={row.key}
         className={`mb-3 ${hasEba ? 'border-l-4 border-l-green-500' : noEba ? 'border-l-4 border-l-red-400' : ''}`}
       >
         <CardContent className="p-4">
@@ -485,16 +490,15 @@ export function MappingSubcontractorsMobileView({ projectId }: MappingSubcontrac
                     setSelectedEmployerId(row.employer_id!)
                     setIsEmployerDetailOpen(true)
                   }}
-                  className={`font-medium text-base truncate underline hover:text-primary text-left block w-full ${
-                    row.matchStatus === 'auto_matched' ? 'italic text-gray-500' : ''
-                  }`}
+                  className={`font-medium text-base truncate underline hover:text-primary text-left block w-full ${row.matchStatus === 'auto_matched' ? 'italic text-gray-500' : ''
+                    }`}
                 >
                   {row.employer_name || "—"}
                 </button>
               ) : (
                 <div className="text-muted-foreground">Not assigned</div>
               )}
-              
+
               {/* Auto-match indicator */}
               {row.employer_id && (
                 <AutoMatchIndicator
@@ -506,18 +510,18 @@ export function MappingSubcontractorsMobileView({ projectId }: MappingSubcontrac
                 />
               )}
             </div>
-            
+
             <div className="flex flex-col items-end gap-2">
               {/* EBA Badge */}
               {row.employer_id && (
-                <Badge 
+                <Badge
                   variant={hasEba ? 'default' : noEba ? 'destructive' : 'secondary'}
                   className="text-xs"
                 >
                   {hasEba ? 'EBA' : noEba ? 'No EBA' : 'Unknown'}
                 </Badge>
               )}
-              
+
               {/* Status */}
               {row.employer_id && !row.isSkeleton && (
                 <StatusSelectSimple
@@ -528,15 +532,15 @@ export function MappingSubcontractorsMobileView({ projectId }: MappingSubcontrac
               )}
             </div>
           </div>
-          
+
           {/* Action buttons */}
           <div className="flex gap-2 mt-3">
             {row.matchStatus === 'auto_matched' && row.employer_id && (
-              <Button 
-                size="sm" 
-                variant="outline" 
+              <Button
+                size="sm"
+                variant="outline"
                 className="text-yellow-600 border-yellow-300 min-h-[44px] flex-1"
-                onClick={() => { 
+                onClick={() => {
                   setAutoMatchRow(row)
                   setAutoMatchOpen(true)
                 }}
@@ -544,9 +548,9 @@ export function MappingSubcontractorsMobileView({ projectId }: MappingSubcontrac
                 Review Match
               </Button>
             )}
-            <Button 
-              size="sm" 
-              variant="outline" 
+            <Button
+              size="sm"
+              variant="outline"
               className="min-h-[44px] flex-1"
               onClick={() => { setActiveRow(row); setManageOpen(true) }}
             >
@@ -563,7 +567,7 @@ export function MappingSubcontractorsMobileView({ projectId }: MappingSubcontrac
               </Button>
             )}
           </div>
-          
+
           {/* Expandable details */}
           {isExpanded && row.employer_id && (
             <div className="mt-4 pt-4 border-t space-y-4">
@@ -621,7 +625,7 @@ export function MappingSubcontractorsMobileView({ projectId }: MappingSubcontrac
                   </div>
                 </div>
               </div>
-              
+
               {/* Membership */}
               <div>
                 <div className="text-sm font-medium mb-2">Membership</div>
@@ -657,7 +661,7 @@ export function MappingSubcontractorsMobileView({ projectId }: MappingSubcontrac
                   )}
                 </div>
               </div>
-              
+
               {/* Compliance */}
               <div>
                 <div className="text-sm font-medium mb-2">Compliance</div>
@@ -675,7 +679,7 @@ export function MappingSubcontractorsMobileView({ projectId }: MappingSubcontrac
   }
 
   return (
-    <div className="mt-4">
+    <div className="mt-4 max-w-full overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="font-semibold uppercase tracking-wide text-sm">Subcontractors</div>
@@ -689,7 +693,7 @@ export function MappingSubcontractorsMobileView({ projectId }: MappingSubcontrac
           Filters
         </Button>
       </div>
-      
+
       {/* Collapsible filters */}
       <Collapsible open={showFilters} onOpenChange={setShowFilters}>
         <CollapsibleContent className="mb-4">
@@ -725,7 +729,7 @@ export function MappingSubcontractorsMobileView({ projectId }: MappingSubcontrac
                   </Button>
                 </div>
               </div>
-              
+
               {/* Assignment filter */}
               <div>
                 <Label className="text-sm font-medium mb-2 block">Assignment</Label>
@@ -756,7 +760,7 @@ export function MappingSubcontractorsMobileView({ projectId }: MappingSubcontrac
                   </Button>
                 </div>
               </div>
-              
+
               {/* Key contractors toggle */}
               <div className="flex items-center gap-3">
                 <Checkbox
@@ -773,12 +777,12 @@ export function MappingSubcontractorsMobileView({ projectId }: MappingSubcontrac
           </Card>
         </CollapsibleContent>
       </Collapsible>
-      
+
       {/* Contractor cards by stage */}
       {getAllStages().map(stage => {
         const stageRows = rowsByStage[stage]
-        if (stageRows.length === 0) return null
-        
+        if (!stageRows || stageRows.length === 0) return null
+
         return (
           <div key={stage} className="mb-6">
             <div className="font-medium text-sm text-muted-foreground uppercase tracking-wide mb-3">
@@ -788,12 +792,12 @@ export function MappingSubcontractorsMobileView({ projectId }: MappingSubcontrac
           </div>
         )
       })}
-      
+
       {/* Add Other button */}
       <div className="flex justify-end mt-4">
-        <Button 
-          size="sm" 
-          variant="outline" 
+        <Button
+          size="sm"
+          variant="outline"
           className="min-h-[44px]"
           onClick={() => handleAddOrChange({
             key: `other|other_${Date.now()}|skeleton`,
