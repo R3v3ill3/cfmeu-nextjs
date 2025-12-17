@@ -336,7 +336,7 @@ export function GeofencingSetup() {
             <div className="font-medium">Location Access Required</div>
             <div className="mt-1">{permissionError}</div>
             <div className="mt-2 text-xs">
-              iOS tip: permissions are usually managed under Settings &gt; Privacy &amp; Security &gt; Location Services &gt; Safari Websites.
+              iOS tip: check Settings &gt; Apps &gt; Safari &gt; Location (&quot;Location Access on All Websites&quot;), and Safari Websites permissions.
             </div>
           </div>
         )}

@@ -66,6 +66,7 @@ import { ComplianceMobileView } from "@/components/projects/compliance/Complianc
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner"
 import { MappingSheetPage1 } from "@/components/projects/mapping/MappingSheetPage1"
 import { MappingSubcontractorsTable } from "@/components/projects/mapping/MappingSubcontractorsTable"
+import { MappingSubcontractorsMobileView } from "@/components/projects/mapping/MappingSubcontractorsMobileView"
 import { ProjectSiteVisits } from "@/components/siteVisits/ProjectSiteVisits"
 
 function SiteContactsSummary({ projectId, siteIds }: { projectId: string; siteIds: string[] }) {
@@ -82,11 +83,11 @@ function SiteContactsSummary({ projectId, siteIds }: { projectId: string; siteId
         .in("name", ["site_delegate", "hsr"])  // company_delegate/shift_delegate intentionally excluded
       const active = (data || []).filter((r: any) => !r.end_date || new Date(r.end_date) > new Date())
       const fullNames: Record<string, string> = {}
-      ;(active || []).forEach((r: any) => {
-        const w = Array.isArray(r.workers) ? r.workers[0] : r.workers
-        const fn = `${w?.first_name || ''} ${w?.surname || ''}`.trim()
-        fullNames[r.worker_id] = fn || r.worker_id
-      })
+        ; (active || []).forEach((r: any) => {
+          const w = Array.isArray(r.workers) ? r.workers[0] : r.workers
+          const fn = `${w?.first_name || ''} ${w?.surname || ''}`.trim()
+          fullNames[r.worker_id] = fn || r.worker_id
+        })
       const ds = Array.from(new Set<string>((active || [])
         .filter((r: any) => r.name === 'site_delegate')
         .map((r: any) => fullNames[r.worker_id] as string | undefined)
@@ -189,7 +190,7 @@ export default function ProjectDetailPage() {
         projectId,
         timestamp: new Date().toISOString(),
       });
-      
+
       try {
         const { data, error } = await supabase
           .from("projects")
@@ -205,9 +206,9 @@ export default function ProjectDetailPage() {
           `)
           .eq("id", projectId)
           .maybeSingle()
-        
+
         const duration = Date.now() - startTime;
-        
+
         if (error) {
           console.error('[ProjectDetailPage] Error fetching project:', {
             projectId,
@@ -219,13 +220,13 @@ export default function ProjectDetailPage() {
           });
           throw error;
         }
-        
+
         console.log('[ProjectDetailPage] Project details fetched successfully', {
           projectId,
           duration,
           hasData: !!data,
         });
-        
+
         return data as ProjectDetailData | null;
       } catch (err) {
         const duration = Date.now() - startTime;
@@ -316,7 +317,7 @@ export default function ProjectDetailPage() {
     refetchOnWindowFocus: false,
     queryFn: async () => {
       if (!project) return { builderName: null, builderHasEba: null, address: null }
-      
+
       let builderName: string | null = null
       let builderHasEba: boolean | null = null
       let address: string | null = null
@@ -334,7 +335,7 @@ export default function ProjectDetailPage() {
         .eq("assignment_type", "contractor_role")
         .eq("contractor_role_types.code", "builder")
         .limit(1)
-      
+
       if (builderAssignments && builderAssignments.length > 0) {
         const builderAssignment = builderAssignments[0] as any
         const employer = builderAssignment.employers
@@ -342,7 +343,7 @@ export default function ProjectDetailPage() {
         const status = employer?.enterprise_agreement_status as string | null
         builderHasEba = status ? status !== "no_eba" : null
       }
- 
+
       return { builderName, builderHasEba, address }
     }
   })
@@ -361,12 +362,12 @@ export default function ProjectDetailPage() {
         .in("job_site_id", siteIds)
 
       const workerMap: Record<string, { isMember: boolean }> = {}
-      ;(placementRows || []).forEach((row: any) => {
-        const wid = row.worker_id as string
-        const isMember = row.workers?.union_membership_status === "member"
-        if (!workerMap[wid]) workerMap[wid] = { isMember }
-        else if (isMember) workerMap[wid].isMember = true
-      })
+        ; (placementRows || []).forEach((row: any) => {
+          const wid = row.worker_id as string
+          const isMember = row.workers?.union_membership_status === "member"
+          if (!workerMap[wid]) workerMap[wid] = { isMember }
+          else if (isMember) workerMap[wid].isMember = true
+        })
 
       const workerIds = Object.keys(workerMap)
 
@@ -379,12 +380,12 @@ export default function ProjectDetailPage() {
           .in("job_site_id", siteIds)
           .in("worker_id", workerIds)
         const leaderRoleSet = new Set(["site_delegate", "shift_delegate", "company_delegate", "hsr"])
-        ;(roles || []).forEach((r: any) => {
-          const active = !r.end_date || new Date(r.end_date) > new Date()
-          if (active && leaderRoleSet.has(r.name)) {
-            leaders.add(r.worker_id as string)
-          }
-        })
+          ; (roles || []).forEach((r: any) => {
+            const active = !r.end_date || new Date(r.end_date) > new Date()
+            if (active && leaderRoleSet.has(r.name)) {
+              leaders.add(r.worker_id as string)
+            }
+          })
       }
 
       return {
@@ -499,17 +500,17 @@ export default function ProjectDetailPage() {
 
       const bySiteToWorkers = new Map<string, Set<string>>()
       const bySiteToMembers = new Map<string, Set<string>>()
-      ;(placementRows || []).forEach((row: any) => {
-        const siteId = String(row.job_site_id)
-        const wid = String(row.worker_id)
-        if (!bySiteToWorkers.has(siteId)) bySiteToWorkers.set(siteId, new Set<string>())
-        bySiteToWorkers.get(siteId)!.add(wid)
-        const isMember = row.workers?.union_membership_status === "member"
-        if (isMember) {
-          if (!bySiteToMembers.has(siteId)) bySiteToMembers.set(siteId, new Set<string>())
-          bySiteToMembers.get(siteId)!.add(wid)
-        }
-      })
+        ; (placementRows || []).forEach((row: any) => {
+          const siteId = String(row.job_site_id)
+          const wid = String(row.worker_id)
+          if (!bySiteToWorkers.has(siteId)) bySiteToWorkers.set(siteId, new Set<string>())
+          bySiteToWorkers.get(siteId)!.add(wid)
+          const isMember = row.workers?.union_membership_status === "member"
+          if (isMember) {
+            if (!bySiteToMembers.has(siteId)) bySiteToMembers.set(siteId, new Set<string>())
+            bySiteToMembers.get(siteId)!.add(wid)
+          }
+        })
       const result: Record<string, { members: number; total: number }> = {}
       Array.from(bySiteToWorkers.keys()).forEach((sid) => {
         const total = bySiteToWorkers.get(sid)!.size
@@ -585,12 +586,12 @@ export default function ProjectDetailPage() {
   })
 
   // Use unified contractor data from all sources
-  const { data: unifiedContractors = [] } = useUnifiedContractors(projectId, { 
-    siteIds: sortedSiteIds, 
+  const { data: unifiedContractors = [] } = useUnifiedContractors(projectId, {
+    siteIds: sortedSiteIds,
     autoIncludeMainSite: true,
     groupBySite: false // Ensure we get flat array for backward compatibility
   })
-  
+
   // Transform to match existing interface for backward compatibility
   const contractorRows = useMemo(() => {
     return (unifiedContractors as any[]).map((contractor: any) => ({
@@ -679,10 +680,10 @@ export default function ProjectDetailPage() {
         .select("employer_id, fwc_certified_date, eba_lodged_fwc, date_eba_signed, date_vote_occurred")
         .in("employer_id", ids)
       const byId = new Map<string, any>()
-      ;(data || []).forEach((r: any) => {
-        // Keep first record; for advanced handling we could pick the best category
-        if (!byId.has(r.employer_id)) byId.set(r.employer_id, r)
-      })
+        ; (data || []).forEach((r: any) => {
+          // Keep first record; for advanced handling we could pick the best category
+          if (!byId.has(r.employer_id)) byId.set(r.employer_id, r)
+        })
       const result: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {}
       ids.forEach((id) => {
         const rec = byId.get(id)
@@ -715,21 +716,21 @@ export default function ProjectDetailPage() {
 
   const statusByEmployer = useMemo(() => {
     const map: Record<string, string> = {}
-    ;(employerStatuses as any[]).forEach((r: any) => {
-      if (r?.id) map[String(r.id)] = String(r.enterprise_agreement_status || '')
-    })
+      ; (employerStatuses as any[]).forEach((r: any) => {
+        if (r?.id) map[String(r.id)] = String(r.enterprise_agreement_status || '')
+      })
     return map
   }, [employerStatuses])
 
   const finalEbaCategoryByEmployer = useMemo(() => {
     const base = (ebaCategoryByEmployer as Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }>) || {}
     const merged: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = { ...base }
-    ;(stableContractorEmployerIds as string[]).forEach((id) => {
-      const status = statusByEmployer[id]
-      if (status && String(status).toLowerCase() === 'active') {
-        merged[id] = { label: 'Active', variant: 'default' }
-      }
-    })
+      ; (stableContractorEmployerIds as string[]).forEach((id) => {
+        const status = statusByEmployer[id]
+        if (status && String(status).toLowerCase() === 'active') {
+          merged[id] = { label: 'Active', variant: 'default' }
+        }
+      })
     return merged
   }, [ebaCategoryByEmployer, statusByEmployer, stableContractorEmployerIds])
 
@@ -749,17 +750,17 @@ export default function ProjectDetailPage() {
 
       const byKeyToWorkers = new Map<string, Set<string>>()
       const byKeyToMembers = new Map<string, Set<string>>()
-      ;(placementRows || []).forEach((row: any) => {
-        const key = `${String(row.job_site_id)}:${String(row.employer_id)}`
-        const wid = String(row.worker_id)
-        if (!byKeyToWorkers.has(key)) byKeyToWorkers.set(key, new Set<string>())
-        byKeyToWorkers.get(key)!.add(wid)
-        const isMember = row.workers?.union_membership_status === "member"
-        if (isMember) {
-          if (!byKeyToMembers.has(key)) byKeyToMembers.set(key, new Set<string>())
-          byKeyToMembers.get(key)!.add(wid)
-        }
-      })
+        ; (placementRows || []).forEach((row: any) => {
+          const key = `${String(row.job_site_id)}:${String(row.employer_id)}`
+          const wid = String(row.worker_id)
+          if (!byKeyToWorkers.has(key)) byKeyToWorkers.set(key, new Set<string>())
+          byKeyToWorkers.get(key)!.add(wid)
+          const isMember = row.workers?.union_membership_status === "member"
+          if (isMember) {
+            if (!byKeyToMembers.has(key)) byKeyToMembers.set(key, new Set<string>())
+            byKeyToMembers.get(key)!.add(wid)
+          }
+        })
       const result: Record<string, { members: number; total: number }> = {}
       Array.from(byKeyToWorkers.keys()).forEach((k) => {
         const total = byKeyToWorkers.get(k)!.size
@@ -774,12 +775,12 @@ export default function ProjectDetailPage() {
   const ebaBySite = useMemo(() => {
     const map = new Map<string, { active: number; total: number }>()
     const bySiteToEmployers = new Map<string, Set<string>>()
-    ;((contractorRows as any[]) || []).forEach((r: any) => {
-      if (!r.siteId) return
-      const sid = String(r.siteId)
-      if (!bySiteToEmployers.has(sid)) bySiteToEmployers.set(sid, new Set<string>())
-      bySiteToEmployers.get(sid)!.add(String(r.employerId))
-    })
+      ; ((contractorRows as any[]) || []).forEach((r: any) => {
+        if (!r.siteId) return
+        const sid = String(r.siteId)
+        if (!bySiteToEmployers.has(sid)) bySiteToEmployers.set(sid, new Set<string>())
+        bySiteToEmployers.get(sid)!.add(String(r.employerId))
+      })
     Array.from(bySiteToEmployers.entries()).forEach(([sid, set]) => {
       const total = set.size
       let active = 0
@@ -880,24 +881,24 @@ export default function ProjectDetailPage() {
         </div>
       )}
       {/* Project Header */}
-      <div className="flex items-start justify-between">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-bold">{project?.name ?? ''}</h1>
-          <div className="flex items-center gap-3">
-            <ProjectTierBadge tier={project?.tier || null} size="lg" />
+      <div className={`${isMobile ? 'space-y-4' : 'flex items-start justify-between'}`}>
+        <div className="space-y-2 min-w-0">
+          <h1 className={`${isMobile ? 'text-xl' : 'text-3xl'} font-bold break-words`}>{project?.name ?? ''}</h1>
+          <div className="flex items-center gap-2 flex-wrap">
+            <ProjectTierBadge tier={project?.tier || null} size={isMobile ? 'sm' : 'lg'} />
             {project ? (() => {
               const ebaStatus = getProjectEbaStatus(project as any)
               return (
-                <CfmeuEbaBadge 
-                  hasActiveEba={ebaStatus.hasActiveEba} 
+                <CfmeuEbaBadge
+                  hasActiveEba={ebaStatus.hasActiveEba}
                   builderName={ebaStatus.builderName}
-                  size="lg"
-                  showText={true}
+                  size={isMobile ? 'sm' : 'lg'}
+                  showText={!isMobile}
                 />
               )
             })() : null}
             {project?.stage_class ? (
-              <Badge variant="secondary" className="capitalize">{String(project.stage_class).replace('_',' ')}</Badge>
+              <Badge variant="secondary" className="capitalize">{String(project.stage_class).replace('_', ' ')}</Badge>
             ) : null}
             {project?.organising_universe ? (
               <OrganizingUniverseBadge
@@ -906,23 +907,27 @@ export default function ProjectDetailPage() {
               />
             ) : null}
             {project?.value ? (
-              <span className="text-lg text-muted-foreground">
+              <span className={`${isMobile ? 'text-sm' : 'text-lg'} text-muted-foreground`}>
                 ${(project.value / 1000000).toFixed(1)}M
               </span>
             ) : null}
           </div>
         </div>
         {project ? (
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => { try { router.push('/projects') } catch {} }}>Close</Button>
-            <MarkProjectCompleteButton 
-              projectId={project.id} 
-              projectName={project.name}
-              variant="outline"
-              size="default"
-            />
-            <EditProjectDialog project={project as any} />
-            <DeleteProjectDialog projectId={project.id} projectName={project.name} />
+          <div className={`flex items-center gap-2 ${isMobile ? 'flex-wrap' : ''}`}>
+            <Button variant="outline" size={isMobile ? 'sm' : 'default'} className={isMobile ? 'min-h-[44px]' : ''} onClick={() => { try { router.push('/projects') } catch { } }}>Close</Button>
+            {!isMobile && (
+              <>
+                <MarkProjectCompleteButton
+                  projectId={project.id}
+                  projectName={project.name}
+                  variant="outline"
+                  size="default"
+                />
+                <EditProjectDialog project={project as any} />
+                <DeleteProjectDialog projectId={project.id} projectName={project.name} />
+              </>
+            )}
           </div>
         ) : null}
       </div>
@@ -970,44 +975,46 @@ export default function ProjectDetailPage() {
       )}
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="h-auto bg-transparent p-0 gap-2 w-full flex-wrap sm:flex-nowrap border-0">
-          {/* Sites tab trigger hidden; accessible via Overview 'Sites' link */}
-          <TabsTrigger 
-            value="mappingsheets" 
-            className="flex items-center gap-2 px-4 py-2.5 text-base font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20"
-          >
-            <FileText className="h-4 w-4" />
-            <span className="whitespace-nowrap">Mapping Sheets</span>
-          </TabsTrigger>
-          <TabsTrigger 
-            value="site-visits"
-            className="flex items-center gap-2 px-4 py-2.5 text-base font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20"
-          >
-            <Calendar className="h-4 w-4" />
-            <span className="whitespace-nowrap">Site Visits</span>
-          </TabsTrigger>
-          <TabsTrigger 
-            value="wallcharts"
-            className="flex items-center gap-2 px-4 py-2.5 text-base font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20"
-          >
-            <BarChart3 className="h-4 w-4" />
-            <span className="whitespace-nowrap">Wallcharts</span>
-          </TabsTrigger>
-          <TabsTrigger 
-            value="eba-search"
-            className="flex items-center gap-2 px-4 py-2.5 text-base font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20"
-          >
-            <Search className="h-4 w-4" />
-            <span className="whitespace-nowrap">EBA Search</span>
-          </TabsTrigger>
-          <TabsTrigger 
-            value="audit-compliance"
-            className="flex items-center gap-2 px-4 py-2.5 text-base font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20"
-          >
-            <FileCheck className="h-4 w-4" />
-            <span className="whitespace-nowrap">Audit & Compliance</span>
-          </TabsTrigger>
-        </TabsList>
+        <div className={`${isMobile ? '-mx-6 px-6 overflow-x-auto pb-2' : ''}`}>
+          <TabsList className={`h-auto bg-transparent p-0 gap-2 border-0 ${isMobile ? 'flex-nowrap w-max' : 'w-full flex-wrap sm:flex-nowrap'}`}>
+            {/* Sites tab trigger hidden; accessible via Overview 'Sites' link */}
+            <TabsTrigger
+              value="mappingsheets"
+              className="flex items-center gap-2 px-4 py-2.5 text-base font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20"
+            >
+              <FileText className="h-4 w-4" />
+              <span className="whitespace-nowrap">Mapping Sheets</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="site-visits"
+              className="flex items-center gap-2 px-4 py-2.5 text-base font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20"
+            >
+              <Calendar className="h-4 w-4" />
+              <span className="whitespace-nowrap">Site Visits</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="wallcharts"
+              className="flex items-center gap-2 px-4 py-2.5 text-base font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20"
+            >
+              <BarChart3 className="h-4 w-4" />
+              <span className="whitespace-nowrap">Wallcharts</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="eba-search"
+              className="flex items-center gap-2 px-4 py-2.5 text-base font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20"
+            >
+              <Search className="h-4 w-4" />
+              <span className="whitespace-nowrap">EBA Search</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="audit-compliance"
+              className="flex items-center gap-2 px-4 py-2.5 text-base font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20"
+            >
+              <FileCheck className="h-4 w-4" />
+              <span className="whitespace-nowrap">Audit & Compliance</span>
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="mappingsheets">
           {projectLoading || mappingDataLoading ? (
@@ -1025,7 +1032,7 @@ export default function ProjectDetailPage() {
                   </Button>
                 </div>
                 <div className="grid gap-6">
-                  <MappingSheetPage1 
+                  <MappingSheetPage1
                     projectData={{
                       ...(project as any),
                       address: mappingSheetData?.address,
@@ -1046,7 +1053,11 @@ export default function ProjectDetailPage() {
                       // No need to update local state as react-query will refetch
                     }}
                   />
-                  <MappingSubcontractorsTable projectId={project?.id ?? ''} />
+                  {isMobile ? (
+                    <MappingSubcontractorsMobileView projectId={project?.id ?? ''} />
+                  ) : (
+                    <MappingSubcontractorsTable projectId={project?.id ?? ''} />
+                  )}
                 </div>
               </div>
             </div>
@@ -1091,8 +1102,8 @@ export default function ProjectDetailPage() {
         </TabsContent>
 
         <TabsContent value="site-visits">
-          <ProjectSiteVisits 
-            projectId={projectId} 
+          <ProjectSiteVisits
+            projectId={projectId}
             projectName={project?.name ?? ''}
             autoCreate={false}
           />

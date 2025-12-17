@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
+import * as Sentry from "@sentry/nextjs"
 
 const GEOFENCE_RADIUS_METERS = 100 // 100 meters
 const POSITION_CHECK_INTERVAL = 60000 // Check every 60 seconds
@@ -42,6 +43,17 @@ export function useGeofencing(enabled: boolean = false) {
       ? (window as any).__GEOFENCE_TEST_SITES
       : null
   const useMockSites = !!mockSites
+
+  const geoDebugEnabled = useCallback(() => {
+    if (typeof window === "undefined") return false
+    try {
+      if (localStorage.getItem("debug-geofencing") === "true") return true
+      const sp = new URLSearchParams(window.location.search)
+      return sp.get("geoDebug") === "1"
+    } catch {
+      return false
+    }
+  }, [])
 
   // Check if geolocation and notifications are supported
   useEffect(() => {
@@ -163,7 +175,11 @@ export function useGeofencing(enabled: boolean = false) {
   useEffect(() => {
     if (typeof navigator === "undefined") return
     const permissions = (navigator as any).permissions
-    if (!permissions?.query) return
+    if (!permissions?.query) {
+      // Safari/iOS can omit Permissions API. Don't block the UI forever.
+      setPermissionChecked(true)
+      return
+    }
 
     let cancelled = false
 
@@ -176,6 +192,7 @@ export function useGeofencing(enabled: boolean = false) {
         if (cancelled) return
         permissionStatus = status
         setHasLocationPermission(status.state === "granted")
+        setPermissionChecked(true)
 
         // #region agent log
         fetch(__AGENT_DEBUG_LOG_ENDPOINT, {
@@ -204,6 +221,21 @@ export function useGeofencing(enabled: boolean = false) {
             timestamp: Date.now(),
           }),
         }).catch(() => {})
+        // #endregion
+
+        // #region agent log
+        if (geoDebugEnabled() && typeof window !== "undefined") {
+          Sentry.addBreadcrumb({
+            category: "geofencing",
+            level: "info",
+            message: "Permissions API geolocation status",
+            data: {
+              state: (status as any)?.state ?? null,
+              origin: window.location?.origin,
+              isSecureContext: (window as any).isSecureContext === true,
+            },
+          })
+        }
         // #endregion
 
         handleChange = () => {
@@ -236,6 +268,21 @@ export function useGeofencing(enabled: boolean = false) {
           }).catch(() => {})
           // #endregion
 
+          // #region agent log
+          if (geoDebugEnabled() && typeof window !== "undefined") {
+            Sentry.addBreadcrumb({
+              category: "geofencing",
+              level: "info",
+              message: "Permissions API geolocation change",
+              data: {
+                state: (status as any)?.state ?? null,
+                origin: window.location?.origin,
+                isSecureContext: (window as any).isSecureContext === true,
+              },
+            })
+          }
+          // #endregion
+
           if (status.state === "granted") {
             setHasLocationPermission(true)
             setPermissionError(null)
@@ -254,6 +301,7 @@ export function useGeofencing(enabled: boolean = false) {
         }
       })
       .catch(() => {
+        setPermissionChecked(true)
         // #region agent log
         fetch(__AGENT_DEBUG_LOG_ENDPOINT, {
           method: "POST",
@@ -281,6 +329,19 @@ export function useGeofencing(enabled: boolean = false) {
             timestamp: Date.now(),
           }),
         }).catch(() => {})
+        // #endregion
+
+        // #region agent log
+        if (geoDebugEnabled() && typeof window !== "undefined") {
+          Sentry.captureMessage("Geofencing: Permissions API query failed", {
+            level: "info",
+            tags: { component: "useGeofencing", area: "permissions" },
+            extra: {
+              origin: window.location?.origin,
+              isSecureContext: (window as any).isSecureContext === true,
+            },
+          })
+        }
         // #endregion
         // Safari (and some embedded browsers) don't expose permissions API—fall back to manual request flow.
       })
@@ -521,6 +582,22 @@ export function useGeofencing(enabled: boolean = false) {
           `On iOS, geolocation generally requires HTTPS. For local testing on an iPhone, use an HTTPS tunnel ` +
           `(e.g. ngrok/cloudflared) or run the dev server with HTTPS, then reinstall the PWA from that HTTPS URL.`
       )
+
+      // #region agent log
+      if (geoDebugEnabled() && typeof window !== "undefined") {
+        Sentry.captureMessage("Geofencing: blocked by insecure context", {
+          level: "info",
+          tags: { component: "useGeofencing", area: "geolocation" },
+          extra: {
+            origin: window.location?.origin,
+            protocol: window.location?.protocol,
+            isIOS,
+            isPWA,
+          },
+        })
+      }
+      // #endregion
+
       return Promise.resolve(false)
     }
 
@@ -627,14 +704,20 @@ export function useGeofencing(enabled: boolean = false) {
 
           if (error.code === error.PERMISSION_DENIED) {
             const msg = (error as any)?.message ? String((error as any).message) : ""
-            const insecureHint =
-              !isSecureContext || /Origin does not have permission/i.test(msg) || /Only secure origins/i.test(msg)
+            const insecureContextHint = !isSecureContext || /Only secure origins/i.test(msg) || /secure context/i.test(msg)
+            const originNotPermittedHint = /Origin does not have permission/i.test(msg)
 
-            if (insecureHint) {
+            if (insecureContextHint) {
               setPermissionError(
                 `Location is blocked for this origin (${typeof window !== "undefined" ? window.location?.origin : "unknown"}). ` +
                   `This commonly happens on iOS when the app is served over plain HTTP (not HTTPS), especially from a LAN IP. ` +
                   `Use an HTTPS URL for testing on iPhone (tunnel or local HTTPS), then reinstall the PWA from that HTTPS address.`
+              )
+            } else if (isIOS && originNotPermittedHint) {
+              setPermissionError(
+                `iOS blocked location for this site. This is often controlled by Safari’s global Location setting. ` +
+                  `Try: Settings > Apps > Safari > Location > "Location Access on All Websites" = Allow. ` +
+                  `Also check: Settings > Privacy & Security > Location Services > Safari Websites > ${hostname || "this site"} > While Using.`
               )
             } else {
               // Real user denial (secure context) — guide to Safari website permissions rather than a native app entry.
@@ -643,6 +726,26 @@ export function useGeofencing(enabled: boolean = false) {
                   `On iOS, manage this under Settings > Privacy & Security > Location Services > Safari Websites > ${hostname || "this site"} > While Using.`
               )
             }
+
+            // #region agent log
+            if (geoDebugEnabled() && typeof window !== "undefined") {
+              Sentry.captureMessage("Geofencing: PERMISSION_DENIED", {
+                level: "info",
+                tags: { component: "useGeofencing", area: "geolocation" },
+                extra: {
+                  origin: window.location?.origin,
+                  hostname: window.location?.hostname,
+                  isSecureContext: (window as any).isSecureContext === true,
+                  isIOS,
+                  isPWA,
+                  code: (error as any)?.code ?? null,
+                  message: msg,
+                  insecureContextHint,
+                  originNotPermittedHint,
+                },
+              })
+            }
+            // #endregion
           } else if (error.code === error.POSITION_UNAVAILABLE) {
             setPermissionError("Unable to determine your location. Check that Location Services are enabled.")
           } else if (error.code === error.TIMEOUT) {
@@ -650,6 +753,7 @@ export function useGeofencing(enabled: boolean = false) {
           } else {
             setPermissionError(`Location error (${error.code}): ${error.message}`)
           }
+          setPermissionChecked(true)
           setHasLocationPermission(false)
           resolve(false)
         },
