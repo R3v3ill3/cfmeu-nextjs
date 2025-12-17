@@ -8,7 +8,7 @@ const NOTIFICATION_COOLDOWN = 3600000 // 1 hour cooldown per site
 
 const __AGENT_DEBUG_LOG_ENDPOINT =
   "http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2"
-const __AGENT_DEBUG_LOG_RELAY_PATH = "/api/__agent-debug"
+const __AGENT_DEBUG_LOG_RELAY_PATH = "/api/agent-debug"
 
 interface JobSiteLocation {
   id: string
@@ -467,6 +467,9 @@ export function useGeofencing(enabled: boolean = false) {
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
     const isPWA = window.matchMedia?.("(display-mode: standalone)")?.matches ||
                   (window.navigator as any).standalone === true
+    const isSecureContext =
+      typeof window !== "undefined" ? (window as any).isSecureContext === true : false
+    const hostname = typeof window !== "undefined" ? window.location?.hostname : ""
 
     // #region agent log
     fetch(__AGENT_DEBUG_LOG_ENDPOINT, {
@@ -508,6 +511,18 @@ export function useGeofencing(enabled: boolean = false) {
       }),
     }).catch(() => {})
     // #endregion
+
+    // iOS (and many browsers) require geolocation to be requested from a secure context (HTTPS).
+    // Note: localhost is treated as secure in most browsers, but LAN IPs (e.g. http://192.168.x.x) are not.
+    if (!isSecureContext) {
+      setPermissionError(
+        `Location is blocked because this site is not running in a secure context (HTTPS). ` +
+          `Current origin: ${typeof window !== "undefined" ? window.location?.origin : "unknown"}. ` +
+          `On iOS, geolocation generally requires HTTPS. For local testing on an iPhone, use an HTTPS tunnel ` +
+          `(e.g. ngrok/cloudflared) or run the dev server with HTTPS, then reinstall the PWA from that HTTPS URL.`
+      )
+      return Promise.resolve(false)
+    }
 
     if (isIOS && !isPWA) {
       setPermissionError("On iOS, geofencing requires installing the app to your home screen. Use Safari → Share → Add to Home Screen.")
@@ -611,10 +626,23 @@ export function useGeofencing(enabled: boolean = false) {
           }
 
           if (error.code === error.PERMISSION_DENIED) {
-            setPermissionError(
-              "Location permission denied. To fix: Settings > Privacy & Security > Location Services > CFMEU > While Using the App. " +
-              "If CFMEU doesn't appear in the list, remove the app from your home screen and reinstall it from Safari."
-            )
+            const msg = (error as any)?.message ? String((error as any).message) : ""
+            const insecureHint =
+              !isSecureContext || /Origin does not have permission/i.test(msg) || /Only secure origins/i.test(msg)
+
+            if (insecureHint) {
+              setPermissionError(
+                `Location is blocked for this origin (${typeof window !== "undefined" ? window.location?.origin : "unknown"}). ` +
+                  `This commonly happens on iOS when the app is served over plain HTTP (not HTTPS), especially from a LAN IP. ` +
+                  `Use an HTTPS URL for testing on iPhone (tunnel or local HTTPS), then reinstall the PWA from that HTTPS address.`
+              )
+            } else {
+              // Real user denial (secure context) — guide to Safari website permissions rather than a native app entry.
+              setPermissionError(
+                `Location permission denied for this site. ` +
+                  `On iOS, manage this under Settings > Privacy & Security > Location Services > Safari Websites > ${hostname || "this site"} > While Using.`
+              )
+            }
           } else if (error.code === error.POSITION_UNAVAILABLE) {
             setPermissionError("Unable to determine your location. Check that Location Services are enabled.")
           } else if (error.code === error.TIMEOUT) {

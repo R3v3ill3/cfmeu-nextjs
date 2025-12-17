@@ -32,7 +32,7 @@ export async function POST(req: Request) {
         sessionId: "debug-session",
         runId: "pre-fix",
         hypothesisId: "E",
-        location: "src/app/api/__agent-debug/route.ts:POST",
+        location: "src/app/api/agent-debug/route.ts:POST",
         message: "Relay received client debug payload",
         data: {
           keys: Object.keys(body ?? {}),

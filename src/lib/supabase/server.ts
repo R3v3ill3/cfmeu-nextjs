@@ -50,28 +50,23 @@ export async function createServerSupabase(): Promise<SupabaseClient<Database>> 
     key,
     {
       cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value
+        // Use the newer getAll/setAll interface so @supabase/ssr can correctly handle
+        // chunked cookies (large sessions) and refresh-token persistence.
+        getAll() {
+          return cookieStore.getAll()
         },
-        set(name: string, value: string, options: CookieOptions) {
+        setAll(cookiesToSet) {
           try {
-            // iOS Safari ITP requires secure cookies and proper sameSite handling
-            // Using 'lax' for first-party context which is compatible with most browsers
-            // In production (HTTPS), secure cookies are required for auth.
-            // In local dev (HTTP), secure cookies will not persist, breaking refresh tokens.
-            cookieStore.set({
-              name,
-              value,
-              ...options,
-              path: '/',
-              sameSite: 'lax',
-              secure: shouldUseSecureCookies,
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set({
+                name,
+                value,
+                ...options,
+                path: '/',
+                sameSite: 'lax',
+                secure: shouldUseSecureCookies,
+              })
             })
-          } catch {}
-        },
-        remove(name: string, options: CookieOptions) {
-          try {
-            cookieStore.set({ name, value: '', ...options, path: '/' })
           } catch {}
         },
       },
