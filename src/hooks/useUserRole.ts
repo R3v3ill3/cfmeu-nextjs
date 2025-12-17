@@ -109,6 +109,25 @@ export function useUserRole(): UseUserRoleResult {
 
       const startTime = Date.now();
       console.log('[useUserRole] Fetching role for user', { userId: user.id });
+      // #region agent log
+      fetch("/api/agent-debug", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: "debug-session",
+          runId: "run4",
+          hypothesisId: "H",
+          location: "src/hooks/useUserRole.ts:queryFn:start",
+          message: "useUserRole queryFn start",
+          data: {
+            userIdSuffix: user.id.slice(-6),
+            serverProvidedRole,
+            cachedRole,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {})
+      // #endregion
       
       try {
         const { data: profile, error } = await supabase
@@ -149,6 +168,26 @@ export function useUserRole(): UseUserRoleResult {
           errorMessage: error instanceof Error ? error.message : String(error),
           timestamp: new Date().toISOString(),
         });
+        // #region agent log
+        fetch("/api/agent-debug", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: "debug-session",
+            runId: "run4",
+            hypothesisId: "H",
+            location: "src/hooks/useUserRole.ts:queryFn:exception",
+            message: "useUserRole queryFn exception",
+            data: {
+              userIdSuffix: user.id.slice(-6),
+              duration,
+              errorMessage: error instanceof Error ? error.message : String(error),
+              errorCode: (error as any)?.code ?? null,
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {})
+        // #endregion
         throw error;
       }
     },
@@ -183,6 +222,26 @@ export function useUserRole(): UseUserRoleResult {
       });
       // #region agent log
       fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'B',location:'src/hooks/useUserRole.ts:onError',message:'useUserRole query error',data:{userIdSuffix:(user?.id??'').slice(-6),cachedRole,errorMessage:error instanceof Error?error.message:String(error),errorCode:(error as any)?.code??null},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      // #region agent log
+      fetch("/api/agent-debug", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: "debug-session",
+          runId: "run4",
+          hypothesisId: "H",
+          location: "src/hooks/useUserRole.ts:onError",
+          message: "useUserRole query error",
+          data: {
+            userIdSuffix: user?.id ? user.id.slice(-6) : null,
+            cachedRole,
+            errorMessage: error instanceof Error ? error.message : String(error),
+            errorCode: (error as any)?.code ?? null,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {})
       // #endregion
     },
   })

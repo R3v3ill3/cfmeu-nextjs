@@ -162,8 +162,64 @@ async function getProjectsHandler(request: NextRequest) {
     const newOnly = newOnlyParam === '1' || newOnlyParam === 'true';
     const sinceParam = searchParams.get('since') || undefined;
 
-    // Parse patch IDs
-    const patchIds = patchParam ? patchParam.split(',').map(s => s.trim()).filter(Boolean) : [];
+    // Parse patch IDs (client-provided)
+    let patchIds = patchParam ? patchParam.split(',').map(s => s.trim()).filter(Boolean) : [];
+    let patchIdsSource: 'request' | 'default_by_role' = 'request';
+
+    // SECURITY + UX:
+    // Do not rely on the client to always send `patch=`. On iOS/PWA navigation, URL params can be dropped,
+    // and `project_list_comprehensive_view` does not include patch_id columns for RLS-based filtering.
+    // For organisers/lead organisers, default to their assigned patches if none were provided.
+    if (patchIds.length === 0 && role !== 'admin') {
+      try {
+        if (role === 'organiser') {
+          const { data: assignments, error } = await supabase
+            .from('organiser_patch_assignments')
+            .select('patch_id')
+            .eq('organiser_id', user.id)
+            .is('effective_to', null);
+          if (error) throw error;
+          patchIds = (assignments || []).map((r: any) => String(r.patch_id)).filter(Boolean);
+          patchIdsSource = 'default_by_role';
+        } else if (role === 'lead_organiser') {
+          const { data: assignments, error } = await supabase
+            .from('lead_organiser_patch_assignments')
+            .select('patch_id')
+            .eq('lead_organiser_id', user.id)
+            .is('effective_to', null);
+          if (error) throw error;
+          patchIds = (assignments || []).map((r: any) => String(r.patch_id)).filter(Boolean);
+          patchIdsSource = 'default_by_role';
+        }
+      } catch (e) {
+        // If we can't resolve patches, fail closed to prevent leaking all projects.
+        patchIds = [];
+        patchIdsSource = 'default_by_role';
+      }
+    }
+
+    // #region agent log
+    if (process.env.NODE_ENV !== 'production') {
+      fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run3',hypothesisId:'G',location:'src/app/api/projects/route.ts:patch_scope',message:'projects api patch scoping resolved',data:{path:request.nextUrl.pathname,role,patchIdsSource,patchIdCount:patchIds.length,sbCookieCount:request.cookies.getAll().filter(c=>c.name.startsWith("sb-")).length},timestamp:Date.now()})}).catch(()=>{});
+    }
+    // #endregion
+
+    if (role !== 'admin' && patchIds.length === 0) {
+      // No accessible patches - return empty result set (prevents leaking all projects).
+      const response: ProjectsResponse = {
+        projects: [],
+        summaries: {},
+        pagination: { page, pageSize, totalCount: 0, totalPages: 0 },
+        debug: {
+          queryTime: Date.now() - startTime,
+          cacheHit: false,
+          appliedFilters: { patchIds: [], patchIdsSource, note: 'no-accessible-patches' },
+          patchFilteringUsed: false,
+          patchFilteringMethod: 'none'
+        }
+      }
+      return NextResponse.json(response)
+    }
 
     // Build query using the optimized materialized view
     let query = supabase.from('project_list_comprehensive_view').select('*', { count: 'exact' });
