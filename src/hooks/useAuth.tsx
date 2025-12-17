@@ -118,6 +118,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       
       if (error) {
         logAuthError("Session recovery failed", error, { stage: "refreshSession" });
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'A',location:'src/hooks/useAuth.tsx:refreshSession',message:'attemptSessionRecovery refreshSession error',data:{hadSession:true,recoveryAttempted:true,errorMessage:error.message},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         return null;
       }
       
@@ -126,12 +129,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           source: "refreshSession",
           userId: data.session.user?.id ?? null,
         });
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'A',location:'src/hooks/useAuth.tsx:refreshSession',message:'attemptSessionRecovery refreshSession returned session',data:{userIdSuffix:(data.session.user?.id??'').slice(-6),expiresAt:data.session.expires_at??null},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         return data.session;
       }
       
       return null;
     } catch (error) {
       logAuthError("Session recovery exception", error);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'A',location:'src/hooks/useAuth.tsx:refreshSession',message:'attemptSessionRecovery threw exception',data:{errorMessage:error instanceof Error?error.message:String(error)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       return null;
     }
   }, [logAuthError, logAuthEvent]);
@@ -264,6 +273,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               timestamp,
               previousUserId: sessionRef.current?.user?.id ?? null,
             }, 'warning');
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'E',location:'src/hooks/useAuth.tsx:onAuthStateChange',message:'onAuthStateChange indicates unexpected session loss',data:{event,previousUserIdSuffix:(sessionRef.current?.user?.id??'').slice(-6)},timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
             
             // Try recovery if we haven't already
             if (!recoveryAttemptedRef.current) {

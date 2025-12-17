@@ -7,6 +7,7 @@ export async function createServerSupabase(): Promise<SupabaseClient<Database>> 
   const cookieStore = await cookies()
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const shouldUseSecureCookies = process.env.NODE_ENV === 'production'
 
   // Track server connection
   const connectionId = trackConnection('server-client')
@@ -56,14 +57,15 @@ export async function createServerSupabase(): Promise<SupabaseClient<Database>> 
           try {
             // iOS Safari ITP requires secure cookies and proper sameSite handling
             // Using 'lax' for first-party context which is compatible with most browsers
-            // Always set secure=true for auth cookies to prevent ITP issues
+            // In production (HTTPS), secure cookies are required for auth.
+            // In local dev (HTTP), secure cookies will not persist, breaking refresh tokens.
             cookieStore.set({
               name,
               value,
               ...options,
               path: '/',
               sameSite: 'lax',
-              secure: true, // Always secure for auth cookies (fixes iOS Safari ITP)
+              secure: shouldUseSecureCookies,
             })
           } catch {}
         },

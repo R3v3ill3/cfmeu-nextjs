@@ -6,6 +6,10 @@ const GEOFENCE_RADIUS_METERS = 100 // 100 meters
 const POSITION_CHECK_INTERVAL = 60000 // Check every 60 seconds
 const NOTIFICATION_COOLDOWN = 3600000 // 1 hour cooldown per site
 
+const __AGENT_DEBUG_LOG_ENDPOINT =
+  "http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2"
+const __AGENT_DEBUG_LOG_RELAY_PATH = "/api/__agent-debug"
+
 interface JobSiteLocation {
   id: string
   name: string
@@ -50,6 +54,51 @@ export function useGeofencing(enabled: boolean = false) {
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
     const isPWA = window.matchMedia?.("(display-mode: standalone)")?.matches ||
                   (window.navigator as any).standalone === true
+
+    // #region agent log
+    fetch(__AGENT_DEBUG_LOG_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: "debug-session",
+        runId: "pre-fix",
+        hypothesisId: "A",
+        location: "src/hooks/useGeofencing.ts:platform-check",
+        message: "Platform capability snapshot",
+        data: {
+          isIOS,
+          isPWA,
+          hasGeolocation,
+          isSecureContext: typeof window !== "undefined" ? (window as any).isSecureContext : null,
+          protocol: typeof window !== "undefined" ? window.location?.protocol : null,
+          origin: typeof window !== "undefined" ? window.location?.origin : null,
+          permissionsApi: typeof navigator !== "undefined" ? !!(navigator as any).permissions?.query : null,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {})
+    fetch(__AGENT_DEBUG_LOG_RELAY_PATH, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: "debug-session",
+        runId: "pre-fix",
+        hypothesisId: "A",
+        location: "src/hooks/useGeofencing.ts:platform-check",
+        message: "Platform capability snapshot",
+        data: {
+          isIOS,
+          isPWA,
+          hasGeolocation,
+          isSecureContext: typeof window !== "undefined" ? (window as any).isSecureContext : null,
+          protocol: typeof window !== "undefined" ? window.location?.protocol : null,
+          origin: typeof window !== "undefined" ? window.location?.origin : null,
+          permissionsApi: typeof navigator !== "undefined" ? !!(navigator as any).permissions?.query : null,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {})
+    // #endregion
 
     // Geofencing requires PWA mode on iOS for reliable operation
     if (isIOS && !isPWA) {
@@ -128,7 +177,65 @@ export function useGeofencing(enabled: boolean = false) {
         permissionStatus = status
         setHasLocationPermission(status.state === "granted")
 
+        // #region agent log
+        fetch(__AGENT_DEBUG_LOG_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: "debug-session",
+            runId: "pre-fix",
+            hypothesisId: "B",
+            location: "src/hooks/useGeofencing.ts:permissions-query:then",
+            message: "Permissions API geolocation status",
+            data: { state: (status as any)?.state ?? null },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {})
+        fetch(__AGENT_DEBUG_LOG_RELAY_PATH, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: "debug-session",
+            runId: "pre-fix",
+            hypothesisId: "B",
+            location: "src/hooks/useGeofencing.ts:permissions-query:then",
+            message: "Permissions API geolocation status",
+            data: { state: (status as any)?.state ?? null },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {})
+        // #endregion
+
         handleChange = () => {
+          // #region agent log
+          fetch(__AGENT_DEBUG_LOG_ENDPOINT, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sessionId: "debug-session",
+              runId: "pre-fix",
+              hypothesisId: "B",
+              location: "src/hooks/useGeofencing.ts:permissions-query:onchange",
+              message: "Permissions API geolocation change event",
+              data: { state: (status as any)?.state ?? null },
+              timestamp: Date.now(),
+            }),
+          }).catch(() => {})
+          fetch(__AGENT_DEBUG_LOG_RELAY_PATH, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sessionId: "debug-session",
+              runId: "pre-fix",
+              hypothesisId: "B",
+              location: "src/hooks/useGeofencing.ts:permissions-query:onchange",
+              message: "Permissions API geolocation change event",
+              data: { state: (status as any)?.state ?? null },
+              timestamp: Date.now(),
+            }),
+          }).catch(() => {})
+          // #endregion
+
           if (status.state === "granted") {
             setHasLocationPermission(true)
             setPermissionError(null)
@@ -147,6 +254,34 @@ export function useGeofencing(enabled: boolean = false) {
         }
       })
       .catch(() => {
+        // #region agent log
+        fetch(__AGENT_DEBUG_LOG_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: "debug-session",
+            runId: "pre-fix",
+            hypothesisId: "B",
+            location: "src/hooks/useGeofencing.ts:permissions-query:catch",
+            message: "Permissions API not available or failed",
+            data: {},
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {})
+        fetch(__AGENT_DEBUG_LOG_RELAY_PATH, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: "debug-session",
+            runId: "pre-fix",
+            hypothesisId: "B",
+            location: "src/hooks/useGeofencing.ts:permissions-query:catch",
+            message: "Permissions API not available or failed",
+            data: {},
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {})
+        // #endregion
         // Safari (and some embedded browsers) don't expose permissions API—fall back to manual request flow.
       })
 
@@ -333,6 +468,47 @@ export function useGeofencing(enabled: boolean = false) {
     const isPWA = window.matchMedia?.("(display-mode: standalone)")?.matches ||
                   (window.navigator as any).standalone === true
 
+    // #region agent log
+    fetch(__AGENT_DEBUG_LOG_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: "debug-session",
+        runId: "pre-fix",
+        hypothesisId: "A",
+        location: "src/hooks/useGeofencing.ts:requestLocationAccess:entry",
+        message: "Requesting location access",
+        data: {
+          isIOS,
+          isPWA,
+          isSecureContext: typeof window !== "undefined" ? (window as any).isSecureContext : null,
+          protocol: typeof window !== "undefined" ? window.location?.protocol : null,
+          origin: typeof window !== "undefined" ? window.location?.origin : null,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {})
+    fetch(__AGENT_DEBUG_LOG_RELAY_PATH, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: "debug-session",
+        runId: "pre-fix",
+        hypothesisId: "A",
+        location: "src/hooks/useGeofencing.ts:requestLocationAccess:entry",
+        message: "Requesting location access",
+        data: {
+          isIOS,
+          isPWA,
+          isSecureContext: typeof window !== "undefined" ? (window as any).isSecureContext : null,
+          protocol: typeof window !== "undefined" ? window.location?.protocol : null,
+          origin: typeof window !== "undefined" ? window.location?.origin : null,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {})
+    // #endregion
+
     if (isIOS && !isPWA) {
       setPermissionError("On iOS, geofencing requires installing the app to your home screen. Use Safari → Share → Add to Home Screen.")
       return Promise.resolve(false)
@@ -346,6 +522,41 @@ export function useGeofencing(enabled: boolean = false) {
 
       navigator.geolocation.getCurrentPosition(
         (position) => {
+          // #region agent log
+          fetch(__AGENT_DEBUG_LOG_ENDPOINT, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sessionId: "debug-session",
+              runId: "pre-fix",
+              hypothesisId: "C",
+              location: "src/hooks/useGeofencing.ts:getCurrentPosition:success",
+              message: "Geolocation success",
+              data: {
+                hasCoords: !!position?.coords,
+                accuracy: position?.coords?.accuracy ?? null,
+              },
+              timestamp: Date.now(),
+            }),
+          }).catch(() => {})
+          fetch(__AGENT_DEBUG_LOG_RELAY_PATH, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sessionId: "debug-session",
+              runId: "pre-fix",
+              hypothesisId: "C",
+              location: "src/hooks/useGeofencing.ts:getCurrentPosition:success",
+              message: "Geolocation success",
+              data: {
+                hasCoords: !!position?.coords,
+                accuracy: position?.coords?.accuracy ?? null,
+              },
+              timestamp: Date.now(),
+            }),
+          }).catch(() => {})
+          // #endregion
+
           if (localStorage.getItem('debug-geofencing') === 'true') {
             console.log('[Geofencing] Location access granted!', position)
           }
@@ -360,6 +571,41 @@ export function useGeofencing(enabled: boolean = false) {
           resolve(true)
         },
         (error) => {
+          // #region agent log
+          fetch(__AGENT_DEBUG_LOG_ENDPOINT, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sessionId: "debug-session",
+              runId: "pre-fix",
+              hypothesisId: "C",
+              location: "src/hooks/useGeofencing.ts:getCurrentPosition:error",
+              message: "Geolocation error",
+              data: {
+                code: (error as any)?.code ?? null,
+                message: (error as any)?.message ?? null,
+              },
+              timestamp: Date.now(),
+            }),
+          }).catch(() => {})
+          fetch(__AGENT_DEBUG_LOG_RELAY_PATH, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sessionId: "debug-session",
+              runId: "pre-fix",
+              hypothesisId: "C",
+              location: "src/hooks/useGeofencing.ts:getCurrentPosition:error",
+              message: "Geolocation error",
+              data: {
+                code: (error as any)?.code ?? null,
+                message: (error as any)?.message ?? null,
+              },
+              timestamp: Date.now(),
+            }),
+          }).catch(() => {})
+          // #endregion
+
           if (localStorage.getItem('debug-geofencing') === 'true') {
             console.error('[Geofencing] Location access denied:', error)
           }
