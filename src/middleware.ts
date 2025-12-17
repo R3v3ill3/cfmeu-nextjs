@@ -151,10 +151,10 @@ export async function middleware(req: NextRequest) {
   // Enhanced logging for diagnostics - only log errors when cookies exist but auth fails
   // (indicates actual session loss, not just unauthenticated requests)
   if (authError) {
-    // Record auth errors in connection monitor
-    recordConnectionError('middleware', authError, 'auth.getUser()')
 
     if (hasSbCookies) {
+      // Record auth errors in connection monitor ONLY when cookies exist (real session-loss signal)
+      recordConnectionError('middleware', authError, 'auth.getUser()')
       // This is the important case: user had cookies but auth failed - potential session loss
       logMiddleware('error', 'Auth error with existing cookies (potential session loss)', {
         errorMessage: authError.message,
@@ -165,7 +165,9 @@ export async function middleware(req: NextRequest) {
         sbCookieNames: sbCookies.map(c => c.name),
       });
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'D',location:'src/middleware.ts:authError',message:'middleware auth error with sb cookies',data:{path,authDuration,hasAuthCode,sbCookieCount:sbCookies.length,errorMessage:authError.message,errorStatus:authError.status??null},timestamp:Date.now()})}).catch(()=>{});
+      if (process.env.NODE_ENV !== 'production') {
+        fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'D',location:'src/middleware.ts:authError',message:'middleware auth error with sb cookies',data:{path,authDuration,hasAuthCode,sbCookieCount:sbCookies.length,errorMessage:authError.message,errorStatus:authError.status??null},timestamp:Date.now()})}).catch(()=>{});
+      }
       // #endregion
       
       // Try to refresh the session - this can recover from stale JWT tokens
@@ -210,7 +212,9 @@ export async function middleware(req: NextRequest) {
       sbCookieNames: sbCookies.map(c => c.name),
     });
     // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'D',location:'src/middleware.ts:noUser',message:'middleware saw sb cookies but no user',data:{path,authDuration,hasAuthCode,sbCookieCount:sbCookies.length},timestamp:Date.now()})}).catch(()=>{});
+    if (process.env.NODE_ENV !== 'production') {
+      fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'D',location:'src/middleware.ts:noUser',message:'middleware saw sb cookies but no user',data:{path,authDuration,hasAuthCode,sbCookieCount:sbCookies.length},timestamp:Date.now()})}).catch(()=>{});
+    }
     // #endregion
     
     try {

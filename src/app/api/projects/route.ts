@@ -111,6 +111,11 @@ async function getProjectsHandler(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (authError || !user) {
+      // #region agent log
+      if (process.env.NODE_ENV !== 'production') {
+        fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'F',location:'src/app/api/projects/route.ts:auth',message:'projects api unauthorized',data:{path:request.nextUrl.pathname,sbCookieCount:request.cookies.getAll().filter(c=>c.name.startsWith("sb-")).length,authErrorMessage:authError?.message??null,authErrorStatus:(authError as any)?.status??null},timestamp:Date.now()})}).catch(()=>{});
+      }
+      // #endregion
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -122,6 +127,11 @@ async function getProjectsHandler(request: NextRequest) {
 
     if (profileError) {
       console.error('Projects API failed to load profile:', profileError);
+      // #region agent log
+      if (process.env.NODE_ENV !== 'production') {
+        fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'F',location:'src/app/api/projects/route.ts:profile',message:'projects api failed to load profile',data:{path:request.nextUrl.pathname,userIdSuffix:user.id.slice(-6),sbCookieCount:request.cookies.getAll().filter(c=>c.name.startsWith("sb-")).length,errorMessage:profileError.message,errorCode:(profileError as any).code??null,errorHint:(profileError as any).hint??null},timestamp:Date.now()})}).catch(()=>{});
+      }
+      // #endregion
       return NextResponse.json({ error: 'Unable to load user profile' }, { status: 500 });
     }
 
@@ -276,12 +286,257 @@ async function getProjectsHandler(request: NextRequest) {
       }
     }
 
+    // IMPORTANT:
+    // The status filters (ratings/audit/mapping/compliance recency) are computed via extra queries.
+    // When NONE of these filters are active (the common/default case), we must NOT:
+    // 1) fetch ALL matching IDs, then
+    // 2) apply `.in('id', hugeList)` for pagination
+    //
+    // That pattern can generate extremely large requests (long URLs) and leads to runtime `TypeError: fetch failed`
+    // as seen in debug logs. Instead, paginate first, then compute status fields for just the page IDs.
+    const statusFiltersActive =
+      ratingStatus !== 'all' ||
+      auditStatus !== 'all' ||
+      mappingStatus !== 'all' ||
+      mappingUpdateStatus !== 'all' ||
+      complianceCheckStatus !== 'all';
+
+    const canPaginateBeforeStatusComputation = !statusFiltersActive && sort !== 'key_contractors_rated_value';
+
+    if (canPaginateBeforeStatusComputation) {
+      // Apply sorting (mirrors the later logic, but without the expensive status-filter path)
+      if (sort === 'name') {
+        query = query.order('name', { ascending: dir === 'asc' });
+      } else if (sort === 'value') {
+        query = query.order('value', { ascending: dir === 'asc', nullsFirst: false });
+      } else if (sort === 'tier') {
+        query = query.order('tier', { ascending: dir === 'asc', nullsFirst: false });
+      } else if (sort === 'workers') {
+        query = query.order('total_workers', { ascending: dir === 'asc' });
+      } else if (sort === 'members') {
+        query = query.order('total_members', { ascending: dir === 'asc' });
+      } else if (sort === 'employers') {
+        query = query.order('engaged_employer_count', { ascending: dir === 'asc' });
+      } else if (sort === 'eba_coverage') {
+        query = query.order('eba_coverage_percent', { ascending: dir === 'asc' });
+      } else if (sort === 'delegates') {
+        query = query.order('delegate_name', { ascending: dir === 'asc', nullsFirst: dir === 'desc' });
+      } else {
+        query = query.order('created_at', { ascending: dir === 'asc' });
+      }
+
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+      const paginated = await query.range(from, to);
+
+      if (paginated.error) {
+        console.error('Projects API error:', paginated.error);
+        // #region agent log
+        if (process.env.NODE_ENV !== 'production') {
+          fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'F',location:'src/app/api/projects/route.ts:fetch_page',message:'projects api failed fetching paginated view rows (fast path)',data:{path:request.nextUrl.pathname,userIdSuffix:user.id.slice(-6),sbCookieCount:request.cookies.getAll().filter(c=>c.name.startsWith("sb-")).length,errorMessage:paginated.error.message,errorCode:(paginated.error as any).code??null},timestamp:Date.now()})}).catch(()=>{});
+        }
+        // #endregion
+        return NextResponse.json({ error: 'Failed to fetch projects' }, { status: 500 });
+      }
+
+      const data = paginated.data || [];
+      const count = paginated.count || 0;
+      const pageProjectIds = data.map((row: any) => row.id).filter(Boolean) as string[];
+
+      // Compute status fields only for the projects on this page
+      const [ratingData, complianceData, mappingData] = await Promise.all([
+        supabase
+          .from('project_compliance_assessments')
+          .select('project_id')
+          .in('project_id', pageProjectIds)
+          .eq('is_active', true),
+        supabase
+          .from('employer_compliance_checks')
+          .select('project_id, updated_at, cbus_check_date, incolink_check_date')
+          .in('project_id', pageProjectIds)
+          .eq('is_current', true),
+        supabase
+          .from('project_assignments')
+          .select('project_id, assignment_type, source, updated_at')
+          .in('project_id', pageProjectIds),
+      ]);
+
+      const projectRatings = new Set((ratingData.data || []).map((r: any) => r.project_id));
+      const projectComplianceChecks = new Map<string, { hasCheck: boolean; lastDate: string | null }>();
+      const projectMappingStatus = new Map<string, { status: string; lastUpdated: string | null }>();
+
+      (complianceData.data || []).forEach((check: any) => {
+        const projectId = check.project_id;
+        const dates = [
+          check.updated_at,
+          check.cbus_check_date ? new Date(check.cbus_check_date).toISOString() : null,
+          check.incolink_check_date ? new Date(check.incolink_check_date).toISOString() : null
+        ].filter(Boolean) as string[];
+
+        const lastDate = dates.length > 0 ? dates.sort().reverse()[0] : null;
+
+        if (!projectComplianceChecks.has(projectId)) {
+          projectComplianceChecks.set(projectId, { hasCheck: true, lastDate });
+        } else {
+          const existing = projectComplianceChecks.get(projectId)!;
+          if (lastDate && (!existing.lastDate || lastDate > existing.lastDate)) {
+            existing.lastDate = lastDate;
+          }
+        }
+      });
+
+      const mappingByProject = new Map<string, { hasRoles: boolean; hasTrades: boolean; sources: Set<string>; lastUpdated: string | null }>();
+      (mappingData.data || []).forEach((assignment: any) => {
+        const projectId = assignment.project_id;
+        if (!mappingByProject.has(projectId)) {
+          mappingByProject.set(projectId, {
+            hasRoles: false,
+            hasTrades: false,
+            sources: new Set(),
+            lastUpdated: null
+          });
+        }
+
+        const proj = mappingByProject.get(projectId)!;
+        if (assignment.assignment_type === 'contractor_role') {
+          proj.hasRoles = true;
+        } else if (assignment.assignment_type === 'trade_work') {
+          proj.hasTrades = true;
+        }
+
+        if (assignment.source) {
+          proj.sources.add(assignment.source);
+        }
+
+        if (assignment.updated_at) {
+          if (!proj.lastUpdated || assignment.updated_at > proj.lastUpdated) {
+            proj.lastUpdated = assignment.updated_at;
+          }
+        }
+      });
+
+      pageProjectIds.forEach((projectId) => {
+        if (!mappingByProject.has(projectId)) {
+          projectMappingStatus.set(projectId, { status: 'no_roles', lastUpdated: null });
+        } else {
+          const m = mappingByProject.get(projectId)!;
+          let status: string;
+          if (!m.hasRoles) {
+            status = 'no_roles';
+          } else if (!m.hasTrades) {
+            status = 'no_trades';
+          } else if (m.sources.size === 1 && m.sources.has('bci_import')) {
+            status = 'bci_only';
+          } else {
+            status = 'has_manual';
+          }
+          projectMappingStatus.set(projectId, { status, lastUpdated: m.lastUpdated });
+        }
+      });
+
+      const projects: ProjectRecord[] = (data || []).map((row: any) => {
+        const projectId = row.id;
+        const mapping = projectMappingStatus.get(projectId);
+        const compliance = projectComplianceChecks.get(projectId);
+
+        return {
+          id: row.id,
+          name: row.name,
+          main_job_site_id: row.main_job_site_id,
+          value: row.value,
+          tier: row.tier,
+          organising_universe: row.organising_universe,
+          stage_class: row.stage_class,
+          created_at: row.created_at,
+          full_address: row.full_address,
+          project_assignments: (row.project_assignments_data || []).map((assignment: any) => ({
+            ...assignment,
+            employers: assignment.employers
+              ? {
+                  ...assignment.employers,
+                  enterprise_agreement_status: assignment.employers.enterprise_agreement_status ?? null,
+                  eba_status_source: assignment.employers.eba_status_source ?? null,
+                }
+              : null,
+          })),
+          has_project_rating: projectRatings.has(projectId),
+          has_compliance_checks: compliance?.hasCheck || false,
+          mapping_status: mapping?.status as any,
+          mapping_last_updated: mapping?.lastUpdated || null,
+          last_compliance_check_date: compliance?.lastDate || null,
+          key_contractors_rated_value: null,
+        };
+      });
+
+      const summaries: Record<string, ProjectSummary> = {};
+      (data || []).forEach((row: any) => {
+        summaries[row.id] = {
+          project_id: row.id,
+          total_workers: row.total_workers || 0,
+          total_members: row.total_members || 0,
+          engaged_employer_count: row.engaged_employer_count || 0,
+          eba_active_employer_count: row.eba_active_employer_count || 0,
+          estimated_total: row.estimated_total || 0,
+          delegate_name: row.delegate_name,
+          first_patch_name: row.first_patch_name,
+          organiser_names: row.organiser_names,
+        };
+      });
+
+      const totalPages = Math.ceil(count / pageSize);
+      const queryTime = Date.now() - startTime;
+
+      const response: ProjectsResponse = {
+        projects,
+        summaries,
+        pagination: { page, pageSize, totalCount: count, totalPages },
+        debug: {
+          queryTime,
+          cacheHit: false,
+          appliedFilters: {
+            q,
+            patchIds,
+            tier,
+            universe,
+            stage,
+            workers,
+            special,
+            eba,
+            ratingStatus,
+            auditStatus,
+            mappingStatus,
+            mappingUpdateStatus,
+            complianceCheckStatus,
+            sort,
+            dir,
+            newOnly,
+            since: sinceParam || (profile as any)?.last_seen_projects_at || null
+          },
+          patchProjectCount,
+          patchFilteringUsed: patchIds.length > 0,
+          patchFilteringMethod
+        }
+      };
+
+      const headers = {
+        'Cache-Control': 'public, s-maxage=180, stale-while-revalidate=300',
+        'Content-Type': 'application/json'
+      };
+
+      return NextResponse.json(response, { headers });
+    }
+
     // Fetch all matching projects first (before pagination) to compute status fields
     // We'll apply status-based filters and then paginate
     const { data: allProjectsData, error: allProjectsError } = await query.select('id');
     
     if (allProjectsError) {
       console.error('Projects API error fetching project IDs:', allProjectsError);
+      // #region agent log
+      if (process.env.NODE_ENV !== 'production') {
+        fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'F',location:'src/app/api/projects/route.ts:project_ids',message:'projects api failed fetching project ids from view',data:{path:request.nextUrl.pathname,userIdSuffix:user.id.slice(-6),sbCookieCount:request.cookies.getAll().filter(c=>c.name.startsWith("sb-")).length,errorMessage:allProjectsError.message,errorCode:(allProjectsError as any).code??null},timestamp:Date.now()})}).catch(()=>{});
+      }
+      // #endregion
       return NextResponse.json(
         { error: 'Failed to fetch projects' },
         { status: 500 }
@@ -654,6 +909,11 @@ async function getProjectsHandler(request: NextRequest) {
       
       if (result.error) {
         console.error('Projects API error:', result.error);
+        // #region agent log
+        if (process.env.NODE_ENV !== 'production') {
+          fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'F',location:'src/app/api/projects/route.ts:fetch_page',message:'projects api failed fetching paginated view rows',data:{path:request.nextUrl.pathname,userIdSuffix:user.id.slice(-6),sbCookieCount:request.cookies.getAll().filter(c=>c.name.startsWith("sb-")).length,errorMessage:result.error.message,errorCode:(result.error as any).code??null},timestamp:Date.now()})}).catch(()=>{});
+        }
+        // #endregion
         return NextResponse.json(
           { error: 'Failed to fetch projects' },
           { status: 500 }
@@ -767,6 +1027,11 @@ async function getProjectsHandler(request: NextRequest) {
 
   } catch (error) {
     console.error('Projects API unexpected error:', error);
+    // #region agent log
+    if (process.env.NODE_ENV !== 'production') {
+      fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'F',location:'src/app/api/projects/route.ts:catch',message:'projects api unexpected exception',data:{path:request.nextUrl.pathname,errorMessage:error instanceof Error?error.message:String(error)},timestamp:Date.now()})}).catch(()=>{});
+    }
+    // #endregion
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

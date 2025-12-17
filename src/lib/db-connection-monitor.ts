@@ -142,10 +142,16 @@ class ConnectionMonitor {
     const metrics = this.connections.get(serviceName)
     if (!metrics) return
 
+    const errorMessage = error instanceof Error ? error.message : error
+    const normalizedContext = context || 'unknown'
+    const isAuthSessionError =
+      /auth session missing|invalid refresh token/i.test(errorMessage) ||
+      normalizedContext.toLowerCase().includes('auth.')
+
     const connectionError: ConnectionError = {
       timestamp: Date.now(),
-      error: error instanceof Error ? error.message : error,
-      context: context || 'unknown',
+      error: errorMessage,
+      context: normalizedContext,
       recoveryAttempt: 0
     }
 
@@ -163,10 +169,13 @@ class ConnectionMonitor {
     })
 
     // Trigger immediate alert for connection errors
+    // Note: auth/session errors are not "DB pool exhaustion" signals; classify separately to reduce noise.
     this.triggerAlert({
-      type: 'critical',
+      type: isAuthSessionError ? 'warning' : 'critical',
       serviceName,
-      message: `Database connection error: ${connectionError.error}`,
+      message: isAuthSessionError
+        ? `Auth/session error: ${connectionError.error}`
+        : `Database connection error: ${connectionError.error}`,
       usage: this.getPoolUtilization(),
       threshold: this.CRITICAL_THRESHOLD,
       timestamp: Date.now()
