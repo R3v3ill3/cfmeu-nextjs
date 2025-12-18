@@ -143,7 +143,10 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
   });
 
   // Loading and search states
-  const [isLoading, setIsLoading] = useState(true);
+  // isInitialLoading: shows full-page spinner on first load
+  // isRefreshing: background refresh (e.g., after job completion) - no spinner
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null)
   const [searchResults, setSearchResults] = useState<Record<string, { isSearching: boolean; results: FWCSearchResult[]; error?: string }>>({});
 
@@ -174,10 +177,15 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
 
   // Load project employers with their roles and trade assignments
   // NOTE: This must be defined BEFORE useScraperJobRealtime to avoid TDZ errors
-  const loadProjectEmployers = useCallback(async () => {
+  // isBackgroundRefresh: when true, don't show the full-page loading spinner (used after job completion)
+  const loadProjectEmployers = useCallback(async (isBackgroundRefresh = false) => {
     if (!projectId) return;
 
-    setIsLoading(true);
+    if (isBackgroundRefresh) {
+      setIsRefreshing(true);
+    } else {
+      setIsInitialLoading(true);
+    }
     try {
       // Get contractor role assignments (using project_assignments table)
       const { data: roleAssignments } = await supabase
@@ -348,7 +356,8 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
         variant: 'destructive',
       });
     } finally {
-      setIsLoading(false);
+      setIsInitialLoading(false);
+      setIsRefreshing(false);
     }
   }, [projectId, toast]);
 
@@ -362,7 +371,8 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
     enabled: !!jobId,
     pollingInterval: 2000,
     onJobComplete: useCallback((job: ScraperJob) => {
-      loadProjectEmployers();
+      // Use background refresh to avoid showing the full-page loading spinner
+      loadProjectEmployers(true);
 
       const title =
         job.status === 'succeeded'
@@ -953,7 +963,7 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
     );
   };
 
-  if (isLoading) {
+  if (isInitialLoading) {
     return (
       <div className="text-center space-y-4 p-8">
         <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto" />

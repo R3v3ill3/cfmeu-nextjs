@@ -95,6 +95,8 @@ export function useScraperJobRealtime(
   const channelRef = useRef<RealtimeChannel | null>(null)
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const lastJobIdRef = useRef<string | null>(null)
+  // Track if onJobComplete has already been fired for this job to prevent duplicates
+  const completedCallbackFiredRef = useRef<string | null>(null)
 
   const fetchJobStatus = useCallback(async (id: string) => {
     try {
@@ -118,10 +120,13 @@ export function useScraperJobRealtime(
       // Call update callback
       onJobUpdate?.(data.job)
 
-      // Check if job is complete
+      // Check if job is complete - only fire callback once per job
       const terminalStatuses: ScraperJobStatus[] = ['succeeded', 'failed', 'cancelled']
       if (terminalStatuses.includes(data.job.status)) {
-        onJobComplete?.(data.job)
+        if (completedCallbackFiredRef.current !== data.job.id) {
+          completedCallbackFiredRef.current = data.job.id
+          onJobComplete?.(data.job)
+        }
       }
 
       return data.job
@@ -163,6 +168,7 @@ export function useScraperJobRealtime(
       setEvents([])
       setError(null)
       lastJobIdRef.current = jobId
+      completedCallbackFiredRef.current = null // Reset callback guard for new job
     }
 
     // Initial fetch
@@ -187,10 +193,13 @@ export function useScraperJobRealtime(
           setJob(updatedJob)
           onJobUpdate?.(updatedJob)
 
-          // Check if job is complete
+          // Check if job is complete - only fire callback once per job
           const terminalStatuses: ScraperJobStatus[] = ['succeeded', 'failed', 'cancelled']
           if (terminalStatuses.includes(updatedJob.status)) {
-            onJobComplete?.(updatedJob)
+            if (completedCallbackFiredRef.current !== updatedJob.id) {
+              completedCallbackFiredRef.current = updatedJob.id
+              onJobComplete?.(updatedJob)
+            }
             // Stop polling when complete
             if (pollIntervalRef.current) {
               clearInterval(pollIntervalRef.current)
