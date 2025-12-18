@@ -309,7 +309,10 @@ function buildCSP(nonce: string): string {
     } catch {}
   } else if (isDev) {
     if (!connectSrc.includes('http://localhost:3200')) connectSrc.push('http://localhost:3200')
-    // Local debug-mode log ingest server (NDJSON)
+  }
+
+  // Local debug-mode log ingest server (NDJSON) - allow in dev even when worker URL is configured
+  if (isDev) {
     if (!connectSrc.includes('http://127.0.0.1:7242')) connectSrc.push('http://127.0.0.1:7242')
     if (!connectSrc.includes('http://localhost:7242')) connectSrc.push('http://localhost:7242')
   }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useAuth } from "@/hooks/useAuth"
 import { useHelpContext } from "@/context/HelpContext"
@@ -27,6 +27,7 @@ export function useUserRole(): UseUserRoleResult {
   const { scope } = useHelpContext()
   const serverProvidedRole = scope.role
   
+  const lastUserIdRef = useRef<string | null>(null)
   const [cachedRole, setCachedRole] = useState<string | null>(() => {
     if (typeof window === "undefined") return serverProvidedRole ?? null
     const stored = window.sessionStorage.getItem(STORAGE_KEY)
@@ -50,7 +51,16 @@ export function useUserRole(): UseUserRoleResult {
   }, [serverProvidedRole, cachedRole]);
 
   useEffect(() => {
-    if (!user?.id) {
+    const nextUserId = user?.id ?? null
+    const prevUserId = lastUserIdRef.current
+    lastUserIdRef.current = nextUserId
+
+    if (!nextUserId) {
+      if (prevUserId) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H3',location:'src/hooks/useUserRole.ts:user-null-effect',message:'useUserRole saw user become null; clearing cached role',data:{prevUserIdSuffix:prevUserId.slice(-6),cachedRole,serverProvidedRole,path:typeof window!=='undefined'?window.location?.pathname:null,hadStoredRole:typeof window!=='undefined'?!!window.sessionStorage.getItem(STORAGE_KEY):null},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+      }
       setCachedRole(null)
       if (typeof window !== "undefined") {
         window.sessionStorage.removeItem(STORAGE_KEY)

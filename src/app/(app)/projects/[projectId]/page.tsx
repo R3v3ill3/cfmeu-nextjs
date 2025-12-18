@@ -974,8 +974,9 @@ export default function ProjectDetailPage() {
         </Card>
       )}
 
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="h-auto bg-transparent p-0 gap-1.5 w-full flex-wrap border-0">
+      <Tabs value={tab} onValueChange={setTab} className="relative">
+        <div className="sticky top-16 z-30 -mx-6 px-6 py-3 bg-white dark:bg-gray-950 border-b shadow-sm">
+          <TabsList className="h-auto bg-transparent p-0 gap-1.5 w-full flex-wrap border-0">
           {/* Sites tab trigger hidden; accessible via Overview 'Sites' link */}
           <TabsTrigger
             value="mappingsheets"
@@ -1012,9 +1013,10 @@ export default function ProjectDetailPage() {
             <FileCheck className="h-4 w-4" />
             Audit
           </TabsTrigger>
-        </TabsList>
+          </TabsList>
+        </div>
 
-        <TabsContent value="mappingsheets">
+        <TabsContent value="mappingsheets" className="mt-4">
           {projectLoading || mappingDataLoading ? (
             <div className="flex items-center justify-center py-12">
               <LoadingSpinner />
@@ -1066,7 +1068,7 @@ export default function ProjectDetailPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="sites">
+        <TabsContent value="sites" className="mt-4">
           {project ? (
             <div className="space-y-4">
               <JobSitesManager projectId={project.id} projectName={project.name} />
@@ -1075,7 +1077,7 @@ export default function ProjectDetailPage() {
           ) : null}
         </TabsContent>
 
-        <TabsContent value="wallcharts">
+        <TabsContent value="wallcharts" className="mt-4">
           <Card>
             <CardHeader>
               <CardTitle>Employer Workers</CardTitle>
@@ -1099,7 +1101,7 @@ export default function ProjectDetailPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="site-visits">
+        <TabsContent value="site-visits" className="mt-4">
           <ProjectSiteVisits
             projectId={projectId}
             projectName={project?.name ?? ''}
@@ -1107,11 +1109,11 @@ export default function ProjectDetailPage() {
           />
         </TabsContent>
 
-        <TabsContent value="eba-search">
+        <TabsContent value="eba-search" className="mt-4">
           <SelectiveEbaSearchManager projectId={projectId} />
         </TabsContent>
 
-        <TabsContent value="audit-compliance">
+        <TabsContent value="audit-compliance" className="mt-4">
           {isMobile ? (
             <ComplianceMobileView projectId={projectId} />
           ) : (

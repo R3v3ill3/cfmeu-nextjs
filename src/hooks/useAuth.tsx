@@ -28,11 +28,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const queryClient = useQueryClient();
   
   // Track if we've ever had a valid session (for recovery logic)
+  const instanceIdRef = useRef(`auth-${Math.random().toString(36).slice(2, 10)}`);
   const hadSessionRef = useRef(false);
   const recoveryAttemptedRef = useRef(false);
   const isSubscribedRef = useRef(true);
   const sessionRef = useRef<Session | null>(null);
   const recoveryTimeoutRef = useRef<NodeJS.Timeout>();
+
+  useEffect(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H1',location:'src/hooks/useAuth.tsx:AuthProvider:mount',message:'AuthProvider mounted',data:{instanceId:instanceIdRef.current,path:typeof window!=='undefined'?window.location?.pathname:null},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    return () => {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H1',location:'src/hooks/useAuth.tsx:AuthProvider:unmount',message:'AuthProvider unmounted',data:{instanceId:instanceIdRef.current,lastUserIdSuffix:(sessionRef.current?.user?.id??'').slice(-6)||null,lastHasSession:!!sessionRef.current,path:typeof window!=='undefined'?window.location?.pathname:null},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+    };
+  }, []);
 
   const logAuthEvent = useCallback(
     (message: string, data?: Record<string, unknown>, level: SeverityLevel = "info") => {
@@ -74,6 +86,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const applyAuthState = useCallback(
     (nextSession: Session | null, metadata?: Record<string, unknown>) => {
+      const prevUserId = sessionRef.current?.user?.id ?? null;
+      const nextUserId = nextSession?.user?.id ?? null;
+      const prevHasSession = !!sessionRef.current;
+      const nextHasSession = !!nextSession;
+      if (prevUserId !== nextUserId) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H2',location:'src/hooks/useAuth.tsx:applyAuthState',message:'applyAuthState user transition',data:{instanceId:instanceIdRef.current,source:typeof metadata?.source==='string'?metadata.source:null,prevHasSession,nextHasSession,prevUserIdSuffix:prevUserId?prevUserId.slice(-6):null,nextUserIdSuffix:nextUserId?nextUserId.slice(-6):null},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+      }
       setSession(nextSession);
       sessionRef.current = nextSession;
       setUser(nextSession?.user ?? null);
