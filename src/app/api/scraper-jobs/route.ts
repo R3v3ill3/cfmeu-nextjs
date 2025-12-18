@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
+import * as Sentry from '@sentry/nextjs'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,6 +17,23 @@ function normalizePriority(priority: unknown) {
 }
 
 export async function POST(request: NextRequest) {
+  const debugEnabled = request.cookies.get('__agent_debug')?.value === '1'
+  const sbCookieCount = request.cookies.getAll().filter((c) => c.name.startsWith('sb-')).length
+  if (debugEnabled) {
+    // #region agent log
+    try {
+      Sentry.withScope((scope) => {
+        scope.setLevel('info')
+        scope.setTag('component', 'scraper-jobs')
+        scope.setTag('method', 'POST')
+        scope.setExtra('path', request.nextUrl.pathname)
+        scope.setExtra('sbCookieCount', sbCookieCount)
+        Sentry.captureMessage('[AgentDebug] scraper-jobs POST request')
+      })
+    } catch {}
+    // #endregion
+  }
+
   const supabase = await createServerSupabase()
   const {
     data: { user },
@@ -23,10 +41,40 @@ export async function POST(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   if (authError) {
+    if (debugEnabled) {
+      // #region agent log
+      try {
+        Sentry.withScope((scope) => {
+          scope.setLevel('warning')
+          scope.setTag('component', 'scraper-jobs')
+          scope.setTag('method', 'POST')
+          scope.setExtra('path', request.nextUrl.pathname)
+          scope.setExtra('sbCookieCount', sbCookieCount)
+          scope.setExtra('authErrorMessage', authError.message)
+          scope.setExtra('authErrorStatus', (authError as any)?.status ?? null)
+          Sentry.captureMessage('[AgentDebug] scraper-jobs authError')
+        })
+      } catch {}
+      // #endregion
+    }
     return NextResponse.json({ error: authError.message }, { status: 401 })
   }
 
   if (!user) {
+    if (debugEnabled) {
+      // #region agent log
+      try {
+        Sentry.withScope((scope) => {
+          scope.setLevel('warning')
+          scope.setTag('component', 'scraper-jobs')
+          scope.setTag('method', 'POST')
+          scope.setExtra('path', request.nextUrl.pathname)
+          scope.setExtra('sbCookieCount', sbCookieCount)
+          Sentry.captureMessage('[AgentDebug] scraper-jobs no user')
+        })
+      } catch {}
+      // #endregion
+    }
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
   }
 
