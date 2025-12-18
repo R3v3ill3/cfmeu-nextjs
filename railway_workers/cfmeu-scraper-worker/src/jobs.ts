@@ -14,6 +14,7 @@ export async function reserveNextJob(client: SupabaseClient): Promise<ScraperJob
     .from(JOB_TABLE)
     .select('*')
     .eq('status', 'queued')
+    .eq('environment', config.workerEnv)
     .in('job_type', ['fwc_lookup', 'incolink_sync']) // Only pick up jobs this worker can handle
     .lte('run_at', nowIso)
     .order('priority', { ascending: true })
@@ -41,6 +42,7 @@ export async function reserveNextJob(client: SupabaseClient): Promise<ScraperJob
       })
       .eq('id', candidate.id)
       .eq('status', 'queued')
+      .eq('environment', config.workerEnv)
       .lte('run_at', nowIso)
       .is('lock_token', null)
       .select()

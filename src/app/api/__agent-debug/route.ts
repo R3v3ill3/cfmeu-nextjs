@@ -52,9 +52,17 @@ export async function POST(req: Request) {
       // Prod (debug gated): send to Sentry + Vercel logs (avoid filesystem writes)
       try {
         const payload = body as Record<string, unknown>
+        const payloadAny = payload as any
+        const payloadLocation = typeof payloadAny?.location === "string" ? payloadAny.location : null
+        const payloadRunId = typeof payloadAny?.runId === "string" ? payloadAny.runId : null
+        const payloadHypothesisId =
+          typeof payloadAny?.hypothesisId === "string" ? payloadAny.hypothesisId : null
         Sentry.withScope((scope) => {
           scope.setLevel("info")
           scope.setTag("component", "agent-debug-relay")
+          if (payloadLocation) scope.setTag("payload_location", payloadLocation.slice(0, 180))
+          if (payloadRunId) scope.setTag("payload_runId", payloadRunId.slice(0, 80))
+          if (payloadHypothesisId) scope.setTag("payload_hypothesisId", payloadHypothesisId.slice(0, 80))
           scope.setExtra("keys", Object.keys(payload ?? {}))
           scope.setExtra("payload", payload)
           Sentry.captureMessage("[AgentDebug] relay payload (__agent)")
