@@ -932,50 +932,9 @@ export default function ProjectDetailPage() {
         ) : null}
       </div>
 
-      {/* Key Contractor EBA Overview */}
-      {keyContractorMetrics && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              Key Contractor EBA Status
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-muted-foreground cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <div className="space-y-1">
-                      <p className="font-medium">Covers key project roles and trades:</p>
-                      <p className="text-xs">• Builders and Project Managers</p>
-                      <p className="text-xs">• Demolition, Piling, Concrete</p>
-                      <p className="text-xs">• Scaffolding, Form Work, Cranes</p>
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ProjectKeyContractorMetrics
-              identifiedCount={keyContractorMetrics.identifiedCount}
-              totalSlots={keyContractorMetrics.totalSlots}
-              identificationTarget={identificationTarget}
-              ebaCount={keyContractorMetrics.ebaCount}
-              ebaTarget={ebaTarget}
-              auditsCount={keyContractorMetrics.auditsCount}
-              auditsTarget={auditsTarget}
-              trafficLightRatings={keyContractorMetrics.trafficLightRatings}
-              onIdentificationClick={() => setTab('mappingsheets')}
-              onEbaClick={() => setTab('eba-search')}
-              onAuditsClick={() => setTab('audit-compliance')}
-              onTrafficLightClick={() => setTab('audit-compliance')}
-            />
-          </CardContent>
-        </Card>
-      )}
-
-      <Tabs value={tab} onValueChange={setTab} className="relative">
-        <div className="sticky top-16 z-30 -mx-6 px-6 py-3 bg-white dark:bg-gray-950 border-b shadow-sm">
+      {/* Tabs Navigation - At the top for easy access */}
+      <Tabs value={tab} onValueChange={setTab}>
+        <div className="bg-white dark:bg-gray-950 border rounded-lg shadow-sm p-2 mb-4">
           <TabsList className="h-auto bg-transparent p-0 gap-1.5 w-full flex-wrap border-0">
           {/* Sites tab trigger hidden; accessible via Overview 'Sites' link */}
           <TabsTrigger
@@ -1016,7 +975,49 @@ export default function ProjectDetailPage() {
           </TabsList>
         </div>
 
-        <TabsContent value="mappingsheets" className="mt-4">
+        {/* Key Contractor EBA Overview - Shows across all tabs */}
+        {keyContractorMetrics && (
+          <Card className="mb-4">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg flex items-center gap-2">
+                Key Contractor EBA Status
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <div className="space-y-1">
+                        <p className="font-medium">Covers key project roles and trades:</p>
+                        <p className="text-xs">• Builders and Project Managers</p>
+                        <p className="text-xs">• Demolition, Piling, Concrete</p>
+                        <p className="text-xs">• Scaffolding, Form Work, Cranes</p>
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ProjectKeyContractorMetrics
+                identifiedCount={keyContractorMetrics.identifiedCount}
+                totalSlots={keyContractorMetrics.totalSlots}
+                identificationTarget={identificationTarget}
+                ebaCount={keyContractorMetrics.ebaCount}
+                ebaTarget={ebaTarget}
+                auditsCount={keyContractorMetrics.auditsCount}
+                auditsTarget={auditsTarget}
+                trafficLightRatings={keyContractorMetrics.trafficLightRatings}
+                onIdentificationClick={() => setTab('mappingsheets')}
+                onEbaClick={() => setTab('eba-search')}
+                onAuditsClick={() => setTab('audit-compliance')}
+                onTrafficLightClick={() => setTab('audit-compliance')}
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        <TabsContent value="mappingsheets" className="mt-0">
           {projectLoading || mappingDataLoading ? (
             <div className="flex items-center justify-center py-12">
               <LoadingSpinner />
@@ -1068,7 +1069,7 @@ export default function ProjectDetailPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="sites" className="mt-4">
+        <TabsContent value="sites" className="mt-0">
           {project ? (
             <div className="space-y-4">
               <JobSitesManager projectId={project.id} projectName={project.name} />
@@ -1077,7 +1078,7 @@ export default function ProjectDetailPage() {
           ) : null}
         </TabsContent>
 
-        <TabsContent value="wallcharts" className="mt-4">
+        <TabsContent value="wallcharts" className="mt-0">
           <Card>
             <CardHeader>
               <CardTitle>Employer Workers</CardTitle>
@@ -1101,7 +1102,7 @@ export default function ProjectDetailPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="site-visits" className="mt-4">
+        <TabsContent value="site-visits" className="mt-0">
           <ProjectSiteVisits
             projectId={projectId}
             projectName={project?.name ?? ''}
@@ -1109,11 +1110,11 @@ export default function ProjectDetailPage() {
           />
         </TabsContent>
 
-        <TabsContent value="eba-search" className="mt-4">
+        <TabsContent value="eba-search" className="mt-0">
           <SelectiveEbaSearchManager projectId={projectId} />
         </TabsContent>
 
-        <TabsContent value="audit-compliance" className="mt-4">
+        <TabsContent value="audit-compliance" className="mt-0">
           {isMobile ? (
             <ComplianceMobileView projectId={projectId} />
           ) : (
