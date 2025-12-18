@@ -593,7 +593,7 @@ const Layout = ({ children, onRefresh }: LayoutProps) => {
 
         {/* Content with pull-to-refresh handling */}
         <div
-          className="h-full"
+          className="min-h-full"
           onTouchStart={(e) => {
             if (isMobile() && onRefresh) {
               const touch = e.touches[0];

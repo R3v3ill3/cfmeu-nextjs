@@ -156,21 +156,21 @@ export function ComplianceMobileView({ projectId }: ComplianceMobileViewProps) {
           </AccordionContent>
         </AccordionItem>
         
-        <AccordionItem value="employers">
-          <AccordionTrigger className="hover:no-underline">
+        <AccordionItem value="employers" className="border-0">
+          <AccordionTrigger className="hover:no-underline bg-blue-600 text-white rounded-lg px-4 py-3 data-[state=open]:rounded-b-none">
             <div className="flex items-center justify-between w-full pr-2">
-              <span className="font-medium">Employer Checks</span>
+              <span className="font-semibold text-base">Employer Checks</span>
               <div className="flex items-center gap-2">
                 {employerStats.issues > 0 && (
-                  <AlertCircle className="h-4 w-4 text-red-600" />
+                  <AlertCircle className="h-4 w-4 text-red-200" />
                 )}
-                <Badge variant="outline" className="text-xs">
+                <Badge variant="secondary" className="text-xs bg-blue-500 text-white border-blue-400">
                   {employerStats.checked}/{employerStats.total}
                 </Badge>
               </div>
             </div>
           </AccordionTrigger>
-          <AccordionContent>
+          <AccordionContent className="border-2 border-t-0 border-blue-600 rounded-b-lg bg-blue-50/30 pt-4">
             <EmployerComplianceMobile projectId={projectId} />
           </AccordionContent>
         </AccordionItem>

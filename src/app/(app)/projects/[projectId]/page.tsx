@@ -1,7 +1,7 @@
 "use client"
 export const dynamic = 'force-dynamic'
 
-import { useMemo, useState, useEffect } from "react"
+import React, { useMemo, useState, useEffect, useRef } from "react"
 import { useParams, useSearchParams, useRouter, usePathname } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
 import { format } from "date-fns"
@@ -138,6 +138,21 @@ export default function ProjectDetailPage() {
   }, [fromSiteVisit, projectId, searchParamsString])
   const isMobile = useIsMobile()
   const [tab, setTab] = useState(sp.get("tab") || "mappingsheets")
+  const tabsRef = useRef<HTMLDivElement>(null)
+  const [isTabsSticky, setIsTabsSticky] = useState(false)
+
+  // Track scroll position to make tabs sticky
+  useEffect(() => {
+    const handleScroll = () => {
+      if (tabsRef.current) {
+        const rect = tabsRef.current.getBoundingClientRect()
+        // Stick when tabs reach 64px from top (below header)
+        setIsTabsSticky(rect.top <= 64)
+      }
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
 
   // Get user's accessible patches for access control
   const { patches: accessiblePatches, isLoading: accessiblePatchesLoading, role } = useAccessiblePatches()
@@ -932,9 +947,22 @@ export default function ProjectDetailPage() {
         ) : null}
       </div>
 
-      {/* Tabs Navigation - At the top for easy access */}
+      {/* Tabs Navigation - Sticky at the top for easy access */}
       <Tabs value={tab} onValueChange={setTab}>
-        <div className="bg-white dark:bg-gray-950 border rounded-lg shadow-sm p-2 mb-4">
+        {/* Placeholder to maintain layout when tabs become fixed */}
+        {isTabsSticky && <div style={{ height: '60px' }} />}
+        <div 
+          ref={tabsRef}
+          className={`bg-white dark:bg-gray-950 border-b shadow-md p-2 transition-all ${
+            isTabsSticky 
+              ? 'fixed left-0 right-0 px-6' 
+              : 'rounded-lg border mx-0'
+          }`}
+          style={isTabsSticky ? { 
+            top: '64px', 
+            zIndex: 25,
+          } : undefined}
+        >
           <TabsList className="h-auto bg-transparent p-0 gap-1.5 w-full flex-wrap border-0">
           {/* Sites tab trigger hidden; accessible via Overview 'Sites' link */}
           <TabsTrigger
