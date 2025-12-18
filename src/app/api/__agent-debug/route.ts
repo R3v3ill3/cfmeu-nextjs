@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { appendFile } from "node:fs/promises"
+import * as Sentry from "@sentry/nextjs"
 
 export const runtime = "nodejs"
 
@@ -8,7 +9,10 @@ const DEBUG_INGEST_ENDPOINT =
   "http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2"
 
 export async function POST(req: Request) {
-  if (process.env.NODE_ENV === "production") {
+  const isProd = process.env.NODE_ENV === "production"
+  const cookieHeader = req.headers.get("cookie") || ""
+  const allowProdDebug = cookieHeader.includes("__agent_debug=1")
+  if (isProd && !allowProdDebug) {
     return NextResponse.json({ ok: false }, { status: 404 })
   }
 
@@ -20,29 +24,51 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false }, { status: 400 })
     }
 
-    // Append as NDJSON
-    await appendFile(DEBUG_LOG_PATH, `${JSON.stringify(body)}\n`, { encoding: "utf8" })
+    if (!isProd) {
+      // Append as NDJSON
+      await appendFile(DEBUG_LOG_PATH, `${JSON.stringify(body)}\n`, { encoding: "utf8" })
 
-    // Also forward to debug ingest (server-local) so it's visible even if the file path isn't readable.
-    // #region agent log
-    fetch(DEBUG_INGEST_ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sessionId: "debug-session",
-        runId: "pre-fix",
-        hypothesisId: "E",
-        location: "src/app/api/__agent-debug/route.ts:POST",
-        message: "Relay received client debug payload",
-        data: {
-          keys: Object.keys(body ?? {}),
-          hasSessionId: typeof (body as any)?.sessionId === "string",
-          hasLocation: typeof (body as any)?.location === "string",
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {})
-    // #endregion
+      // Also forward to debug ingest (server-local) so it's visible even if the file path isn't readable.
+      // #region agent log
+      fetch(DEBUG_INGEST_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: "debug-session",
+          runId: "pre-fix",
+          hypothesisId: "E",
+          location: "src/app/api/__agent-debug/route.ts:POST",
+          message: "Relay received client debug payload",
+          data: {
+            keys: Object.keys(body ?? {}),
+            hasSessionId: typeof (body as any)?.sessionId === "string",
+            hasLocation: typeof (body as any)?.location === "string",
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {})
+      // #endregion
+    } else {
+      // Prod (debug gated): send to Sentry + Vercel logs (avoid filesystem writes)
+      try {
+        const payload = body as Record<string, unknown>
+        Sentry.withScope((scope) => {
+          scope.setLevel("info")
+          scope.setTag("component", "agent-debug-relay")
+          scope.setExtra("keys", Object.keys(payload ?? {}))
+          scope.setExtra("payload", payload)
+          Sentry.captureMessage("[AgentDebug] relay payload (__agent)")
+        })
+      } catch {}
+      try {
+        console.log("[AgentDebug] relay payload (__agent)", {
+          keys: Object.keys((body as any) ?? {}),
+          location: (body as any)?.location ?? null,
+          message: (body as any)?.message ?? null,
+          timestamp: new Date().toISOString(),
+        })
+      } catch {}
+    }
 
     return NextResponse.json({ ok: true })
   } catch {

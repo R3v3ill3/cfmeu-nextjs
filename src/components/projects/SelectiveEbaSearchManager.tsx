@@ -186,7 +186,7 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
           id,
           employer_id,
           employers!inner(id, name, enterprise_agreement_status),
-          contractor_role_types!inner(code, label)
+          contractor_role_types!inner(code, name)
         `)
         .eq('project_id', projectId)
         .eq('assignment_type', 'contractor_role');

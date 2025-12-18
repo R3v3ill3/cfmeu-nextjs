@@ -31,6 +31,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const instanceIdRef = useRef(`auth-${Math.random().toString(36).slice(2, 10)}`);
   const hadSessionRef = useRef(false);
   const recoveryAttemptedRef = useRef(false);
+  const sessionLossReportedRef = useRef(false);
   const isSubscribedRef = useRef(true);
   const sessionRef = useRef<Session | null>(null);
   const recoveryTimeoutRef = useRef<NodeJS.Timeout>();
@@ -244,6 +245,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (newSession) {
           hadSessionRef.current = true;
           recoveryAttemptedRef.current = false;
+          sessionLossReportedRef.current = false;
 
           // Clear any pending recovery timeout since we now have a valid session
           if (recoveryTimeoutRef.current) {
@@ -294,6 +296,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               timestamp,
               previousUserId: sessionRef.current?.user?.id ?? null,
             }, 'warning');
+            if (typeof window !== 'undefined' && !sessionLossReportedRef.current) {
+              sessionLossReportedRef.current = true;
+              try {
+                Sentry.withScope((scope) => {
+                  scope.setLevel('warning');
+                  scope.setTag('component', 'useAuth');
+                  scope.setTag('auth_event', event);
+                  scope.setExtra('instanceId', instanceIdRef.current);
+                  scope.setExtra('path', window.location?.pathname ?? null);
+                  scope.setExtra(
+                    'previousUserIdSuffix',
+                    (sessionRef.current?.user?.id ?? '').slice(-6) || null
+                  );
+                  Sentry.captureMessage('[Auth] Session lost unexpectedly');
+                });
+              } catch {}
+            }
             // #region agent log
             fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'E',location:'src/hooks/useAuth.tsx:onAuthStateChange',message:'onAuthStateChange indicates unexpected session loss',data:{event,previousUserIdSuffix:(sessionRef.current?.user?.id??'').slice(-6)},timestamp:Date.now()})}).catch(()=>{});
             // #endregion

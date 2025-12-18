@@ -23,8 +23,18 @@ export function useCoreComplianceData(projectId: string) {
       // Get site contacts from mapping sheets
       const { data: siteContacts, error: siteError } = await supabase
         .from("site_contacts")
-        .select("*")
-        .eq("project_id", projectId);
+        .select(
+          `
+            id,
+            role,
+            name,
+            email,
+            phone,
+            job_site_id,
+            job_sites!inner(project_id)
+          `
+        )
+        .eq("job_sites.project_id", projectId);
 
       if (siteError && siteError.code !== 'PGRST116') {
         console.error("Error fetching site contacts:", siteError);
@@ -40,9 +50,10 @@ export function useCoreComplianceData(projectId: string) {
             surname,
             email,
             mobile_phone
-          )
+          ),
+          job_sites!inner(project_id)
         `)
-        .eq("job_site_id", projectId)
+        .eq("job_sites.project_id", projectId)
         .is("end_date", null);
 
       if (unionError && unionError.code !== 'PGRST116') {

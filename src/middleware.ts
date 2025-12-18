@@ -8,6 +8,7 @@ export async function middleware(req: NextRequest) {
   })
   const requestId = req.headers.get('x-request-id') ?? crypto.randomUUID()
   const path = req.nextUrl.pathname
+  const allowLocalDebugIngest = req.nextUrl.searchParams.get('__agent_debug') === '1'
   const isHttps =
     req.nextUrl.protocol === 'https:' || req.headers.get('x-forwarded-proto') === 'https'
 
@@ -72,8 +73,18 @@ export async function middleware(req: NextRequest) {
     const requestHeaders = new Headers(req.headers)
     requestHeaders.set('x-nonce', nonce)
     supabaseResponse.headers.set('x-nonce', nonce)
-    const csp = buildCSP(nonce)
+    const csp = buildCSP(nonce, { allowLocalDebugIngest })
     supabaseResponse.headers.set('Content-Security-Policy', csp)
+    if (allowLocalDebugIngest) {
+      // Persist debug flag across navigations (prod-safe, short-lived).
+      supabaseResponse.cookies.set('__agent_debug', '1', {
+        path: '/',
+        sameSite: 'lax',
+        secure: isHttps,
+        maxAge: 60 * 60, // 1 hour
+        httpOnly: true,
+      })
+    }
 
     // Release connection for public path
     releaseConnection('middleware', middlewareConnectionId)
@@ -267,8 +278,18 @@ export async function middleware(req: NextRequest) {
   supabaseResponse.headers.set('x-nonce', nonce)
 
   // Build and set CSP with nonce
-  const csp = buildCSP(nonce)
+  const csp = buildCSP(nonce, { allowLocalDebugIngest })
   supabaseResponse.headers.set('Content-Security-Policy', csp)
+  if (allowLocalDebugIngest) {
+    // Persist debug flag across navigations (prod-safe, short-lived).
+    supabaseResponse.cookies.set('__agent_debug', '1', {
+      path: '/',
+      sameSite: 'lax',
+      secure: isHttps,
+      maxAge: 60 * 60, // 1 hour
+      httpOnly: true,
+    })
+  }
 
   } catch (error) {
     // Record any middleware errors for connection monitoring
@@ -284,10 +305,23 @@ export async function middleware(req: NextRequest) {
   return supabaseResponse
 }
 
-function buildCSP(nonce: string): string {
+function buildCSP(
+  nonce: string,
+  opts?: {
+    /**
+     * Allow connecting to the local debug ingest server from the browser.
+     * This is useful for diagnosing production-only issues when running the
+     * debug ingest server locally and browsing the production deployment.
+     *
+     * NOTE: Keep disabled unless explicitly requested via URL flag.
+     */
+    allowLocalDebugIngest?: boolean
+  }
+): string {
   const isDev = process.env.NODE_ENV !== 'production'
   const isVercelPreview = process.env.VERCEL_ENV === 'preview' || process.env.VERCEL_ENV === 'development'
   const allowVercelLive = isDev || isVercelPreview
+  const allowLocalDebugIngest = opts?.allowLocalDebugIngest === true
 
   // Build connect-src with required origins
   const connectSrc = [
@@ -311,8 +345,10 @@ function buildCSP(nonce: string): string {
     if (!connectSrc.includes('http://localhost:3200')) connectSrc.push('http://localhost:3200')
   }
 
-  // Local debug-mode log ingest server (NDJSON) - allow in dev even when worker URL is configured
-  if (isDev) {
+  // Local debug-mode log ingest server (NDJSON)
+  // - Always allowed in dev
+  // - Allowed in production ONLY when explicitly enabled via URL flag (see middleware)
+  if (isDev || allowLocalDebugIngest) {
     if (!connectSrc.includes('http://127.0.0.1:7242')) connectSrc.push('http://127.0.0.1:7242')
     if (!connectSrc.includes('http://localhost:7242')) connectSrc.push('http://localhost:7242')
   }

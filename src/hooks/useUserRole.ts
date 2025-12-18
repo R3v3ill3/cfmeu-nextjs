@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query"
 import { useAuth } from "@/hooks/useAuth"
 import { useHelpContext } from "@/context/HelpContext"
 import { supabase } from "@/integrations/supabase/client"
+import * as Sentry from "@sentry/nextjs"
 
 interface UseUserRoleResult {
   role: string | null
@@ -230,6 +231,34 @@ export function useUserRole(): UseUserRoleResult {
         errorMessage: error instanceof Error ? error.message : String(error),
         timestamp: new Date().toISOString(),
       });
+      // Capture a low-volume, high-signal signal in production for session/permission loss.
+      // Avoid capturing every transient network error.
+      try {
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        const errorCode = (error as any)?.code ?? null
+        const shouldCapture =
+          errorCode === 'PGRST116' ||
+          errorCode === '42501' ||
+          (typeof errorMessage === 'string' &&
+            (errorMessage.includes('Auth session missing') ||
+              errorMessage.includes('JWT') ||
+              errorMessage.includes('row-level security') ||
+              errorMessage.includes('permission denied')))
+
+        if (shouldCapture) {
+          Sentry.withScope((scope) => {
+            scope.setLevel('warning')
+            scope.setTag('component', 'useUserRole')
+            if (errorCode) scope.setTag('supabase_code', String(errorCode))
+            scope.setExtra('path', typeof window !== 'undefined' ? window.location?.pathname : null)
+            scope.setExtra('userIdSuffix', user?.id ? user.id.slice(-6) : null)
+            scope.setExtra('cachedRole', cachedRole)
+            scope.setExtra('serverProvidedRole', serverProvidedRole ?? null)
+            scope.setExtra('errorMessage', errorMessage)
+            Sentry.captureMessage('[Auth] useUserRole query error')
+          })
+        }
+      } catch {}
       // #region agent log
       fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'B',location:'src/hooks/useUserRole.ts:onError',message:'useUserRole query error',data:{userIdSuffix:(user?.id??'').slice(-6),cachedRole,errorMessage:error instanceof Error?error.message:String(error),errorCode:(error as any)?.code??null},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
