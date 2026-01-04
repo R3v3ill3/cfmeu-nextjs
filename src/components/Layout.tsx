@@ -371,6 +371,7 @@ const Layout = ({ children, onRefresh }: LayoutProps) => {
       <header
         ref={headerRef}
         className="border-b sticky top-0 z-40 bg-white shadow-md safe-area-inset-top"
+        style={{ willChange: 'transform' }}
       >
         <div className="flex h-16 items-center px-4 max-lg:px-safe">
           {/* Mobile back button */}
