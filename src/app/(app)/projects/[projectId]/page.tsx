@@ -141,9 +141,34 @@ export default function ProjectDetailPage() {
   const tabsRef = useRef<HTMLDivElement>(null)
   const [isTabsSticky, setIsTabsSticky] = useState(false)
   const [tabsHeight, setTabsHeight] = useState<number>(60) // Default height, will be measured
+  const [headerHeight, setHeaderHeight] = useState<number>(64) // Default header height, will be measured
 
   // Track scroll position to make tabs sticky and measure height
   useEffect(() => {
+    // Measure actual header height including safe area insets and border
+    const measureHeaderHeight = () => {
+      const header = document.querySelector('header')
+      if (header) {
+        // offsetHeight includes border, padding, and content
+        const height = header.offsetHeight
+        if (height > 0) {
+          setHeaderHeight(height)
+        } else {
+          // Fallback: calculate from computed styles if offsetHeight is 0
+          const computedStyle = window.getComputedStyle(header)
+          const borderTop = parseFloat(computedStyle.borderTopWidth) || 0
+          const borderBottom = parseFloat(computedStyle.borderBottomWidth) || 0
+          const paddingTop = parseFloat(computedStyle.paddingTop) || 0
+          const paddingBottom = parseFloat(computedStyle.paddingBottom) || 0
+          const contentHeight = header.clientHeight - paddingTop - paddingBottom
+          const totalHeight = contentHeight + paddingTop + paddingBottom + borderTop + borderBottom
+          if (totalHeight > 0) {
+            setHeaderHeight(totalHeight)
+          }
+        }
+      }
+    }
+    
     // Measure tabs height when component mounts or when not sticky
     const measureTabsHeight = () => {
       if (tabsRef.current) {
@@ -157,9 +182,7 @@ export default function ProjectDetailPage() {
     const handleScroll = () => {
       if (tabsRef.current) {
         const rect = tabsRef.current.getBoundingClientRect()
-        // Account for safe area insets on mobile (header is 64px / 4rem)
-        // Stick when tabs reach header height from top (below header)
-        const headerHeight = 64
+        // Use measured header height for accurate positioning
         const shouldBeSticky = rect.top <= headerHeight
         setIsTabsSticky(shouldBeSticky)
         // Measure height when not sticky to use for placeholder
@@ -181,15 +204,19 @@ export default function ProjectDetailPage() {
     }
     window.addEventListener('scroll', optimizedScroll, { passive: true })
     // Initial check and measurement
+    measureHeaderHeight()
     measureTabsHeight()
     handleScroll()
     // Also measure on resize
-    window.addEventListener('resize', measureTabsHeight, { passive: true })
+    window.addEventListener('resize', () => {
+      measureHeaderHeight()
+      measureTabsHeight()
+    }, { passive: true })
     return () => {
       window.removeEventListener('scroll', optimizedScroll)
       window.removeEventListener('resize', measureTabsHeight)
     }
-  }, [])
+  }, [headerHeight])
 
   // Get user's accessible patches for access control
   const { patches: accessiblePatches, isLoading: accessiblePatchesLoading, role } = useAccessiblePatches()
@@ -990,13 +1017,13 @@ export default function ProjectDetailPage() {
         {isTabsSticky && <div style={{ height: `${tabsHeight}px` }} />}
         <div 
           ref={tabsRef}
-          className={`bg-white dark:bg-gray-950 border-b shadow-md p-2 transition-all ${
+          className={`bg-white dark:bg-gray-950 border-b shadow-md transition-all ${
             isTabsSticky 
-              ? 'fixed left-0 right-0 px-6 z-30' 
-              : 'rounded-lg border mx-0'
+              ? 'fixed left-0 right-0 px-6 z-30 py-2' 
+              : 'rounded-lg border mx-0 p-2'
           }`}
           style={isTabsSticky ? { 
-            top: '64px', 
+            top: `${headerHeight}px`, 
             zIndex: 30,
           } : undefined}
         >
