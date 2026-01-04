@@ -370,7 +370,7 @@ const Layout = ({ children, onRefresh }: LayoutProps) => {
       {/* Header */}
       <header
         ref={headerRef}
-        className="border-b sticky top-0 z-40 bg-white shadow-md safe-area-inset-top"
+        className={`border-b ${isMobile() ? 'fixed' : 'sticky'} top-0 left-0 right-0 z-40 bg-white shadow-md safe-area-inset-top`}
         style={{ willChange: 'transform' }}
       >
         <div className="flex h-16 items-center px-4 max-lg:px-safe">
@@ -568,10 +568,15 @@ const Layout = ({ children, onRefresh }: LayoutProps) => {
         )}
       </header>
 
-      {/* Main content */}
-      <main className={`flex-1 px-safe py-4 transition-opacity duration-200 relative ${
-        isNavigating ? 'opacity-50 pointer-events-none' : 'opacity-100'
-      }`}>
+      {/* Main content - add padding-top on mobile to account for fixed header (64px = 4rem) */}
+      <main 
+        className={`flex-1 px-safe py-4 transition-opacity duration-200 relative ${
+          isNavigating ? 'opacity-50 pointer-events-none' : 'opacity-100'
+        }`}
+        style={isMobile() ? { 
+          paddingTop: `calc(4rem + env(safe-area-inset-top))` 
+        } : undefined}
+      >
         {/* Pull-to-refresh indicator */}
         {isMobile() && (
           <div
