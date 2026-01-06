@@ -1,0 +1,44 @@
+---
+description: Systematic debugging workflow (repro → isolate → fix → regression net)
+globs:
+  - "**/*"
+alwaysApply: true
+---
+
+## Default debugging loop
+1. **Reproduce**: write down exact steps, role, environment, URL, expected vs actual.
+2. **Observe**: collect evidence before changing code:
+   - UI screenshots (mobile + desktop if relevant)
+   - network request + response payloads (redact secrets)
+   - server logs / worker logs (if applicable)
+   - relevant DB rows / RLS outcomes (what query is denied/empty?)
+3. **Localize**: narrow to the smallest failing boundary:
+   - UI component vs API route vs worker vs Supabase/RLS
+4. **Validate assumptions**:
+   - current user role + patch assignments
+   - environment variables and worker URLs
+   - whether the path is served by App Router route, API route, or worker call
+5. **Fix minimally**:
+   - smallest patch that resolves the root cause
+   - avoid refactors unless required to fix correctness
+6. **Regression net**:
+   - run the narrowest relevant tests
+   - if UI/navigation touched, prioritize mobile tests
+
+## Always ask for (or infer from context)
+- **Role**: admin / lead_organiser / organiser / delegate / viewer
+- **Scope**: which patch/area? which project/employer?
+- **Environment**: local vs Vercel prod, and whether workers are local vs Railway
+- **Repro determinism**: does it happen always, or only for certain records?
+
+## High-signal artifacts to produce while debugging
+- A short “bug dossier”:
+  - repro steps
+  - root cause (1–3 sentences)
+  - fix summary
+  - regression checks performed
+
+## Guardrails
+- Do not “fix” by broadening access in the UI; permissions live in **RLS**.
+- Do not add heavy client-side filtering for large lists; push filters server-side.
+

@@ -1,0 +1,31 @@
+---
+description: Workers + environment guidance (Vercel app + Railway workers + local dev)
+globs:
+  - "railway_workers/**"
+  - "src/**"
+  - "package.json"
+alwaysApply: true
+---
+
+## Multi-service architecture is intentional
+- Main app: Next.js (local + Vercel).
+- Workers: long-running services under `railway_workers/` (local + Railway).
+- Shared data: Supabase project (Postgres + RLS + RPCs).
+
+## Local dev reality
+- Prefer using the existing npm scripts:
+  - `dev:app` (Next app on :3000, uses dashboard worker URL)
+  - `dev:all` / `dev:all:mac` (runs app + workers)
+  - worker dev scripts under `package.json`
+- Do not hardcode production URLs; use environment variables already established in this repo.
+
+## Worker integration rules
+- If the app calls a worker (e.g. dashboard caching), the worker URL must be configurable.
+- Workers should stay independently runnable; avoid coupling them to the Next app runtime beyond shared Supabase credentials.
+
+## Debug checklist when a worker feature fails
+- Is the worker running locally (or reachable in the target environment)?
+- Is the correct URL configured (e.g. `NEXT_PUBLIC_DASHBOARD_WORKER_URL`)?
+- Does the worker have Supabase keys configured?
+- Is the failure a queue issue (job enqueued but not consumed) vs an API issue?
+

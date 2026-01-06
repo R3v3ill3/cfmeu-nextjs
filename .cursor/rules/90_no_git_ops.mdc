@@ -1,0 +1,11 @@
+---
+description: Safety guardrail — no git operations unless user explicitly approves each command
+globs:
+  - "**/*"
+alwaysApply: true
+---
+
+## Git safety rule
+- Do **not** run any git commands unless the user explicitly requests/approves the exact command.
+- If a git command would be helpful, propose it first and wait for approval.
+

@@ -1,0 +1,43 @@
+---
+description: CFMEU organising database — project context for Cursor agents
+globs:
+  - "**/*"
+alwaysApply: true
+---
+
+## Mission
+You are working on the **CFMEU NSW construction union organising database**. This system supports organisers, lead organisers, admins, delegates, and viewers. Primary users are **field organisers on iPhone 13+** in construction site conditions (glare, gloves, poor connectivity).
+
+## Core user workflows (do not break)
+- **Project mapping**: identify employers/delegates/workers on sites.
+- **Compliance auditing**: traffic-light style outcomes, evidence capture, delegated tasks.
+- **Delegate coordination**: assign tasks, track completion.
+- **Geographic discovery/navigation**: near-me projects, maps, directions.
+- **Employer management**: search, merge/duplicates, worksites presence.
+
+## Architecture snapshot
+- **Frontend**: Next.js 14 App Router + TypeScript + Tailwind v4.
+- **Backend**: Next.js API routes + multiple long-running **Railway workers**.
+- **Database**: Supabase Postgres with **RLS** (permissions enforced at DB layer).
+- **Deployment**: Vercel (app) + Railway (workers).
+
+Reference: `docs/ARCHITECTURE.md`, `claude.md`.
+
+## Non-negotiable constraints
+- **Mobile-first**: if it’s wrong on mobile, it’s wrong. Validate iPhone 13+ layout/tap targets.
+- **RLS truth**: permissions must be correct at the database layer; UI must not assume access.
+- **Large datasets**: prefer server-side filtering/pagination; avoid fetching “all then filter”.
+- **Multi-service reality**: bugs may live in Next app, workers, or Supabase/RLS/migrations.
+
+## Where to look first (entry points)
+- **App shells / auth guard**: `src/app/layout.tsx`, `src/app/(app)/layout.tsx`, `src/middleware.ts`.
+- **Routes**: `src/app/**` (especially `/mobile`).
+- **API routes**: `src/app/api/**/route.ts`.
+- **Supabase clients**: `src/lib/supabase/client.ts`, `src/lib/supabase/server.ts`.
+- **Workers**: `railway_workers/**`.
+- **DB schema & RLS**: `supabase/migrations/**`.
+
+## Testing posture
+- Mobile E2E exists; prefer it when touching UI or navigation.
+- Local scripts are defined in `package.json` (dev, workers, mobile test runner).
+

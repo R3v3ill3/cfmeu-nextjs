@@ -1,0 +1,31 @@
+---
+description: Mobile-first UX constraints (iPhone 13+ field use) and test expectations
+globs:
+  - "src/app/mobile/**"
+  - "src/components/**"
+  - "src/app/**"
+alwaysApply: true
+---
+
+## Mobile is the primary product
+- Target device: **iPhone 13+** (mobile Safari + installed PWA).
+- Field context: glare, gloves, poor connectivity. Prefer simple flows and large tap targets.
+
+## Layout and interaction rules
+- Minimum tap target ~44x44px.
+- Avoid fixed widths; use responsive patterns and safe-area padding.
+- Prevent label/validation overflow. Prefer wrapping + sensible truncation.
+- Provide clear back-navigation and breadcrumbs on mobile.
+
+## Known UX requirements (do not regress)
+- Mobile left drawer must be **fully opaque (white) in light theme** and sit **above** the overlay.
+- Desktop sticky header must be **solid white** with a shadow.
+- Navigation loading dialog must be **solid white** with a moderately dark dim overlay that covers the header too.
+
+## Mobile testing expectations
+- When changing layouts/navigation/forms, validate with Playwright mobile suite (see `package.json` scripts).
+- Prefer testing the smallest iPhone target first (iPhone 13 class viewport).
+
+## PWA / geofencing notes
+- iOS geofencing requires foreground PWA usage; follow `README.md` and `docs/ios-geofencing-setup.md`.
+

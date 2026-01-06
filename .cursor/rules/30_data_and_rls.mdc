@@ -1,0 +1,36 @@
+---
+description: Data consistency + Supabase RLS guardrails (permissions, filtering, integrity)
+globs:
+  - "src/**"
+  - "supabase/**"
+alwaysApply: true
+---
+
+## RLS is the source of truth
+- Assume **database RLS policies** are authoritative for access control.
+- UI must not “paper over” permission issues by hiding errors or showing partial data without explaining.
+
+## Prefer server-side filtering & pagination
+- For large datasets (projects, employers, mapping views), avoid: fetch-all → client filter.
+- Prefer:
+  - filtered DB queries / RPCs
+  - API routes that apply filters server-side
+  - materialized views where appropriate
+
+## Data model heuristics (common pitfalls)
+- Use `job_sites` for specific locations; use `projects` for project-level metadata.
+- Use `site_employers` for employer presence at a site.
+- Use `project_employer_roles` for formal roles (builder/head contractor/project manager/etc).
+- Patches drive organiser access; always consider patch assignments when a “missing data” bug appears.
+
+## Implementation guardrails
+- When adding/adjusting API routes, ensure authorization is enforced (and aligns with RLS).
+- Only use Supabase service-role key where necessary; keep it server-only and minimize blast radius.
+- When modifying schema/migrations, ensure RLS policies are updated and tested for each role.
+
+## Debug checklist for “data missing” bugs
+- Confirm user role + patch assignments.
+- Confirm query uses the correct table/view for the use case.
+- Check whether RLS is filtering rows (vs query logic returning empty).
+- Validate joins don’t accidentally turn into inner-joins that drop rows.
+
