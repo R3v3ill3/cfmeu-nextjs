@@ -13,9 +13,6 @@ import { AppRole } from '@/constants/roles'
 import { ReactNode } from 'react'
 import { randomUUID } from 'crypto'
 
-const __AGENT_DEBUG_INGEST_ENDPOINT =
-  'http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2'
-
 interface UserProfile {
   id: string
   email: string | null
@@ -72,10 +69,6 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const hdrs = await headers()
   const requestId = hdrs.get('x-request-id') ?? randomUUID()
   const currentPath = hdrs.get('x-pathname') || ''
-  const cookieHeader = hdrs.get('cookie')
-  const hasCookieHeader = !!cookieHeader
-  const hasSupabaseCookie = cookieHeader ? cookieHeader.includes('sb-') : false
-  const shouldDebugAuthPath = (currentPath || '').startsWith('/projects')
   const userAgent = hdrs.get('user-agent') || undefined
   const isMobile = isMobileOrTablet(userAgent)
 
@@ -84,12 +77,6 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     path: currentPath || '/',
     userAgent,
   })
-
-  if (process.env.NODE_ENV !== 'production' && shouldDebugAuthPath) {
-    // #region agent log
-    fetch(__AGENT_DEBUG_INGEST_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H4',location:'src/app/(app)/layout.tsx:request-snapshot',message:'AppLayout request snapshot (projects path)',data:{requestIdSuffix:requestId.slice(-6),path:currentPath||'/',hasCookieHeader,hasSupabaseCookie},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-  }
 
   const supabase = await createServerSupabase()
   
@@ -106,11 +93,6 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   }
   
   if (!user) {
-    if (process.env.NODE_ENV !== 'production' && shouldDebugAuthPath) {
-      // #region agent log
-      fetch(__AGENT_DEBUG_INGEST_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H4',location:'src/app/(app)/layout.tsx:no-user',message:'AppLayout saw no user; redirecting to /auth',data:{requestIdSuffix:requestId.slice(-6),path:currentPath||'/',hasCookieHeader,hasSupabaseCookie},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-    }
     logAppLayout('No user found, redirecting to /auth', { requestId })
     redirect('/auth')
   }
@@ -123,12 +105,6 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   })
   const role = profile?.role ?? null
   const layoutDuration = Date.now() - layoutStartTime
-
-  if (process.env.NODE_ENV !== 'production' && shouldDebugAuthPath) {
-    // #region agent log
-    fetch(__AGENT_DEBUG_INGEST_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H4',location:'src/app/(app)/layout.tsx:profile-resolved',message:'AppLayout resolved auth/profile (projects path)',data:{requestIdSuffix:requestId.slice(-6),path:currentPath||'/',userIdSuffix:user.id.slice(-6),hasProfile:!!profile,role,isActive:profile?.is_active??null},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-  }
 
   // SECURITY: Validate user has a valid profile with a role
   // This prevents unauthorized OAuth users from accessing the app

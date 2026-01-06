@@ -529,28 +529,6 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
     const employerIds = Array.from(selectedEmployers);
 
     try {
-      // #region agent log
-      fetch("/api/agent-debug", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId: "debug-session",
-          runId: "prod-repro",
-          hypothesisId: "P1",
-          location: "src/components/projects/SelectiveEbaSearchManager.tsx:startEbaSearch:before",
-          message: "startEbaSearch invoked",
-          data: {
-            projectIdSuffix: projectId ? projectId.slice(-6) : null,
-            selectedCount: selectedEmployers.size,
-            hasServiceWorkerController:
-              typeof navigator !== "undefined" ? !!navigator.serviceWorker?.controller : null,
-            path: typeof window !== "undefined" ? window.location?.pathname : null,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {})
-      // #endregion
-
       const jobOptions: FwcLookupJobOptions = {
         priority: 'normal',
         skipExisting: filters.ebaStatus === 'missing_only',
@@ -576,47 +554,8 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
         }),
       })
 
-      // #region agent log
-      fetch("/api/agent-debug", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId: "debug-session",
-          runId: "prod-repro",
-          hypothesisId: "P1",
-          location: "src/components/projects/SelectiveEbaSearchManager.tsx:startEbaSearch:after",
-          message: "startEbaSearch response received",
-          data: {
-            status: response.status,
-            ok: response.ok,
-            path: typeof window !== "undefined" ? window.location?.pathname : null,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {})
-      // #endregion
-
       if (!response.ok) {
         const text = await response.text().catch(() => '')
-        // #region agent log
-        fetch("/api/agent-debug", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sessionId: "debug-session",
-            runId: "prod-repro",
-            hypothesisId: "P1",
-            location: "src/components/projects/SelectiveEbaSearchManager.tsx:startEbaSearch:not-ok",
-            message: "startEbaSearch non-OK response",
-            data: {
-              status: response.status,
-              bodySnippet: text ? String(text).slice(0, 200) : null,
-              path: typeof window !== "undefined" ? window.location?.pathname : null,
-            },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {})
-        // #endregion
         throw new Error(text)
       }
 
@@ -632,24 +571,6 @@ export default function SelectiveEbaSearchManager({ projectId, onClose }: Select
 
     } catch (error) {
       console.error('Failed to start EBA search:', error);
-      // #region agent log
-      fetch("/api/agent-debug", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId: "debug-session",
-          runId: "prod-repro",
-          hypothesisId: "P1",
-          location: "src/components/projects/SelectiveEbaSearchManager.tsx:startEbaSearch:catch",
-          message: "startEbaSearch threw",
-          data: {
-            errorMessage: error instanceof Error ? error.message : String(error),
-            path: typeof window !== "undefined" ? window.location?.pathname : null,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {})
-      // #endregion
       toast({
         title: 'Search Failed',
         description: 'Failed to start EBA search. Please try again.',

@@ -55,9 +55,6 @@ export function useUserProfile(staleTime = 5 * 60 * 1000) {
 
         return (response as { data: UserProfileRecord | null }).data ?? null;
       } catch (error) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'B',location:'src/hooks/useUserProfile.ts:queryFn',message:'useUserProfile query failed',data:{userIdSuffix,errorMessage:error instanceof Error?error.message:String(error),errorCode:(error as any)?.code??null,usedAbortController:!!abortController},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         throw error;
       }
     },

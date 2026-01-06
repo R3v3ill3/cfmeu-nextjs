@@ -183,9 +183,6 @@ export function getSupabaseBrowserClient(): ReturnType<typeof createBrowserClien
  */
 export function resetSupabaseBrowserClient(): void {
   logSupabaseEvent('Resetting browser client')
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'C',location:'src/lib/supabase/client.ts:resetSupabaseBrowserClient',message:'resetSupabaseBrowserClient invoked',data:{hadExistingClient:!!browserClient,hasConnectionId:!!(browserClient as any)?.__connectionId},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
 
   // Release connection from monitoring
   if (browserClient && browserClient.__connectionId) {

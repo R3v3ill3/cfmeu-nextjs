@@ -72,6 +72,8 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         {nonce ? <meta name="csp-nonce" content={nonce} /> : null}
+        {/* Modern PWA meta tag (alongside Next.js-generated apple-mobile-web-app-capable) */}
+        <meta name="mobile-web-app-capable" content="yes" />
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />

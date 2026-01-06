@@ -175,12 +175,6 @@ export async function middleware(req: NextRequest) {
         sbCookieCount: sbCookies.length,
         sbCookieNames: sbCookies.map(c => c.name),
       });
-      // #region agent log
-      if (process.env.NODE_ENV !== 'production') {
-        fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'D',location:'src/middleware.ts:authError',message:'middleware auth error with sb cookies',data:{path,authDuration,hasAuthCode,sbCookieCount:sbCookies.length,errorMessage:authError.message,errorStatus:authError.status??null},timestamp:Date.now()})}).catch(()=>{});
-      }
-      // #endregion
-      
       // Try to refresh the session - this can recover from stale JWT tokens
       logMiddleware('log', 'Attempting session refresh due to auth error with existing cookies');
       try {
@@ -222,12 +216,6 @@ export async function middleware(req: NextRequest) {
       sbCookieCount: sbCookies.length,
       sbCookieNames: sbCookies.map(c => c.name),
     });
-    // #region agent log
-    if (process.env.NODE_ENV !== 'production') {
-      fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'D',location:'src/middleware.ts:noUser',message:'middleware saw sb cookies but no user',data:{path,authDuration,hasAuthCode,sbCookieCount:sbCookies.length},timestamp:Date.now()})}).catch(()=>{});
-    }
-    // #endregion
-    
     try {
       const refreshStartTime = Date.now();
       const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
@@ -345,13 +333,6 @@ function buildCSP(
     if (!connectSrc.includes('http://localhost:3200')) connectSrc.push('http://localhost:3200')
   }
 
-  // Local debug-mode log ingest server (NDJSON)
-  // - Always allowed in dev
-  // - Allowed in production ONLY when explicitly enabled via URL flag (see middleware)
-  if (isDev || allowLocalDebugIngest) {
-    if (!connectSrc.includes('http://127.0.0.1:7242')) connectSrc.push('http://127.0.0.1:7242')
-    if (!connectSrc.includes('http://localhost:7242')) connectSrc.push('http://localhost:7242')
-  }
 
   // Build script-src with conditional Vercel Live support
   const scriptSrc = [

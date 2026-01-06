@@ -111,11 +111,6 @@ async function getProjectsHandler(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (authError || !user) {
-      // #region agent log
-      if (process.env.NODE_ENV !== 'production') {
-        fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'F',location:'src/app/api/projects/route.ts:auth',message:'projects api unauthorized',data:{path:request.nextUrl.pathname,sbCookieCount:request.cookies.getAll().filter(c=>c.name.startsWith("sb-")).length,authErrorMessage:authError?.message??null,authErrorStatus:(authError as any)?.status??null},timestamp:Date.now()})}).catch(()=>{});
-      }
-      // #endregion
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -127,11 +122,6 @@ async function getProjectsHandler(request: NextRequest) {
 
     if (profileError) {
       console.error('Projects API failed to load profile:', profileError);
-      // #region agent log
-      if (process.env.NODE_ENV !== 'production') {
-        fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'F',location:'src/app/api/projects/route.ts:profile',message:'projects api failed to load profile',data:{path:request.nextUrl.pathname,userIdSuffix:user.id.slice(-6),sbCookieCount:request.cookies.getAll().filter(c=>c.name.startsWith("sb-")).length,errorMessage:profileError.message,errorCode:(profileError as any).code??null,errorHint:(profileError as any).hint??null},timestamp:Date.now()})}).catch(()=>{});
-      }
-      // #endregion
       return NextResponse.json({ error: 'Unable to load user profile' }, { status: 500 });
     }
 
@@ -197,12 +187,6 @@ async function getProjectsHandler(request: NextRequest) {
         patchIdsSource = 'default_by_role';
       }
     }
-
-    // #region agent log
-    if (process.env.NODE_ENV !== 'production') {
-      fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run3',hypothesisId:'G',location:'src/app/api/projects/route.ts:patch_scope',message:'projects api patch scoping resolved',data:{path:request.nextUrl.pathname,role,patchIdsSource,patchIdCount:patchIds.length,sbCookieCount:request.cookies.getAll().filter(c=>c.name.startsWith("sb-")).length},timestamp:Date.now()})}).catch(()=>{});
-    }
-    // #endregion
 
     if (role !== 'admin' && patchIds.length === 0) {
       // No accessible patches - return empty result set (prevents leaking all projects).
@@ -387,11 +371,6 @@ async function getProjectsHandler(request: NextRequest) {
 
       if (paginated.error) {
         console.error('Projects API error:', paginated.error);
-        // #region agent log
-        if (process.env.NODE_ENV !== 'production') {
-          fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'F',location:'src/app/api/projects/route.ts:fetch_page',message:'projects api failed fetching paginated view rows (fast path)',data:{path:request.nextUrl.pathname,userIdSuffix:user.id.slice(-6),sbCookieCount:request.cookies.getAll().filter(c=>c.name.startsWith("sb-")).length,errorMessage:paginated.error.message,errorCode:(paginated.error as any).code??null},timestamp:Date.now()})}).catch(()=>{});
-        }
-        // #endregion
         return NextResponse.json({ error: 'Failed to fetch projects' }, { status: 500 });
       }
 
@@ -588,11 +567,6 @@ async function getProjectsHandler(request: NextRequest) {
     
     if (allProjectsError) {
       console.error('Projects API error fetching project IDs:', allProjectsError);
-      // #region agent log
-      if (process.env.NODE_ENV !== 'production') {
-        fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'F',location:'src/app/api/projects/route.ts:project_ids',message:'projects api failed fetching project ids from view',data:{path:request.nextUrl.pathname,userIdSuffix:user.id.slice(-6),sbCookieCount:request.cookies.getAll().filter(c=>c.name.startsWith("sb-")).length,errorMessage:allProjectsError.message,errorCode:(allProjectsError as any).code??null},timestamp:Date.now()})}).catch(()=>{});
-      }
-      // #endregion
       return NextResponse.json(
         { error: 'Failed to fetch projects' },
         { status: 500 }
@@ -965,11 +939,6 @@ async function getProjectsHandler(request: NextRequest) {
       
       if (result.error) {
         console.error('Projects API error:', result.error);
-        // #region agent log
-        if (process.env.NODE_ENV !== 'production') {
-          fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'F',location:'src/app/api/projects/route.ts:fetch_page',message:'projects api failed fetching paginated view rows',data:{path:request.nextUrl.pathname,userIdSuffix:user.id.slice(-6),sbCookieCount:request.cookies.getAll().filter(c=>c.name.startsWith("sb-")).length,errorMessage:result.error.message,errorCode:(result.error as any).code??null},timestamp:Date.now()})}).catch(()=>{});
-        }
-        // #endregion
         return NextResponse.json(
           { error: 'Failed to fetch projects' },
           { status: 500 }
@@ -1083,11 +1052,6 @@ async function getProjectsHandler(request: NextRequest) {
 
   } catch (error) {
     console.error('Projects API unexpected error:', error);
-    // #region agent log
-    if (process.env.NODE_ENV !== 'production') {
-      fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'F',location:'src/app/api/projects/route.ts:catch',message:'projects api unexpected exception',data:{path:request.nextUrl.pathname,errorMessage:error instanceof Error?error.message:String(error)},timestamp:Date.now()})}).catch(()=>{});
-    }
-    // #endregion
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

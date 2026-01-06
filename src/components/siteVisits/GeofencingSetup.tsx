@@ -13,8 +13,6 @@ import { MapPin, CheckCircle2, AlertCircle, XCircle } from "lucide-react"
 import { toast } from "sonner"
 import { useGeofencingPermission } from "@/lib/geofencing/GeofencingPermissionManager"
 
-const __AGENT_DEBUG_LOG_RELAY_PATH = "/api/agent-debug"
-
 export function GeofencingSetup() {
   const router = useRouter()
   const [enabled, setEnabled] = useState(false)
@@ -118,56 +116,6 @@ export function GeofencingSetup() {
     }
   }
   const showInstallPrompt = enabled && iosInstallVisible
-
-  // #region agent log
-  useEffect(() => {
-    fetch(__AGENT_DEBUG_LOG_RELAY_PATH, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sessionId: "debug-session",
-        runId: "pre-fix",
-        hypothesisId: "F",
-        location: "src/components/siteVisits/GeofencingSetup.tsx:mount",
-        message: "GeofencingSetup mounted",
-        data: {
-          enabled,
-          isSupported,
-          hasLocationPermission,
-          hasPermissionError: !!permissionError,
-          isStandalone:
-            typeof window !== "undefined"
-              ? (window.matchMedia?.("(display-mode: standalone)")?.matches ||
-                (window.navigator as any).standalone === true)
-              : null,
-          isSecureContext: typeof window !== "undefined" ? (window as any).isSecureContext : null,
-          origin: typeof window !== "undefined" ? window.location?.origin : null,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {})
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-  // #endregion
-
-  // #region agent log
-  useEffect(() => {
-    if (!permissionError) return
-    fetch(__AGENT_DEBUG_LOG_RELAY_PATH, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sessionId: "debug-session",
-        runId: "pre-fix",
-        hypothesisId: "F",
-        location: "src/components/siteVisits/GeofencingSetup.tsx:permissionError",
-        message: "Permission error shown to user",
-        data: { permissionError },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {})
-  }, [permissionError])
-  // #endregion
 
   // Debug logging
   useEffect(() => {
