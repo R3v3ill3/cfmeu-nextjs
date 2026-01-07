@@ -1,13 +1,13 @@
 // Service Worker for CFMEU Employer Rating System PWA
 // Enhanced with Mobile Performance Optimizations
-// Version 2.2.0 - Fixed pre-caching auth-protected routes causing installation failures
+// Version 2.3.0 - Fixed deployment version mismatch by using network-first for JS chunks
 
-const CACHE_NAME = 'cfmeu-ratings-v2.2.0'
-const STATIC_CACHE = 'cfmeu-static-v2.2.0'
-const API_CACHE = 'cfmeu-api-v2.2.0'
-const DYNAMIC_CACHE = 'cfmeu-dynamic-v2.2.0'
-const MOBILE_CACHE = 'cfmeu-mobile-v2.2.0'
-const CRITICAL_DATA_CACHE = 'cfmeu-critical-v2.2.0'
+const CACHE_NAME = 'cfmeu-ratings-v2.3.0'
+const STATIC_CACHE = 'cfmeu-static-v2.3.0'
+const API_CACHE = 'cfmeu-api-v2.3.0'
+const DYNAMIC_CACHE = 'cfmeu-dynamic-v2.3.0'
+const MOBILE_CACHE = 'cfmeu-mobile-v2.3.0'
+const CRITICAL_DATA_CACHE = 'cfmeu-critical-v2.3.0'
 
 // ONLY truly static assets that don't require authentication
 // Auth-protected routes will be cached dynamically after user logs in
@@ -44,7 +44,7 @@ const MOBILE_ASSETS = [
 
 // Install event - cache ONLY truly static assets (no auth-protected routes)
 self.addEventListener('install', (event) => {
-  console.log('[SW] Installing service worker v2.2.0')
+  console.log('[SW] Installing service worker v2.3.0')
 
   event.waitUntil(
     // Only cache truly static assets that don't require authentication
@@ -76,7 +76,7 @@ self.addEventListener('install', (event) => {
 
 // Activate event - clean up old caches
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activating service worker v2.2.0')
+  console.log('[SW] Activating service worker v2.3.0')
 
   // List of current cache names to keep
   const currentCaches = [STATIC_CACHE, API_CACHE, DYNAMIC_CACHE, MOBILE_CACHE, CRITICAL_DATA_CACHE]
@@ -95,7 +95,7 @@ self.addEventListener('activate', (event) => {
         )
       })
       .then(() => {
-        console.log('[SW] Service worker v2.2.0 activated - claiming clients')
+        console.log('[SW] Service worker v2.3.0 activated - claiming clients')
         // Claim clients immediately so the new SW takes control
         return self.clients.claim()
       })
@@ -105,7 +105,7 @@ self.addEventListener('activate', (event) => {
           clients.forEach(client => {
             client.postMessage({
               type: 'SW_UPDATED',
-              version: '2.2.0',
+              version: '2.3.0',
               message: 'Service worker updated. Please refresh for best experience.'
             })
           })
@@ -172,6 +172,25 @@ async function cacheFirst(request) {
     return networkResponse
   } catch (error) {
     console.error('[SW] Failed to fetch:', request.url, error)
+    throw error
+  }
+}
+
+// Network-first for JS chunks to prevent deployment version conflicts
+// Chunks have unique hashes so we don't need aggressive caching
+async function networkFirstForChunks(request) {
+  try {
+    console.log('[SW] Network-first chunk:', request.url)
+    const networkResponse = await fetch(request)
+    return networkResponse
+  } catch (error) {
+    // Only fall back to cache if offline
+    console.log('[SW] Chunk fetch failed, trying cache:', request.url)
+    const cache = await caches.open(STATIC_CACHE)
+    const cachedResponse = await cache.match(request)
+    if (cachedResponse) {
+      return cachedResponse
+    }
     throw error
   }
 }
@@ -467,10 +486,18 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // Static assets - cache first
+  // Next.js chunks - NETWORK FIRST to prevent deployment version mismatches
+  // These files have unique hashes and deployment query params, so caching them
+  // across deployments causes version conflicts. Let the browser's HTTP cache handle them.
+  if (url.pathname.startsWith('/_next/static/chunks/')) {
+    // Use network-first for chunks to avoid cross-deployment version conflicts
+    event.respondWith(networkFirstForChunks(request))
+    return
+  }
+
+  // Other static assets - cache first (fonts, images, CSS are safe to cache)
   if (url.pathname.startsWith('/_next/static/') ||
       url.pathname.startsWith('/static/') ||
-      url.pathname.includes('.js') ||
       url.pathname.includes('.css') ||
       url.pathname.includes('.woff') ||
       url.pathname.includes('.woff2') ||
