@@ -1,7 +1,7 @@
 "use client"
 export const dynamic = 'force-dynamic'
 
-import { useState, useEffect, Suspense, lazy } from "react"
+import React, { useState, useEffect, Suspense, lazy } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
@@ -17,33 +17,132 @@ import { ChevronDown, Users, ShieldCheck, Map, Database, Navigation, Activity } 
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
 
+// Helper to wrap lazy imports with error logging
+function lazyWithErrorLogging<T extends React.ComponentType<any>>(
+  importFn: () => Promise<{ default: T }>,
+  componentName: string
+) {
+  return lazy(() => {
+    console.log(`[AdminPage] Loading lazy component: ${componentName}`)
+    return importFn()
+      .then(module => {
+        console.log(`[AdminPage] Successfully loaded: ${componentName}`)
+        return module
+      })
+      .catch(error => {
+        console.error(`[AdminPage] FAILED to load lazy component: ${componentName}`, error)
+        // Return a fallback error component
+        return {
+          default: (() => {
+            return (
+              <div className="p-4 border border-red-300 bg-red-50 rounded-md text-red-700">
+                <p className="font-medium">Failed to load {componentName}</p>
+                <p className="text-sm mt-1">{error?.message || 'Unknown error'}</p>
+                <button 
+                  onClick={() => window.location.reload()} 
+                  className="mt-2 text-sm underline"
+                >
+                  Reload page
+                </button>
+              </div>
+            )
+          }) as unknown as T
+        }
+      })
+  })
+}
+
 // Lazy load heavy components - only loaded when tab is active
-const PendingUsersTable = lazy(() => import("@/components/admin/PendingUsersTable").then(m => ({ default: m.PendingUsersTable })))
-const InviteUserDialog = lazy(() => import("@/components/admin/InviteUserDialog").then(m => ({ default: m.InviteUserDialog })))
-const AddDraftUserDialog = lazy(() => import("@/components/admin/AddDraftUserDialog").then(m => ({ default: m.AddDraftUserDialog })))
-const PendingProjectsTable = lazy(() => import("@/components/admin/PendingProjectsTable").then(m => ({ default: m.PendingProjectsTable })))
-const PendingEmployersTable = lazy(() => import("@/components/admin/PendingEmployersTable").then(m => ({ default: m.PendingEmployersTable })))
-const PendingEmployerDuplicateDetector = lazy(() => import("@/components/admin/PendingEmployerDuplicateDetector").then(m => ({ default: m.PendingEmployerDuplicateDetector })))
-const PendingProjectDuplicateDetector = lazy(() => import("@/components/admin/PendingProjectDuplicateDetector").then(m => ({ default: m.PendingProjectDuplicateDetector })))
-const UsersTable = lazy(() => import("@/components/admin/UsersTable"))
-const RoleHierarchyManager = lazy(() => import("@/components/admin/RoleHierarchyManager").then(m => ({ default: m.RoleHierarchyManager })))
-const OrganiserScopeManager = lazy(() => import("@/components/admin/OrganiserScopeManager").then(m => ({ default: m.OrganiserScopeManager })))
-const PatchManager = lazy(() => import("@/components/admin/PatchManager"))
-const SpatialAssignmentTool = lazy(() => import("@/components/admin/SpatialAssignmentTool"))
-const AddressLookupDialog = lazy(() => import("@/components/AddressLookupDialog"))
-const DuplicateEmployerManager = lazy(() => import("@/components/admin/DuplicateEmployerManager"))
-const DataUploadTab = lazy(() => import("@/components/admin/DataUploadTab"))
-const BatchesManagement = lazy(() => import("@/components/admin/BatchesManagement").then(m => ({ default: m.BatchesManagement })))
-const NavigationVisibilityManager = lazy(() => import("@/components/admin/NavigationVisibilityManager").then(m => ({ default: m.NavigationVisibilityManager })))
-const SystemHealthDashboard = lazy(() => import("@/components/admin/SystemHealthDashboard").then(m => ({ default: m.SystemHealthDashboard })))
-const CanonicalPromotionConsole = lazy(() => import("@/components/admin/CanonicalPromotionConsole"))
-const AliasAnalyticsDashboard = lazy(() => import("@/components/admin/AliasAnalyticsDashboard"))
+const PendingUsersTable = lazyWithErrorLogging(
+  () => import("@/components/admin/PendingUsersTable").then(m => ({ default: m.PendingUsersTable })),
+  "PendingUsersTable"
+)
+const InviteUserDialog = lazyWithErrorLogging(
+  () => import("@/components/admin/InviteUserDialog").then(m => ({ default: m.InviteUserDialog })),
+  "InviteUserDialog"
+)
+const AddDraftUserDialog = lazyWithErrorLogging(
+  () => import("@/components/admin/AddDraftUserDialog").then(m => ({ default: m.AddDraftUserDialog })),
+  "AddDraftUserDialog"
+)
+const PendingProjectsTable = lazyWithErrorLogging(
+  () => import("@/components/admin/PendingProjectsTable").then(m => ({ default: m.PendingProjectsTable })),
+  "PendingProjectsTable"
+)
+const PendingEmployersTable = lazyWithErrorLogging(
+  () => import("@/components/admin/PendingEmployersTable").then(m => ({ default: m.PendingEmployersTable })),
+  "PendingEmployersTable"
+)
+const PendingEmployerDuplicateDetector = lazyWithErrorLogging(
+  () => import("@/components/admin/PendingEmployerDuplicateDetector").then(m => ({ default: m.PendingEmployerDuplicateDetector })),
+  "PendingEmployerDuplicateDetector"
+)
+const PendingProjectDuplicateDetector = lazyWithErrorLogging(
+  () => import("@/components/admin/PendingProjectDuplicateDetector").then(m => ({ default: m.PendingProjectDuplicateDetector })),
+  "PendingProjectDuplicateDetector"
+)
+const UsersTable = lazyWithErrorLogging(
+  () => import("@/components/admin/UsersTable"),
+  "UsersTable"
+)
+const RoleHierarchyManager = lazyWithErrorLogging(
+  () => import("@/components/admin/RoleHierarchyManager").then(m => ({ default: m.RoleHierarchyManager })),
+  "RoleHierarchyManager"
+)
+const OrganiserScopeManager = lazyWithErrorLogging(
+  () => import("@/components/admin/OrganiserScopeManager").then(m => ({ default: m.OrganiserScopeManager })),
+  "OrganiserScopeManager"
+)
+const PatchManager = lazyWithErrorLogging(
+  () => import("@/components/admin/PatchManager"),
+  "PatchManager"
+)
+const SpatialAssignmentTool = lazyWithErrorLogging(
+  () => import("@/components/admin/SpatialAssignmentTool"),
+  "SpatialAssignmentTool"
+)
+const AddressLookupDialog = lazyWithErrorLogging(
+  () => import("@/components/AddressLookupDialog"),
+  "AddressLookupDialog"
+)
+const DuplicateEmployerManager = lazyWithErrorLogging(
+  () => import("@/components/admin/DuplicateEmployerManager"),
+  "DuplicateEmployerManager"
+)
+const DataUploadTab = lazyWithErrorLogging(
+  () => import("@/components/admin/DataUploadTab"),
+  "DataUploadTab"
+)
+const BatchesManagement = lazyWithErrorLogging(
+  () => import("@/components/admin/BatchesManagement").then(m => ({ default: m.BatchesManagement })),
+  "BatchesManagement"
+)
+const NavigationVisibilityManager = lazyWithErrorLogging(
+  () => import("@/components/admin/NavigationVisibilityManager").then(m => ({ default: m.NavigationVisibilityManager })),
+  "NavigationVisibilityManager"
+)
+const SystemHealthDashboard = lazyWithErrorLogging(
+  () => import("@/components/admin/SystemHealthDashboard").then(m => ({ default: m.SystemHealthDashboard })),
+  "SystemHealthDashboard"
+)
+const CanonicalPromotionConsole = lazyWithErrorLogging(
+  () => import("@/components/admin/CanonicalPromotionConsole"),
+  "CanonicalPromotionConsole"
+)
+const AliasAnalyticsDashboard = lazyWithErrorLogging(
+  () => import("@/components/admin/AliasAnalyticsDashboard"),
+  "AliasAnalyticsDashboard"
+)
 
 // Loading fallback component
 function TabLoadingState() {
+  // #region agent log
+  console.log('[AdminPage] TabLoadingState rendered - lazy component loading...')
+  // #endregion
   return (
     <div className="flex items-center justify-center py-12">
       <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <span className="ml-2 text-sm text-muted-foreground">Loading component...</span>
     </div>
   )
 }

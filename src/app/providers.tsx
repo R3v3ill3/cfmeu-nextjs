@@ -83,6 +83,76 @@ export default function Providers({ children }: ProvidersProps) {
     }
   }, [])
 
+  // #region agent log - Chunk loading error handler
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    // Handle chunk loading errors (common after deployments)
+    const handleChunkError = (event: ErrorEvent) => {
+      const message = event.message || ''
+      const isChunkError = 
+        message.includes('Loading chunk') ||
+        message.includes('ChunkLoadError') ||
+        message.includes('Failed to fetch dynamically imported module') ||
+        message.includes('error loading dynamically imported module')
+      
+      if (isChunkError) {
+        console.error('[ChunkError] Dynamic import failed, will reload:', message)
+        Sentry.captureException(new Error(`Chunk loading failed: ${message}`))
+        
+        // Clear caches and reload
+        if ('caches' in window) {
+          caches.keys().then(names => {
+            names.forEach(name => {
+              console.log('[ChunkError] Clearing cache:', name)
+              caches.delete(name)
+            })
+          }).finally(() => {
+            console.log('[ChunkError] Reloading page...')
+            window.location.reload()
+          })
+        } else {
+          window.location.reload()
+        }
+      }
+    }
+
+    // Handle unhandled promise rejections (lazy import failures)
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason?.message || String(event.reason) || ''
+      const isChunkError = 
+        reason.includes('Loading chunk') ||
+        reason.includes('ChunkLoadError') ||
+        reason.includes('Failed to fetch dynamically imported module') ||
+        reason.includes('error loading dynamically imported module')
+      
+      if (isChunkError) {
+        console.error('[ChunkError] Dynamic import promise rejected:', reason)
+        event.preventDefault() // Prevent default handling
+        
+        // Clear caches and reload
+        if ('caches' in window) {
+          caches.keys().then(names => {
+            names.forEach(name => caches.delete(name))
+          }).finally(() => {
+            window.location.reload()
+          })
+        } else {
+          window.location.reload()
+        }
+      }
+    }
+
+    window.addEventListener('error', handleChunkError)
+    window.addEventListener('unhandledrejection', handleUnhandledRejection)
+
+    return () => {
+      window.removeEventListener('error', handleChunkError)
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection)
+    }
+  }, [])
+  // #endregion
+
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
       return
