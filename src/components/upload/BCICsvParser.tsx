@@ -34,6 +34,8 @@ const BCI_CSV_HEADERS = [
   'Longitude',
   'Project Country',
   'Role on Project',
+  // Optional but supported for employer typing
+  'Role Group on Project',
   'Company ID',
   'Company Name',
   'Company Street Name',
@@ -76,6 +78,7 @@ interface BCICsvRow {
   longitude?: string;
   projectCountry: string;
   roleOnProject: string;
+  roleGroupOnProject?: string;
   companyId?: string;
   companyName: string;
   companyStreet: string;
@@ -202,6 +205,7 @@ export default function BCICsvParser({ onDataParsed, onError, onModeChange, allo
           longitude: get(row, 'Longitude', ['Long', 'Lng']),
           projectCountry: get(row, 'Project Country', ['Country']),
           roleOnProject: get(row, 'Role on Project', ['Role']),
+          roleGroupOnProject: get(row, 'Role Group on Project', ['Role Group', 'Role Group on Project', 'Role Group on project']),
           companyId: get(row, 'Company ID', ['CompanyID', 'Company_ID', 'CID']),
           companyName: get(row, 'Company Name', ['Company']),
           companyStreet: get(row, 'Company Street Name', ['Company Street']),

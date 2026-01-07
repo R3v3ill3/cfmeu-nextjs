@@ -52,6 +52,7 @@ type BCICsvRow = {
   longitude?: string
   lastUpdate?: string
   roleOnProject?: string
+  roleGroupOnProject?: string
   companyId?: string
   companyName?: string
 }

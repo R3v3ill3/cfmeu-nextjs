@@ -45,6 +45,7 @@ interface BCICsvRow {
   postCode: string;
   projectCountry: string;
   roleOnProject: string;
+  roleGroupOnProject?: string;
   companyId?: string;
   companyName: string;
   companyStreet: string;
@@ -81,6 +82,8 @@ interface CompanyClassification {
   userConfirmed: boolean;
   userExcluded: boolean;
 }
+
+type EmployerType = 'individual' | 'small_contractor' | 'large_contractor' | 'principal_contractor' | 'builder';
 
 interface EmployerMatchResult {
   companyName: string;
@@ -1020,6 +1023,20 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
   const createEmployerWithBciId = async (csvRow: BCICsvRow): Promise<string> => {
     const supabase = getSupabaseBrowserClient();
     
+    const deriveEmployerType = (row: { roleOnProject?: string; roleGroupOnProject?: string }): EmployerType => {
+      const role = (row.roleOnProject || '').toLowerCase();
+      const roleGroup = (row.roleGroupOnProject || '').toLowerCase();
+
+      // Most-specific mapping first: Builder/Main Contractor should remain a builder.
+      if (role.includes('builder / main contractor') || role.includes('building contractor')) return 'builder';
+
+      // Role group mapping (your rule): Main Contractor → principal_contractor.
+      if (roleGroup.includes('main contractor')) return 'principal_contractor';
+
+      // Default (your rule): small_contractor.
+      return 'small_contractor';
+    };
+
     const { data, error } = await supabase
       .from('employers')
       .insert({
@@ -1030,7 +1047,8 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
         postcode: csvRow.companyPostcode,
         phone: csvRow.companyPhone,
         email: csvRow.companyEmail,
-        bci_company_id: csvRow.companyId
+        bci_company_id: csvRow.companyId,
+        employer_type: deriveEmployerType(csvRow)
       } as any)
       .select('id')
       .single();
@@ -1183,6 +1201,15 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
   // Enhanced employer creation with duplicate prevention
   const createEmployer = async (companyData: any): Promise<string> => {
     const supabase = getSupabaseBrowserClient();
+
+    const deriveEmployerType = (row: { roleOnProject?: string; roleGroupOnProject?: string }): EmployerType => {
+      const role = (row.roleOnProject || '').toLowerCase();
+      const roleGroup = (row.roleGroupOnProject || '').toLowerCase();
+
+      if (role.includes('builder / main contractor') || role.includes('building contractor')) return 'builder';
+      if (roleGroup.includes('main contractor')) return 'principal_contractor';
+      return 'small_contractor';
+    };
     
     // Step 1: Check for BCI Company ID match first (if available)
     if (companyData.companyId) {
@@ -1222,7 +1249,7 @@ const BCIProjectImport: React.FC<BCIProjectImportProps> = ({ csvData, mode, onIm
         phone: companyData.companyPhone,
         email: companyData.companyEmail,
         primary_contact_name: `${companyData.contactFirstName} ${companyData.contactSurname}`.trim(),
-        employer_type: 'large_contractor',
+        employer_type: deriveEmployerType(companyData),
         bci_company_id: companyData.companyId  // ✅ ADD THIS CRITICAL FIELD
       } as any)
       .select('id')
