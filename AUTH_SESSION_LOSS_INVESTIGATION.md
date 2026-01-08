@@ -422,6 +422,86 @@ const handleAction = () => setIsOpen(true)
 
 ---
 
+---
+
+### Session 4: 2026-01-08 (Inactivity/Tab Background Session Loss)
+
+#### Problem Identified
+
+**Specific Symptom**: After periods of inactivity (overnight, tab backgrounded for extended time), users experience:
+- Pages load but data doesn't populate
+- "Checking access permissions..." spinner persists indefinitely
+- Console shows: `[withTimeout] Timeout occurred for fetch current user profile`
+
+**Root Cause**: Race condition between token refresh and database queries.
+
+When a tab becomes visible after inactivity:
+1. The Supabase access token has expired (typically ~1 hour)
+2. `useUserProfile` and `useAccessiblePatches` queries run immediately with stale token
+3. `withTimeout` starts 10-second countdown
+4. `useAuth` visibility handler schedules session recovery with 1-second debounce
+5. Database query hangs waiting for valid auth context
+6. `withTimeout` fires BEFORE session refresh completes
+
+#### Fix Applied
+
+##### Fix A: Proactive Session Refresh in useUserProfile
+
+**File**: `src/hooks/useUserProfile.ts`
+
+Added `ensureValidSession()` helper that:
+- Checks if session is missing or expires within 1 minute
+- Proactively calls `refreshSession()` BEFORE querying database
+- Prevents queries from running with stale tokens
+
+Also added retry logic for auth/RLS errors (similar to `useUserRole`).
+
+```typescript
+async function ensureValidSession(): Promise<boolean> {
+  const supabase = getSupabaseBrowserClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  const isExpiredOrStale = !session || 
+    (session.expires_at && session.expires_at * 1000 < Date.now() + 60000);
+  
+  if (isExpiredOrStale) {
+    const { data: refreshData, error } = await supabase.auth.refreshSession();
+    if (error || !refreshData.session) return false;
+  }
+  return true;
+}
+```
+
+##### Fix B: Immediate Session Refresh on Visibility Change
+
+**File**: `src/hooks/useAuth.tsx`
+
+Changed visibility handler to:
+- Check token expiry immediately (compare `expires_at` with current time + 1 minute buffer)
+- Call `refreshSession()` IMMEDIATELY instead of using 1-second debounced `scheduleRecovery()`
+- Apply the refreshed session and reset recovery flags
+
+Key change: Removed debounce delay for visibility-triggered refreshes to prevent race conditions.
+
+##### Fix C: Session Validation in useAccessiblePatches
+
+**File**: `src/hooks/useAccessiblePatches.ts`
+
+Added same session validation pattern as `useUserProfile`:
+- Check and refresh session before any database queries
+- Added retry logic for auth/RLS errors
+- Changed from using imported `supabase` singleton to `getSupabaseBrowserClient()`
+
+#### Files Modified - Session 4
+
+| File | Change | Status |
+|------|--------|--------|
+| `src/hooks/useUserProfile.ts` | Added `ensureValidSession()` helper and retry logic | **Committed** |
+| `src/hooks/useAuth.tsx` | Immediate session refresh on visibility change, token expiry check | **Committed** |
+| `src/hooks/useAccessiblePatches.ts` | Added session validation and retry logic | **Committed** |
+
+---
+
 ## Contact & History
 
 | Date | Status | Key Finding |
@@ -429,9 +509,12 @@ const handleAction = () => setIsOpen(true)
 | 2025-11-26 | Initial investigation | Multiple root causes identified |
 | 2025-11-27 | Continued investigation | TOKEN_REFRESHED cache invalidation identified as likely cause |
 | 2025-11-27 | Session 3 | `window.location.href` in RatingsView identified as specific cause; fixed with Dialog pattern |
+| 2026-01-08 | Session 4 | Race condition between tab visibility and token refresh; fixed with proactive session validation |
 
-**Current Status**: RatingsView Dialog pattern fix pending deployment. To test:
-1. Deploy changes to Vercel
-2. Log in as organiser → Patch → Site Visit Wizard → Ratings → Add Rating
-3. Complete or cancel assessment
-4. Verify auth/profile persists (check Settings page)
+**Current Status**: Session 4 fixes deployed. To test:
+1. Log in as any user
+2. Leave tab backgrounded overnight (or wait for token expiry ~1 hour)
+3. Return to tab
+4. Navigate to any data-heavy page (e.g., Project Details)
+5. Verify data loads without "Checking access permissions..." hanging
+6. Check console for `[useUserProfile] Session refreshed successfully` logs

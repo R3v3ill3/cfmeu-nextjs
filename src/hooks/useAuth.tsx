@@ -341,8 +341,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [scheduleRecovery, queryClient, applyAuthState, logAuthEvent, logAuthError]);
 
-  // Visibility change listener - proactively re-validate session when page becomes visible
-  // This handles cases where the session may have been lost while the tab was in background
+  // Visibility change listener - proactively re-validate and refresh session when page becomes visible
+  // This handles cases where the session may have expired while the tab was in background
+  // CRITICAL: We refresh IMMEDIATELY (no debounce) to prevent race conditions with React Query
   useEffect(() => {
     if (typeof document === 'undefined') return;
 
@@ -363,20 +364,65 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }, 'warning');
         }
         
-        // If we had a session but now don't, and we haven't already tried recovery
-        if (!currentSession && hadSessionRef.current && !recoveryAttemptedRef.current) {
-          logAuthEvent('Visibility check: session lost, scheduling recovery', {
-            hadSession: true,
-            recoveryAttempted: recoveryAttemptedRef.current,
+        // Check if token is expired or about to expire (within 1 minute)
+        // This proactively refreshes BEFORE queries run, preventing timeout errors
+        const now = Date.now();
+        const expiresAt = currentSession?.expires_at ? currentSession.expires_at * 1000 : 0;
+        const isExpiredOrStale = !currentSession || expiresAt < now + 60000; // 1 minute buffer
+        
+        if (isExpiredOrStale && hadSessionRef.current) {
+          logAuthEvent('Visibility check: session expired or stale, refreshing immediately', {
+            hasSession: !!currentSession,
+            expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+            now: new Date(now).toISOString(),
+            timeUntilExpiry: expiresAt ? Math.round((expiresAt - now) / 1000) : null,
           });
-
-          scheduleRecovery();
+          
+          // Refresh IMMEDIATELY - don't use debounced scheduleRecovery
+          // This prevents race conditions where React Query runs before session is refreshed
+          const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+          
+          if (refreshError) {
+            logAuthEvent('Visibility check: session refresh failed', {
+              errorMessage: refreshError.message,
+            }, 'warning');
+            
+            // If refresh fails and we previously had a session, this is a real session loss
+            if (!recoveryAttemptedRef.current) {
+              recoveryAttemptedRef.current = true;
+              sessionLossReportedRef.current = true;
+              logAuthEvent('Visibility check: marking session as lost after refresh failure', {}, 'warning');
+            }
+          } else if (refreshData.session) {
+            logAuthEvent('Visibility check: session refreshed successfully', {
+              userId: refreshData.session.user?.id,
+              newExpiresAt: refreshData.session.expires_at 
+                ? new Date(refreshData.session.expires_at * 1000).toISOString() 
+                : null,
+            });
+            
+            // Apply the refreshed session immediately
+            applyAuthState(refreshData.session, { source: 'visibility_refresh' });
+            
+            // Reset recovery flags since we successfully recovered
+            recoveryAttemptedRef.current = false;
+            sessionLossReportedRef.current = false;
+          }
         } else if (currentSession && !sessionRef.current) {
           // Edge case: we have a session now but didn't before (maybe cookie was restored)
           logAuthEvent('Visibility check: session restored externally', {
             userId: currentSession.user?.id,
           });
           applyAuthState(currentSession, { source: 'visibility_restore' });
+        } else if (currentSession) {
+          // Session is valid and not about to expire - just update the ref if needed
+          if (!sessionRef.current || sessionRef.current.access_token !== currentSession.access_token) {
+            logAuthEvent('Visibility check: updating session reference', {
+              userId: currentSession.user?.id,
+              timeUntilExpiry: Math.round((expiresAt - now) / 1000),
+            });
+            applyAuthState(currentSession, { source: 'visibility_sync' });
+          }
         }
       } catch (err) {
         logAuthError('Visibility check exception', err);
@@ -388,7 +434,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [scheduleRecovery, applyAuthState, logAuthEvent, logAuthError]);
+  }, [applyAuthState, logAuthEvent, logAuthError]);
 
   const signOut = async () => {
     const supabase = getSupabaseBrowserClient();

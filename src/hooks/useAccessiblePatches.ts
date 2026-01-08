@@ -1,7 +1,7 @@
 "use client"
 import { useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { supabase } from "@/integrations/supabase/client"
+import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 import { useAuth } from "@/hooks/useAuth"
 
 export type AccessiblePatch = {
@@ -14,6 +14,52 @@ export interface AccessiblePatchesResult {
   patches: AccessiblePatch[]
   isLoading: boolean
   error: Error | null
+}
+
+// How far in advance to refresh the session (1 minute before expiry)
+const SESSION_REFRESH_BUFFER_MS = 60 * 1000;
+
+/**
+ * Helper to ensure the session is valid before making an authenticated query.
+ * If the session is expired or about to expire, it proactively refreshes it.
+ * Returns the supabase client to use for queries.
+ */
+async function ensureValidSessionForPatches(): Promise<ReturnType<typeof getSupabaseBrowserClient> | null> {
+  const supabase = getSupabaseBrowserClient();
+  
+  try {
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError) {
+      console.warn('[useAccessiblePatches] Error getting session:', sessionError.message);
+    }
+    
+    // Check if session is missing or expired/about to expire
+    const now = Date.now();
+    const expiresAt = session?.expires_at ? session.expires_at * 1000 : 0;
+    const isExpiredOrStale = !session || expiresAt < now + SESSION_REFRESH_BUFFER_MS;
+    
+    if (isExpiredOrStale) {
+      console.log('[useAccessiblePatches] Session expired or stale, attempting refresh', {
+        hasSession: !!session,
+        expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+      });
+      
+      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+      
+      if (refreshError || !refreshData.session) {
+        console.error('[useAccessiblePatches] Session refresh failed:', refreshError?.message);
+        return null;
+      }
+      
+      console.log('[useAccessiblePatches] Session refreshed successfully');
+    }
+    
+    return supabase;
+  } catch (error) {
+    console.error('[useAccessiblePatches] Exception in ensureValidSession:', error);
+    return null;
+  }
 }
 
 /**
@@ -32,9 +78,47 @@ export function useAccessiblePatches(): AccessiblePatchesResult {
     enabled: !!user?.id,
     staleTime: 60_000,
     refetchOnWindowFocus: false,
+    // Retry on auth/RLS errors - session might be refreshing
+    retry: (failureCount, error) => {
+      if (failureCount >= 3) return false;
+      
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorCode = (error as any)?.code;
+      
+      const isRetryable = 
+        errorMessage.includes('timeout') ||
+        errorMessage.includes('network') ||
+        errorMessage.includes('fetch') ||
+        errorMessage.includes('permission denied') ||
+        errorMessage.includes('row-level security') ||
+        errorMessage.includes('JWT') ||
+        errorMessage.includes('Auth session missing') ||
+        errorCode === 'ETIMEDOUT' ||
+        errorCode === 'PGRST116' ||
+        errorCode === '42501';
+      
+      if (isRetryable) {
+        console.log(`[useAccessiblePatches] Retrying (attempt ${failureCount + 1}/3)`, {
+          userId: user?.id?.slice(-6),
+          error: errorMessage,
+        });
+        return true;
+      }
+      
+      return false;
+    },
+    retryDelay: (attemptIndex) => {
+      return Math.min(500 * Math.pow(2, attemptIndex), 4000);
+    },
     queryFn: async () => {
       if (!user?.id) {
         return { role: null, patches: [] }
+      }
+
+      // Ensure session is valid before querying
+      const supabase = await ensureValidSessionForPatches();
+      if (!supabase) {
+        throw new Error('Session expired - please sign in again');
       }
 
       const userId = user.id
