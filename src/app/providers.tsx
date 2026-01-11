@@ -212,9 +212,10 @@ export default function Providers({ children }: ProvidersProps) {
         // Listen for messages from service worker
         navigator.serviceWorker.addEventListener('message', (event) => {
           if (event.data?.type === 'SW_UPDATED') {
+            // Log the update but don't reload here - controllerchange handles it
+            // Having both caused a race condition on iOS Safari where the script
+            // load would fail during the reload transition (JAVASCRIPT-NEXTJS-A)
             logPwaEvent('Service worker updated', { version: event.data.version })
-            // Auto-reload to get fresh content with new service worker
-            window.location.reload()
           }
         })
 
