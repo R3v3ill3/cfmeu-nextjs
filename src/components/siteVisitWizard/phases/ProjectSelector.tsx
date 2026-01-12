@@ -43,12 +43,15 @@ interface UserLocation {
   accuracy: number
 }
 
+const MAX_NEARBY_RETRIES = 2
+
 export function ProjectSelector({ onProjectSelected }: ProjectSelectorProps) {
   const [geoState, setGeoState] = useState<GeolocationState>('requesting')
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [showSearch, setShowSearch] = useState(false)
   const [nearbySlow, setNearbySlow] = useState(false)
+  const [nearbyRetryCount, setNearbyRetryCount] = useState(0)
   const queryClient = useQueryClient()
   
   const { patches, isLoading: loadingPatches } = useAccessiblePatches()
@@ -139,6 +142,14 @@ export function ProjectSelector({ onProjectSelected }: ProjectSelectorProps) {
     const t = setTimeout(() => setNearbySlow(true), 8_000)
     return () => clearTimeout(t)
   }, [loadingNearby])
+
+  // Auto-fallback to search mode after max retries exceeded
+  useEffect(() => {
+    if (nearbyError && nearbyRetryCount >= MAX_NEARBY_RETRIES) {
+      console.log('[ProjectSelector] Max nearby retries exceeded, auto-switching to search mode')
+      setShowSearch(true)
+    }
+  }, [nearbyError, nearbyRetryCount])
   
   // Fallback: Get user's patch projects
   const patchIds = patches.map(p => p.id)
@@ -349,6 +360,21 @@ export function ProjectSelector({ onProjectSelected }: ProjectSelectorProps) {
       )
     }
   }, [])
+
+  // Retry nearby search with tracking
+  const handleRetryNearby = useCallback(() => {
+    const newCount = nearbyRetryCount + 1
+    setNearbyRetryCount(newCount)
+    console.log('[ProjectSelector] Retrying nearby search, attempt:', newCount)
+    
+    if (newCount >= MAX_NEARBY_RETRIES) {
+      // Don't bother retrying, auto-switch to search
+      console.log('[ProjectSelector] Max retries reached, switching to search mode')
+      setShowSearch(true)
+    } else {
+      refetchNearby()
+    }
+  }, [nearbyRetryCount, refetchNearby])
   
   // Format distance for display
   const formatDistance = (km: number): string => {
@@ -496,18 +522,30 @@ export function ProjectSelector({ onProjectSelected }: ProjectSelectorProps) {
           {loadingNearby ? (
             nearbySlow ? (
               <div className="text-center py-8 space-y-4">
-                <p className="text-gray-600">Nearby search is taking longer than usual.</p>
+                <div className="bg-amber-50 text-amber-800 p-4 rounded-xl">
+                  <AlertCircle className="h-6 w-6 mx-auto mb-2" />
+                  <p className="font-medium">Nearby search is slow</p>
+                  <p className="text-sm mt-1 opacity-80">
+                    {nearbyRetryCount > 0 
+                      ? `Attempt ${nearbyRetryCount + 1} - you can search your projects instead`
+                      : 'This sometimes happens on mobile networks'}
+                  </p>
+                </div>
                 <div className="flex flex-col gap-3">
+                  {nearbyRetryCount < MAX_NEARBY_RETRIES - 1 && (
+                    <WizardButton
+                      variant="secondary"
+                      onClick={handleRetryNearby}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Retry nearby search
+                    </WizardButton>
+                  )}
                   <WizardButton
-                    variant="secondary"
-                    onClick={() => refetchNearby()}
-                  >
-                    Retry nearby search
-                  </WizardButton>
-                  <WizardButton
-                    variant="secondary"
+                    variant="primary"
                     onClick={() => setShowSearch(true)}
                   >
+                    <Search className="h-4 w-4 mr-2" />
                     Search my projects
                   </WizardButton>
                 </div>
@@ -520,20 +558,36 @@ export function ProjectSelector({ onProjectSelected }: ProjectSelectorProps) {
             )
           ) : nearbyError ? (
             <div className="text-center py-8 space-y-4">
-              <p className="text-gray-600">
-                {(nearbyError as Error)?.message || 'Unable to search nearby projects.'}
-              </p>
+              <div className="bg-amber-50 text-amber-800 p-4 rounded-xl">
+                <AlertCircle className="h-6 w-6 mx-auto mb-2" />
+                <p className="font-medium">
+                  {nearbyRetryCount >= MAX_NEARBY_RETRIES 
+                    ? 'Nearby search unavailable'
+                    : 'Unable to find nearby projects'}
+                </p>
+                <p className="text-sm mt-1 opacity-80">
+                  {(nearbyError as Error)?.message?.includes('timed out')
+                    ? 'The server is responding slowly. Please use search instead.'
+                    : nearbyRetryCount >= MAX_NEARBY_RETRIES 
+                      ? 'Please search your projects below.'
+                      : 'This sometimes happens on mobile networks.'}
+                </p>
+              </div>
               <div className="flex flex-col gap-3">
+                {nearbyRetryCount < MAX_NEARBY_RETRIES && (
+                  <WizardButton
+                    variant="secondary"
+                    onClick={handleRetryNearby}
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Retry ({MAX_NEARBY_RETRIES - nearbyRetryCount} left)
+                  </WizardButton>
+                )}
                 <WizardButton
-                  variant="secondary"
-                  onClick={() => refetchNearby()}
-                >
-                  Retry nearby search
-                </WizardButton>
-                <WizardButton
-                  variant="secondary"
+                  variant="primary"
                   onClick={() => setShowSearch(true)}
                 >
+                  <Search className="h-4 w-4 mr-2" />
                   Search my projects
                 </WizardButton>
               </div>
