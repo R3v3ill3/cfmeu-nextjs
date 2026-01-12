@@ -188,13 +188,21 @@ const Layout = ({ children, onRefresh }: LayoutProps) => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Handle search
-  const handleSearch = (query: string) => {
+  // Handle search input change (no navigation on keystroke)
+  const handleSearchInputChange = (query: string) => {
     setSearchQuery(query);
-    // Navigate to search results if query is substantial
-    if (query.length > 2) {
-      router.push(`/search?q=${encodeURIComponent(query)}`);
-    }
+  };
+  
+  // Handle search submission - navigate to search page
+  const handleSearchSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    setShowSearch(false);
+    startNavigation();
+    // Navigate to search page, optionally passing query as initial value
+    const url = searchQuery.trim() 
+      ? `/search?q=${encodeURIComponent(searchQuery.trim())}`
+      : '/search';
+    router.push(url);
   };
 
   // Mobile-specific navigation items (reduced for mobile UX)
@@ -407,16 +415,17 @@ const Layout = ({ children, onRefresh }: LayoutProps) => {
                 </div>
 
                 {/* Mobile search */}
-                <div className="relative">
+                <form onSubmit={(e) => { e.preventDefault(); setIsOpen(false); handleSearchSubmit(); }} className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input
                     type="text"
                     placeholder="Search..."
                     className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     value={searchQuery}
-                    onChange={(e) => handleSearch(e.target.value)}
+                    onChange={(e) => handleSearchInputChange(e.target.value)}
+                    enterKeyHint="search"
                   />
-                </div>
+                </form>
 
                 {/* Mobile navigation items */}
                 <nav className="flex-1 overflow-y-auto">
@@ -545,25 +554,36 @@ const Layout = ({ children, onRefresh }: LayoutProps) => {
         {/* Mobile search overlay */}
         {showSearch && isMobile() && (
           <div className="absolute top-full left-0 right-0 bg-white border-b shadow-lg z-30 p-4">
-            <div className="relative">
+            <form onSubmit={handleSearchSubmit} className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search projects, employers..."
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Search projects, employers, workers..."
+                className="w-full pl-10 pr-20 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 value={searchQuery}
-                onChange={(e) => handleSearch(e.target.value)}
+                onChange={(e) => handleSearchInputChange(e.target.value)}
                 autoFocus
+                enterKeyHint="search"
               />
-              <Button
-                variant="ghost"
-                size="sm"
-                className="absolute right-2 top-1/2 transform -translate-y-1/2"
-                onClick={() => setShowSearch(false)}
-              >
-                ×
-              </Button>
-            </div>
+              <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-1">
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="h-8 px-3 min-w-[44px] touch-manipulation"
+                >
+                  Go
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  onClick={() => setShowSearch(false)}
+                >
+                  ×
+                </Button>
+              </div>
+            </form>
           </div>
         )}
       </header>
