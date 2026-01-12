@@ -177,26 +177,67 @@ export async function POST(
   { params }: { params: { projectId: string } }
 ) {
   const projectId = params.projectId
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mapping-sheet/route.ts:POST-entry',message:'POST request received',data:{projectId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,D'})}).catch(()=>{});
+  // #endregion
+  
   const access = await ensureUserAccess(projectId)
-  if ("error" in access) return access.error
+  if ("error" in access) {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mapping-sheet/route.ts:POST-access-error',message:'Access denied',data:{hasError:true},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+    return access.error
+  }
 
   const { supabase, project } = access
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mapping-sheet/route.ts:POST-access-ok',message:'Access granted',data:{projectId,mainJobSiteId:project.main_job_site_id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+  // #endregion
 
   try {
     const submission: MappingSheetSubmission = await request.json()
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mapping-sheet/route.ts:POST-parsed',message:'Submission parsed',data:{hasProjectUpdates:!!submission.projectUpdates,hasSiteContacts:!!(submission.siteContactUpdates?.length),hasContractorRoles:!!(submission.contractorRoleUpdates?.length),hasTradeContractors:!!(submission.tradeContractorUpdates?.length)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,D'})}).catch(()=>{});
+    // #endregion
 
     await handleProjectUpdates(supabase, projectId, submission.projectUpdates)
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mapping-sheet/route.ts:POST-project-ok',message:'handleProjectUpdates completed',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
+    
     await handleAddressUpdate(supabase, project.main_job_site_id, submission.addressUpdate)
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mapping-sheet/route.ts:POST-address-ok',message:'handleAddressUpdate completed',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
+    
     await handleSiteContacts(
       supabase,
       project.main_job_site_id,
       submission.siteContactUpdates || []
     )
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mapping-sheet/route.ts:POST-contacts-ok',message:'handleSiteContacts completed',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
+    
     await handleContractorRoles(supabase, projectId, submission.contractorRoleUpdates || [])
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mapping-sheet/route.ts:POST-roles-ok',message:'handleContractorRoles completed',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
+    
     await handleTradeContractors(supabase, projectId, submission.tradeContractorUpdates || [])
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mapping-sheet/route.ts:POST-trades-ok',message:'handleTradeContractors completed',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
 
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mapping-sheet/route.ts:POST-success',message:'All handlers completed successfully',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,D'})}).catch(()=>{});
+    // #endregion
     return NextResponse.json({ success: true })
   } catch (error) {
+    // #region agent log
+    const errorInfo = {errorType:typeof error,isError:error instanceof Error,message:(error as any)?.message,code:(error as any)?.code,details:(error as any)?.details,hint:(error as any)?.hint,name:(error as any)?.name,stringified:String(error)};
+    fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mapping-sheet/route.ts:POST-catch',message:'Handler threw error',data:errorInfo,timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,D'})}).catch(()=>{});
+    // #endregion
     console.error("Failed to submit mapping sheet form:", error)
     return NextResponse.json(
       { error: "Failed to submit mapping sheet form" },
@@ -370,36 +411,32 @@ async function handleTradeContractors(
 ) {
   if (updates.length === 0) return
 
+  // Look up trade_type_id from trade_types table
+  const { data: tradeTypes = [] } = await supabase
+    .from("trade_types")
+    .select("id, code")
+  const tradeTypeMap = new Map(tradeTypes.map((tt: { id: string; code: string }) => [tt.code, tt.id]))
+
   for (const update of updates) {
     const basePatch: Record<string, any> = {}
     if (update.employerId) basePatch.employer_id = update.employerId
     if (update.estimatedWorkforce !== undefined)
-      basePatch.estimated_workforce = update.estimatedWorkforce
-    if (update.estimatedFullTimeWorkers !== undefined)
-      basePatch.estimated_full_time_workers = update.estimatedFullTimeWorkers
-    if (update.estimatedCasualWorkers !== undefined)
-      basePatch.estimated_casual_workers = update.estimatedCasualWorkers
-    if (update.estimatedAbnWorkers !== undefined)
-      basePatch.estimated_abn_workers = update.estimatedAbnWorkers
-    if (update.membershipChecked !== undefined)
-      basePatch.membership_checked = update.membershipChecked
-    if (update.estimatedMembers !== undefined)
-      basePatch.estimated_members = update.estimatedMembers
+      basePatch.estimated_workers = update.estimatedWorkforce
 
     switch (update.action) {
       case "create": {
         if (!update.employerId || !update.tradeType) break
+        const tradeTypeId = tradeTypeMap.get(update.tradeType)
+        if (!tradeTypeId) {
+          console.warn(`Trade type not found: ${update.tradeType}`)
+          break
+        }
         const { error } = await supabase.from("project_assignments").insert({
           project_id: projectId,
           employer_id: update.employerId,
           assignment_type: "trade_work",
-          trade_type: update.tradeType,
-          estimated_workforce: update.estimatedWorkforce ?? null,
-          estimated_full_time_workers: update.estimatedFullTimeWorkers ?? null,
-          estimated_casual_workers: update.estimatedCasualWorkers ?? null,
-          estimated_abn_workers: update.estimatedAbnWorkers ?? null,
-          membership_checked: update.membershipChecked ?? false,
-          estimated_members: update.estimatedMembers ?? null,
+          trade_type_id: tradeTypeId,
+          estimated_workers: update.estimatedWorkforce ?? null,
           source: "site_visit_internal",
           match_status: "manual",
         })
