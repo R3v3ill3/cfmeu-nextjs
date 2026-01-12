@@ -14,14 +14,22 @@ const app = Fastify({
   logger: true
 })
 
+// Build allowed origins list
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  // Production domain
+  'https://cfmeu.uconstruct.app',
+]
+
+// Add custom origin from env if provided (for additional domains)
+if (process.env.ALLOWED_ORIGIN) {
+  allowedOrigins.push(process.env.ALLOWED_ORIGIN)
+}
+
 await app.register(cors, {
-  origin: [
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-    // Add your production domain here
-    process.env.ALLOWED_ORIGIN || 'https://your-app.vercel.app'
-  ],
-  methods: ['POST', 'OPTIONS']
+  origin: allowedOrigins,
+  methods: ['POST', 'OPTIONS', 'GET']
 })
 await app.register(multipart, {
   limits: {

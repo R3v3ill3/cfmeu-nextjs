@@ -3,8 +3,8 @@
 import {  useCallback, useEffect, useMemo, useRef, useState  } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Upload, Loader2 } from 'lucide-react'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Upload, Loader2, AlertCircle, RefreshCw } from 'lucide-react'
 import BCIProjectImport from '@/components/upload/BCIProjectImport'
 
 type NormalizedProjectRow = {
@@ -60,10 +60,17 @@ type BCICsvRow = {
 type WizardStage = 'upload' | 'projects' | 'employers' | 'done'
 type EmployerMode = 'quick' | 'fuzzy'
 
+type ErrorInfo = {
+  message: string
+  code?: string
+  isRetryable?: boolean
+}
+
 export default function BCIXlsxWizard() {
   const [stage, setStage] = useState<WizardStage>('upload')
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<ErrorInfo | null>(null)
   const [isUploading, setIsUploading] = useState(false)
+  const [lastFile, setLastFile] = useState<File | null>(null)
   const [projects, setProjects] = useState<NormalizedProjectRow[]>([])
   const [companies, setCompanies] = useState<NormalizedCompanyRow[]>([])
   const [employerMode, setEmployerMode] = useState<EmployerMode>('quick')
@@ -123,50 +130,97 @@ export default function BCIXlsxWizard() {
 
   const onFileSelected = useCallback(async (file: File) => {
     setError(null)
+    setLastFile(file)
+    
     if (!file || !file.name.toLowerCase().endsWith('.xlsx')) {
-      setError('Please select a valid .xlsx file')
+      setError({ message: 'Please select a valid .xlsx file', isRetryable: false })
       return
     }
     if (file.size > 1_000_000) {
-      setError('File is too large. Please keep under 1MB.')
+      setError({ message: 'File is too large. Please keep under 1MB.', isRetryable: false })
       return
     }
+    
     setIsUploading(true)
     try {
       const form = new FormData()
       form.append('file', file)
       const res = await fetch('/api/dev/bci/normalize-xlsx', { method: 'POST', body: form })
+      
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        throw new Error(data?.error || 'Failed to normalize file')
+        const errorCode = data?.code || (res.status === 504 ? 'TIMEOUT' : res.status === 502 ? 'PROXY_ERROR' : undefined)
+        const isRetryable = res.status === 504 || res.status === 502 || res.status >= 500
+        
+        let message = data?.error || 'Failed to normalize file'
+        if (errorCode === 'TIMEOUT') {
+          message = 'Request timed out. The import service may be starting up — please try again in a few seconds.'
+        } else if (res.status === 502) {
+          message = 'Unable to connect to the import service. Please try again in a moment.'
+        } else if (res.status === 500 && message.includes('not configured')) {
+          message = 'The BCI import service is not properly configured. Please contact support.'
+        }
+        
+        throw { message, code: errorCode, isRetryable }
       }
+      
       const data = await res.json()
       setProjects(data.projects || [])
       setCompanies(data.companies || [])
       setStage('projects')
     } catch (e: any) {
-      setError(e?.message || 'Upload failed')
+      console.error('[BCIXlsxWizard] Upload error:', e)
+      if (e.code || e.isRetryable !== undefined) {
+        setError(e as ErrorInfo)
+      } else {
+        setError({ 
+          message: e?.message || 'Upload failed. Please check your connection and try again.',
+          isRetryable: true 
+        })
+      }
     } finally {
       setIsUploading(false)
     }
   }, [])
+
+  const handleRetry = useCallback(() => {
+    if (lastFile) {
+      onFileSelected(lastFile)
+    }
+  }, [lastFile, onFileSelected])
 
   const renderUpload = () => (
     <Card>
       <CardHeader>
         <CardTitle>BCI XLSX Import</CardTitle>
         <CardDescription>
-          Upload a BCI .xlsx file. We’ll split Project and Company sheets, clean the blank top row, then import projects first, followed by employers.
+          Upload a BCI .xlsx file. We'll split Project and Company sheets, clean the blank top row, then import projects first, followed by employers.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
           {error && (
-            <Alert>
-              <AlertDescription>{error}</AlertDescription>
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Import Error</AlertTitle>
+              <AlertDescription className="mt-2">
+                <p>{error.message}</p>
+                {error.isRetryable && lastFile && (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="mt-3"
+                    onClick={handleRetry}
+                    disabled={isUploading}
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Try Again
+                  </Button>
+                )}
+              </AlertDescription>
             </Alert>
           )}
-          <div className="inline-flex items-center gap-2">
+          <div className="inline-flex items-center gap-2 flex-wrap">
             <input
               ref={fileInputRef}
               type="file"
@@ -183,10 +237,15 @@ export default function BCIXlsxWizard() {
               onClick={() => fileInputRef.current?.click()}
             >
               {isUploading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
-              {isUploading ? 'Uploading…' : 'Select .xlsx file'}
+              {isUploading ? 'Processing…' : 'Select .xlsx file'}
             </Button>
             <span className="text-sm text-muted-foreground">Max 1MB. Sheets must be Project and Company.</span>
           </div>
+          {isUploading && (
+            <p className="text-sm text-muted-foreground">
+              Uploading and processing your file. This may take up to 30 seconds if the service is starting up…
+            </p>
+          )}
         </div>
       </CardContent>
     </Card>

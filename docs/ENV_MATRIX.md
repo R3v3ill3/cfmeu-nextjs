@@ -16,6 +16,7 @@ Web app (Vercel/Local)
 | NEXT_PUBLIC_USE_WORKER_DASHBOARD | client | optional |  | false |
 | NEXT_PUBLIC_USE_WORKER_PROJECTS | client | optional |  | false |
 | NEXT_PUBLIC_GOOGLE_MAPS_API_KEY | client | optional |  | — |
+| BCI_WORKER_URL | server | R (prod) |  | http://localhost:3250 (dev only) |
 
 cfmeu-dashboard-worker (Railway)
 
@@ -56,10 +57,10 @@ mapping-sheet-scanner-worker (Railway)
 
 bci-import-worker (Railway)
 
-| Var | R | S |
-| --- | --- | --- |
-| PORT | optional |  |
-| ALLOWED_ORIGIN | optional |  |
+| Var | R | S | Notes |
+| --- | --- | --- | --- |
+| PORT | optional |  | Defaults to 3250 locally, Railway uses PORT env |
+| ALLOWED_ORIGIN | optional |  | Extra origin to allow; cfmeu.uconstruct.app is included by default |
 
 Cross-service conventions
 - Service role keys are used only on server/worker processes; never shipped to browser.
