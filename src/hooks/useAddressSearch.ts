@@ -21,16 +21,29 @@ export interface NearbyProject {
 interface UseAddressSearchParams {
   lat: number | null
   lng: number | null
-  address: string | null
+  address?: string | null
   enabled?: boolean
   maxResults?: number
   maxDistanceKm?: number
 }
 
+const FIND_NEARBY_PROJECTS_TIMEOUT_MS = 12_000
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, timeoutMessage: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), ms)
+  })
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId)
+  })
+}
+
 export function useAddressSearch({
   lat,
   lng,
-  address,
+  address = null,
   enabled = true,
   maxResults = 10,
   maxDistanceKm = 100
@@ -55,13 +68,19 @@ export function useAddressSearch({
         max_distance_km: maxDistanceKm
       })
 
-      const { data, error } = await (supabase.rpc as any)('find_nearby_projects', {
+      const rpcPromise = (supabase.rpc as any)('find_nearby_projects', {
         search_lat: lat,
         search_lng: lng,
         search_address: address,
         max_results: maxResults,
-        max_distance_km: maxDistanceKm
-      })
+        max_distance_km: maxDistanceKm,
+      }) as Promise<{ data: unknown; error: unknown }>
+
+      const { data, error } = await withTimeout(
+        rpcPromise,
+        FIND_NEARBY_PROJECTS_TIMEOUT_MS,
+        'Nearby project search timed out. Please retry or use search.'
+      )
 
       if (error) {
         console.error('[useAddressSearch] RPC error:', error)

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/integrations/supabase/client'
 import { useAccessiblePatches } from '@/hooks/useAccessiblePatches'
 import { useAddressSearch, type NearbyProject } from '@/hooks/useAddressSearch'
@@ -48,6 +48,8 @@ export function ProjectSelector({ onProjectSelected }: ProjectSelectorProps) {
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [showSearch, setShowSearch] = useState(false)
+  const [nearbySlow, setNearbySlow] = useState(false)
+  const queryClient = useQueryClient()
   
   const { patches, isLoading: loadingPatches } = useAccessiblePatches()
   
@@ -93,19 +95,50 @@ export function ProjectSelector({ onProjectSelected }: ProjectSelectorProps) {
     
     return () => clearTimeout(timeoutId)
   }, [])
+
+  // Cleanup: if a nearby-project request got stuck in-flight, don't let it persist across wizard exits.
+  useEffect(() => {
+    const nearbyQueryKey = [
+      'address-search',
+      userLocation?.lat ?? null,
+      userLocation?.lng ?? null,
+      null,
+      10,
+      10,
+    ] as const
+
+    return () => {
+      // Best-effort; this won't abort the underlying fetch, but it prevents a stuck "loading" query
+      // from being reused on the next wizard launch in long-lived iOS PWA sessions.
+      queryClient.cancelQueries({ queryKey: nearbyQueryKey })
+      queryClient.removeQueries({ queryKey: nearbyQueryKey })
+    }
+  }, [queryClient, userLocation?.lat, userLocation?.lng])
   
   // Find nearby projects using geolocation
   const { 
     data: nearbyProjects = [], 
     isLoading: loadingNearby,
+    error: nearbyError,
     refetch: refetchNearby,
   } = useAddressSearch({
     lat: userLocation?.lat ?? null,
     lng: userLocation?.lng ?? null,
+    address: null,
     enabled: geoState === 'available' && userLocation !== null,
     maxResults: 10,
     maxDistanceKm: 10,
   })
+
+  // If nearby search is taking unusually long, show a recovery UI instead of a forever spinner.
+  useEffect(() => {
+    if (!loadingNearby) {
+      setNearbySlow(false)
+      return
+    }
+    const t = setTimeout(() => setNearbySlow(true), 8_000)
+    return () => clearTimeout(t)
+  }, [loadingNearby])
   
   // Fallback: Get user's patch projects
   const patchIds = patches.map(p => p.id)
@@ -461,8 +494,49 @@ export function ProjectSelector({ onProjectSelected }: ProjectSelectorProps) {
         <div className="space-y-6">
           {/* Closest project card */}
           {loadingNearby ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+            nearbySlow ? (
+              <div className="text-center py-8 space-y-4">
+                <p className="text-gray-600">Nearby search is taking longer than usual.</p>
+                <div className="flex flex-col gap-3">
+                  <WizardButton
+                    variant="secondary"
+                    onClick={() => refetchNearby()}
+                  >
+                    Retry nearby search
+                  </WizardButton>
+                  <WizardButton
+                    variant="secondary"
+                    onClick={() => setShowSearch(true)}
+                  >
+                    Search my projects
+                  </WizardButton>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8 gap-3">
+                <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                <p className="text-gray-600">Finding nearby projects…</p>
+              </div>
+            )
+          ) : nearbyError ? (
+            <div className="text-center py-8 space-y-4">
+              <p className="text-gray-600">
+                {(nearbyError as Error)?.message || 'Unable to search nearby projects.'}
+              </p>
+              <div className="flex flex-col gap-3">
+                <WizardButton
+                  variant="secondary"
+                  onClick={() => refetchNearby()}
+                >
+                  Retry nearby search
+                </WizardButton>
+                <WizardButton
+                  variant="secondary"
+                  onClick={() => setShowSearch(true)}
+                >
+                  Search my projects
+                </WizardButton>
+              </div>
             </div>
           ) : closestProject ? (
             <div className="space-y-4">

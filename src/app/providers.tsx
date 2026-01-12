@@ -187,11 +187,28 @@ export default function Providers({ children }: ProvidersProps) {
         logPwaEvent('Service worker registered')
 
         // Check for updates immediately and periodically
-        registration.update()
+        try {
+          if (navigator.onLine) {
+            await registration.update()
+          }
+        } catch (updateError) {
+          logPwaEvent('Service worker update check failed', {
+            error: updateError instanceof Error ? updateError.message : String(updateError),
+            userAgent: navigator.userAgent,
+            online: navigator.onLine,
+          })
+        }
         
         // Check for updates every 5 minutes
         const updateInterval = setInterval(() => {
-          registration.update()
+          if (!navigator.onLine) return
+          registration.update().catch((updateError) => {
+            logPwaEvent('Service worker periodic update failed', {
+              error: updateError instanceof Error ? updateError.message : String(updateError),
+              userAgent: navigator.userAgent,
+              online: navigator.onLine,
+            })
+          })
         }, 5 * 60 * 1000)
 
         // Handle service worker updates

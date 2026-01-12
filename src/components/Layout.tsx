@@ -197,11 +197,11 @@ const Layout = ({ children, onRefresh }: LayoutProps) => {
   const handleSearchSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
     setShowSearch(false);
-    startNavigation();
-    // Navigate to search page, optionally passing query as initial value
+    // Compute URL first, then navigate
     const url = searchQuery.trim() 
       ? `/search?q=${encodeURIComponent(searchQuery.trim())}`
       : '/search';
+    startNavigation(url);
     router.push(url);
   };
 
@@ -415,7 +415,7 @@ const Layout = ({ children, onRefresh }: LayoutProps) => {
                 </div>
 
                 {/* Mobile search */}
-                <form onSubmit={(e) => { e.preventDefault(); setIsOpen(false); handleSearchSubmit(); }} className="relative">
+                <form onSubmit={(e) => { setIsOpen(false); handleSearchSubmit(e); }} className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input
                     type="text"
