@@ -3,7 +3,16 @@
 import { useState, useCallback, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
-export type WizardPhase = 'project-selection' | 'action-menu'
+export type WizardPhase = 
+  | 'project-selection' 
+  | 'action-menu'
+  // Add project flow phases
+  | 'add-project-options'
+  | 'bci-import'
+  | 'bci-project-select'
+  | 'bci-importing'
+  | 'manual-create'
+
 export type WizardView = 
   | 'contacts' 
   | 'mapping' 
@@ -21,6 +30,34 @@ export interface SelectedProject {
   mainJobSiteId?: string | null
 }
 
+// BCI import data types
+export interface BCINormalizedProject {
+  projectId: string
+  projectName: string
+  projectStage: string
+  projectStatus?: string
+  localValue?: number
+  projectAddress?: string
+  projectTown?: string
+  projectState?: string
+  postCode?: string
+  latitude?: number
+  longitude?: number
+}
+
+export interface BCINormalizedCompany {
+  projectId: string
+  companyId?: string
+  companyName: string
+  roleOnProject: string
+}
+
+export interface BCIImportData {
+  projects: BCINormalizedProject[]
+  companies: BCINormalizedCompany[]
+  selectedProjectId?: string
+}
+
 export interface WizardState {
   phase: WizardPhase
   view: WizardView
@@ -29,6 +66,8 @@ export interface WizardState {
   siteVisitDialogMode: 'entry' | 'exit'
   // Track which views have been visited for pre-selecting reasons
   visitedViews: Set<WizardView>
+  // BCI import data
+  bciImportData: BCIImportData | null
 }
 
 export interface UseWizardStateReturn {
@@ -36,6 +75,12 @@ export interface UseWizardStateReturn {
   // Phase navigation
   goToProjectSelection: () => void
   goToActionMenu: (project: SelectedProject) => void
+  // Add project flow navigation
+  goToAddProjectOptions: () => void
+  goToBCIImport: () => void
+  goToBCIProjectSelect: (data: BCIImportData) => void
+  goToBCIImporting: (selectedProjectId: string) => void
+  goToManualCreate: () => void
   // View navigation
   openView: (view: WizardView) => void
   closeView: () => void
@@ -45,6 +90,8 @@ export interface UseWizardStateReturn {
   // Project
   selectProject: (project: SelectedProject) => void
   clearProject: () => void
+  // BCI data
+  setBCIImportData: (data: BCIImportData | null) => void
   // Utils
   canGoBack: boolean
   goBack: () => void
@@ -59,6 +106,7 @@ const DEFAULT_STATE: WizardState = {
   showSiteVisitDialog: false,
   siteVisitDialogMode: 'exit', // Only exit mode now
   visitedViews: new Set(),
+  bciImportData: null,
 }
 
 export function useWizardState(): UseWizardStateReturn {
@@ -85,6 +133,7 @@ export function useWizardState(): UseWizardStateReturn {
       showSiteVisitDialog: false,
       siteVisitDialogMode: 'exit',
       visitedViews: new Set(),
+      bciImportData: null,
     }
   }, [searchParams])
   
@@ -137,10 +186,66 @@ export function useWizardState(): UseWizardStateReturn {
       phase: 'action-menu' as const,
       view: null as WizardView,
       selectedProject: project,
+      bciImportData: null, // Clear BCI data when navigating to action menu
     }
     setState(prev => ({ ...prev, ...newState }))
     updateUrl(newState)
   }, [updateUrl])
+  
+  // Add project flow navigation
+  const goToAddProjectOptions = useCallback(() => {
+    const newState = {
+      phase: 'add-project-options' as const,
+      view: null as WizardView,
+    }
+    setState(prev => ({ ...prev, ...newState }))
+    updateUrl(newState)
+  }, [updateUrl])
+  
+  const goToBCIImport = useCallback(() => {
+    const newState = {
+      phase: 'bci-import' as const,
+      view: null as WizardView,
+    }
+    setState(prev => ({ ...prev, ...newState }))
+    updateUrl(newState)
+  }, [updateUrl])
+  
+  const goToBCIProjectSelect = useCallback((data: BCIImportData) => {
+    const newState = {
+      phase: 'bci-project-select' as const,
+      view: null as WizardView,
+      bciImportData: data,
+    }
+    setState(prev => ({ ...prev, ...newState }))
+    updateUrl(newState)
+  }, [updateUrl])
+  
+  const goToBCIImporting = useCallback((selectedProjectId: string) => {
+    setState(prev => ({
+      ...prev,
+      phase: 'bci-importing' as const,
+      view: null as WizardView,
+      bciImportData: prev.bciImportData ? {
+        ...prev.bciImportData,
+        selectedProjectId,
+      } : null,
+    }))
+    updateUrl({ phase: 'bci-importing' as const, view: null })
+  }, [updateUrl])
+  
+  const goToManualCreate = useCallback(() => {
+    const newState = {
+      phase: 'manual-create' as const,
+      view: null as WizardView,
+    }
+    setState(prev => ({ ...prev, ...newState }))
+    updateUrl(newState)
+  }, [updateUrl])
+  
+  const setBCIImportData = useCallback((data: BCIImportData | null) => {
+    setState(prev => ({ ...prev, bciImportData: data }))
+  }, [])
   
   // View navigation - track which views are visited
   const openView = useCallback((view: WizardView) => {
@@ -185,6 +290,11 @@ export function useWizardState(): UseWizardStateReturn {
   const canGoBack = useMemo(() => {
     if (state.view !== null) return true
     if (state.phase === 'action-menu') return true
+    // New phases can go back
+    if (state.phase === 'add-project-options') return true
+    if (state.phase === 'bci-import') return true
+    if (state.phase === 'bci-project-select') return true
+    if (state.phase === 'manual-create') return true
     return false
   }, [state.view, state.phase])
   
@@ -220,6 +330,25 @@ export function useWizardState(): UseWizardStateReturn {
         return { ...currentState, showSiteVisitDialog: true, siteVisitDialogMode: 'exit' as const }
       }
       
+      // Handle back navigation for add-project flow phases
+      if (currentState.phase === 'add-project-options') {
+        // Go back to project selection
+        router.replace('/site-visit-wizard', { scroll: false })
+        return { ...currentState, phase: 'project-selection' as const }
+      }
+      
+      if (currentState.phase === 'bci-import' || currentState.phase === 'manual-create') {
+        // Go back to add-project-options
+        router.replace('/site-visit-wizard?phase=add-project-options', { scroll: false })
+        return { ...currentState, phase: 'add-project-options' as const }
+      }
+      
+      if (currentState.phase === 'bci-project-select') {
+        // Go back to BCI import
+        router.replace('/site-visit-wizard?phase=bci-import', { scroll: false })
+        return { ...currentState, phase: 'bci-import' as const, bciImportData: null }
+      }
+      
       return currentState
     })
   }, [router])
@@ -248,12 +377,19 @@ export function useWizardState(): UseWizardStateReturn {
     state,
     goToProjectSelection,
     goToActionMenu,
+    // Add project flow navigation
+    goToAddProjectOptions,
+    goToBCIImport,
+    goToBCIProjectSelect,
+    goToBCIImporting,
+    goToManualCreate,
     openView,
     closeView,
     showExitDialog,
     closeSiteVisitDialog,
     selectProject,
     clearProject,
+    setBCIImportData,
     canGoBack,
     goBack,
     getPreSelectedReasonNames,
