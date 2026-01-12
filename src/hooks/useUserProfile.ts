@@ -3,6 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { QUERY_TIMEOUTS, withTimeout } from "@/lib/withTimeout";
 import { useAuth } from "./useAuth";
+import * as Sentry from "@sentry/nextjs";
+import { useEffect, useRef } from "react";
 
 export interface UserProfileRecord {
   id: string;
@@ -73,9 +75,49 @@ async function ensureValidSession(): Promise<boolean> {
 }
 
 export function useUserProfile(staleTime = 5 * 60 * 1000) {
-  const { session } = useAuth();
+  const { session, loading } = useAuth();
   const supabase = getSupabaseBrowserClient();
   const userId = session?.user?.id;
+  
+  // Track if we previously had a userId to detect session loss
+  const hadUserIdRef = useRef<string | null>(null);
+  const sessionLossReportedRef = useRef(false);
+  
+  // Detect when userId becomes undefined after being defined (session loss)
+  useEffect(() => {
+    if (userId) {
+      // We have a user - track it
+      hadUserIdRef.current = userId;
+      sessionLossReportedRef.current = false;
+    } else if (hadUserIdRef.current && !loading && !sessionLossReportedRef.current) {
+      // We HAD a user but now we don't, and we're not loading - potential session loss
+      sessionLossReportedRef.current = true;
+      const lossData = {
+        previousUserId: hadUserIdRef.current?.slice(-6),
+        pathname: typeof window !== 'undefined' ? window.location?.pathname : null,
+        timestamp: Date.now(),
+        loading,
+        hasSession: !!session,
+      };
+      
+      console.warn('[useUserProfile] SESSION LOSS DETECTED - userId became undefined', lossData);
+      
+      if (typeof window !== 'undefined') {
+        Sentry.addBreadcrumb({
+          category: 'auth-session-loss',
+          level: 'warning',
+          message: 'useUserProfile detected session loss - userId became undefined',
+          data: lossData,
+        });
+        
+        Sentry.captureMessage('[Auth] Session loss detected in useUserProfile', {
+          level: 'warning',
+          tags: { component: 'useUserProfile', type: 'session-loss' },
+          extra: lossData,
+        });
+      }
+    }
+  }, [userId, loading, session]);
 
   const query = useQuery<UserProfileRecord | null>({
     queryKey: [...CURRENT_USER_PROFILE_QUERY_KEY, userId],

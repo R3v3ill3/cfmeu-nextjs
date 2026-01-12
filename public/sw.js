@@ -1,13 +1,17 @@
 // Service Worker for CFMEU Employer Rating System PWA
 // Enhanced with Mobile Performance Optimizations
-// Version 2.3.0 - Fixed deployment version mismatch by using network-first for JS chunks
+// Version 2.4.0 - Fixed iOS PWA session loss by deferring SW updates during navigation
 
-const CACHE_NAME = 'cfmeu-ratings-v2.3.0'
-const STATIC_CACHE = 'cfmeu-static-v2.3.0'
-const API_CACHE = 'cfmeu-api-v2.3.0'
-const DYNAMIC_CACHE = 'cfmeu-dynamic-v2.3.0'
-const MOBILE_CACHE = 'cfmeu-mobile-v2.3.0'
-const CRITICAL_DATA_CACHE = 'cfmeu-critical-v2.3.0'
+const CACHE_NAME = 'cfmeu-ratings-v2.4.0'
+const STATIC_CACHE = 'cfmeu-static-v2.4.0'
+const API_CACHE = 'cfmeu-api-v2.4.0'
+const DYNAMIC_CACHE = 'cfmeu-dynamic-v2.4.0'
+const MOBILE_CACHE = 'cfmeu-mobile-v2.4.0'
+const CRITICAL_DATA_CACHE = 'cfmeu-critical-v2.4.0'
+
+// Track navigation state to prevent mid-navigation disruption
+let isNavigating = false
+let pendingSkipWaiting = false
 
 // ONLY truly static assets that don't require authentication
 // Auth-protected routes will be cached dynamically after user logs in
@@ -44,7 +48,7 @@ const MOBILE_ASSETS = [
 
 // Install event - cache ONLY truly static assets (no auth-protected routes)
 self.addEventListener('install', (event) => {
-  console.log('[SW] Installing service worker v2.3.0')
+  console.log('[SW] Installing service worker v2.4.0')
 
   event.waitUntil(
     // Only cache truly static assets that don't require authentication
@@ -63,20 +67,32 @@ self.addEventListener('install', (event) => {
         )
       })
       .then(() => {
-        console.log('[SW] Static assets cached, skipping waiting')
-        return self.skipWaiting()
+        console.log('[SW] Static assets cached')
+        // DON'T skipWaiting immediately - wait for explicit message from client
+        // This prevents mid-navigation service worker takeover that causes session loss
+        console.log('[SW] Waiting for client signal before activating')
+        // Only auto-skip if this is the first SW install (no controller)
+        return self.clients.matchAll().then(clients => {
+          const hasActiveController = clients.some(c => c.url && !c.url.includes('/auth'))
+          if (!hasActiveController) {
+            console.log('[SW] No active clients with auth pages, safe to skipWaiting')
+            return self.skipWaiting()
+          }
+          console.log('[SW] Active clients detected, deferring skipWaiting')
+          pendingSkipWaiting = true
+        })
       })
       .catch((error) => {
         console.error('[SW] Failed to cache static assets:', error)
-        // Still skip waiting to activate the SW even on cache failure
-        return self.skipWaiting()
+        // Still mark as pending - don't force activation on error
+        pendingSkipWaiting = true
       })
   )
 })
 
 // Activate event - clean up old caches
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activating service worker v2.3.0')
+  console.log('[SW] Activating service worker v2.4.0')
 
   // List of current cache names to keep
   const currentCaches = [STATIC_CACHE, API_CACHE, DYNAMIC_CACHE, MOBILE_CACHE, CRITICAL_DATA_CACHE]
@@ -95,18 +111,22 @@ self.addEventListener('activate', (event) => {
         )
       })
       .then(() => {
-        console.log('[SW] Service worker v2.3.0 activated - claiming clients')
-        // Claim clients immediately so the new SW takes control
+        console.log('[SW] Service worker v2.4.0 activated - claiming clients carefully')
+        // Claim clients so the new SW takes control
         return self.clients.claim()
       })
       .then(() => {
         // Notify all clients that they should refresh for the best experience
+        // BUT don't force reload - let the client decide when it's safe
         return self.clients.matchAll().then(clients => {
+          console.log(`[SW] Notifying ${clients.length} clients of update`)
           clients.forEach(client => {
             client.postMessage({
               type: 'SW_UPDATED',
-              version: '2.3.0',
-              message: 'Service worker updated. Please refresh for best experience.'
+              version: '2.4.0',
+              message: 'Service worker updated. Refresh when ready for best experience.',
+              // Include flag to indicate client should NOT auto-reload
+              deferReload: true
             })
           })
         })
@@ -222,6 +242,41 @@ async function staleWhileRevalidate(request) {
   // Otherwise wait for network
   return fetchPromise
 }
+
+// Handle messages from clients
+self.addEventListener('message', (event) => {
+  console.log('[SW] Received message:', event.data?.type)
+  
+  if (event.data?.type === 'SKIP_WAITING') {
+    // Client explicitly requested SW activation - it's safe to proceed
+    console.log('[SW] Client requested skipWaiting - activating now')
+    self.skipWaiting()
+  }
+  
+  if (event.data?.type === 'NAVIGATION_START') {
+    // Client is about to navigate - don't disrupt
+    isNavigating = true
+    console.log('[SW] Client navigation started - deferring disruptive operations')
+  }
+  
+  if (event.data?.type === 'NAVIGATION_END') {
+    // Client finished navigating - safe to proceed with pending operations
+    isNavigating = false
+    console.log('[SW] Client navigation ended')
+    
+    // If we had a pending skipWaiting, execute it now
+    if (pendingSkipWaiting) {
+      console.log('[SW] Executing deferred skipWaiting')
+      pendingSkipWaiting = false
+      self.skipWaiting()
+    }
+  }
+  
+  if (event.data?.type === 'GET_VERSION') {
+    // Client is checking SW version
+    event.ports?.[0]?.postMessage({ version: '2.4.0' })
+  }
+})
 
 // Network-first strategy for navigation requests (HTML pages)
 // This ensures auth state is always correct - critical for PWA

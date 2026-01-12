@@ -163,28 +163,45 @@ const nextConfig = {
   poweredByHeader: false,
 };
 
-// Sentry configuration options
+// Sentry configuration options for SDK v10+
 const sentryWebpackPluginOptions = {
   // Suppress source map uploading logs during build
-  silent: true,
-
-  // Upload source maps only in production
-  sourceMaps: {
-    enable: isProduction,
-  },
-
-  // Automatically tree-shake Sentry logger statements
-  disableLogger: true,
-
-  // Hide source maps from generated client bundles
-  hideSourceMaps: true,
-
-  // Only upload source maps when SENTRY_AUTH_TOKEN is set
-  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: !process.env.SENTRY_DEBUG,
 
   // Organization and project slugs (set these in your Sentry project settings)
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
+  
+  // Auth token for source map upload
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+
+  // Source maps configuration for SDK v10+
+  sourcemaps: {
+    // Delete source maps after upload to keep bundle size small
+    deleteSourceMapsAfterUpload: true,
+  },
+
+  // Widen the upload scope to include all client-side files
+  // This ensures we capture chunk files that might be missed
+  widenClientFileUpload: true,
+
+  // Route browser requests to Sentry through a Next.js rewrite
+  // This avoids ad-blockers blocking Sentry
+  tunnelRoute: "/monitoring",
+
+  // Automatically tree-shake Sentry logger statements
+  disableLogger: true,
+
+  // Hide source maps from generated client bundles (security)
+  hideSourceMaps: true,
+
+  // Disable automatic instrumentation of API routes
+  automaticVercelMonitors: false,
+
+  // React component annotations for better error context
+  reactComponentAnnotation: {
+    enabled: true,
+  },
 };
 
 // Wrap with Sentry if DSN is configured

@@ -229,21 +229,63 @@ export default function Providers({ children }: ProvidersProps) {
         // Listen for messages from service worker
         navigator.serviceWorker.addEventListener('message', (event) => {
           if (event.data?.type === 'SW_UPDATED') {
-            // Log the update but don't reload here - controllerchange handles it
-            // Having both caused a race condition on iOS Safari where the script
-            // load would fail during the reload transition (JAVASCRIPT-NEXTJS-A)
-            logPwaEvent('Service worker updated', { version: event.data.version })
+            // Log the update with timestamp for correlation with Sentry errors
+            logPwaEvent('Service worker updated message received', { 
+              version: event.data.version,
+              timestamp: Date.now(),
+              pathname: window.location?.pathname,
+              deferReload: event.data.deferReload,
+              isStandalone: window.matchMedia?.('(display-mode: standalone)')?.matches || 
+                           (navigator as any).standalone === true,
+            })
+            
+            // Store that an update is available - reload will happen on next
+            // natural navigation or when user explicitly refreshes
+            if (event.data.deferReload) {
+              sessionStorage.setItem('sw-update-available', event.data.version)
+            }
           }
         })
 
-        // When a new service worker takes over, reload to ensure fresh state
+        // Track if we're in the middle of a navigation to avoid mid-navigation reloads
         let refreshing = false
+        let pendingReload = false
+        
+        // When a new service worker takes over, be careful about reloading
         navigator.serviceWorker.addEventListener('controllerchange', () => {
-          if (!refreshing) {
-            refreshing = true
-            logPwaEvent('Service worker controller changed, reloading')
-            window.location.reload()
+          const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+          const isStandalone = window.matchMedia?.('(display-mode: standalone)')?.matches || 
+                              (navigator as any).standalone === true
+          
+          logPwaEvent('Service worker controller changed', {
+            timestamp: Date.now(),
+            pathname: window.location?.pathname,
+            isIOS,
+            isStandalone,
+            refreshing,
+            willReload: !refreshing && !isIOS,
+          })
+          
+          if (refreshing) {
+            logPwaEvent('Skipping reload - already refreshing')
+            return
           }
+          
+          // On iOS PWA, don't auto-reload - session state loss is too risky
+          // Let the user manually refresh when they're ready
+          if (isIOS && isStandalone) {
+            logPwaEvent('iOS PWA detected - deferring reload to preserve session', { 
+              timestamp: Date.now(),
+            })
+            pendingReload = true
+            // Instead of reloading, just log that an update is available
+            // The next natural page load will pick up the new SW
+            return
+          }
+          
+          refreshing = true
+          logPwaEvent('Triggering page reload for SW update', { timestamp: Date.now() })
+          window.location.reload()
         })
 
         return () => clearInterval(updateInterval)

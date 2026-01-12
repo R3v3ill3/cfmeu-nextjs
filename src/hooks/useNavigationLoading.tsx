@@ -1,8 +1,9 @@
 'use client'
 
-import { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react'
+import { createContext, useContext, useState, useEffect, ReactNode, useRef, useCallback } from 'react'
 import { usePathname } from 'next/navigation'
 import Image from 'next/image'
+import * as Sentry from '@sentry/nextjs'
 
 interface NavigationLoadingContextType {
   isNavigating: boolean
@@ -12,6 +13,22 @@ interface NavigationLoadingContextType {
 }
 
 const NavigationLoadingContext = createContext<NavigationLoadingContextType | undefined>(undefined)
+
+// Navigation event logging for debugging session loss
+function logNavigationEvent(message: string, data?: Record<string, unknown>) {
+  const payload = { ...data, timestamp: Date.now(), isoTime: new Date().toISOString() }
+  if (process.env.NODE_ENV !== 'test') {
+    console.log(`[Navigation] ${message}`, payload)
+  }
+  if (typeof window !== 'undefined') {
+    Sentry.addBreadcrumb({
+      category: 'navigation',
+      level: 'info',
+      message,
+      data: payload,
+    })
+  }
+}
 
 export function NavigationLoadingProvider({ children }: { children: ReactNode }) {
   const [isNavigating, setIsNavigating] = useState(false)
@@ -50,6 +67,25 @@ export function NavigationLoadingProvider({ children }: { children: ReactNode })
 
         // Set timer to clear loading state after minimum display time + render delay
         clearTimerRef.current = setTimeout(() => {
+          logNavigationEvent('Navigation completed', {
+            from: pathname,
+            to: targetPath,
+            duration: navigationDuration,
+          })
+          
+          // Notify service worker that navigation is complete
+          // This allows deferred SW operations to proceed
+          if (typeof navigator !== 'undefined' && navigator.serviceWorker?.controller) {
+            try {
+              navigator.serviceWorker.controller.postMessage({ 
+                type: 'NAVIGATION_END',
+                pathname
+              })
+            } catch {
+              // Ignore errors - SW may not be available
+            }
+          }
+          
           setIsNavigating(false)
           setTargetPath(null)
           navigationStartTimeRef.current = null
@@ -113,19 +149,48 @@ export function NavigationLoadingProvider({ children }: { children: ReactNode })
     }
   }, [isNavigating])
 
-  const startNavigation = (path: string) => {
+  const startNavigation = useCallback((path: string) => {
     // Extract base paths for comparison
     const currentBasePath = pathname.split('?')[0]
     const targetBasePath = path.split('?')[0]
 
     // Only start navigation if actually changing pages (ignore query param changes on same page)
     if (currentBasePath !== targetBasePath) {
+      const navigationId = `nav-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      
+      // Log navigation start for debugging session loss during navigation
+      logNavigationEvent('startNavigation called', {
+        navigationId,
+        from: currentBasePath,
+        to: targetBasePath,
+        fullPath: path,
+        isIOS: typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent),
+        isStandalone: typeof window !== 'undefined' && (
+          window.matchMedia?.('(display-mode: standalone)')?.matches ||
+          (navigator as any).standalone === true
+        ),
+      })
+      
+      // Notify service worker that navigation is starting
+      // This prevents the SW from triggering page reload mid-navigation
+      if (typeof navigator !== 'undefined' && navigator.serviceWorker?.controller) {
+        try {
+          navigator.serviceWorker.controller.postMessage({ 
+            type: 'NAVIGATION_START',
+            from: currentBasePath,
+            to: targetBasePath
+          })
+        } catch {
+          // Ignore errors - SW may not be available
+        }
+      }
+      
       // Track when navigation starts for minimum display time calculation
       navigationStartTimeRef.current = Date.now()
       setTargetPath(path)
       setIsNavigating(true)
     }
-  }
+  }, [pathname])
 
   // Direct method to set loading state (for page-level loading that bypasses navigation logic)
   const setNavigationLoading = (loading: boolean, path?: string) => {

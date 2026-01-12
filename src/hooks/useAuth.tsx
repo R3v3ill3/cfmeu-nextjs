@@ -11,6 +11,56 @@ import type { SeverityLevel } from "@sentry/types";
 // Session recovery: if session is lost unexpectedly, wait this long before giving up
 const SESSION_RECOVERY_TIMEOUT = 5000; // 5 seconds
 
+// localStorage key for persisting session presence indicator
+const HAD_SESSION_STORAGE_KEY = "cfmeu-had-session";
+const HAD_SESSION_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+// Helper to persist hadSession state to localStorage (survives React tree destruction)
+function persistHadSession(userId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const payload = {
+      userId: userId.slice(-12), // Last 12 chars for matching, privacy-safe
+      timestamp: Date.now(),
+    };
+    localStorage.setItem(HAD_SESSION_STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    // localStorage might be unavailable in private browsing
+  }
+}
+
+// Helper to check if we previously had a session (survives React tree destruction)
+function checkPersistedHadSession(): { hadSession: boolean; userId?: string } {
+  if (typeof window === "undefined") return { hadSession: false };
+  try {
+    const stored = localStorage.getItem(HAD_SESSION_STORAGE_KEY);
+    if (!stored) return { hadSession: false };
+    
+    const payload = JSON.parse(stored);
+    const age = Date.now() - (payload.timestamp || 0);
+    
+    // Expired - clean up and return false
+    if (age > HAD_SESSION_TTL) {
+      localStorage.removeItem(HAD_SESSION_STORAGE_KEY);
+      return { hadSession: false };
+    }
+    
+    return { hadSession: true, userId: payload.userId };
+  } catch {
+    return { hadSession: false };
+  }
+}
+
+// Helper to clear persisted hadSession (on explicit sign out)
+function clearPersistedHadSession(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(HAD_SESSION_STORAGE_KEY);
+  } catch {
+    // Ignore errors
+  }
+}
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
@@ -81,9 +131,40 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const nextUserId = nextSession?.user?.id ?? null;
       const prevHasSession = !!sessionRef.current;
       const nextHasSession = !!nextSession;
+      
+      // CRITICAL: Log state transition for debugging session loss
+      const transition = {
+        prevHasSession,
+        nextHasSession,
+        prevUserId: prevUserId?.slice(-6) ?? null,
+        nextUserId: nextUserId?.slice(-6) ?? null,
+        hadSessionRef: hadSessionRef.current,
+        recoveryAttempted: recoveryAttemptedRef.current,
+        pathname: typeof window !== "undefined" ? window.location?.pathname : null,
+      };
+      
+      // Detect potential session loss scenarios
+      if (prevHasSession && !nextHasSession) {
+        logAuthEvent("SESSION LOSS DETECTED - applyAuthState transitioning to null", {
+          ...transition,
+          source: metadata?.source ?? "unknown",
+        }, "warning");
+      } else if (!prevHasSession && nextHasSession) {
+        logAuthEvent("Session restored in applyAuthState", {
+          ...transition,
+          source: metadata?.source ?? "unknown",
+        });
+      }
+      
       setSession(nextSession);
       sessionRef.current = nextSession;
       setUser(nextSession?.user ?? null);
+      
+      // Persist hadSession to localStorage so it survives React tree destruction
+      if (nextSession?.user?.id) {
+        hadSessionRef.current = true;
+        persistHadSession(nextSession.user.id);
+      }
 
       if (typeof window !== "undefined") {
         Sentry.setUser(
@@ -101,6 +182,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           source: metadata.source ?? "unknown",
           hasSession: !!nextSession,
           userId: nextSession?.user?.id ?? null,
+          transitionType: prevHasSession && !nextHasSession ? "loss" : 
+                          !prevHasSession && nextHasSession ? "restore" : "update",
           ...metadata,
         });
       }
@@ -155,6 +238,95 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       recoveryTimeoutRef.current = undefined;
     }, 1000); // 1-second debounce to prevent race conditions
   }, [attemptSessionRecovery, logAuthEvent]);
+
+  // Detect iOS PWA environment for diagnostic purposes
+  const detectIosPwaContext = useCallback(() => {
+    if (typeof window === "undefined") return null;
+    
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isStandalone = window.matchMedia?.("(display-mode: standalone)")?.matches || 
+                        (navigator as unknown as { standalone?: boolean }).standalone === true;
+    const isMobileSafari = isIOS && /Safari/.test(navigator.userAgent) && 
+                          !/Chrome|CriOS|FxiOS/.test(navigator.userAgent);
+    
+    // Check if cookies are accessible (iOS PWA isolation check)
+    let cookieAccessible = false;
+    let sbCookieCount = 0;
+    try {
+      cookieAccessible = document.cookie !== undefined;
+      // Count Supabase cookies
+      const cookies = document.cookie.split(";").filter(c => c.trim().startsWith("sb-"));
+      sbCookieCount = cookies.length;
+    } catch {
+      cookieAccessible = false;
+    }
+    
+    return {
+      isIOS,
+      isStandalone,
+      isMobileSafari,
+      isPWA: isStandalone && isIOS,
+      cookieAccessible,
+      sbCookieCount,
+      userAgent: navigator.userAgent?.slice(0, 100),
+    };
+  }, []);
+  
+  // Log iOS/PWA context on mount for debugging session loss
+  useEffect(() => {
+    const context = detectIosPwaContext();
+    if (context) {
+      if (context.isPWA) {
+        logAuthEvent("iOS PWA context detected on mount", context);
+        
+        // This is a critical diagnostic point - if we're in iOS PWA and have no sb cookies,
+        // the session will fail to restore
+        if (context.sbCookieCount === 0) {
+          logAuthEvent("WARNING: iOS PWA with no Supabase cookies - session loss likely", context, "warning");
+        }
+      } else if (context.isIOS && context.isMobileSafari) {
+        logAuthEvent("iOS Safari context on mount", context);
+      }
+    }
+    
+    // Check for persisted hadSession - this survives React tree destruction
+    const persisted = checkPersistedHadSession();
+    if (persisted.hadSession) {
+      logAuthEvent("Found persisted hadSession from localStorage", { 
+        persistedUserId: persisted.userId,
+        iosContext: context?.isPWA ? "ios-pwa" : context?.isIOS ? "ios-safari" : "other",
+      });
+      hadSessionRef.current = true;
+    }
+  }, [detectIosPwaContext, logAuthEvent]);
+  
+  // Mount-time session recovery: if we previously had a session but now it's null,
+  // attempt recovery immediately after loading completes
+  useEffect(() => {
+    if (loading) return; // Wait for initial load to complete
+    
+    const persisted = checkPersistedHadSession();
+    
+    // If we had a session (persisted) but now we don't have one, and loading is done
+    if (persisted.hadSession && !session && !recoveryAttemptedRef.current) {
+      logAuthEvent("Session null on mount despite persisted hadSession - attempting recovery", {
+        persistedUserId: persisted.userId,
+      });
+      
+      // Attempt recovery
+      attemptSessionRecovery().then((recoveredSession) => {
+        if (recoveredSession) {
+          logAuthEvent("Mount-time session recovery succeeded", {
+            userId: recoveredSession.user?.id?.slice(-6),
+          });
+        } else {
+          logAuthEvent("Mount-time session recovery failed - user will need to re-authenticate", {}, "warning");
+          // Clear persisted state since recovery failed
+          clearPersistedHadSession();
+        }
+      });
+    }
+  }, [loading, session, attemptSessionRecovery, logAuthEvent]);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -352,6 +524,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (document.visibilityState !== 'visible' || !hadSessionRef.current) {
         return;
       }
+      
+      // Capture iOS PWA context for diagnostic purposes
+      const iosContext = detectIosPwaContext();
+      if (iosContext?.isPWA) {
+        logAuthEvent("iOS PWA becoming visible - checking session", {
+          ...iosContext,
+          hadSession: hadSessionRef.current,
+          currentHasSession: !!sessionRef.current,
+          pathname: window.location?.pathname,
+        });
+      }
 
       const supabase = getSupabaseBrowserClient();
       
@@ -440,6 +623,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const supabase = getSupabaseBrowserClient();
     hadSessionRef.current = false; // Reset on explicit sign out
     recoveryAttemptedRef.current = false; // Reset recovery attempt flag
+
+    // Clear persisted hadSession from localStorage
+    clearPersistedHadSession();
 
     // Clear any pending recovery timeout on sign out
     if (recoveryTimeoutRef.current) {

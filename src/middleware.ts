@@ -158,6 +158,20 @@ export async function middleware(req: NextRequest) {
   const allCookies = req.cookies.getAll()
   const sbCookies = allCookies.filter(c => c.name.startsWith('sb-'))
   const hasSbCookies = sbCookies.length > 0
+  
+  // Enhanced cookie state logging for session loss debugging
+  // Log cookie metadata (not values) to track state transitions
+  const cookieMetadata = sbCookies.map(c => ({
+    name: c.name,
+    valueLength: c.value?.length ?? 0,
+    // Check if it looks like a valid JWT structure (header.payload.signature)
+    looksLikeJwt: c.value?.split('.').length === 3,
+  }))
+  
+  // Detect iOS/PWA context from user agent
+  const userAgent = req.headers.get('user-agent') || ''
+  const isIOS = /iPad|iPhone|iPod/.test(userAgent)
+  const isMobileSafari = isIOS && /Safari/.test(userAgent) && !/Chrome|CriOS|FxiOS/.test(userAgent)
 
   // Enhanced logging for diagnostics - only log errors when cookies exist but auth fails
   // (indicates actual session loss, not just unauthenticated requests)
@@ -173,7 +187,9 @@ export async function middleware(req: NextRequest) {
         authDuration,
         hasAuthCode,
         sbCookieCount: sbCookies.length,
-        sbCookieNames: sbCookies.map(c => c.name),
+        sbCookieMetadata: cookieMetadata,
+        isIOS,
+        isMobileSafari,
       });
       // Try to refresh the session - this can recover from stale JWT tokens
       logMiddleware('log', 'Attempting session refresh due to auth error with existing cookies');
@@ -214,7 +230,9 @@ export async function middleware(req: NextRequest) {
     // No error but also no user, yet we have cookies - try refresh
     logMiddleware('log', 'No user but sb cookies present, attempting session refresh', {
       sbCookieCount: sbCookies.length,
-      sbCookieNames: sbCookies.map(c => c.name),
+      sbCookieMetadata: cookieMetadata,
+      isIOS,
+      isMobileSafari,
     });
     try {
       const refreshStartTime = Date.now();
