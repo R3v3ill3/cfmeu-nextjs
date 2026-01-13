@@ -177,67 +177,26 @@ export async function POST(
   { params }: { params: { projectId: string } }
 ) {
   const projectId = params.projectId
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mapping-sheet/route.ts:POST-entry',message:'POST request received',data:{projectId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,D'})}).catch(()=>{});
-  // #endregion
-  
   const access = await ensureUserAccess(projectId)
-  if ("error" in access) {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mapping-sheet/route.ts:POST-access-error',message:'Access denied',data:{hasError:true},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion
-    return access.error
-  }
+  if ("error" in access) return access.error
 
   const { supabase, project } = access
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mapping-sheet/route.ts:POST-access-ok',message:'Access granted',data:{projectId,mainJobSiteId:project.main_job_site_id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
-  // #endregion
 
   try {
     const submission: MappingSheetSubmission = await request.json()
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mapping-sheet/route.ts:POST-parsed',message:'Submission parsed',data:{hasProjectUpdates:!!submission.projectUpdates,hasSiteContacts:!!(submission.siteContactUpdates?.length),hasContractorRoles:!!(submission.contractorRoleUpdates?.length),hasTradeContractors:!!(submission.tradeContractorUpdates?.length)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,D'})}).catch(()=>{});
-    // #endregion
 
     await handleProjectUpdates(supabase, projectId, submission.projectUpdates)
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mapping-sheet/route.ts:POST-project-ok',message:'handleProjectUpdates completed',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
-    
     await handleAddressUpdate(supabase, project.main_job_site_id, submission.addressUpdate)
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mapping-sheet/route.ts:POST-address-ok',message:'handleAddressUpdate completed',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
-    
     await handleSiteContacts(
       supabase,
       project.main_job_site_id,
       submission.siteContactUpdates || []
     )
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mapping-sheet/route.ts:POST-contacts-ok',message:'handleSiteContacts completed',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
-    
     await handleContractorRoles(supabase, projectId, submission.contractorRoleUpdates || [])
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mapping-sheet/route.ts:POST-roles-ok',message:'handleContractorRoles completed',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
-    
     await handleTradeContractors(supabase, projectId, submission.tradeContractorUpdates || [])
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mapping-sheet/route.ts:POST-trades-ok',message:'handleTradeContractors completed',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
 
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mapping-sheet/route.ts:POST-success',message:'All handlers completed successfully',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,D'})}).catch(()=>{});
-    // #endregion
     return NextResponse.json({ success: true })
   } catch (error) {
-    // #region agent log
-    const errorInfo = {errorType:typeof error,isError:error instanceof Error,message:(error as any)?.message,code:(error as any)?.code,details:(error as any)?.details,hint:(error as any)?.hint,name:(error as any)?.name,stringified:String(error)};
-    fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'mapping-sheet/route.ts:POST-catch',message:'Handler threw error',data:errorInfo,timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,D'})}).catch(()=>{});
-    // #endregion
     console.error("Failed to submit mapping sheet form:", error)
     return NextResponse.json(
       { error: "Failed to submit mapping sheet form" },

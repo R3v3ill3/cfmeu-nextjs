@@ -1,18 +1,24 @@
 "use client"
 
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useWizardState } from './hooks/useWizardState'
+import { useWizardState, type BCIImportData, type SelectedProject } from './hooks/useWizardState'
 import { WizardHeader } from './shared/WizardHeader'
 import { SiteVisitRecordDialog } from './shared/SiteVisitRecordDialog'
 import { ProjectSelector } from './phases/ProjectSelector'
 import { ActionMenu } from './phases/ActionMenu'
+import { AddProjectOptions } from './phases/AddProjectOptions'
+import { BCIImportPanel } from './phases/BCIImportPanel'
+import { BCIProjectSelector } from './phases/BCIProjectSelector'
+import { MobileManualProjectForm } from './phases/MobileManualProjectForm'
+import { MobileBCIImport } from '@/components/upload/MobileBCIImport'
 import { ContactsView } from './views/ContactsView'
 import { MappingView } from './views/MappingView'
 import { RatingsView } from './views/RatingsView'
 import { EbaView } from './views/EbaView'
 import { IncolinkView } from './views/IncolinkView'
 import { ProjectDetailsView } from './views/ProjectDetailsView'
+import { toast } from 'sonner'
 
 export function SiteVisitWizard() {
   const router = useRouter()
@@ -20,14 +26,23 @@ export function SiteVisitWizard() {
     state,
     goToProjectSelection,
     goToActionMenu,
+    goToAddProjectOptions,
+    goToBCIImport,
+    goToBCIProjectSelect,
+    goToBCIImporting,
+    goToManualCreate,
     openView,
     closeView,
     showExitDialog,
     closeSiteVisitDialog,
+    setBCIImportData,
     canGoBack,
     goBack,
     getPreSelectedReasonNames,
   } = useWizardState()
+  
+  // Local error state for BCI import
+  const [bciImportError, setBciImportError] = useState<string | null>(null)
   
   // Handle project selection - just go to action menu, no entry dialog
   const handleProjectSelected = useCallback((project: {
@@ -66,6 +81,41 @@ export function SiteVisitWizard() {
     }
   }, [state.selectedProject, showExitDialog, handleExit])
   
+  // Handle BCI file processed
+  const handleBCIFileProcessed = useCallback((data: BCIImportData) => {
+    if (data.projects.length === 1) {
+      // Single project - go straight to importing
+      goToBCIImporting(data.projects[0].projectId)
+      setBCIImportData(data)
+    } else {
+      // Multiple projects - show selector
+      goToBCIProjectSelect(data)
+    }
+  }, [goToBCIImporting, goToBCIProjectSelect, setBCIImportData])
+  
+  // Handle BCI project selected
+  const handleBCIProjectSelected = useCallback((projectId: string) => {
+    goToBCIImporting(projectId)
+  }, [goToBCIImporting])
+  
+  // Handle BCI import complete
+  const handleBCIImportComplete = useCallback((project: SelectedProject) => {
+    toast.success('Project imported successfully')
+    goToActionMenu(project)
+  }, [goToActionMenu])
+  
+  // Handle BCI import error
+  const handleBCIImportError = useCallback((error: string) => {
+    setBciImportError(error)
+    toast.error('Import failed: ' + error)
+  }, [])
+  
+  // Handle manual project created
+  const handleManualProjectComplete = useCallback((project: SelectedProject) => {
+    toast.success('Project created successfully')
+    goToActionMenu(project)
+  }, [goToActionMenu])
+  
   // Get header title and subtitle
   const getHeaderContent = () => {
     if (state.view && state.selectedProject) {
@@ -87,6 +137,42 @@ export function SiteVisitWizard() {
       return {
         title: state.selectedProject.name,
         subtitle: state.selectedProject.address || undefined,
+      }
+    }
+    
+    // Add project flow headers
+    if (state.phase === 'add-project-options') {
+      return {
+        title: 'Add New Project',
+        subtitle: undefined,
+      }
+    }
+    
+    if (state.phase === 'bci-import') {
+      return {
+        title: 'Import from BCI',
+        subtitle: undefined,
+      }
+    }
+    
+    if (state.phase === 'bci-project-select') {
+      return {
+        title: 'Select Project',
+        subtitle: undefined,
+      }
+    }
+    
+    if (state.phase === 'bci-importing') {
+      return {
+        title: 'Importing...',
+        subtitle: undefined,
+      }
+    }
+    
+    if (state.phase === 'manual-create') {
+      return {
+        title: 'Create Project',
+        subtitle: undefined,
       }
     }
     
@@ -170,6 +256,46 @@ export function SiteVisitWizard() {
         ) : state.phase === 'project-selection' ? (
           <ProjectSelector 
             onProjectSelected={handleProjectSelected}
+            onAddNewProject={goToAddProjectOptions}
+          />
+        ) : state.phase === 'add-project-options' ? (
+          <AddProjectOptions
+            onSelectBCIImport={goToBCIImport}
+            onSelectManualCreate={goToManualCreate}
+            onBack={goBack}
+          />
+        ) : state.phase === 'bci-import' ? (
+          <BCIImportPanel
+            onFileProcessed={handleBCIFileProcessed}
+            onBack={goBack}
+          />
+        ) : state.phase === 'bci-project-select' && state.bciImportData ? (
+          <BCIProjectSelector
+            projects={state.bciImportData.projects}
+            onSelectProject={handleBCIProjectSelected}
+            onBack={goBack}
+          />
+        ) : state.phase === 'bci-importing' && state.bciImportData?.selectedProjectId ? (
+          (() => {
+            const selectedProject = state.bciImportData.projects.find(
+              p => p.projectId === state.bciImportData?.selectedProjectId
+            )
+            if (!selectedProject) return null
+            return (
+              <MobileBCIImport
+                project={selectedProject}
+                companies={state.bciImportData.companies.filter(
+                  c => c.projectId === selectedProject.projectId
+                )}
+                onComplete={handleBCIImportComplete}
+                onError={handleBCIImportError}
+              />
+            )
+          })()
+        ) : state.phase === 'manual-create' ? (
+          <MobileManualProjectForm
+            onComplete={handleManualProjectComplete}
+            onBack={goBack}
           />
         ) : state.phase === 'action-menu' && state.selectedProject ? (
           <ActionMenu

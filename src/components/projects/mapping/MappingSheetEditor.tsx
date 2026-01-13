@@ -243,47 +243,17 @@ export function MappingSheetEditor({
   // Submit form mutation
   const submitMutation = useMutation({
     mutationFn: async (submission: any) => {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MappingSheetEditor.tsx:submitMutation-start',message:'Starting submission',data:{submitUrl,dataSourceType:dataSource.type},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,E'})}).catch(()=>{});
-      // #endregion
-      
-      let response: Response;
-      try {
-        response = await fetch(submitUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(submission),
-        });
-      } catch (fetchError: any) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MappingSheetEditor.tsx:submitMutation-fetchError',message:'Fetch itself threw',data:{errorType:typeof fetchError,isError:fetchError instanceof Error,message:fetchError?.message,name:fetchError?.name,stringified:String(fetchError)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
-        throw fetchError;
-      }
-
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MappingSheetEditor.tsx:submitMutation-response',message:'Got response',data:{ok:response.ok,status:response.status,statusText:response.statusText},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
+      const response = await fetch(submitUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(submission),
+      });
 
       if (!response.ok) {
-        let errorBody: any;
-        try {
-          errorBody = await response.json();
-        } catch (jsonError: any) {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MappingSheetEditor.tsx:submitMutation-jsonError',message:'response.json() threw',data:{errorType:typeof jsonError,message:jsonError?.message,name:jsonError?.name},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
-          // #endregion
-          throw new Error(`Server error: ${response.status} ${response.statusText}`);
-        }
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MappingSheetEditor.tsx:submitMutation-errorBody',message:'Error response parsed',data:{errorBody},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
-        throw new Error(errorBody.error || 'Failed to submit form');
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to submit form');
       }
 
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MappingSheetEditor.tsx:submitMutation-success',message:'Submission successful',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,E'})}).catch(()=>{});
-      // #endregion
       return response.json();
     },
     onSuccess: () => {
@@ -291,9 +261,6 @@ export function MappingSheetEditor({
       queryClient.invalidateQueries({ queryKey: ['mapping-sheet-form', dataSource.type, dataKey] });
     },
     onError: (error: any) => {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MappingSheetEditor.tsx:submitMutation-onError',message:'Mutation onError called',data:{errorType:typeof error,isError:error instanceof Error,message:error?.message,name:error?.name,stringified:String(error)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,E'})}).catch(()=>{});
-      // #endregion
       toast.error(error.message || 'Failed to submit form');
     },
   });
@@ -311,13 +278,13 @@ export function MappingSheetEditor({
     };
 
     const siteContactUpdates = Object.values(formData.siteContacts)
-      .filter(contact => contact.name.trim())
+      .filter(contact => contact.name?.trim())
       .map(contact => ({
         id: contact.id,
         role: contact.role,
-        name: contact.name.trim(),
-        email: contact.email.trim() || '',
-        phone: contact.phone.trim() || '',
+        name: contact.name?.trim() || '',
+        email: contact.email?.trim() || '',
+        phone: contact.phone?.trim() || '',
       }));
 
     // Process contractor actions

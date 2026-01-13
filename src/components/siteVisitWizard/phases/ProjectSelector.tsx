@@ -16,7 +16,8 @@ import {
   AlertCircle,
   Loader2,
   ChevronRight,
-  RefreshCw
+  RefreshCw,
+  Plus
 } from 'lucide-react'
 
 interface ProjectSelectorProps {
@@ -27,6 +28,7 @@ interface ProjectSelectorProps {
     builderName?: string | null
     mainJobSiteId?: string | null
   }) => void
+  onAddNewProject?: () => void
 }
 
 type GeolocationState = 
@@ -45,7 +47,7 @@ interface UserLocation {
 
 const MAX_NEARBY_RETRIES = 2
 
-export function ProjectSelector({ onProjectSelected }: ProjectSelectorProps) {
+export function ProjectSelector({ onProjectSelected, onAddNewProject }: ProjectSelectorProps) {
   const [geoState, setGeoState] = useState<GeolocationState>('requesting')
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
@@ -493,10 +495,22 @@ export function ProjectSelector({ onProjectSelected }: ProjectSelectorProps) {
                 <span className="ml-2 text-gray-500">Loading projects...</span>
               </div>
             ) : filteredPatchProjects.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                {searchQuery 
-                  ? `No projects matching "${searchQuery}"`
-                  : `No projects found in ${patches.length} patch(es)`}
+              <div className="text-center py-8 space-y-4">
+                <p className="text-gray-500">
+                  {searchQuery 
+                    ? `No projects matching "${searchQuery}"`
+                    : `No projects found in ${patches.length} patch(es)`}
+                </p>
+                {onAddNewProject && (
+                  <WizardButton
+                    variant="primary"
+                    onClick={onAddNewProject}
+                    className="w-full"
+                  >
+                    <Plus className="h-5 w-5 mr-2" />
+                    Add New Project
+                  </WizardButton>
+                )}
               </div>
             ) : (
               <div className="space-y-2">
@@ -648,14 +662,28 @@ export function ProjectSelector({ onProjectSelected }: ProjectSelectorProps) {
               </div>
             </div>
           ) : (
-            <div className="text-center py-8">
-              <p className="text-gray-500 mb-4">No nearby projects found</p>
-              <WizardButton
-                variant="secondary"
-                onClick={() => setShowSearch(true)}
-              >
-                Search all projects
-              </WizardButton>
+            <div className="text-center py-8 space-y-4">
+              <p className="text-gray-500">No nearby projects found</p>
+              <div className="space-y-3">
+                <WizardButton
+                  variant="secondary"
+                  onClick={() => setShowSearch(true)}
+                  className="w-full"
+                >
+                  <Search className="h-5 w-5 mr-2" />
+                  Search all projects
+                </WizardButton>
+                {onAddNewProject && (
+                  <WizardButton
+                    variant="primary"
+                    onClick={onAddNewProject}
+                    className="w-full"
+                  >
+                    <Plus className="h-5 w-5 mr-2" />
+                    Add New Project
+                  </WizardButton>
+                )}
+              </div>
             </div>
           )}
           
