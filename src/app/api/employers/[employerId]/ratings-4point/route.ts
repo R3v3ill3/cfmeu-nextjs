@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { featureFlags } from '@/lib/feature-flags';
+import * as Sentry from '@sentry/nextjs';
 
 // TypeScript interfaces for 4-point rating system
 interface ProjectAssessment4Point {
@@ -97,8 +98,26 @@ interface EmployerRating4PointResponse {
 }
 
 export async function GET(request: NextRequest, { params }: { params: { employerId: string } }) {
+  // #region agent log
+  const DEBUG_ENDPOINT = 'http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2';
+  const debugLog = (location: string, message: string, data: any, hypothesisId: string) => {
+    // Log to Sentry breadcrumbs in production and local debug endpoint in dev
+    Sentry.addBreadcrumb({ category: 'ratings-4point', message, data: { ...data, location, hypothesisId }, level: 'info' });
+    if (process.env.NODE_ENV === 'development') {
+      fetch(DEBUG_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location, message, data, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId }) }).catch(() => {});
+    }
+  };
+  const serializeError = (err: any): Record<string, unknown> => {
+    if (!err) return { raw: err };
+    if (typeof err !== 'object') return { raw: err };
+    return { message: err.message, code: err.code, details: err.details, hint: err.hint, status: err.status, statusCode: err.statusCode };
+  };
+  // #endregion
   try {
     const { employerId } = params;
+    // #region agent log
+    debugLog('route.ts:GET:entry', 'ratings-4point API called', { employerId }, 'A');
+    // #endregion
 
     // Check if 4-point rating system is enabled
     // In development, always enable. In production, check feature flag.
@@ -152,10 +171,17 @@ export async function GET(request: NextRequest, { params }: { params: { employer
 
     try {
       // Use the weighted rating calculation function
+      // #region agent log
+      const rpcStart = Date.now();
+      debugLog('route.ts:rpc:start', 'Starting weighted rating RPC', { employerId }, 'A');
+      // #endregion
       const { data: weightedData, error: weightedError } = await supabase
         .rpc('calculate_weighted_employer_rating_4point', {
           p_employer_id: employerId
         });
+      // #region agent log
+      debugLog('route.ts:rpc:complete', 'Weighted rating RPC completed', { employerId, durationMs: Date.now() - rpcStart, hasError: !!weightedError, errorMessage: weightedError?.message, errorCode: weightedError?.code, errorDetails: weightedError?.details }, 'A');
+      // #endregion
 
       if (weightedError) {
         console.error('Error in weighted rating calculation:', weightedError);
@@ -305,6 +331,10 @@ export async function GET(request: NextRequest, { params }: { params: { employer
     // Get organiser expertise assessments (Track 2) - with error handling
     let expertiseAssessments: any[] = [];
     try {
+      // #region agent log
+      const expertiseStart = Date.now();
+      debugLog('route.ts:expertise:start', 'Starting expertise assessments query', { employerId }, 'B');
+      // #endregion
       const { data, error: expertiseError } = await supabase
         .from('organiser_overall_expertise_ratings')
         .select(`
@@ -321,13 +351,26 @@ export async function GET(request: NextRequest, { params }: { params: { employer
         .eq('is_active', true)
         .order('assessment_date', { ascending: false })
         .limit(50);
+      // #region agent log
+      debugLog('route.ts:expertise:complete', 'Expertise assessments query completed', { employerId, durationMs: Date.now() - expertiseStart, hasError: !!expertiseError, errorMessage: expertiseError?.message, errorCode: expertiseError?.code, errorDetails: expertiseError?.details, errorHint: expertiseError?.hint, resultCount: data?.length }, 'B');
+      // #endregion
 
       if (expertiseError) {
-        console.error('Error fetching expertise assessments:', expertiseError);
+        // #region agent log
+        const serialized = serializeError(expertiseError);
+        debugLog('route.ts:expertise:error', 'Expertise error details', { employerId, ...serialized }, 'C');
+        Sentry.captureException(new Error(`Expertise assessments query failed: ${serialized.message || 'Unknown error'}`), {
+          extra: { employerId, errorCode: serialized.code, errorDetails: serialized.details, errorHint: serialized.hint }
+        });
+        // #endregion
+        console.error('[ratings-4point] Error fetching expertise assessments:', JSON.stringify(serialized), 'employerId:', employerId);
       } else {
         expertiseAssessments = data || [];
       }
     } catch (error) {
+      // #region agent log
+      debugLog('route.ts:expertise:exception', 'Exception in expertise query', { employerId, error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined }, 'B');
+      // #endregion
       console.error('Error in expertise assessments query:', error);
     }
 
@@ -643,6 +686,10 @@ export async function GET(request: NextRequest, { params }: { params: { employer
       data_quality: dataQuality
     };
 
+    // #region agent log
+    debugLog('route.ts:success', 'API completed successfully', { employerId, projectAssessmentCount: processedProjectAssessments.length, expertiseAssessmentCount: processedExpertiseAssessments.length, dataQuality }, 'D');
+    // #endregion
+
     return NextResponse.json(response, {
       headers: {
         'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
@@ -651,6 +698,9 @@ export async function GET(request: NextRequest, { params }: { params: { employer
     });
 
   } catch (error) {
+    // #region agent log
+    debugLog('route.ts:catch', 'Unhandled exception in ratings-4point', { employerId: params.employerId, error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined, errorType: typeof error }, 'D');
+    // #endregion
     console.error('Error fetching 4-point employer ratings:', error);
 
     return NextResponse.json({
