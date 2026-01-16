@@ -113,10 +113,12 @@ export async function GET(request: NextRequest, { params }: { params: { employer
     return { message: err.message, code: err.code, details: err.details, hint: err.hint, status: err.status, statusCode: err.statusCode };
   };
   // #endregion
+  const apiStartTime = Date.now();
   try {
     const { employerId } = params;
     // #region agent log
     debugLog('route.ts:GET:entry', 'ratings-4point API called', { employerId }, 'A');
+    console.log('[ratings-4point] API started', { employerId, timestamp: new Date().toISOString() });
     // #endregion
 
     // Check if 4-point rating system is enabled
@@ -687,7 +689,9 @@ export async function GET(request: NextRequest, { params }: { params: { employer
     };
 
     // #region agent log
-    debugLog('route.ts:success', 'API completed successfully', { employerId, projectAssessmentCount: processedProjectAssessments.length, expertiseAssessmentCount: processedExpertiseAssessments.length, dataQuality }, 'D');
+    const totalDuration = Date.now() - apiStartTime;
+    debugLog('route.ts:success', 'API completed successfully', { employerId, projectAssessmentCount: processedProjectAssessments.length, expertiseAssessmentCount: processedExpertiseAssessments.length, dataQuality, totalDurationMs: totalDuration }, 'D');
+    console.log('[ratings-4point] API completed', { employerId, totalDurationMs: totalDuration, projectAssessments: processedProjectAssessments.length, expertiseAssessments: processedExpertiseAssessments.length });
     // #endregion
 
     return NextResponse.json(response, {
@@ -699,7 +703,11 @@ export async function GET(request: NextRequest, { params }: { params: { employer
 
   } catch (error) {
     // #region agent log
-    debugLog('route.ts:catch', 'Unhandled exception in ratings-4point', { employerId: params.employerId, error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined, errorType: typeof error }, 'D');
+    const totalDuration = Date.now() - apiStartTime;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    debugLog('route.ts:catch', 'Unhandled exception in ratings-4point', { employerId: params.employerId, error: errorMessage, stack: error instanceof Error ? error.stack : undefined, errorType: typeof error, totalDurationMs: totalDuration }, 'D');
+    console.error('[ratings-4point] Unhandled exception:', { employerId: params.employerId, error: errorMessage, totalDurationMs: totalDuration });
+    Sentry.captureException(error, { extra: { employerId: params.employerId, totalDurationMs: totalDuration } });
     // #endregion
     console.error('Error fetching 4-point employer ratings:', error);
 
