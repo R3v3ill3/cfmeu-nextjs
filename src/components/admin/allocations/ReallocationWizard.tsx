@@ -162,47 +162,6 @@ export function ReallocationWizard({ open, onOpenChange }: ReallocationWizardPro
                     Coordinator links update from the effective date forward. Patch assignments remain immediate.
                   </div>
                 </div>
-
-                {(scenario === "swap-coordinators" || scenario === "swap-and-reallocate") && (
-                  <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <div className="text-sm font-medium">Source coordinator</div>
-                      <select
-                        className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                        value={sourceCoordinator}
-                        onChange={(event) => setSourceCoordinator(event.target.value as CoordinatorKey)}
-                      >
-                        <option value="">Select coordinator</option>
-                        {coordinatorOptions.map(option => (
-                          <option key={`source-${option.key}`} value={option.key}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                      <div className="text-xs text-muted-foreground">
-                        This is the coordinator you want to replace.
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="text-sm font-medium">Destination coordinator</div>
-                      <select
-                        className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                        value={destinationCoordinator}
-                        onChange={(event) => setDestinationCoordinator(event.target.value as CoordinatorKey)}
-                      >
-                        <option value="">Select coordinator</option>
-                        {coordinatorOptions.map(option => (
-                          <option key={`dest-${option.key}`} value={option.key}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                      <div className="text-xs text-muted-foreground">
-                        This coordinator will inherit the team scope or organisers you stage.
-                      </div>
-                    </div>
-                  </div>
-                )}
               </CardContent>
             </Card>
           )}
@@ -217,6 +176,46 @@ export function ReallocationWizard({ open, onOpenChange }: ReallocationWizardPro
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
+                  {(scenario === "swap-coordinators" || scenario === "swap-and-reallocate") && (
+                    <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <div className="text-sm font-medium">Source coordinator</div>
+                        <select
+                          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                          value={sourceCoordinator}
+                          onChange={(event) => setSourceCoordinator(event.target.value as CoordinatorKey)}
+                        >
+                          <option value="">Select coordinator</option>
+                          {coordinatorOptions.map(option => (
+                            <option key={`source-${option.key}`} value={option.key}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="text-xs text-muted-foreground">
+                          This is the coordinator you want to replace.
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="text-sm font-medium">Destination coordinator</div>
+                        <select
+                          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                          value={destinationCoordinator}
+                          onChange={(event) => setDestinationCoordinator(event.target.value as CoordinatorKey)}
+                        >
+                          <option value="">Select coordinator</option>
+                          {coordinatorOptions.map(option => (
+                            <option key={`dest-${option.key}`} value={option.key}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="text-xs text-muted-foreground">
+                          This coordinator will inherit the team scope or organisers you stage.
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <AllocationStagingBoard
                     effectiveDate={effectiveDate}
                     organiserTargets={organiserTargets}
