@@ -12,7 +12,12 @@ import { Separator } from "@/components/ui/separator"
 import RoleHierarchyManager from "@/components/admin/RoleHierarchyManager"
 import PatchManager from "@/components/admin/PatchManager"
 import OrganiserScopeManager from "@/components/admin/OrganiserScopeManager"
-import CoordinatorRollupSummary from "@/components/admin/allocations/CoordinatorRollupSummary"
+import AllocationStagingBoard, {
+  type CoordinatorKey,
+  type OrganiserKey,
+  type StagingData
+} from "@/components/admin/allocations/staging/AllocationStagingBoard"
+import PatchCoveragePreview from "@/components/admin/allocations/staging/PatchCoveragePreview"
 
 type WizardStep = 0 | 1 | 2
 
@@ -35,7 +40,7 @@ const scenarios = [
   {
     id: "move-across-teams",
     title: "Move patches across teams",
-    description: "Move patches between organisers in different teams while preserving rollups."
+    description: "Move patches between organisers in different teams while preserving patch coverage."
   }
 ]
 
@@ -49,6 +54,11 @@ export function ReallocationWizard({ open, onOpenChange }: ReallocationWizardPro
   const [step, setStep] = useState<WizardStep>(0)
   const [scenario, setScenario] = useState<string>(scenarios[0].id)
   const [effectiveDate, setEffectiveDate] = useState<string>(today)
+  const [sourceCoordinator, setSourceCoordinator] = useState<CoordinatorKey | "">( "")
+  const [destinationCoordinator, setDestinationCoordinator] = useState<CoordinatorKey | "">( "")
+  const [organiserTargets, setOrganiserTargets] = useState<Record<OrganiserKey, CoordinatorKey | null>>({})
+  const [patchTargets, setPatchTargets] = useState<Record<string, CoordinatorKey | null>>({})
+  const [stagingData, setStagingData] = useState<StagingData | null>(null)
 
   const currentScenario = scenarios.find(item => item.id === scenario)
 
@@ -63,6 +73,34 @@ export function ReallocationWizard({ open, onOpenChange }: ReallocationWizardPro
       return data || []
     }
   })
+
+  const { data: draftCoordinators = [] } = useQuery({
+    queryKey: ["admin-draft-coordinators"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("pending_users")
+        .select("id, full_name, email, role, status")
+        .in("role", ["lead_organiser", "admin"])
+        .in("status", ["draft", "invited"])
+        .order("created_at", { ascending: false })
+      if (error) throw error
+      return data || []
+    }
+  })
+
+  const coordinatorOptions = useMemo(() => {
+    const live = users
+      .filter(user => user.role === "lead_organiser" || user.role === "admin")
+      .map(user => ({
+        key: `live:${user.id}` as CoordinatorKey,
+        label: user.full_name || user.email || user.id
+      }))
+    const drafts = (draftCoordinators as any[]).map(user => ({
+      key: `draft:${user.id}` as CoordinatorKey,
+      label: `${user.full_name || user.email || user.id} (draft)`
+    }))
+    return [...live, ...drafts]
+  }, [draftCoordinators, users])
 
   const nextStep = () => setStep(prev => (prev < 2 ? ((prev + 1) as WizardStep) : prev))
   const previousStep = () => setStep(prev => (prev > 0 ? ((prev - 1) as WizardStep) : prev))
@@ -109,20 +147,8 @@ export function ReallocationWizard({ open, onOpenChange }: ReallocationWizardPro
                     </div>
                   ))}
                 </RadioGroup>
-              </CardContent>
-            </Card>
-          )}
 
-          {step === 1 && (
-            <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Effective date and impact preview</CardTitle>
-                  <CardDescription>
-                    Changes apply forward from the effective date. Historical reporting remains unchanged.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
+                <div className="mt-6 space-y-4">
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-[220px_1fr] md:items-center">
                     <div className="text-sm font-medium">Effective date</div>
                     <Input
@@ -133,23 +159,75 @@ export function ReallocationWizard({ open, onOpenChange }: ReallocationWizardPro
                     />
                   </div>
                   <div className="text-sm text-muted-foreground">
-                    Patch assignments take effect immediately; coordinator links follow the effective date.
+                    Coordinator links update from the effective date forward. Patch assignments remain immediate.
                   </div>
+                </div>
+
+                {(scenario === "swap-coordinators" || scenario === "swap-and-reallocate") && (
+                  <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium">Source coordinator</div>
+                      <select
+                        className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        value={sourceCoordinator}
+                        onChange={(event) => setSourceCoordinator(event.target.value as CoordinatorKey)}
+                      >
+                        <option value="">Select coordinator</option>
+                        {coordinatorOptions.map(option => (
+                          <option key={`source-${option.key}`} value={option.key}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="text-xs text-muted-foreground">
+                        This is the coordinator you want to replace.
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium">Destination coordinator</div>
+                      <select
+                        className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        value={destinationCoordinator}
+                        onChange={(event) => setDestinationCoordinator(event.target.value as CoordinatorKey)}
+                      >
+                        <option value="">Select coordinator</option>
+                        {coordinatorOptions.map(option => (
+                          <option key={`dest-${option.key}`} value={option.key}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="text-xs text-muted-foreground">
+                        This coordinator will inherit the team scope or organisers you stage.
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {step === 1 && (
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Stage reallocation moves</CardTitle>
+                  <CardDescription>
+                    Stage organisers and patches into coordinator buckets. This supports complex reshuffles across multiple coordinators.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <AllocationStagingBoard
+                    effectiveDate={effectiveDate}
+                    organiserTargets={organiserTargets}
+                    patchTargets={patchTargets}
+                    onOrganiserTargetsChange={setOrganiserTargets}
+                    onPatchTargetsChange={setPatchTargets}
+                    onDataChange={setStagingData}
+                    defaultTargetCoordinatorKey={destinationCoordinator || null}
+                  />
                 </CardContent>
               </Card>
-
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                <CoordinatorRollupSummary
-                  effectiveDate={effectiveDate}
-                  title="Current coordinator rollup"
-                  description="Use this to understand existing organiser and patch totals."
-                />
-                <CoordinatorRollupSummary
-                  effectiveDate={effectiveDate}
-                  title="Incoming coordinator rollup"
-                  description="Select the destination coordinator to gauge capacity."
-                />
-              </div>
             </div>
           )}
 
@@ -157,9 +235,9 @@ export function ReallocationWizard({ open, onOpenChange }: ReallocationWizardPro
             <div className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Apply changes</CardTitle>
+                  <CardTitle>Preview and apply changes</CardTitle>
                   <CardDescription>
-                    Use the allocation tools below to make the selected changes. Draft users are included.
+                    Review patch coverage impacts, then apply changes using the allocation tools below. Draft users are included.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm text-muted-foreground">
@@ -167,6 +245,17 @@ export function ReallocationWizard({ open, onOpenChange }: ReallocationWizardPro
                   <div>Effective date: {effectiveDate}</div>
                 </CardContent>
               </Card>
+
+              <PatchCoveragePreview
+                stagingData={stagingData}
+                organiserTargets={organiserTargets}
+                patchTargets={patchTargets}
+              />
+
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                Changes across coordinator teams will affect dashboard totals going forward from the effective date.
+                Patch assignments update immediately even when coordinator links are future-dated.
+              </div>
 
               <RoleHierarchyManager effectiveDate={effectiveDate} users={users} />
               <PatchManager />

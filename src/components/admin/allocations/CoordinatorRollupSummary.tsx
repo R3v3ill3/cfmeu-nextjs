@@ -164,7 +164,7 @@ export function CoordinatorRollupSummary({ effectiveDate, title, description }: 
     }
   }, [options, selected])
 
-  const rollup = useMemo(() => {
+  const patchCoverage = useMemo(() => {
     if (!data || !selected) return null
 
     const organiserIds = new Set<string>()
@@ -211,7 +211,7 @@ export function CoordinatorRollupSummary({ effectiveDate, title, description }: 
   return (
     <Card>
       <CardHeader className="space-y-1">
-        <CardTitle>{title || "Coordinator patch rollup"}</CardTitle>
+        <CardTitle>{title || "Coordinator patch coverage"}</CardTitle>
         <CardDescription>
           {description || "Includes live and draft organisers assigned to the coordinator."}
         </CardDescription>
@@ -250,33 +250,33 @@ export function CoordinatorRollupSummary({ effectiveDate, title, description }: 
         {isLoading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <LoadingSpinner size={16} />
-            Loading rollup...
+            Loading patch coverage...
           </div>
         ) : error ? (
           <div className="space-y-2 text-sm">
-            <div className="text-red-600">Failed to load rollup data.</div>
+            <div className="text-red-600">Failed to load patch coverage data.</div>
             <Button variant="outline" size="sm" onClick={() => refetch()}>
               Retry
             </Button>
           </div>
-        ) : rollup ? (
+        ) : patchCoverage ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="rounded-md border px-4 py-3">
               <div className="text-xs uppercase text-muted-foreground">Organisers</div>
-              <div className="text-2xl font-semibold">{rollup.organiserCount}</div>
+              <div className="text-2xl font-semibold">{patchCoverage.organiserCount}</div>
             </div>
             <div className="rounded-md border px-4 py-3">
-              <div className="text-xs uppercase text-muted-foreground">Patches in rollup</div>
-              <div className="text-2xl font-semibold">{rollup.patchCount}</div>
+              <div className="text-xs uppercase text-muted-foreground">Patches in coverage</div>
+              <div className="text-2xl font-semibold">{patchCoverage.patchCount}</div>
             </div>
           </div>
         ) : (
-          <div className="text-sm text-muted-foreground">Select a coordinator to view rollup data.</div>
+          <div className="text-sm text-muted-foreground">Select a coordinator to view patch coverage.</div>
         )}
 
         {!!data?.warnings?.length && !error && (
           <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-            <div className="font-medium">Some rollup data could not be loaded:</div>
+            <div className="font-medium">Some patch coverage data could not be loaded:</div>
             <ul className="list-disc pl-4">
               {data.warnings.map((warning) => (
                 <li key={warning}>{warning}</li>
