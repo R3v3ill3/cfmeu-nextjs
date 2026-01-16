@@ -141,6 +141,24 @@ export async function GET(request: NextRequest, { params }: { params: { employer
 
     const supabase = await createServerSupabase();
 
+    // #region agent log - Auth check
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError) {
+      console.error('[ratings-4point] Auth error:', JSON.stringify(serializeError(authError)));
+      Sentry.captureException(new Error(`Auth error in ratings-4point: ${authError.message}`), {
+        extra: { employerId, authError: serializeError(authError) }
+      });
+    }
+    if (!user) {
+      console.warn('[ratings-4point] No authenticated user - RLS policies may fail', { employerId, hasAuthError: !!authError });
+      Sentry.addBreadcrumb({ category: 'ratings-4point', message: 'No authenticated user', level: 'warning', data: { employerId, hasAuthError: !!authError } });
+      // Don't return 401 - let the queries proceed and fail naturally with RLS
+      // This preserves existing behavior but adds visibility
+    } else {
+      debugLog('route.ts:auth', 'User authenticated', { employerId, userId: user.id }, 'A');
+    }
+    // #endregion
+
     // First check if the required tables exist by attempting a simple query
     try {
       const { error: tableCheckError } = await supabase
