@@ -97,6 +97,10 @@ const PatchManager = lazyWithErrorLogging(
   () => import("@/components/admin/PatchManager"),
   "PatchManager"
 )
+const PatchHierarchySummaryTable = lazyWithErrorLogging(
+  () => import("@/components/admin/PatchHierarchySummaryTable"),
+  "PatchHierarchySummaryTable"
+)
 const SpatialAssignmentTool = lazyWithErrorLogging(
   () => import("@/components/admin/SpatialAssignmentTool"),
   "SpatialAssignmentTool"
@@ -834,6 +838,10 @@ export default function AdminPage() {
           {/* Patch Management Group */}
           <TabsContent value="patch-management" className="space-y-8">
             <Suspense fallback={<TabLoadingState />}>
+              <div>
+                <h3 className="text-lg font-semibold mb-4">Patch Summary</h3>
+                <PatchHierarchySummaryTable />
+              </div>
               <div>
                 <h3 className="text-lg font-semibold mb-4">Patches</h3>
                 <PatchManager />
