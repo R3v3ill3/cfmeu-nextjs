@@ -12,7 +12,7 @@ export interface EmployersParams {
   eba?: 'all' | 'active' | 'lodged' | 'pending' | 'no';
   type?: 'all' | 'builder' | 'principal_contractor' | 'large_contractor' | 'small_contractor' | 'individual';
   categoryType?: 'contractor_role' | 'trade' | 'all';
-  categoryCode?: string;
+  categoryCode?: string | string[];
   projectTier?: 'all' | 'tier_1' | 'tier_2' | 'tier_3';
   enhanced?: boolean;
   // Alias search parameters
@@ -126,7 +126,13 @@ export function useEmployersServerSide(params: EmployersParams) {
       }
 
       if (params.categoryCode) {
-        searchParams.set('categoryCode', params.categoryCode);
+        const categoryCode =
+          Array.isArray(params.categoryCode)
+            ? params.categoryCode.join(',')
+            : params.categoryCode;
+        if (categoryCode) {
+          searchParams.set('categoryCode', categoryCode);
+        }
       }
 
       if (params.projectTier && params.projectTier !== 'all') {

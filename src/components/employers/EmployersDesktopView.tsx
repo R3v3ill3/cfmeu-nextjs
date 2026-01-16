@@ -25,6 +25,7 @@ import { RatingFiltersComponent, ActiveRatingFilters } from "@/components/rating
 import { RatingFilters } from "@/types/rating"
 import { useAccessiblePatches } from "@/hooks/useAccessiblePatches"
 import { useAdminPatchContext } from "@/context/AdminPatchContext"
+import { TradeTypeFilter } from "@/components/employers/TradeTypeFilter"
 
 export function EmployersDesktopView() {
   const queryClient = useQueryClient()
@@ -35,6 +36,12 @@ export function EmployersDesktopView() {
   const engaged = sp.get("engaged") === "1" // Changed: Show all by default, filter when explicitly set to "1"
   const eba = sp.get("eba") || "all"
   const type = sp.get("type") || "all"
+  const categoryType = sp.get("categoryType")
+  const categoryCodeParam = sp.get("categoryCode") || ""
+  const selectedTradeCodes =
+    categoryType === "trade" && categoryCodeParam
+      ? categoryCodeParam.split(",").map((c) => c.trim()).filter(Boolean)
+      : []
   const sort = sp.get("sort") || "name"
   const dir = sp.get("dir") || "asc"
   const view = sp.get("view") || "card"
@@ -129,6 +136,20 @@ export function EmployersDesktopView() {
     router.replace(qs ? `${pathname}?${qs}` : pathname)
   }
 
+  const setTradeCodes = (codes: string[]) => {
+    const params = new URLSearchParams(sp.toString())
+    if (codes.length === 0) {
+      params.delete("categoryType")
+      params.delete("categoryCode")
+    } else {
+      params.set("categoryType", "trade")
+      params.set("categoryCode", codes.join(","))
+    }
+    params.delete("page")
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname)
+  }
+
   // CLIENT-SIDE DATA FETCHING (Original implementation)
   const { data: allEmployersData = [], isFetching: clientFetching } = useQuery({
     queryKey: ["employers-list"],
@@ -181,6 +202,8 @@ export function EmployersDesktopView() {
     engaged,
     eba: eba as any,
     type: type as any,
+    categoryType: selectedTradeCodes.length > 0 ? "trade" : "all",
+    categoryCode: selectedTradeCodes.length > 0 ? selectedTradeCodes.join(",") : undefined,
     patch: (role === 'admin' ? undefined : patchParam) || undefined,
     enhanced: true, // Enable enhanced data for projects, organisers, incolink
     includeAliases: true, // Enable alias search for better employer matching
@@ -188,6 +211,32 @@ export function EmployersDesktopView() {
   })
 
   const { refetch: refetchEmployers } = serverSideResult
+
+  const tradeFilterActive = selectedTradeCodes.length > 0
+  const employerIdsForTradeFilter = useMemo(() => {
+    if (USE_SERVER_SIDE || !tradeFilterActive) return []
+    return (employersData as any[]).map((emp) => emp.id).filter(Boolean)
+  }, [USE_SERVER_SIDE, tradeFilterActive, employersData])
+
+  const { data: tradeCategoryMap, isFetching: tradeCategoriesLoading } = useQuery({
+    queryKey: ["employer-trade-categories", employerIdsForTradeFilter],
+    enabled: !USE_SERVER_SIDE && tradeFilterActive && employerIdsForTradeFilter.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("v_employer_contractor_categories")
+        .select("employer_id, category_code")
+        .eq("category_type", "trade")
+        .eq("is_current", true)
+        .in("employer_id", employerIdsForTradeFilter)
+      if (error) throw error
+      const map = new Map<string, Set<string>>()
+      ;(data || []).forEach((row: any) => {
+        if (!map.has(row.employer_id)) map.set(row.employer_id, new Set())
+        map.get(row.employer_id)!.add(row.category_code)
+      })
+      return map
+    },
+  })
 
   // Conditional data selection based on feature flag
   const employersData = (USE_SERVER_SIDE || sort === 'project_count') ? serverSideResult.data : allEmployersData
@@ -325,6 +374,13 @@ export function EmployersDesktopView() {
       if (type !== "all") {
         list = list.filter((emp: any) => emp.employer_type === type)
       }
+      if (tradeFilterActive && tradeCategoryMap) {
+        list = list.filter((emp: any) => {
+          const codes = tradeCategoryMap.get(emp.id)
+          if (!codes) return false
+          return selectedTradeCodes.some((code) => codes.has(code))
+        })
+      }
       
       // Apply sorting
       const scoreDate = (x: any) => {
@@ -360,7 +416,7 @@ export function EmployersDesktopView() {
         currentPage
       }
     }
-  }, [USE_SERVER_SIDE, employersData, serverSideResult, q, engaged, eba, type, sort, dir, page, pageSize])
+  }, [USE_SERVER_SIDE, employersData, serverSideResult, q, engaged, eba, type, sort, dir, page, pageSize, tradeFilterActive, tradeCategoryMap, selectedTradeCodes])
 
   return (
     <div className="p-6 space-y-4">
@@ -478,6 +534,13 @@ export function EmployersDesktopView() {
               </SelectContent>
             </Select>
           </div>
+          <div className="w-56">
+            <TradeTypeFilter
+              selectedCodes={selectedTradeCodes}
+              onChange={setTradeCodes}
+              label="Trade type"
+            />
+          </div>
           <div className="w-40">
             <div className="text-xs text-muted-foreground mb-1">Rating</div>
             <Select value={sp.get("rating") || undefined} onValueChange={(v) => setParam("rating", v || undefined)}>
@@ -521,6 +584,9 @@ export function EmployersDesktopView() {
         </div>
       </div>
       {isFetching && <p className="text-sm text-muted-foreground">Loading…</p>}
+      {tradeFilterActive && tradeCategoriesLoading && (
+        <p className="text-sm text-muted-foreground">Loading trade filter…</p>
+      )}
 
       {/* Results summary */}
       <div className="flex items-center justify-between text-sm text-muted-foreground">

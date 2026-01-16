@@ -35,6 +35,7 @@ export function EbaEmployersMobileView() {
   const [includeDerived, setIncludeDerived] = useState(true)
   const [includeManual, setIncludeManual] = useState(true)
   const [keyOnly, setKeyOnly] = useState(false)
+  const [showNonEba, setShowNonEba] = useState(false)
   const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null)
 
   // Load categories for the selected type
@@ -81,8 +82,33 @@ export function EbaEmployersMobileView() {
     },
   })
 
+  const { data: nonEbaEmployers = [], isFetching: isFetchingNonEba } = useQuery({
+    queryKey: ['eba-employers-mobile-non-eba', type, code, currentOnly, includeDerived, includeManual, keyOnly],
+    enabled: showNonEba && !!code,
+    queryFn: async () => {
+      const params = new URLSearchParams()
+      params.set('type', type)
+      params.set('code', code)
+      if (currentOnly) params.set('currentOnly', 'true')
+      if (!includeDerived) params.set('includeDerived', 'false')
+      if (!includeManual) params.set('includeManual', 'false')
+      if (keyOnly) params.set('keyOnly', 'true')
+      const res = await fetch(`/api/eba/employers/non-eba?${params.toString()}`)
+      if (!res.ok) throw new Error(await res.text())
+      const json = await res.json()
+      return (json.data || []) as EmployerRow[]
+    },
+  })
+
   // Fetch ratings for visible employers
-  const employerIds = employers.map(e => e.employer_id)
+  const employerIds = (() => {
+    const ids = new Set<string>()
+    employers.forEach((e) => ids.add(e.employer_id))
+    if (showNonEba) {
+      nonEbaEmployers.forEach((e) => ids.add(e.employer_id))
+    }
+    return Array.from(ids)
+  })()
   
   const { data: ratingsData } = useQuery({
     queryKey: ['eba-employer-ratings-mobile', employerIds],
@@ -104,6 +130,13 @@ export function EbaEmployersMobileView() {
     const q = query.trim().toLowerCase()
     return !q || e.employer_name.toLowerCase().includes(q)
   })
+
+  const filteredNonEba = nonEbaEmployers.filter((e) => {
+    const q = query.trim().toLowerCase()
+    return !q || e.employer_name.toLowerCase().includes(q)
+  })
+
+  const showNonEbaToggle = Boolean(code)
 
   return (
     <div className="min-h-screen bg-background pb-safe-bottom">
@@ -194,6 +227,17 @@ export function EbaEmployersMobileView() {
                 <span>Key only</span>
               </label>
             )}
+            {showNonEbaToggle && (
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <Checkbox
+                  id="mobile-showNonEba"
+                  checked={showNonEba}
+                  onCheckedChange={(v) => setShowNonEba(Boolean(v))}
+                  className="h-4 w-4"
+                />
+                <span>Show non‑EBA</span>
+              </label>
+            )}
           </div>
         </div>
       </div>
@@ -230,6 +274,39 @@ export function EbaEmployersMobileView() {
               No employers found
             </CardContent>
           </Card>
+        )}
+
+        {showNonEba && (
+          <div className="space-y-3 pt-2">
+            <div className="text-sm text-muted-foreground">
+              {isFetchingNonEba ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading non‑EBA employers...
+                </div>
+              ) : (
+                <span>{filteredNonEba.length} non‑EBA employer{filteredNonEba.length !== 1 ? 's' : ''}</span>
+              )}
+            </div>
+            {filteredNonEba.length > 0 ? (
+              <div className="space-y-3">
+                {filteredNonEba.map((employer) => (
+                  <EbaEmployerMobileCard
+                    key={employer.employer_id}
+                    employer={employer}
+                    rating={ratingsData?.[employer.employer_id]}
+                    onViewDetails={() => setSelectedEmployerId(employer.employer_id)}
+                  />
+                ))}
+              </div>
+            ) : !isFetchingNonEba && (
+              <Card>
+                <CardContent className="py-12 text-center text-sm text-muted-foreground">
+                  No non‑EBA employers found
+                </CardContent>
+              </Card>
+            )}
+          </div>
         )}
       </div>
 

@@ -31,10 +31,6 @@ export async function GET(request: NextRequest) {
     const includeExtendedData = parseBool(searchParams.get('includeExtendedData'), false)
     const includePatchData = parseBool(searchParams.get('includePatchData'), false)
 
-    if (keyOnly && typeParam && typeParam !== 'trade') {
-      return NextResponse.json({ error: 'keyOnly is only supported when type=trade' }, { status: 400 })
-    }
-
     if (!includeDerived && !includeManual) {
       return NextResponse.json({ data: [] })
     }
@@ -52,7 +48,7 @@ export async function GET(request: NextRequest) {
         includeExtendedData,
         includePatchData,
       },
-      'eba'
+      'non-eba'
     )
 
     return NextResponse.json({ data })
@@ -60,5 +56,3 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: err?.message || 'Unexpected error' }, { status: 500 })
   }
 }
-
-

@@ -362,7 +362,10 @@ async function getEmployersHandler(request: NextRequest) {
     const eba = (searchParams.get('eba') || 'all') as EmployersRequest['eba'];
     const type = (searchParams.get('type') || 'all') as EmployersRequest['type'];
     const categoryType = (searchParams.get('categoryType') || 'all') as 'contractor_role' | 'trade' | 'all';
-    const categoryCode = searchParams.get('categoryCode') || undefined;
+    const categoryCodeParam = searchParams.get('categoryCode') || undefined;
+    const categoryCodes = categoryCodeParam
+      ? categoryCodeParam.split(',').map((code) => code.trim()).filter(Boolean)
+      : [];
     const projectTier = (searchParams.get('projectTier') || 'all') as 'all' | 'tier_1' | 'tier_2' | 'tier_3';
     const patchParam = searchParams.get('patch') || undefined;
 
@@ -539,6 +542,22 @@ async function getEmployersHandler(request: NextRequest) {
         matViewQuery = matViewQuery.eq('employer_type', type);
       }
 
+      // Apply category filters (trade/role)
+      if (categoryType !== 'all' && categoryCodes.length > 0) {
+        if (categoryType === 'trade') {
+          if (categoryCodes.length === 1) {
+            matViewQuery = matViewQuery.contains('category_trades_json', [{ code: categoryCodes[0] }]);
+          } else {
+            const tradeFilters = categoryCodes
+              .map((code) => `category_trades_json.cs.[{"code":"${code}"}]`)
+              .join(',');
+            matViewQuery = matViewQuery.or(tradeFilters);
+          }
+        } else if (categoryType === 'contractor_role') {
+          matViewQuery = matViewQuery.contains('category_roles_json', [{ code: categoryCodes[0] }]);
+        }
+      }
+
       // Apply sorting
       if (sort === 'name') {
         matViewQuery = matViewQuery.order('name', { ascending: dir === 'asc' });
@@ -634,11 +653,15 @@ async function getEmployersHandler(request: NextRequest) {
         analyticsQuery = analyticsQuery.eq('employer_type', type);
       }
 
-      if (categoryType !== 'all' && categoryCode) {
+      if (categoryType !== 'all' && categoryCodes.length > 0) {
         if (categoryType === 'contractor_role') {
-          analyticsQuery = analyticsQuery.contains('category_roles', [categoryCode]);
+          analyticsQuery = analyticsQuery.contains('category_roles', [categoryCodes[0]]);
         } else if (categoryType === 'trade') {
-          analyticsQuery = analyticsQuery.contains('category_trades', [categoryCode]);
+          if (categoryCodes.length === 1) {
+            analyticsQuery = analyticsQuery.contains('category_trades', [categoryCodes[0]]);
+          } else {
+            analyticsQuery = analyticsQuery.overlaps('category_trades', categoryCodes);
+          }
         }
       }
 
@@ -932,7 +955,7 @@ async function getEmployersHandler(request: NextRequest) {
           eba,
           type,
           categoryType,
-          categoryCode,
+          categoryCodes,
           projectTier,
           patchIds,
           patchFilteringUsed: patchIds.length > 0,

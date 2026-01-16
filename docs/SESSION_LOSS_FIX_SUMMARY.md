@@ -350,6 +350,83 @@ For historical context, see:
 
 ---
 
+## Additional Manifestation: API Route RLS Failures (January 2026)
+
+### Problem
+
+Intermittent errors appearing in Vercel logs as:
+```
+Error fetching expertise assessments: [object Object]
+```
+
+Users experienced repeated timeouts attempting to load employer information pages, specifically when viewing the Traffic Light Rating tab.
+
+### Root Cause
+
+The `/api/employers/[employerId]/ratings-4point` route was missing authentication checks that other employer routes had. When session loss occurred (due to any of the causes documented above), the route would:
+
+1. Create a Supabase client without valid auth context
+2. Attempt to query `organiser_overall_expertise_ratings` table
+3. RLS policy would fail because `auth.role() = 'authenticated'` check fails for `anon` role
+4. Supabase returns an error object that wasn't being serialized properly (hence `[object Object]`)
+
+### Fix Applied
+
+**File Changed**: `src/app/api/employers/[employerId]/ratings-4point/route.ts`
+
+1. **Added Sentry import** for proper error tracking
+2. **Added authentication check** with logging:
+```typescript
+const { data: { user }, error: authError } = await supabase.auth.getUser();
+if (!user) {
+  console.warn('[ratings-4point] No authenticated user - RLS policies may fail', { employerId });
+  Sentry.addBreadcrumb({ category: 'ratings-4point', message: 'No authenticated user', level: 'warning' });
+}
+```
+
+3. **Added proper error serialization**:
+```typescript
+const serializeError = (err: any): Record<string, unknown> => {
+  if (!err) return { raw: err };
+  if (typeof err !== 'object') return { raw: err };
+  return { message: err.message, code: err.code, details: err.details, hint: err.hint };
+};
+```
+
+4. **Added Sentry exception capture** for expertise assessment errors
+5. **Added timing instrumentation** to identify slow queries
+
+### Diagnostic Logs to Look For
+
+In Vercel function logs:
+```
+[ratings-4point] No authenticated user - RLS policies may fail
+[ratings-4point] Auth error: {"message":"...","code":"..."}
+[ratings-4point] Error fetching expertise assessments: {"message":"...","code":"..."}
+```
+
+### Why This Manifests Intermittently
+
+This error only occurs when session loss happens. The user may:
+- Have a valid session most of the time (queries work)
+- Experience session loss due to iOS PWA issues, token expiry, or service worker activation
+- During the brief window of no auth context, the ratings-4point query fails
+- Session may recover on next page load, making the issue appear "intermittent"
+
+### Recommended Pattern for New API Routes
+
+All API routes that query RLS-protected tables should include:
+```typescript
+const { data: { user }, error: authError } = await supabase.auth.getUser();
+if (authError || !user) {
+  return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+}
+```
+
+Or at minimum, log when auth context is missing for debugging purposes.
+
+---
+
 ## Contact & Escalation
 
 If session loss issues persist after these fixes:

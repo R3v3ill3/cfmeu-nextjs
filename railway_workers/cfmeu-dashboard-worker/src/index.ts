@@ -1071,6 +1071,11 @@ app.get('/v1/employers', async (req, res) => {
   const engaged = req.query.engaged === '1' || req.query.engaged === 'true'
   const eba = (req.query.eba ? String(req.query.eba) : 'all') as 'all' | 'active' | 'lodged' | 'pending' | 'no'
   const type = (req.query.type ? String(req.query.type) : 'all') as 'all' | 'builder' | 'principal_contractor' | 'large_contractor' | 'small_contractor' | 'individual'
+  const categoryType = (req.query.categoryType ? String(req.query.categoryType) : 'all') as 'contractor_role' | 'trade' | 'all'
+  const categoryCodeParam = req.query.categoryCode ? String(req.query.categoryCode) : undefined
+  const categoryCodes = categoryCodeParam
+    ? categoryCodeParam.split(',').map((code) => code.trim()).filter(Boolean)
+    : []
 
   // Build cache key
   const cacheKey = makeCacheKey('employers', hashToken(token), {
@@ -1082,6 +1087,8 @@ app.get('/v1/employers', async (req, res) => {
     engaged,
     eba,
     type,
+    categoryType,
+    categoryCodes,
   })
 
   const cached = cache.get<any>(cacheKey)
@@ -1119,6 +1126,22 @@ app.get('/v1/employers', async (req, res) => {
     // Apply employer type filter
     if (type !== 'all') {
       query = query.eq('employer_type', type)
+    }
+
+    // Apply category filters (trade/role)
+    if (categoryType !== 'all' && categoryCodes.length > 0) {
+      if (categoryType === 'trade') {
+        if (categoryCodes.length === 1) {
+          query = query.contains('trades_json', [{ code: categoryCodes[0] }])
+        } else {
+          const tradeFilters = categoryCodes
+            .map((code) => `trades_json.cs.[{"code":"${code}"}]`)
+            .join(',')
+          query = query.or(tradeFilters)
+        }
+      } else if (categoryType === 'contractor_role') {
+        query = query.contains('roles_json', [{ code: categoryCodes[0] }])
+      }
     }
 
     // Apply sorting

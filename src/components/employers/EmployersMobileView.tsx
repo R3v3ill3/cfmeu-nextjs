@@ -16,6 +16,7 @@ import { refreshSupabaseClient } from "@/integrations/supabase/client"
 import { AddEmployerDialog } from "./AddEmployerDialog"
 import { useDebounce, useLocalStorage, useInterval } from "react-use"
 import { useAccessiblePatches } from "@/hooks/useAccessiblePatches"
+import { TradeTypeFilter } from "@/components/employers/TradeTypeFilter"
 
 const EMPLOYERS_STATE_KEY = 'employers-page-state-mobile'
 
@@ -48,6 +49,12 @@ export function EmployersMobileView() {
   const PAGE_SIZE = 10
   const patchParam = sp.get("patch")
   const isGeographicallyFiltered = !!patchParam
+  const categoryType = sp.get("categoryType")
+  const categoryCodeParam = sp.get("categoryCode") || ""
+  const selectedTradeCodes =
+    categoryType === "trade" && categoryCodeParam
+      ? categoryCodeParam.split(",").map((c) => c.trim()).filter(Boolean)
+      : []
 
   // Get user's accessible patches for geographic filtering
   const { patches: accessiblePatches, isLoading: patchesLoading, role } = useAccessiblePatches()
@@ -144,12 +151,28 @@ export function EmployersMobileView() {
     router.replace(qs ? `${pathname}?${qs}` : pathname)
   }
 
+  const setTradeCodes = (codes: string[]) => {
+    const params = new URLSearchParams(sp.toString())
+    if (codes.length === 0) {
+      params.delete("categoryType")
+      params.delete("categoryCode")
+    } else {
+      params.set("categoryType", "trade")
+      params.set("categoryCode", codes.join(","))
+    }
+    params.delete("page")
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname)
+  }
+
   const serverSideResult = useEmployersServerSideCompatible({
     page,
     pageSize: PAGE_SIZE,
     sort: 'name',
     dir: 'asc',
     q: q || undefined,
+    categoryType: selectedTradeCodes.length > 0 ? "trade" : "all",
+    categoryCode: selectedTradeCodes.length > 0 ? selectedTradeCodes.join(",") : undefined,
     patch: patchParam || undefined,
     enhanced: true, // Enable enhanced data for projects, organisers, incolink
     includeAliases: true, // Enable alias search for better employer matching
@@ -302,6 +325,14 @@ export function EmployersMobileView() {
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
           className="pl-10"
+        />
+      </div>
+
+      <div className="bg-muted/30 rounded-lg p-3">
+        <TradeTypeFilter
+          selectedCodes={selectedTradeCodes}
+          onChange={setTradeCodes}
+          label="Trade type"
         />
       </div>
 

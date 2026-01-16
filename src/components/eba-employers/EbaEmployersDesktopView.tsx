@@ -57,6 +57,7 @@ export function EbaEmployersDesktopView() {
   const [includeDerived, setIncludeDerived] = useState(true)
   const [includeManual, setIncludeManual] = useState(true)
   const [keyOnly, setKeyOnly] = useState(false)
+  const [showNonEba, setShowNonEba] = useState(false)
   const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null)
   const { startNavigation } = useNavigationLoading()
   
@@ -129,8 +130,35 @@ export function EbaEmployersDesktopView() {
     },
   })
 
+  const { data: nonEbaEmployers = [], isFetching: isFetchingNonEba } = useQuery({
+    queryKey: ['eba-employers-non-eba', type, code, currentOnly, includeDerived, includeManual, keyOnly, needsExtendedData, needsPatchData],
+    enabled: showNonEba && !!code,
+    queryFn: async () => {
+      const params = new URLSearchParams()
+      params.set('type', type)
+      params.set('code', code)
+      if (currentOnly) params.set('currentOnly', 'true')
+      if (!includeDerived) params.set('includeDerived', 'false')
+      if (!includeManual) params.set('includeManual', 'false')
+      if (keyOnly) params.set('keyOnly', 'true')
+      if (needsExtendedData) params.set('includeExtendedData', 'true')
+      if (needsPatchData) params.set('includePatchData', 'true')
+      const res = await fetch(`/api/eba/employers/non-eba?${params.toString()}`)
+      if (!res.ok) throw new Error(await res.text())
+      const json = await res.json()
+      return (json.data || []) as EmployerRow[]
+    },
+  })
+
   // Fetch ratings for visible employers
-  const employerIds = useMemo(() => employers.map(e => e.employer_id), [employers])
+  const employerIds = useMemo(() => {
+    const ids = new Set<string>()
+    ;(employers || []).forEach((e) => ids.add(e.employer_id))
+    if (showNonEba) {
+      ;(nonEbaEmployers || []).forEach((e) => ids.add(e.employer_id))
+    }
+    return Array.from(ids)
+  }, [employers, nonEbaEmployers, showNonEba])
   
   const { data: ratingsData } = useQuery({
     queryKey: ['eba-employer-ratings', employerIds],
@@ -152,7 +180,13 @@ export function EbaEmployersDesktopView() {
     return (employers || []).filter((e) => !q || e.employer_name.toLowerCase().includes(q))
   }, [employers, query])
 
+  const filteredNonEba = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return (nonEbaEmployers || []).filter((e) => !q || e.employer_name.toLowerCase().includes(q))
+  }, [nonEbaEmployers, query])
+
   const totalColumns = 3 + (projectDisplayMode !== 'hide' ? 1 : 0) + (showPatchColumn ? 1 : 0)
+  const showNonEbaToggle = Boolean(code)
 
   return (
     <div className="p-6 space-y-4">
@@ -217,6 +251,16 @@ export function EbaEmployersDesktopView() {
                 <div className="flex items-center gap-2">
                   <Checkbox id="keyOnly" checked={keyOnly} onCheckedChange={(v) => setKeyOnly(Boolean(v))} />
                   <label htmlFor="keyOnly" className="text-sm">Key contractors only</label>
+                </div>
+              )}
+              {showNonEbaToggle && (
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="showNonEba"
+                    checked={showNonEba}
+                    onCheckedChange={(v) => setShowNonEba(Boolean(v))}
+                  />
+                  <label htmlFor="showNonEba" className="text-sm">Show non‑EBA employers</label>
                 </div>
               )}
             </div>
@@ -348,6 +392,90 @@ export function EbaEmployersDesktopView() {
           </div>
         </CardContent>
       </Card>
+
+      {showNonEba && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Non‑EBA Employers ({filteredNonEba.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-md border overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[25%] max-w-[300px]">Employer</TableHead>
+                    <TableHead className="w-[15%]">Rating</TableHead>
+                    {showPatchColumn && (
+                      <TableHead className="w-[20%] min-w-[220px]">Patches &amp; Organisers</TableHead>
+                    )}
+                    {projectDisplayMode !== 'hide' && (
+                      <TableHead className={projectDisplayMode === 'detail' ? 'w-[45%]' : 'w-[45%]'}>
+                        Projects
+                      </TableHead>
+                    )}
+                    <TableHead className="w-[15%] min-w-[120px]">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredNonEba.map((row) => (
+                    <TableRow key={row.employer_id}>
+                      <TableCell className="font-medium max-w-[300px]">
+                        <Button
+                          variant="link"
+                          onClick={() => setSelectedEmployerId(row.employer_id)}
+                          className="px-0 text-left truncate max-w-full block"
+                          title={row.employer_name}
+                        >
+                          {row.employer_name}
+                        </Button>
+                      </TableCell>
+
+                      <TableCell>
+                        <EbaEmployerRatingCell
+                          employerId={row.employer_id}
+                          employerName={row.employer_name}
+                          rating={ratingsData?.[row.employer_id]}
+                        />
+                      </TableCell>
+
+                      {showPatchColumn && (
+                        <TableCell>
+                          <PatchOrganiserDisplayCell assignments={row.patch_assignments ?? []} />
+                        </TableCell>
+                      )}
+
+                      {projectDisplayMode !== 'hide' && (
+                        <TableCell>
+                          <ProjectDisplayCell
+                            projects={row.projects}
+                            displayMode={projectDisplayMode || 'show'}
+                          />
+                        </TableCell>
+                      )}
+
+                      <TableCell>
+                        <EbaEmployerActions
+                          employerId={row.employer_id}
+                          employerName={row.employer_name}
+                          projects={row.projects}
+                          onViewDetails={() => setSelectedEmployerId(row.employer_id)}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {filteredNonEba.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={totalColumns} className="text-center text-sm text-muted-foreground py-8">
+                        {isFetchingNonEba ? 'Loading…' : 'No non‑EBA employers found.'}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Correlation Analytics Section */}
       <Card>
