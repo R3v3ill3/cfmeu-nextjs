@@ -24,80 +24,119 @@ interface CoordinatorRollupSummaryProps {
   description?: string
 }
 
+const DEFAULT_TIMEOUT_MS = 15000
+
+const withTimeout = async <T,>(promise: Promise<T>, label: string, timeoutMs = DEFAULT_TIMEOUT_MS) => {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`Timed out loading ${label}`))
+    }, timeoutMs)
+  })
+  try {
+    return await Promise.race([promise, timeoutPromise])
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
+  }
+}
+
 export function CoordinatorRollupSummary({ effectiveDate, title, description }: CoordinatorRollupSummaryProps) {
   const effectiveDateValue = effectiveDate || new Date().toISOString().slice(0, 10)
   const effectiveDateTime = `${effectiveDateValue}T00:00:00.000Z`
   const [selected, setSelected] = useState<CoordinatorOption | null>(null)
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-coordinator-rollup", effectiveDateValue],
     queryFn: async () => {
-      const [
-        { data: liveUsers, error: liveError },
-        { data: pendingUsers, error: pendingError },
-        { data: roleLinks, error: roleError },
-        { data: draftLinks, error: draftError },
-        { data: draftLeadLinks, error: draftLeadError },
-        { data: organiserAssignments, error: organiserAssignmentError },
-        { data: leadAssignments, error: leadAssignmentError }
-      ] = await Promise.all([
-        (supabase as any)
-          .from("profiles")
-          .select("id,full_name,email,role")
-          .in("role", ["lead_organiser", "admin"])
-          .order("full_name"),
-        (supabase as any)
-          .from("pending_users")
-          .select("id,full_name,email,role,status,assigned_patch_ids")
-          .in("role", ["lead_organiser", "admin", "organiser"])
-          .in("status", ["draft", "invited"])
-          .order("created_at", { ascending: false }),
-        (supabase as any)
-          .from("role_hierarchy")
-          .select("parent_user_id,child_user_id,start_date,end_date")
-          .eq("is_active", true)
-          .lte("start_date", effectiveDateValue)
-          .or(`end_date.is.null,end_date.gte.${effectiveDateValue}`),
-        (supabase as any)
-          .from("lead_draft_organiser_links")
-          .select("lead_user_id,pending_user_id,start_date,end_date")
-          .eq("is_active", true)
-          .lte("start_date", effectiveDateValue)
-          .or(`end_date.is.null,end_date.gte.${effectiveDateValue}`),
-        (supabase as any)
-          .from("draft_lead_organiser_links")
-          .select("draft_lead_pending_user_id,organiser_user_id,organiser_pending_user_id,start_date,end_date")
-          .eq("is_active", true)
-          .lte("start_date", effectiveDateValue)
-          .or(`end_date.is.null,end_date.gte.${effectiveDateValue}`),
-        (supabase as any)
-          .from("organiser_patch_assignments")
-          .select("organiser_id,patch_id,effective_from,effective_to")
-          .lte("effective_from", effectiveDateTime)
-          .or(`effective_to.is.null,effective_to.gte.${effectiveDateTime}`),
-        (supabase as any)
-          .from("lead_organiser_patch_assignments")
-          .select("lead_organiser_id,patch_id,effective_from,effective_to")
-          .lte("effective_from", effectiveDateTime)
-          .or(`effective_to.is.null,effective_to.gte.${effectiveDateTime}`)
-      ])
+      const queries = [
+        withTimeout(
+          (supabase as any)
+            .from("profiles")
+            .select("id,full_name,email,role")
+            .in("role", ["lead_organiser", "admin"])
+            .order("full_name"),
+          "coordinator users"
+        ),
+        withTimeout(
+          (supabase as any)
+            .from("pending_users")
+            .select("id,full_name,email,role,status,assigned_patch_ids")
+            .in("role", ["lead_organiser", "admin", "organiser"])
+            .in("status", ["draft", "invited"])
+            .order("created_at", { ascending: false }),
+          "draft users"
+        ),
+        withTimeout(
+          (supabase as any)
+            .from("role_hierarchy")
+            .select("parent_user_id,child_user_id,start_date,end_date")
+            .eq("is_active", true)
+            .lte("start_date", effectiveDateValue)
+            .or(`end_date.is.null,end_date.gte.${effectiveDateValue}`),
+          "role hierarchy"
+        ),
+        withTimeout(
+          (supabase as any)
+            .from("lead_draft_organiser_links")
+            .select("lead_user_id,pending_user_id,start_date,end_date")
+            .eq("is_active", true)
+            .lte("start_date", effectiveDateValue)
+            .or(`end_date.is.null,end_date.gte.${effectiveDateValue}`),
+          "draft organiser links"
+        ),
+        withTimeout(
+          (supabase as any)
+            .from("draft_lead_organiser_links")
+            .select("draft_lead_pending_user_id,organiser_user_id,organiser_pending_user_id,start_date,end_date")
+            .eq("is_active", true)
+            .lte("start_date", effectiveDateValue)
+            .or(`end_date.is.null,end_date.gte.${effectiveDateValue}`),
+          "draft lead links"
+        ),
+        withTimeout(
+          (supabase as any)
+            .from("organiser_patch_assignments")
+            .select("organiser_id,patch_id,effective_from,effective_to")
+            .lte("effective_from", effectiveDateTime)
+            .or(`effective_to.is.null,effective_to.gte.${effectiveDateTime}`),
+          "organiser patch assignments"
+        ),
+        withTimeout(
+          (supabase as any)
+            .from("lead_organiser_patch_assignments")
+            .select("lead_organiser_id,patch_id,effective_from,effective_to")
+            .lte("effective_from", effectiveDateTime)
+            .or(`effective_to.is.null,effective_to.gte.${effectiveDateTime}`),
+          "coordinator patch assignments"
+        )
+      ]
 
-      if (liveError) throw liveError
-      if (pendingError) throw pendingError
-      if (roleError) throw roleError
-      if (draftError) throw draftError
-      if (draftLeadError) throw draftLeadError
-      if (organiserAssignmentError) throw organiserAssignmentError
-      if (leadAssignmentError) throw leadAssignmentError
+      const results = await Promise.allSettled(queries)
+      const warnings: string[] = []
+
+      const extract = <T,>(index: number, label: string) => {
+        const result = results[index]
+        if (result.status === "fulfilled") {
+          const { data: payload, error: queryError } = result.value as any
+          if (queryError) {
+            warnings.push(`${label}: ${queryError.message || "query failed"}`)
+            return [] as T[]
+          }
+          return (payload || []) as T[]
+        }
+        warnings.push(`${label}: ${result.reason?.message || "query failed"}`)
+        return [] as T[]
+      }
 
       return {
-        liveUsers: (liveUsers || []) as LiveUser[],
-        pendingUsers: (pendingUsers || []) as PendingUser[],
-        roleLinks: (roleLinks || []) as RoleLink[],
-        draftLinks: (draftLinks || []) as DraftLink[],
-        draftLeadLinks: (draftLeadLinks || []) as DraftLeadLink[],
-        organiserAssignments: (organiserAssignments || []) as Assignment[],
-        leadAssignments: (leadAssignments || []) as LeadAssignment[]
+        liveUsers: extract<LiveUser>(0, "coordinator users"),
+        pendingUsers: extract<PendingUser>(1, "draft users"),
+        roleLinks: extract<RoleLink>(2, "role hierarchy"),
+        draftLinks: extract<DraftLink>(3, "draft organiser links"),
+        draftLeadLinks: extract<DraftLeadLink>(4, "draft lead links"),
+        organiserAssignments: extract<Assignment>(5, "organiser patch assignments"),
+        leadAssignments: extract<LeadAssignment>(6, "coordinator patch assignments"),
+        warnings
       }
     }
   })
@@ -213,6 +252,13 @@ export function CoordinatorRollupSummary({ effectiveDate, title, description }: 
             <LoadingSpinner size={16} />
             Loading rollup...
           </div>
+        ) : error ? (
+          <div className="space-y-2 text-sm">
+            <div className="text-red-600">Failed to load rollup data.</div>
+            <Button variant="outline" size="sm" onClick={() => refetch()}>
+              Retry
+            </Button>
+          </div>
         ) : rollup ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="rounded-md border px-4 py-3">
@@ -226,6 +272,17 @@ export function CoordinatorRollupSummary({ effectiveDate, title, description }: 
           </div>
         ) : (
           <div className="text-sm text-muted-foreground">Select a coordinator to view rollup data.</div>
+        )}
+
+        {!!data?.warnings?.length && !error && (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            <div className="font-medium">Some rollup data could not be loaded:</div>
+            <ul className="list-disc pl-4">
+              {data.warnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          </div>
         )}
       </CardContent>
     </Card>
