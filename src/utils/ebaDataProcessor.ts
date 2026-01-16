@@ -54,22 +54,62 @@ export function parseEbaContactDetails(
 }
 
 // Parse date field that might contain multiple dates
-export function parseEbaDate(dateString: string): string | undefined {
-  if (!dateString || dateString.trim() === '') return undefined;
-  
-  // Extract the first date if multiple dates are present
-  const dateMatch = dateString.match(/(\d{1,2}\.\d{1,2}\.\d{2,4})/);
-  if (dateMatch) {
-    const [day, month, year] = dateMatch[1].split('.');
-    const fullYear = year.length === 2 ? `20${year}` : year;
-    return `${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+export function parseEbaDate(value: unknown): string | undefined {
+  if (value === null || value === undefined) return undefined
+
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return value.toISOString().split('T')[0]
   }
-  
-  return undefined;
+
+  if (typeof value === 'number' && !isNaN(value)) {
+    const excelEpoch = Date.UTC(1899, 11, 30)
+    const date = new Date(excelEpoch + value * 24 * 60 * 60 * 1000)
+    if (!isNaN(date.getTime())) {
+      return date.toISOString().split('T')[0]
+    }
+  }
+
+  const dateString = String(value).trim()
+  if (!dateString) return undefined
+
+  // Extract the first date if multiple dates are present (dd.mm.yyyy)
+  const dotMatch = dateString.match(/(\d{1,2})\.(\d{1,2})\.(\d{2,4})/)
+  if (dotMatch) {
+    const day = dotMatch[1]
+    const month = dotMatch[2]
+    const year = dotMatch[3]
+    const fullYear = year.length === 2 ? `20${year}` : year
+    return `${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+  }
+
+  const slashMatch = dateString.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/)
+  if (slashMatch) {
+    let day = slashMatch[1]
+    let month = slashMatch[2]
+    const year = slashMatch[3]
+    if (parseInt(slashMatch[1], 10) <= 12 && parseInt(slashMatch[2], 10) > 12) {
+      day = slashMatch[2]
+      month = slashMatch[1]
+    }
+    const fullYear = year.length === 2 ? `20${year}` : year
+    return `${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+  }
+
+  const parsed = new Date(dateString)
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toISOString().split('T')[0]
+  }
+
+  return undefined
 }
 
-export function processEbaRow(row: Record<string, string>): ProcessedEbaData | null {
-  const companyName = row['Company name'] || row['company_name'];
+export function processEbaRow(row: Record<string, any>): ProcessedEbaData | null {
+  const companyName =
+    row['Company Name'] ||
+    row['Company name'] ||
+    row['company_name'] ||
+    row['Company'] ||
+    row['company'];
   
   // Skip rows with missing company name
   if (!companyName || companyName.trim() === '') {
@@ -89,7 +129,13 @@ export function processEbaRow(row: Record<string, string>): ProcessedEbaData | n
     comments: row['COMMENTS'] || row['comments'] || undefined,
     fwc_lodgement_number: row['FWC Lodgement #'] || row['fwc_lodgement_number'] || undefined,
     fwc_matter_number: row['FWC Matter #'] || row['fwc_matter_number'] || undefined,
-    fwc_document_url: row['FWC Document Search Link'] || row['FWC Document URL'] || row['fwc_document_url'] || row['Document URL'] || row['document_url'] || undefined,
+    fwc_document_url:
+      row['FWC Document Search Link'] ||
+      row['FWC Document URL'] ||
+      row['fwc_document_url'] ||
+      row['Document URL'] ||
+      row['document_url'] ||
+      undefined,
     
     ...contactDetails,
     

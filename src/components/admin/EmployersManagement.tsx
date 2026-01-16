@@ -4,7 +4,7 @@ import React, { useState, type ComponentType } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Building, UserPlus, RefreshCw, UserX, Link, Database, FileText } from 'lucide-react'
+import { Building, UserPlus, RefreshCw, UserX, Link, Database, FileText, FileSpreadsheet } from 'lucide-react'
 import PendingEmployersImport from '@/components/upload/PendingEmployersImport'
 import ContractorImport from '@/components/upload/ContractorImport'
 import { BackfillProjectCoordinates } from '@/components/admin/BackfillProjectCoordinates'
@@ -13,8 +13,16 @@ import { IncolinkImport } from '@/components/upload/IncolinkImport'
 import IncolinkScrape from '@/components/upload/IncolinkScrape'
 import FileUpload from '@/components/upload/FileUpload'
 import EbaTradeImport from '@/components/upload/EbaTradeImport'
+import EbaSpreadsheetImport from '@/components/upload/EbaSpreadsheetImport'
 
-type EmployerImportMode = 'pending-employers' | 'csv-upload' | 'project-backfill' | 'duplicates' | 'incolink' | 'eba-trade-import'
+type EmployerImportMode =
+  | 'pending-employers'
+  | 'csv-upload'
+  | 'project-backfill'
+  | 'duplicates'
+  | 'incolink'
+  | 'eba-trade-import'
+  | 'eba-spreadsheet-import'
 
 interface EmployerOption {
   mode: EmployerImportMode
@@ -65,6 +73,13 @@ const employerOptions: EmployerOption[] = [
     title: 'EBA Trade Import',
     description: 'Import employers from EBA trade-categorized PDF lists using AI parsing',
     icon: FileText,
+    requiresUpload: true
+  },
+  {
+    mode: 'eba-spreadsheet-import',
+    title: 'EBA Spreadsheet Import',
+    description: 'Import employer EBA status and certified dates from CSV or XLSX',
+    icon: FileSpreadsheet,
     requiresUpload: true
   }
 ]
@@ -211,6 +226,12 @@ export default function EmployersManagement() {
               <EbaTradeImport 
                 onNavigateToPendingImport={() => setSelectedMode('pending-employers')}
               />
+            </div>
+          )}
+
+          {selectedMode === 'eba-spreadsheet-import' && (
+            <div className="space-y-4">
+              <EbaSpreadsheetImport />
             </div>
           )}
         </CardContent>

@@ -126,17 +126,67 @@ export function EbaImport({ csvData, onImportComplete, onBack }: EbaImportProps)
   // Helper function to update employer EBA status
   const updateEmployerEbaStatus = async (employerId: string, hasEba: boolean) => {
     try {
-      const { error } = await supabase
-        .from('employers')
-        .update({ enterprise_agreement_status: hasEba })
-        .eq('id', employerId);
-      
+      const { error } = await (supabase as any).rpc('set_employer_eba_status', {
+        p_employer_id: employerId,
+        p_status: hasEba,
+        p_source: 'import',
+        p_notes: 'Updated via EBA spreadsheet import',
+      });
+
       if (error) {
-        console.warn('Failed to update employer EBA status:', error);
-        // Don't throw - this is a secondary operation
+        console.warn('Failed to update employer EBA status via RPC:', error);
+        await supabase
+          .from('employers')
+          .update({ enterprise_agreement_status: hasEba })
+          .eq('id', employerId);
       }
     } catch (error) {
       console.warn('Error updating employer EBA status:', error);
+    }
+  };
+
+  const addTradeCapability = async (employerId: string, tradeCode?: string | null) => {
+    const normalized = tradeCode?.toString().trim();
+    if (!normalized) return;
+
+    try {
+      const { data: tradeType, error: tradeError } = await supabase
+        .from('trade_types')
+        .select('id, name')
+        .eq('code', normalized)
+        .maybeSingle();
+
+      if (tradeError || !tradeType) {
+        console.warn(`Trade type "${normalized}" not found in trade_types table`);
+        return;
+      }
+
+      const { data: existingCapability } = await supabase
+        .from('employer_capabilities')
+        .select('id')
+        .eq('employer_id', employerId)
+        .eq('capability_type', 'trade')
+        .eq('trade_type_id', tradeType.id)
+        .maybeSingle();
+
+      if (!existingCapability) {
+        const { error: insertError } = await supabase
+          .from('employer_capabilities')
+          .insert({
+            employer_id: employerId,
+            capability_type: 'trade',
+            trade_type_id: tradeType.id,
+            is_primary: true,
+            proficiency_level: 'intermediate',
+            notes: 'Added via EBA spreadsheet import',
+          });
+
+        if (insertError) {
+          console.warn(`Failed to add trade capability "${normalized}":`, insertError);
+        }
+      }
+    } catch (error) {
+      console.warn('Error adding trade capability:', error);
     }
   };
 
@@ -340,6 +390,8 @@ export function EbaImport({ csvData, onImportComplete, onBack }: EbaImportProps)
           if (!employerId) {
             throw new Error('Failed to determine employer ID');
           }
+
+          await addTradeCapability(employerId, record.sector);
 
           // Check if EBA record already exists for this employer
           const { data: existingRecord } = await supabase
