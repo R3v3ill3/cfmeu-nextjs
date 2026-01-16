@@ -13,7 +13,7 @@ import { useAuth } from "@/hooks/useAuth"
 import { useUserRole } from "@/hooks/useUserRole"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { ChevronDown, Users, ShieldCheck, Map, Database, Navigation, Activity } from "lucide-react"
+import { ChevronDown, Users, ShieldCheck, Map, Database, Navigation, Activity, Shuffle } from "lucide-react"
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
 
@@ -121,6 +121,14 @@ const NavigationVisibilityManager = lazyWithErrorLogging(
   () => import("@/components/admin/NavigationVisibilityManager").then(m => ({ default: m.NavigationVisibilityManager })),
   "NavigationVisibilityManager"
 )
+const UnifiedAllocationsView = lazyWithErrorLogging(
+  () => import("@/components/admin/allocations/UnifiedAllocationsView").then(m => ({ default: m.UnifiedAllocationsView })),
+  "UnifiedAllocationsView"
+)
+const ReallocationWizard = lazyWithErrorLogging(
+  () => import("@/components/admin/allocations/ReallocationWizard").then(m => ({ default: m.ReallocationWizard })),
+  "ReallocationWizard"
+)
 const SystemHealthDashboard = lazyWithErrorLogging(
   () => import("@/components/admin/SystemHealthDashboard").then(m => ({ default: m.SystemHealthDashboard })),
   "SystemHealthDashboard"
@@ -152,6 +160,7 @@ export default function AdminPage() {
   const [open, setOpen] = useState(false)
   const [addDraftOpen, setAddDraftOpen] = useState(false)
   const [lookupOpen, setLookupOpen] = useState(false)
+  const [wizardOpen, setWizardOpen] = useState(false)
   const { user } = useAuth()
   const { role: userRole } = useUserRole()
   const searchParams = useSearchParams()
@@ -195,6 +204,8 @@ export default function AdminPage() {
         'users': 'user-management',
         'invites': 'user-management',
         'hierarchy': 'user-management',
+        'allocations': 'allocations',
+        'reallocation': 'allocations',
         'pending': 'data-integrity',
         'alias-analytics': 'data-integrity',
         'canonical-names': 'data-integrity',
@@ -347,6 +358,16 @@ export default function AdminPage() {
             {isAdmin && (
               <Button variant="outline" size={isMobile ? "sm" : "default"} onClick={() => setLookupOpen(true)} className={isMobile ? "w-full" : ""}>
                 Address Lookup
+              </Button>
+            )}
+            {isAdmin && (
+              <Button
+                variant="outline"
+                size={isMobile ? "sm" : "default"}
+                onClick={() => setWizardOpen(true)}
+                className={isMobile ? "w-full" : ""}
+              >
+                Reallocation Wizard
               </Button>
             )}
             <Button onClick={() => setOpen(true)} size={isMobile ? "sm" : "default"} className={isMobile ? "w-full" : ""}>
@@ -564,6 +585,30 @@ export default function AdminPage() {
               </div>
             </div>
 
+            {/* Unified Allocations */}
+            {isAdmin && (
+              <div className="pt-4">
+                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">
+                  Allocations
+                </h2>
+                <div className="space-y-2">
+                  <Collapsible>
+                    <CollapsibleTrigger asChild>
+                      <Button variant="outline" className="w-full justify-between">
+                        Unified Allocations
+                        <ChevronDown className="h-4 w-4" />
+                      </Button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="mt-3">
+                        <UnifiedAllocationsView onOpenWizard={() => setWizardOpen(true)} />
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                </div>
+              </div>
+            )}
+
             {/* Other Sections */}
             <div className="pt-4">
               <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">
@@ -643,6 +688,15 @@ export default function AdminPage() {
                 </Badge>
               )}
             </TabsTrigger>
+            {isAdmin && (
+              <TabsTrigger 
+                value="allocations"
+                className="flex items-center gap-2 px-4 py-2.5 text-base font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20"
+              >
+                <Shuffle className="h-4 w-4" />
+                <span className="whitespace-nowrap">Allocations</span>
+              </TabsTrigger>
+            )}
             <TabsTrigger 
               value="patch-management"
               className="flex items-center gap-2 px-4 py-2.5 text-base font-medium rounded-lg border transition-all min-h-[44px] data-[state=inactive]:bg-white data-[state=inactive]:text-muted-foreground data-[state=inactive]:border-border/60 data-[state=inactive]:hover:bg-muted/30 data-[state=inactive]:hover:text-foreground data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:font-semibold data-[state=active]:border-blue-600 data-[state=active]:shadow-lg data-[state=active]:shadow-blue-600/30 data-[state=active]:ring-2 data-[state=active]:ring-blue-500/20"
@@ -769,6 +823,14 @@ export default function AdminPage() {
             </Suspense>
           </TabsContent>
 
+          {isAdmin && (
+            <TabsContent value="allocations" className="space-y-8">
+              <Suspense fallback={<TabLoadingState />}>
+                <UnifiedAllocationsView onOpenWizard={() => setWizardOpen(true)} />
+              </Suspense>
+            </TabsContent>
+          )}
+
           {/* Patch Management Group */}
           <TabsContent value="patch-management" className="space-y-8">
             <Suspense fallback={<TabLoadingState />}>
@@ -833,6 +895,7 @@ export default function AdminPage() {
           <InviteUserDialog open={open} onOpenChange={setOpen} onSuccess={() => {}} />
           {isAdmin && <AddressLookupDialog open={lookupOpen} onOpenChange={setLookupOpen} />}
           <AddDraftUserDialog open={addDraftOpen} onOpenChange={setAddDraftOpen} onSuccess={() => {}} />
+          {isAdmin && <ReallocationWizard open={wizardOpen} onOpenChange={setWizardOpen} />}
         </Suspense>
       </div>
     </RoleGuard>

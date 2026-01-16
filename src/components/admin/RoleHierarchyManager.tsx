@@ -10,10 +10,13 @@ import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 
 interface RoleHierarchyManagerProps {
   users: Array<{ id: string; full_name: string | null; email: string | null; role: string | null }>;
+  effectiveDate?: string;
 }
 
-export const RoleHierarchyManager = ({ users }: RoleHierarchyManagerProps) => {
+export const RoleHierarchyManager = ({ users, effectiveDate }: RoleHierarchyManagerProps) => {
   const { toast } = useToast();
+  const effectiveDateValue = effectiveDate || new Date().toISOString().slice(0, 10);
+  const todayValue = new Date().toISOString().slice(0, 10);
   const [leadId, setLeadId] = useState<string>("");
   const [organiserId, setOrganiserId] = useState<string>("");
   const [loading, setLoading] = useState(false);
@@ -37,12 +40,12 @@ export const RoleHierarchyManager = ({ users }: RoleHierarchyManagerProps) => {
 
   useEffect(() => {
     const fetchLinks = async () => {
-      const today = new Date().toISOString().slice(0, 10);
       const { data, error } = await supabase
         .from("role_hierarchy")
         .select("id,parent_user_id,child_user_id")
         .eq("is_active", true)
-        .or(`end_date.is.null,end_date.gte.${today}`)
+        .lte("start_date", effectiveDateValue)
+        .or(`end_date.is.null,end_date.gte.${effectiveDateValue}`)
         .order("created_at", { ascending: false });
       if (error) {
         console.error(error);
@@ -52,11 +55,10 @@ export const RoleHierarchyManager = ({ users }: RoleHierarchyManagerProps) => {
       }
     };
     fetchLinks();
-  }, [toast]);
+  }, [effectiveDateValue, toast]);
 
   useEffect(() => {
     const fetchDraftData = async () => {
-      const today = new Date().toISOString().slice(0, 10);
       const [
         { data: pending, error: pErr },
         { data: dl, error: dErr },
@@ -73,7 +75,8 @@ export const RoleHierarchyManager = ({ users }: RoleHierarchyManagerProps) => {
           .from("lead_draft_organiser_links")
           .select("id,lead_user_id,pending_user_id")
           .eq("is_active", true)
-          .or(`end_date.is.null,end_date.gte.${today}`)
+          .lte("start_date", effectiveDateValue)
+          .or(`end_date.is.null,end_date.gte.${effectiveDateValue}`)
           .order("created_at", { ascending: false }),
         supabase
           .from("pending_users")
@@ -85,7 +88,8 @@ export const RoleHierarchyManager = ({ users }: RoleHierarchyManagerProps) => {
           .from("draft_lead_organiser_links")
           .select("id,draft_lead_pending_user_id,organiser_user_id,organiser_pending_user_id")
           .eq("is_active", true)
-          .or(`end_date.is.null,end_date.gte.${today}`)
+          .lte("start_date", effectiveDateValue)
+          .or(`end_date.is.null,end_date.gte.${effectiveDateValue}`)
           .order("created_at", { ascending: false })
       ]);
       if (pErr) {
@@ -114,7 +118,7 @@ export const RoleHierarchyManager = ({ users }: RoleHierarchyManagerProps) => {
       }
     };
     fetchDraftData();
-  }, [toast]);
+  }, [effectiveDateValue, toast]);
 
   const addLink = async () => {
     if (!leadId || !organiserId) {
@@ -129,17 +133,18 @@ export const RoleHierarchyManager = ({ users }: RoleHierarchyManagerProps) => {
         parent_user_id: leadId,
         child_user_id: organiserId,
         assigned_by: assignedBy,
+        start_date: effectiveDateValue,
       } as any);
       if (error) throw error;
       toast({ title: "Linked", description: "Co-ordinator linked to organiser" });
       setLeadId("");
       setOrganiserId("");
-      const today = new Date().toISOString().slice(0, 10);
       const { data } = await supabase
         .from("role_hierarchy")
         .select("id,parent_user_id,child_user_id")
         .eq("is_active", true)
-        .or(`end_date.is.null,end_date.gte.${today}`)
+        .lte("start_date", effectiveDateValue)
+        .or(`end_date.is.null,end_date.gte.${effectiveDateValue}`)
         .order("created_at", { ascending: false });
       setLinks(data || []);
     } catch (e: any) {
@@ -153,7 +158,11 @@ export const RoleHierarchyManager = ({ users }: RoleHierarchyManagerProps) => {
   const removeLink = async (id: string) => {
     setLoading(true);
     try {
-      const { error } = await supabase.from("role_hierarchy").update({ is_active: false, end_date: new Date().toISOString().slice(0, 10) }).eq("id", id);
+      const shouldDeactivate = effectiveDateValue <= todayValue;
+      const { error } = await supabase
+        .from("role_hierarchy")
+        .update({ is_active: !shouldDeactivate, end_date: effectiveDateValue })
+        .eq("id", id);
       if (error) throw error;
       setLinks(prev => prev.filter(l => l.id !== id));
       toast({ title: "Removed", description: "Link removed" });
@@ -178,17 +187,18 @@ export const RoleHierarchyManager = ({ users }: RoleHierarchyManagerProps) => {
         lead_user_id: draftLeadId,
         pending_user_id: draftPendingId,
         assigned_by: assignedBy,
+        start_date: effectiveDateValue,
       } as any);
       if (error) throw error;
       toast({ title: "Draft linked", description: "Co-ordinator linked to draft organiser" });
       setDraftLeadId("");
       setDraftPendingId("");
-      const today = new Date().toISOString().slice(0, 10);
       const { data } = await supabase
         .from("lead_draft_organiser_links")
         .select("id,lead_user_id,pending_user_id")
         .eq("is_active", true)
-        .or(`end_date.is.null,end_date.gte.${today}`)
+        .lte("start_date", effectiveDateValue)
+        .or(`end_date.is.null,end_date.gte.${effectiveDateValue}`)
         .order("created_at", { ascending: false });
       setDraftLinks(data || []);
     } catch (e: any) {
@@ -202,7 +212,11 @@ export const RoleHierarchyManager = ({ users }: RoleHierarchyManagerProps) => {
   const removeDraftLink = async (id: string) => {
     setLoading(true);
     try {
-      const { error } = await supabase.from("lead_draft_organiser_links").update({ is_active: false, end_date: new Date().toISOString().slice(0, 10) }).eq("id", id);
+      const shouldDeactivate = effectiveDateValue <= todayValue;
+      const { error } = await supabase
+        .from("lead_draft_organiser_links")
+        .update({ is_active: !shouldDeactivate, end_date: effectiveDateValue })
+        .eq("id", id);
       if (error) throw error;
       setDraftLinks(prev => prev.filter(l => l.id !== id));
       toast({ title: "Removed", description: "Draft link removed" });
@@ -232,7 +246,11 @@ export const RoleHierarchyManager = ({ users }: RoleHierarchyManagerProps) => {
     try {
       const { data: auth } = await supabase.auth.getUser();
       const assignedBy = (auth as any)?.user?.id ?? null;
-      const payload: any = { draft_lead_pending_user_id: draftLeadPendingId, assigned_by: assignedBy };
+      const payload: any = {
+        draft_lead_pending_user_id: draftLeadPendingId,
+        assigned_by: assignedBy,
+        start_date: effectiveDateValue
+      };
       if (draftLeadToOrganiserId) payload.organiser_user_id = draftLeadToOrganiserId;
       if (draftLeadToPendingId) payload.organiser_pending_user_id = draftLeadToPendingId;
       const { error } = await supabase.from("draft_lead_organiser_links").insert(payload);
@@ -241,12 +259,12 @@ export const RoleHierarchyManager = ({ users }: RoleHierarchyManagerProps) => {
       setDraftLeadPendingId("");
       setDraftLeadToOrganiserId("");
       setDraftLeadToPendingId("");
-      const today = new Date().toISOString().slice(0, 10);
       const { data } = await supabase
         .from("draft_lead_organiser_links")
         .select("id,draft_lead_pending_user_id,organiser_user_id,organiser_pending_user_id")
         .eq("is_active", true)
-        .or(`end_date.is.null,end_date.gte.${today}`)
+        .lte("start_date", effectiveDateValue)
+        .or(`end_date.is.null,end_date.gte.${effectiveDateValue}`)
         .order("created_at", { ascending: false });
       setDraftLeadLinks(data || []);
     } catch (e: any) {
@@ -260,7 +278,11 @@ export const RoleHierarchyManager = ({ users }: RoleHierarchyManagerProps) => {
   const removeDraftLeadLink = async (id: string) => {
     setLoading(true);
     try {
-      const { error } = await supabase.from("draft_lead_organiser_links").update({ is_active: false, end_date: new Date().toISOString().slice(0, 10) }).eq("id", id);
+      const shouldDeactivate = effectiveDateValue <= todayValue;
+      const { error } = await supabase
+        .from("draft_lead_organiser_links")
+        .update({ is_active: !shouldDeactivate, end_date: effectiveDateValue })
+        .eq("id", id);
       if (error) throw error;
       setDraftLeadLinks(prev => prev.filter(l => l.id !== id));
       toast({ title: "Removed", description: "Draft lead link removed" });
