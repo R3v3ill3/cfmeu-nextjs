@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner"
+import { Button } from "@/components/ui/button"
 
 type CoordinatorType = "live" | "draft"
 type OrganiserType = "live" | "draft"
@@ -373,6 +374,61 @@ export function AllocationStagingBoard({
     return defaultTargetCoordinatorKey || null
   }
 
+  const [lastOrganiserTargets, setLastOrganiserTargets] = useState<Record<OrganiserKey, CoordinatorKey | null> | null>(null)
+  const [lastPatchTargets, setLastPatchTargets] = useState<Record<string, CoordinatorKey | null> | null>(null)
+
+  const organiserCounts = useMemo(() => {
+    const current = new Map<CoordinatorKey, number>()
+    const proposed = new Map<CoordinatorKey, number>()
+    const changing = new Map<CoordinatorKey, number>()
+
+    stagingData.organisers.forEach(organiser => {
+      const currentKey = organiser.currentCoordinatorKey || null
+      const proposedKey = resolveOrganiserDefault(organiser)
+
+      if (currentKey) {
+        current.set(currentKey, (current.get(currentKey) || 0) + 1)
+      }
+      if (proposedKey) {
+        proposed.set(proposedKey, (proposed.get(proposedKey) || 0) + 1)
+      }
+      if (currentKey !== proposedKey) {
+        if (currentKey) changing.set(currentKey, (changing.get(currentKey) || 0) + 1)
+        if (proposedKey) changing.set(proposedKey, (changing.get(proposedKey) || 0) + 1)
+      }
+    })
+
+    return { current, proposed, changing }
+  }, [resolveOrganiserDefault, stagingData.organisers])
+
+  const patchCounts = useMemo(() => {
+    const current = new Map<CoordinatorKey, number>()
+    const proposed = new Map<CoordinatorKey, number>()
+    const changing = new Map<CoordinatorKey, number>()
+
+    stagingData.patches.forEach(patch => {
+      patch.currentCoordinatorKeys.forEach(key => {
+        current.set(key, (current.get(key) || 0) + 1)
+      })
+      const proposedKey = resolvePatchDefault(patch)
+      if (proposedKey) {
+        proposed.set(proposedKey, (proposed.get(proposedKey) || 0) + 1)
+      } else {
+        patch.currentCoordinatorKeys.forEach(key => {
+          proposed.set(key, (proposed.get(key) || 0) + 1)
+        })
+      }
+
+      const currentKeys = patch.currentCoordinatorKeys
+      if (proposedKey && !currentKeys.includes(proposedKey)) {
+        if (proposedKey) changing.set(proposedKey, (changing.get(proposedKey) || 0) + 1)
+        currentKeys.forEach(key => changing.set(key, (changing.get(key) || 0) + 1))
+      }
+    })
+
+    return { current, proposed, changing }
+  }, [resolvePatchDefault, stagingData.patches])
+
   return (
     <div className="space-y-6">
       {defaultTargetCoordinatorKey && (
@@ -380,36 +436,65 @@ export function AllocationStagingBoard({
           <CardHeader className="space-y-1">
             <CardTitle className="text-base">Quick apply destination</CardTitle>
             <CardDescription>
-              Apply the destination coordinator to all organisers or patches before fine-tuning.
+              Apply the destination coordinator to items currently assigned to the source coordinator.
             </CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
-            <button
-              className="h-9 rounded-md border px-3 text-sm"
+          <CardContent className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
               onClick={() => {
-                const next: Record<OrganiserKey, CoordinatorKey | null> = {}
+                if (!sourceCoordinatorKey) return
+                setLastOrganiserTargets(organiserTargets)
+                const next: Record<OrganiserKey, CoordinatorKey | null> = { ...organiserTargets }
                 stagingData.organisers.forEach(organiser => {
-                  next[organiser.key] = defaultTargetCoordinatorKey
+                  if (organiser.currentCoordinatorKey === sourceCoordinatorKey) {
+                    next[organiser.key] = defaultTargetCoordinatorKey
+                  }
                 })
                 onOrganiserTargetsChange(next)
               }}
-              type="button"
+              disabled={!sourceCoordinatorKey}
             >
-              Apply to all organisers
-            </button>
-            <button
-              className="h-9 rounded-md border px-3 text-sm"
+              Apply to source organisers
+            </Button>
+            <Button
+              variant="outline"
               onClick={() => {
-                const next: Record<string, CoordinatorKey | null> = {}
+                if (!sourceCoordinatorKey) return
+                setLastPatchTargets(patchTargets)
+                const next: Record<string, CoordinatorKey | null> = { ...patchTargets }
                 stagingData.patches.forEach(patch => {
-                  next[patch.id] = defaultTargetCoordinatorKey
+                  if (patch.currentCoordinatorKeys.includes(sourceCoordinatorKey)) {
+                    next[patch.id] = defaultTargetCoordinatorKey
+                  }
                 })
                 onPatchTargetsChange(next)
               }}
-              type="button"
+              disabled={!sourceCoordinatorKey}
             >
-              Apply to all patches
-            </button>
+              Apply to source patches
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                if (lastOrganiserTargets) {
+                  onOrganiserTargetsChange(lastOrganiserTargets)
+                  setLastOrganiserTargets(null)
+                }
+                if (lastPatchTargets) {
+                  onPatchTargetsChange(lastPatchTargets)
+                  setLastPatchTargets(null)
+                }
+              }}
+              disabled={!lastOrganiserTargets && !lastPatchTargets}
+            >
+              Undo bulk apply
+            </Button>
+            {!sourceCoordinatorKey && (
+              <span className="text-xs text-muted-foreground">
+                Select a source coordinator to enable bulk actions.
+              </span>
+            )}
           </CardContent>
         </Card>
       )}
@@ -420,15 +505,32 @@ export function AllocationStagingBoard({
             ([, target]) => target === coordinator.key
           ).length
           const stagedPatches = Object.entries(patchTargets).filter(([, target]) => target === coordinator.key).length
+          const existingOrganisers = organiserCounts.current.get(coordinator.key) || 0
+          const existingPatches = patchCounts.current.get(coordinator.key) || 0
+          const changingOrganisers = organiserCounts.changing.get(coordinator.key) || 0
+          const changingPatches = patchCounts.changing.get(coordinator.key) || 0
+          const resultingOrganisers = organiserCounts.proposed.get(coordinator.key) || 0
+          const resultingPatches = patchCounts.proposed.get(coordinator.key) || 0
           return (
             <Card key={coordinator.key}>
               <CardHeader className="space-y-1">
                 <CardTitle className="text-base">{coordinator.label}</CardTitle>
                 <CardDescription>Staged items</CardDescription>
               </CardHeader>
-              <CardContent className="flex items-center gap-3">
-                <Badge variant="secondary">{stagedOrganisers} organisers</Badge>
-                <Badge variant="outline">{stagedPatches} patches</Badge>
+              <CardContent className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary">{stagedOrganisers} staged organisers</Badge>
+                  <Badge variant="outline">{stagedPatches} staged patches</Badge>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Existing: {existingOrganisers} organisers, {existingPatches} patches
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Changing: {changingOrganisers} organisers, {changingPatches} patches
+                </div>
+                <div className="text-xs font-medium text-foreground">
+                  Resulting: {resultingOrganisers} organisers, {resultingPatches} patches
+                </div>
               </CardContent>
             </Card>
           )
