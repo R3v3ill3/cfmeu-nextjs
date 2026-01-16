@@ -61,6 +61,9 @@ interface AllocationStagingBoardProps {
   onPatchTargetsChange: (next: Record<string, CoordinatorKey | null>) => void
   onDataChange?: (data: StagingData | null) => void
   defaultTargetCoordinatorKey?: CoordinatorKey | null
+  sourceCoordinatorKey?: CoordinatorKey | null
+  destinationCoordinatorKey?: CoordinatorKey | null
+  allocationBasis?: "organiser" | "patch"
 }
 
 const buildCoordinatorKey = (type: CoordinatorType, id: string) => `${type}:${id}` as CoordinatorKey
@@ -73,7 +76,10 @@ export function AllocationStagingBoard({
   onOrganiserTargetsChange,
   onPatchTargetsChange,
   onDataChange,
-  defaultTargetCoordinatorKey
+  defaultTargetCoordinatorKey,
+  sourceCoordinatorKey,
+  destinationCoordinatorKey,
+  allocationBasis = "organiser"
 }: AllocationStagingBoardProps) {
   const effectiveDateValue = effectiveDate || new Date().toISOString().slice(0, 10)
   const effectiveDateTime = `${effectiveDateValue}T00:00:00.000Z`
@@ -342,6 +348,30 @@ export function AllocationStagingBoard({
 
   const coordinatorOptions = stagingData.coordinators
   const coordinatorLabel = (key?: CoordinatorKey | null) => (key ? stagingData.coordinatorLabels[key] || key : "Unassigned")
+  const resolveOrganiserDefault = (organiser: OrganiserInfo) => {
+    const explicit = organiserTargets[organiser.key]
+    if (explicit) return explicit
+    if (
+      sourceCoordinatorKey &&
+      destinationCoordinatorKey &&
+      organiser.currentCoordinatorKey === sourceCoordinatorKey
+    ) {
+      return destinationCoordinatorKey
+    }
+    return organiser.currentCoordinatorKey || defaultTargetCoordinatorKey || null
+  }
+  const resolvePatchDefault = (patch: PatchInfo) => {
+    const explicit = patchTargets[patch.id]
+    if (explicit) return explicit
+    if (patch.currentCoordinatorKeys.length === 1) {
+      const current = patch.currentCoordinatorKeys[0]
+      if (sourceCoordinatorKey && destinationCoordinatorKey && current === sourceCoordinatorKey) {
+        return destinationCoordinatorKey
+      }
+      return current
+    }
+    return defaultTargetCoordinatorKey || null
+  }
 
   return (
     <div className="space-y-6">
@@ -405,7 +435,8 @@ export function AllocationStagingBoard({
         })}
       </div>
 
-      <Card>
+      {allocationBasis === "organiser" && (
+        <Card>
         <CardHeader>
           <CardTitle>Stage organisers</CardTitle>
           <CardDescription>Assign organisers to target coordinators for this reshuffle.</CardDescription>
@@ -430,7 +461,7 @@ export function AllocationStagingBoard({
                 {stagingData.organisers
                   .filter(organiser => organiser.label.toLowerCase().includes(organiserFilter.toLowerCase()))
                   .map(organiser => {
-                  const currentTarget = organiserTargets[organiser.key] ?? defaultTargetCoordinatorKey ?? null
+                  const currentTarget = resolveOrganiserDefault(organiser)
                   const currentCoordinator = organiser.currentCoordinatorKey
                   return (
                     <TableRow key={organiser.key}>
@@ -469,8 +500,10 @@ export function AllocationStagingBoard({
           </div>
         </CardContent>
       </Card>
+      )}
 
-      <Card>
+      {allocationBasis === "patch" && (
+        <Card>
         <CardHeader>
           <CardTitle>Stage patches</CardTitle>
           <CardDescription>Assign patches to target coordinators for complex reshuffles.</CardDescription>
@@ -495,7 +528,7 @@ export function AllocationStagingBoard({
                 {stagingData.patches
                   .filter(patch => patch.name.toLowerCase().includes(patchFilter.toLowerCase()))
                   .map(patch => {
-                  const currentTarget = patchTargets[patch.id] ?? defaultTargetCoordinatorKey ?? null
+                  const currentTarget = resolvePatchDefault(patch)
                   const currentCoverage =
                     patch.currentCoordinatorKeys.length === 0
                       ? "Unassigned"
@@ -534,6 +567,7 @@ export function AllocationStagingBoard({
           </div>
         </CardContent>
       </Card>
+      )}
     </div>
   )
 }

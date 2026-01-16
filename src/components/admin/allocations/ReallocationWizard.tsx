@@ -59,6 +59,7 @@ export function ReallocationWizard({ open, onOpenChange }: ReallocationWizardPro
   const [organiserTargets, setOrganiserTargets] = useState<Record<OrganiserKey, CoordinatorKey | null>>({})
   const [patchTargets, setPatchTargets] = useState<Record<string, CoordinatorKey | null>>({})
   const [stagingData, setStagingData] = useState<StagingData | null>(null)
+  const [allocationBasis, setAllocationBasis] = useState<"organiser" | "patch">("organiser")
 
   const currentScenario = scenarios.find(item => item.id === scenario)
 
@@ -177,6 +178,38 @@ export function ReallocationWizard({ open, onOpenChange }: ReallocationWizardPro
                 </CardHeader>
                 <CardContent>
                   {(scenario === "swap-coordinators" || scenario === "swap-and-reallocate") && (
+                    <div className="mb-6 space-y-3">
+                      <div className="text-sm font-medium">Reallocation basis</div>
+                      <RadioGroup
+                        value={allocationBasis}
+                        onValueChange={(value) => setAllocationBasis(value as "organiser" | "patch")}
+                        className="grid grid-cols-1 gap-2 md:grid-cols-2"
+                      >
+                        <label className="flex items-start gap-3 rounded-md border p-3 text-sm">
+                          <RadioGroupItem value="organiser" className="mt-1" />
+                          <span>
+                            <div className="font-medium">Organiser-based reallocation</div>
+                            <div className="text-xs text-muted-foreground">
+                              Move organisers between coordinators; patch coverage follows organisers.
+                            </div>
+                          </span>
+                        </label>
+                        <label className="flex items-start gap-3 rounded-md border p-3 text-sm">
+                          <RadioGroupItem value="patch" className="mt-1" />
+                          <span>
+                            <div className="font-medium">Patch-based reallocation</div>
+                            <div className="text-xs text-muted-foreground">
+                              Move patches directly; organiser links stay unless you adjust them later.
+                            </div>
+                          </span>
+                        </label>
+                      </RadioGroup>
+                      <div className="text-xs text-muted-foreground">
+                        Use only one basis at a time to avoid conflicting changes.
+                      </div>
+                    </div>
+                  )}
+                  {(scenario === "swap-coordinators" || scenario === "swap-and-reallocate") && (
                     <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
                       <div className="space-y-2">
                         <div className="text-sm font-medium">Source coordinator</div>
@@ -224,6 +257,9 @@ export function ReallocationWizard({ open, onOpenChange }: ReallocationWizardPro
                     onPatchTargetsChange={setPatchTargets}
                     onDataChange={setStagingData}
                     defaultTargetCoordinatorKey={destinationCoordinator || null}
+                    sourceCoordinatorKey={sourceCoordinator || null}
+                    destinationCoordinatorKey={destinationCoordinator || null}
+                    allocationBasis={allocationBasis}
                   />
                 </CardContent>
               </Card>
