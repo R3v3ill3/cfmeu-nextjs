@@ -14,6 +14,7 @@ import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { useToast } from "@/components/ui/use-toast";
 import { Checkbox } from '@/components/ui/checkbox';
 import { getTradeOptionsByStage, getAllStages, getStageLabel } from "@/utils/tradeUtils";
+import { useKeyContractorTradesSet } from '@/hooks/useKeyContractorTrades';
 
 interface ProjectEmployer {
   id: string;
