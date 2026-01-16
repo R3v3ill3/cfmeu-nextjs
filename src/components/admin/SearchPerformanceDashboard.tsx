@@ -154,7 +154,7 @@ export default function SearchPerformanceDashboard() {
               {formatDuration(searchMetrics?.metrics?.avg_query_time_ms || 0)}
             </div>
             <p className="text-xs text-muted-foreground">
-              Target: <200ms
+              Target: &lt;200ms
             </p>
           </CardContent>
         </Card>
@@ -184,7 +184,7 @@ export default function SearchPerformanceDashboard() {
               {searchMetrics?.metrics?.slow_queries_count || 0}
             </div>
             <p className="text-xs text-muted-foreground">
-              >500ms queries
+              &gt;500ms queries
             </p>
           </CardContent>
         </Card>
