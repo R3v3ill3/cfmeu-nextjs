@@ -61,8 +61,8 @@ async function fetchServerPatchSummaries({
   searchParams.set('userId', viewerId)
   searchParams.set('userRole', viewerRole)
   searchParams.set('leadOrganizerId', leadOrganizerId)
-  // Cache bust to ensure fresh data after coordinator scorecard fix
-  searchParams.set('_v', '2')
+  // Cache bust to ensure fresh data after coordinator scorecard fix (v3: show all patches)
+  searchParams.set('_v', '3')
 
   const response = await fetch(`${baseUrl}/api/dashboard/patch-summaries?${searchParams.toString()}`, {
     method: 'GET',
