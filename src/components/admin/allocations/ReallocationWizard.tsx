@@ -62,6 +62,10 @@ export function ReallocationWizard({ open, onOpenChange }: ReallocationWizardPro
   const [allocationBasis, setAllocationBasis] = useState<"organiser" | "patch">("organiser")
 
   const currentScenario = scenarios.find(item => item.id === scenario)
+  const canRenderPatchCoverage = typeof PatchCoveragePreview === "function"
+  const canRenderRoleHierarchy = typeof RoleHierarchyManager === "function"
+  const canRenderPatchManager = typeof PatchManager === "function"
+  const canRenderScopeManager = typeof OrganiserScopeManager === "function"
 
   const { data: users = [] } = useQuery({
     queryKey: ["admin-users"],
@@ -281,20 +285,28 @@ export function ReallocationWizard({ open, onOpenChange }: ReallocationWizardPro
                 </CardContent>
               </Card>
 
-              <PatchCoveragePreview
-                stagingData={stagingData}
-                organiserTargets={organiserTargets}
-                patchTargets={patchTargets}
-              />
+              {canRenderPatchCoverage ? (
+                <PatchCoveragePreview
+                  stagingData={stagingData}
+                  organiserTargets={organiserTargets}
+                  patchTargets={patchTargets}
+                />
+              ) : (
+                <div className="rounded-md border px-4 py-3 text-sm text-muted-foreground">
+                  Patch coverage preview is temporarily unavailable.
+                </div>
+              )}
 
               <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
                 Changes across coordinator teams will affect dashboard totals going forward from the effective date.
                 Patch assignments update immediately even when coordinator links are future-dated.
               </div>
 
-              <RoleHierarchyManager effectiveDate={effectiveDate} users={users} />
-              <PatchManager />
-              <OrganiserScopeManager />
+              {canRenderRoleHierarchy && (
+                <RoleHierarchyManager effectiveDate={effectiveDate} users={users} />
+              )}
+              {canRenderPatchManager && <PatchManager />}
+              {canRenderScopeManager && <OrganiserScopeManager />}
             </div>
           )}
 
