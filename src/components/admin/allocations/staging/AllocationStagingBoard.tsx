@@ -341,7 +341,7 @@ export function AllocationStagingBoard({
         proposedKey = destinationCoordinatorKey
       }
       if (!proposedKey) {
-        proposedKey = organiser.currentCoordinatorKey || defaultTargetCoordinatorKey || null
+        proposedKey = organiser.currentCoordinatorKey || null
       }
 
       if (currentKey) {
@@ -432,6 +432,7 @@ export function AllocationStagingBoard({
 
   const coordinatorOptions = stagingData.coordinators
   const coordinatorLabel = (key?: CoordinatorKey | null) => (key ? stagingData.coordinatorLabels[key] || key : "Unassigned")
+  const UNASSIGNED_VALUE = "__unassigned__"
   const resolveOrganiserDefault = (organiser: OrganiserInfo) => {
     const explicit = organiserTargets[organiser.key]
     if (explicit) return explicit
@@ -442,7 +443,7 @@ export function AllocationStagingBoard({
     ) {
       return destinationCoordinatorKey
     }
-    return organiser.currentCoordinatorKey || defaultTargetCoordinatorKey || null
+    return organiser.currentCoordinatorKey || null
   }
   const resolvePatchDefault = (patch: PatchInfo) => {
     const explicit = patchTargets[patch.id]
@@ -604,9 +605,10 @@ export function AllocationStagingBoard({
                       <TableCell>{coordinatorLabel(currentCoordinator)}</TableCell>
                       <TableCell className="text-right">
                         <Select
-                          value={currentTarget || ""}
+                          value={currentTarget || UNASSIGNED_VALUE}
                           onValueChange={(value) => {
-                            const next = { ...organiserTargets, [organiser.key]: value as CoordinatorKey }
+                            const nextValue = value === UNASSIGNED_VALUE ? null : (value as CoordinatorKey)
+                            const next = { ...organiserTargets, [organiser.key]: nextValue }
                             onOrganiserTargetsChange(next)
                           }}
                         >
@@ -614,6 +616,7 @@ export function AllocationStagingBoard({
                             <SelectValue placeholder="Select target" />
                           </SelectTrigger>
                           <SelectContent>
+                            <SelectItem value={UNASSIGNED_VALUE}>Unassigned</SelectItem>
                             {coordinatorOptions.map(option => (
                               <SelectItem key={option.key} value={option.key}>
                                 {option.label}
@@ -671,9 +674,10 @@ export function AllocationStagingBoard({
                       <TableCell>{currentCoverage}</TableCell>
                       <TableCell className="text-right">
                         <Select
-                          value={currentTarget || ""}
+                          value={currentTarget || UNASSIGNED_VALUE}
                           onValueChange={(value) => {
-                            const next = { ...patchTargets, [patch.id]: value as CoordinatorKey }
+                            const nextValue = value === UNASSIGNED_VALUE ? null : (value as CoordinatorKey)
+                            const next = { ...patchTargets, [patch.id]: nextValue }
                             onPatchTargetsChange(next)
                           }}
                         >
@@ -681,6 +685,7 @@ export function AllocationStagingBoard({
                             <SelectValue placeholder="Select target" />
                           </SelectTrigger>
                           <SelectContent>
+                            <SelectItem value={UNASSIGNED_VALUE}>Unassigned</SelectItem>
                             {coordinatorOptions.map(option => (
                               <SelectItem key={option.key} value={option.key}>
                                 {option.label}
