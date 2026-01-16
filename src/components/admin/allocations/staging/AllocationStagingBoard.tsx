@@ -317,6 +317,89 @@ export function AllocationStagingBoard({
 
   const [organiserFilter, setOrganiserFilter] = useState("")
   const [patchFilter, setPatchFilter] = useState("")
+  const [lastOrganiserTargets, setLastOrganiserTargets] = useState<Record<OrganiserKey, CoordinatorKey | null> | null>(null)
+  const [lastPatchTargets, setLastPatchTargets] = useState<Record<string, CoordinatorKey | null> | null>(null)
+
+  const organiserCounts = useMemo(() => {
+    const current = new Map<CoordinatorKey, number>()
+    const proposed = new Map<CoordinatorKey, number>()
+    const changing = new Map<CoordinatorKey, number>()
+
+    if (!stagingData) {
+      return { current, proposed, changing }
+    }
+
+    stagingData.organisers.forEach(organiser => {
+      const currentKey = organiser.currentCoordinatorKey || null
+      let proposedKey = organiserTargets[organiser.key]
+      if (
+        !proposedKey &&
+        sourceCoordinatorKey &&
+        destinationCoordinatorKey &&
+        organiser.currentCoordinatorKey === sourceCoordinatorKey
+      ) {
+        proposedKey = destinationCoordinatorKey
+      }
+      if (!proposedKey) {
+        proposedKey = organiser.currentCoordinatorKey || defaultTargetCoordinatorKey || null
+      }
+
+      if (currentKey) {
+        current.set(currentKey, (current.get(currentKey) || 0) + 1)
+      }
+      if (proposedKey) {
+        proposed.set(proposedKey, (proposed.get(proposedKey) || 0) + 1)
+      }
+      if (currentKey !== proposedKey) {
+        if (currentKey) changing.set(currentKey, (changing.get(currentKey) || 0) + 1)
+        if (proposedKey) changing.set(proposedKey, (changing.get(proposedKey) || 0) + 1)
+      }
+    })
+
+    return { current, proposed, changing }
+  }, [defaultTargetCoordinatorKey, destinationCoordinatorKey, organiserTargets, sourceCoordinatorKey, stagingData])
+
+  const patchCounts = useMemo(() => {
+    const current = new Map<CoordinatorKey, number>()
+    const proposed = new Map<CoordinatorKey, number>()
+    const changing = new Map<CoordinatorKey, number>()
+
+    if (!stagingData) {
+      return { current, proposed, changing }
+    }
+
+    stagingData.patches.forEach(patch => {
+      patch.currentCoordinatorKeys.forEach(key => {
+        current.set(key, (current.get(key) || 0) + 1)
+      })
+
+      let proposedKey = patchTargets[patch.id]
+      if (!proposedKey && patch.currentCoordinatorKeys.length === 1) {
+        const currentKey = patch.currentCoordinatorKeys[0]
+        if (sourceCoordinatorKey && destinationCoordinatorKey && currentKey === sourceCoordinatorKey) {
+          proposedKey = destinationCoordinatorKey
+        } else {
+          proposedKey = currentKey
+        }
+      }
+
+      if (proposedKey) {
+        proposed.set(proposedKey, (proposed.get(proposedKey) || 0) + 1)
+      } else {
+        patch.currentCoordinatorKeys.forEach(key => {
+          proposed.set(key, (proposed.get(key) || 0) + 1)
+        })
+      }
+
+      const currentKeys = patch.currentCoordinatorKeys
+      if (proposedKey && !currentKeys.includes(proposedKey)) {
+        changing.set(proposedKey, (changing.get(proposedKey) || 0) + 1)
+        currentKeys.forEach(key => changing.set(key, (changing.get(key) || 0) + 1))
+      }
+    })
+
+    return { current, proposed, changing }
+  }, [destinationCoordinatorKey, patchTargets, sourceCoordinatorKey, stagingData])
 
   if (isLoading) {
     return (
@@ -373,61 +456,6 @@ export function AllocationStagingBoard({
     }
     return defaultTargetCoordinatorKey || null
   }
-
-  const [lastOrganiserTargets, setLastOrganiserTargets] = useState<Record<OrganiserKey, CoordinatorKey | null> | null>(null)
-  const [lastPatchTargets, setLastPatchTargets] = useState<Record<string, CoordinatorKey | null> | null>(null)
-
-  const organiserCounts = useMemo(() => {
-    const current = new Map<CoordinatorKey, number>()
-    const proposed = new Map<CoordinatorKey, number>()
-    const changing = new Map<CoordinatorKey, number>()
-
-    stagingData.organisers.forEach(organiser => {
-      const currentKey = organiser.currentCoordinatorKey || null
-      const proposedKey = resolveOrganiserDefault(organiser)
-
-      if (currentKey) {
-        current.set(currentKey, (current.get(currentKey) || 0) + 1)
-      }
-      if (proposedKey) {
-        proposed.set(proposedKey, (proposed.get(proposedKey) || 0) + 1)
-      }
-      if (currentKey !== proposedKey) {
-        if (currentKey) changing.set(currentKey, (changing.get(currentKey) || 0) + 1)
-        if (proposedKey) changing.set(proposedKey, (changing.get(proposedKey) || 0) + 1)
-      }
-    })
-
-    return { current, proposed, changing }
-  }, [resolveOrganiserDefault, stagingData.organisers])
-
-  const patchCounts = useMemo(() => {
-    const current = new Map<CoordinatorKey, number>()
-    const proposed = new Map<CoordinatorKey, number>()
-    const changing = new Map<CoordinatorKey, number>()
-
-    stagingData.patches.forEach(patch => {
-      patch.currentCoordinatorKeys.forEach(key => {
-        current.set(key, (current.get(key) || 0) + 1)
-      })
-      const proposedKey = resolvePatchDefault(patch)
-      if (proposedKey) {
-        proposed.set(proposedKey, (proposed.get(proposedKey) || 0) + 1)
-      } else {
-        patch.currentCoordinatorKeys.forEach(key => {
-          proposed.set(key, (proposed.get(key) || 0) + 1)
-        })
-      }
-
-      const currentKeys = patch.currentCoordinatorKeys
-      if (proposedKey && !currentKeys.includes(proposedKey)) {
-        if (proposedKey) changing.set(proposedKey, (changing.get(proposedKey) || 0) + 1)
-        currentKeys.forEach(key => changing.set(key, (changing.get(key) || 0) + 1))
-      }
-    })
-
-    return { current, proposed, changing }
-  }, [resolvePatchDefault, stagingData.patches])
 
   return (
     <div className="space-y-6">
