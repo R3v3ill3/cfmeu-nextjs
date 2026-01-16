@@ -244,9 +244,11 @@ export async function GET(request: NextRequest) {
       }
     }
     
-    // Cache for 90 seconds, stale for 5 minutes  
+    // Temporarily disable caching to verify coordinator scorecard fix (can re-enable later)
     const headers = {
-      'Cache-Control': 'public, s-maxage=90, stale-while-revalidate=300',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
       'Content-Type': 'application/json'
     }
     
