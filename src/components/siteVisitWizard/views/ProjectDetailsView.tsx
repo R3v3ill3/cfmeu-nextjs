@@ -14,15 +14,49 @@ import {
   Loader2,
   Navigation,
   Phone,
+  Lock,
+  AlertCircle,
 } from 'lucide-react'
+
+interface ProjectAccessCheck {
+  has_access: boolean
+  access_reason: string
+  is_claimable: boolean
+  assigned_to_names: string[] | null
+  patch_name: string | null
+}
 
 interface ProjectDetailsViewProps {
   projectId: string
 }
 
 export function ProjectDetailsView({ projectId }: ProjectDetailsViewProps) {
-  // Fetch full project details
-  const { data: project, isLoading } = useQuery({
+  // First, check if user has access to this project
+  const { data: accessCheck, isLoading: loadingAccess } = useQuery({
+    queryKey: ['project-access-check', projectId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .rpc('check_project_access', { p_project_id: projectId })
+        .single<ProjectAccessCheck>()
+      
+      if (error) {
+        console.error('[ProjectDetailsView] Access check failed:', error)
+        // If RPC fails, we'll show a generic error
+        return {
+          has_access: false,
+          access_reason: 'error',
+          is_claimable: false,
+          assigned_to_names: null,
+          patch_name: null,
+        } as ProjectAccessCheck
+      }
+      return data
+    },
+    staleTime: 30000,
+  })
+
+  // Only fetch project details if user has access
+  const { data: project, isLoading: loadingProject } = useQuery({
     queryKey: ['wizard-project-details', projectId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -64,8 +98,11 @@ export function ProjectDetailsView({ projectId }: ProjectDetailsViewProps) {
       if (error) throw error
       return data
     },
+    enabled: accessCheck?.has_access === true,
     staleTime: 30000,
   })
+  
+  const isLoading = loadingAccess || (accessCheck?.has_access && loadingProject)
   
   // Get builder info
   const builder = project?.project_assignments?.find((pa: any) => 
@@ -141,10 +178,53 @@ export function ProjectDetailsView({ projectId }: ProjectDetailsViewProps) {
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
         </div>
+      ) : accessCheck && !accessCheck.has_access ? (
+        // Show access denied message with details
+        <div className="text-center py-8 bg-white rounded-xl border border-gray-200 space-y-4">
+          <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto">
+            <Lock className="h-8 w-8 text-amber-600" />
+          </div>
+          <div className="space-y-2 px-6">
+            <h3 className="text-lg font-semibold text-gray-900">
+              Access Restricted
+            </h3>
+            <p className="text-gray-600">
+              {accessCheck.assigned_to_names && accessCheck.assigned_to_names.length > 0 ? (
+                <>
+                  This project is assigned to{' '}
+                  <span className="font-medium">
+                    {accessCheck.assigned_to_names.slice(0, 3).join(', ')}
+                    {accessCheck.assigned_to_names.length > 3 && 
+                      ` and ${accessCheck.assigned_to_names.length - 3} more`}
+                  </span>
+                  .
+                </>
+              ) : accessCheck.patch_name ? (
+                <>
+                  This project is in the <span className="font-medium">{accessCheck.patch_name}</span> patch, 
+                  which you don&apos;t have access to.
+                </>
+              ) : (
+                <>You don&apos;t have access to this project.</>
+              )}
+            </p>
+            {accessCheck.is_claimable && (
+              <div className="mt-4 p-3 bg-amber-50 rounded-lg">
+                <p className="text-sm text-amber-800">
+                  <AlertCircle className="inline h-4 w-4 mr-1" />
+                  This project appears to be unassigned. You may be able to claim it from the project selector.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
       ) : !project ? (
         <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
           <Building className="h-12 w-12 text-gray-300 mx-auto mb-3" />
           <p className="text-gray-500 font-medium">Project not found</p>
+          <p className="text-sm text-gray-400 mt-1">
+            The project may have been deleted or you may not have access to it.
+          </p>
         </div>
       ) : (
         <>

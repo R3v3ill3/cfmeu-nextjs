@@ -18,8 +18,17 @@ import {
   Search,
   AlertCircle,
   FileText,
+  Lock,
 } from 'lucide-react'
 import { useScraperJobRealtime } from '@/hooks/useScraperJobRealtime'
+
+interface ProjectAccessCheck {
+  has_access: boolean
+  access_reason: string
+  is_claimable: boolean
+  assigned_to_names: string[] | null
+  patch_name: string | null
+}
 
 interface EbaViewProps {
   projectId: string
@@ -61,8 +70,31 @@ export function EbaView({ projectId, projectName }: EbaViewProps) {
   
   const lastStatusRef = useRef<ScraperJobStatus | null>(null)
 
+  // First, check if user has access to this project
+  const { data: accessCheck, isLoading: loadingAccess } = useQuery({
+    queryKey: ['project-access-check', projectId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .rpc('check_project_access', { p_project_id: projectId })
+        .single<ProjectAccessCheck>()
+      
+      if (error) {
+        console.error('[EbaView] Access check failed:', error)
+        return {
+          has_access: false,
+          access_reason: 'error',
+          is_claimable: false,
+          assigned_to_names: null,
+          patch_name: null,
+        } as ProjectAccessCheck
+      }
+      return data
+    },
+    staleTime: 30000,
+  })
+
   // Fetch builder EBA status - must be defined before useScraperJobRealtime since refetch is used in callback
-  const { data: ebaData, isLoading, refetch } = useQuery({
+  const { data: ebaData, isLoading: loadingEba, refetch } = useQuery({
     queryKey: ['wizard-eba-status', projectId],
     queryFn: async () => {
       // Get builder assignment
@@ -115,8 +147,11 @@ export function EbaView({ projectId, projectName }: EbaViewProps) {
         nominalExpiryDate: ebaRecord?.nominal_expiry_date || null,
       } as BuilderEbaStatus
     },
+    enabled: accessCheck?.has_access === true,
     staleTime: 30000,
   })
+  
+  const isLoading = loadingAccess || (accessCheck?.has_access && loadingEba)
 
   // Real-time job updates - refetch is now defined above
   const {
@@ -269,6 +304,46 @@ export function EbaView({ projectId, projectName }: EbaViewProps) {
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+        </div>
+      ) : accessCheck && !accessCheck.has_access ? (
+        // Access denied - show helpful message
+        <div className="text-center py-8 bg-white rounded-xl border border-gray-200 space-y-4">
+          <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto">
+            <Lock className="h-8 w-8 text-amber-600" />
+          </div>
+          <div className="space-y-2 px-6">
+            <h3 className="text-lg font-semibold text-gray-900">
+              Access Restricted
+            </h3>
+            <p className="text-gray-600">
+              {accessCheck.assigned_to_names && accessCheck.assigned_to_names.length > 0 ? (
+                <>
+                  This project is assigned to{' '}
+                  <span className="font-medium">
+                    {accessCheck.assigned_to_names.slice(0, 3).join(', ')}
+                    {accessCheck.assigned_to_names.length > 3 && 
+                      ` and ${accessCheck.assigned_to_names.length - 3} more`}
+                  </span>
+                  .
+                </>
+              ) : accessCheck.patch_name ? (
+                <>
+                  This project is in the <span className="font-medium">{accessCheck.patch_name}</span> patch, 
+                  which you don&apos;t have access to.
+                </>
+              ) : (
+                <>You don&apos;t have access to this project.</>
+              )}
+            </p>
+            {accessCheck.is_claimable && (
+              <div className="mt-4 p-3 bg-amber-50 rounded-lg">
+                <p className="text-sm text-amber-800">
+                  <AlertCircle className="inline h-4 w-4 mr-1" />
+                  This project appears to be unassigned. You may be able to claim it from the project selector.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       ) : !ebaData?.builderName ? (
         // No builder assigned

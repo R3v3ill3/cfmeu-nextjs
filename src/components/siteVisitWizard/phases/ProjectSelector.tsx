@@ -4,10 +4,12 @@ import { useState, useEffect, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/integrations/supabase/client'
 import { useAccessiblePatches } from '@/hooks/useAccessiblePatches'
-import { useAddressSearch, type NearbyProject } from '@/hooks/useAddressSearch'
+import { useAddressSearch, type NearbyProject, type ProjectAccessStatus } from '@/hooks/useAddressSearch'
 import { WizardButton } from '../shared/WizardButton'
+import { ClaimProjectDialog } from '../shared/ClaimProjectDialog'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 import { 
   MapPin, 
   Search, 
@@ -17,7 +19,9 @@ import {
   Loader2,
   ChevronRight,
   RefreshCw,
-  Plus
+  Plus,
+  Lock,
+  UserPlus
 } from 'lucide-react'
 
 interface ProjectSelectorProps {
@@ -47,6 +51,15 @@ interface UserLocation {
 
 const MAX_NEARBY_RETRIES = 2
 
+// Project to claim state
+interface ProjectToClaim {
+  id: string
+  name: string
+  address?: string | null
+  builderName?: string | null
+  mainJobSiteId?: string | null
+}
+
 export function ProjectSelector({ onProjectSelected, onAddNewProject }: ProjectSelectorProps) {
   const [geoState, setGeoState] = useState<GeolocationState>('requesting')
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null)
@@ -54,6 +67,7 @@ export function ProjectSelector({ onProjectSelected, onAddNewProject }: ProjectS
   const [showSearch, setShowSearch] = useState(false)
   const [nearbySlow, setNearbySlow] = useState(false)
   const [nearbyRetryCount, setNearbyRetryCount] = useState(0)
+  const [projectToClaim, setProjectToClaim] = useState<ProjectToClaim | null>(null)
   const queryClient = useQueryClient()
   
   const { patches, isLoading: loadingPatches } = useAccessiblePatches()
@@ -386,16 +400,52 @@ export function ProjectSelector({ onProjectSelected, onAddNewProject }: ProjectS
     return `${km.toFixed(1)}km`
   }
   
-  // Handle project selection
-  const handleSelectProject = (project: {
-    id: string
-    name: string
-    address?: string | null
-    builderName?: string | null
-    mainJobSiteId?: string | null
-  }) => {
-    onProjectSelected(project)
-  }
+  // Handle project selection with access check
+  const handleSelectProject = useCallback((
+    project: {
+      id: string
+      name: string
+      address?: string | null
+      builderName?: string | null
+      mainJobSiteId?: string | null
+    },
+    accessStatus?: ProjectAccessStatus,
+    assignedToNames?: string[] | null
+  ) => {
+    // For projects from patch search (no access_status), allow directly
+    if (!accessStatus || accessStatus === 'owned') {
+      onProjectSelected(project)
+      return
+    }
+
+    // For claimable projects, show the claim dialog
+    if (accessStatus === 'claimable') {
+      setProjectToClaim(project)
+      return
+    }
+
+    // For projects assigned to others, show a toast with the names
+    if (accessStatus === 'assigned_other') {
+      const names = assignedToNames?.join(', ') || 'other organisers'
+      toast.error(`This project is assigned to ${names}`, {
+        description: 'You cannot access projects assigned to other organisers.',
+        duration: 5000,
+      })
+      return
+    }
+  }, [onProjectSelected])
+
+  // Handle successful claim
+  const handleClaimSuccess = useCallback(() => {
+    if (projectToClaim) {
+      // Invalidate queries to refresh project lists
+      queryClient.invalidateQueries({ queryKey: ['address-search'] })
+      queryClient.invalidateQueries({ queryKey: ['wizard-patch-projects'] })
+      // Select the claimed project
+      onProjectSelected(projectToClaim)
+      setProjectToClaim(null)
+    }
+  }, [projectToClaim, onProjectSelected, queryClient])
   
   // Loading state
   const isLoading = geoState === 'requesting' || loadingPatches
@@ -609,56 +659,120 @@ export function ProjectSelector({ onProjectSelected, onAddNewProject }: ProjectS
           ) : closestProject ? (
             <div className="space-y-4">
               <h2 className="text-lg font-semibold text-center text-gray-700">
-                Is this your job?
+                {closestProject.access_status === 'owned' 
+                  ? 'Is this your job?'
+                  : closestProject.access_status === 'claimable'
+                  ? 'Unclaimed project nearby'
+                  : 'Nearby project (assigned to others)'}
               </h2>
               
-              <div className="bg-white rounded-2xl shadow-lg border-2 border-blue-200 overflow-hidden">
+              <div className={cn(
+                'rounded-2xl shadow-lg border-2 overflow-hidden',
+                closestProject.access_status === 'owned' && 'bg-white border-blue-200',
+                closestProject.access_status === 'claimable' && 'bg-amber-50 border-amber-200',
+                closestProject.access_status === 'assigned_other' && 'bg-gray-100 border-gray-300 opacity-70'
+              )}>
                 <div className="p-5 space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-xl font-bold text-gray-900 truncate">
-                        {closestProject.project_name}
-                      </h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className={cn(
+                          'text-xl font-bold truncate',
+                          closestProject.access_status === 'assigned_other' ? 'text-gray-600' : 'text-gray-900'
+                        )}>
+                          {closestProject.project_name}
+                        </h3>
+                        {closestProject.access_status === 'claimable' && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 rounded-full">
+                            <UserPlus className="h-3 w-3" />
+                            Unclaimed
+                          </span>
+                        )}
+                        {closestProject.access_status === 'assigned_other' && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-gray-200 text-gray-600 rounded-full">
+                            <Lock className="h-3 w-3" />
+                            Assigned
+                          </span>
+                        )}
+                      </div>
                       {closestProject.builder_name && (
-                        <p className="text-sm text-gray-600 mt-1 flex items-center gap-1.5">
+                        <p className={cn(
+                          'text-sm mt-1 flex items-center gap-1.5',
+                          closestProject.access_status === 'assigned_other' ? 'text-gray-500' : 'text-gray-600'
+                        )}>
                           <Building className="h-4 w-4 flex-shrink-0" />
                           <span className="truncate">{closestProject.builder_name}</span>
                         </p>
                       )}
                     </div>
-                    <div className="flex items-center gap-1 px-3 py-1.5 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
+                    <div className={cn(
+                      'flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-medium',
+                      closestProject.access_status === 'assigned_other' 
+                        ? 'bg-gray-200 text-gray-600'
+                        : 'bg-blue-100 text-blue-700'
+                    )}>
                       <MapPin className="h-4 w-4" />
                       {formatDistance(closestProject.distance_km)}
                     </div>
                   </div>
                   
                   {closestProject.job_site_address && (
-                    <p className="text-gray-500 text-sm">
+                    <p className={cn(
+                      'text-sm',
+                      closestProject.access_status === 'assigned_other' ? 'text-gray-400' : 'text-gray-500'
+                    )}>
                       {closestProject.job_site_address}
+                    </p>
+                  )}
+                  
+                  {/* Show assigned organisers for assigned_other */}
+                  {closestProject.access_status === 'assigned_other' && closestProject.assigned_to_names && (
+                    <p className="text-xs text-gray-500">
+                      Assigned to: {closestProject.assigned_to_names.join(', ')}
                     </p>
                   )}
                 </div>
                 
-                <div className="grid grid-cols-2 gap-0 border-t border-gray-200">
-                  <button
-                    onClick={() => setShowSearch(true)}
-                    className="py-4 text-center font-semibold text-gray-600 hover:bg-gray-50 active:bg-gray-100 transition-colors border-r border-gray-200"
-                  >
-                    Other
-                  </button>
-                  <button
-                    onClick={() => handleSelectProject({
-                      id: closestProject.project_id,
-                      name: closestProject.project_name,
-                      address: closestProject.job_site_address,
-                      builderName: closestProject.builder_name,
-                      mainJobSiteId: closestProject.job_site_id,
-                    })}
-                    className="py-4 text-center font-bold text-blue-600 hover:bg-blue-50 active:bg-blue-100 transition-colors"
-                  >
-                    Yes, this is it
-                  </button>
-                </div>
+                {closestProject.access_status !== 'assigned_other' ? (
+                  <div className="grid grid-cols-2 gap-0 border-t border-gray-200">
+                    <button
+                      onClick={() => setShowSearch(true)}
+                      className="py-4 text-center font-semibold text-gray-600 hover:bg-gray-50 active:bg-gray-100 transition-colors border-r border-gray-200"
+                    >
+                      Other
+                    </button>
+                    <button
+                      onClick={() => handleSelectProject(
+                        {
+                          id: closestProject.project_id,
+                          name: closestProject.project_name,
+                          address: closestProject.job_site_address,
+                          builderName: closestProject.builder_name,
+                          mainJobSiteId: closestProject.job_site_id,
+                        },
+                        closestProject.access_status,
+                        closestProject.assigned_to_names
+                      )}
+                      className={cn(
+                        'py-4 text-center font-bold transition-colors',
+                        closestProject.access_status === 'claimable'
+                          ? 'text-amber-600 hover:bg-amber-50 active:bg-amber-100'
+                          : 'text-blue-600 hover:bg-blue-50 active:bg-blue-100'
+                      )}
+                    >
+                      {closestProject.access_status === 'claimable' ? 'Claim project' : 'Yes, this is it'}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="border-t border-gray-200 py-3 text-center">
+                    <button
+                      onClick={() => setShowSearch(true)}
+                      className="text-sm font-medium text-gray-600 hover:text-blue-600"
+                    >
+                      Search for other projects
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -702,13 +816,20 @@ export function ProjectSelector({ onProjectSelected, onAddNewProject }: ProjectS
                     address={project.job_site_address}
                     builderName={project.builder_name}
                     distance={formatDistance(project.distance_km)}
-                    onSelect={() => handleSelectProject({
-                      id: project.project_id,
-                      name: project.project_name,
-                      address: project.job_site_address,
-                      builderName: project.builder_name,
-                      mainJobSiteId: project.job_site_id,
-                    })}
+                    accessStatus={project.access_status}
+                    assignedToNames={project.assigned_to_names}
+                    patchName={project.patch_name}
+                    onSelect={() => handleSelectProject(
+                      {
+                        id: project.project_id,
+                        name: project.project_name,
+                        address: project.job_site_address,
+                        builderName: project.builder_name,
+                        mainJobSiteId: project.job_site_id,
+                      },
+                      project.access_status,
+                      project.assigned_to_names
+                    )}
                   />
                 ))}
               </div>
@@ -723,52 +844,125 @@ export function ProjectSelector({ onProjectSelected, onAddNewProject }: ProjectS
           )}
         </div>
       )}
+
+      {/* Claim project dialog */}
+      <ClaimProjectDialog
+        open={!!projectToClaim}
+        onOpenChange={(open) => !open && setProjectToClaim(null)}
+        project={projectToClaim}
+        onSuccess={handleClaimSuccess}
+      />
     </div>
   )
 }
 
-// Project list item component
+// Project list item component with access status support
 function ProjectListItem({
   name,
   address,
   builderName,
   distance,
+  accessStatus,
+  assignedToNames,
+  patchName,
   onSelect,
 }: {
   name: string
   address?: string | null
   builderName?: string | null
   distance?: string
+  accessStatus?: ProjectAccessStatus
+  assignedToNames?: string[] | null
+  patchName?: string | null
   onSelect: () => void
 }) {
+  const isOwned = !accessStatus || accessStatus === 'owned'
+  const isClaimable = accessStatus === 'claimable'
+  const isAssignedOther = accessStatus === 'assigned_other'
+  
   return (
     <button
       onClick={onSelect}
       className={cn(
-        'w-full text-left p-4 bg-white rounded-xl border border-gray-200',
-        'hover:border-blue-300 hover:shadow-md active:bg-gray-50',
-        'transition-all duration-200 touch-manipulation',
-        'flex items-center gap-3'
+        'w-full text-left p-4 rounded-xl border transition-all duration-200 touch-manipulation flex items-center gap-3',
+        // Owned: normal styling
+        isOwned && 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-md active:bg-gray-50',
+        // Claimable: slightly muted with dashed border
+        isClaimable && 'bg-gray-50 border-2 border-dashed border-gray-300 hover:border-blue-400 hover:bg-white',
+        // Assigned to other: greyed out
+        isAssignedOther && 'bg-gray-100 border-gray-200 opacity-60 cursor-not-allowed'
       )}
     >
       <div className="flex-1 min-w-0 space-y-1">
-        <h3 className="font-semibold text-gray-900 truncate">{name}</h3>
+        <div className="flex items-center gap-2">
+          <h3 className={cn(
+            'font-semibold truncate',
+            isAssignedOther ? 'text-gray-500' : 'text-gray-900'
+          )}>
+            {name}
+          </h3>
+          {/* Status badges */}
+          {isClaimable && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 rounded-full whitespace-nowrap">
+              <UserPlus className="h-3 w-3" />
+              Unclaimed
+            </span>
+          )}
+          {isAssignedOther && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-gray-200 text-gray-600 rounded-full whitespace-nowrap">
+              <Lock className="h-3 w-3" />
+              Assigned
+            </span>
+          )}
+        </div>
         {builderName && (
-          <p className="text-sm text-gray-600 truncate flex items-center gap-1.5">
+          <p className={cn(
+            'text-sm truncate flex items-center gap-1.5',
+            isAssignedOther ? 'text-gray-400' : 'text-gray-600'
+          )}>
             <Building className="h-3.5 w-3.5 flex-shrink-0" />
             {builderName}
           </p>
         )}
         {address && (
-          <p className="text-sm text-gray-500 truncate">{address}</p>
+          <p className={cn(
+            'text-sm truncate',
+            isAssignedOther ? 'text-gray-400' : 'text-gray-500'
+          )}>
+            {address}
+          </p>
+        )}
+        {/* Show assigned organiser names for assigned_other */}
+        {isAssignedOther && assignedToNames && assignedToNames.length > 0 && (
+          <p className="text-xs text-gray-400 truncate">
+            Assigned to: {assignedToNames.slice(0, 2).join(', ')}
+            {assignedToNames.length > 2 && ` +${assignedToNames.length - 2} more`}
+          </p>
+        )}
+        {/* Show patch name for claimable projects */}
+        {isClaimable && patchName && (
+          <p className="text-xs text-amber-600">
+            Patch: {patchName} (no organiser assigned)
+          </p>
         )}
       </div>
       
       <div className="flex items-center gap-2 flex-shrink-0">
         {distance && (
-          <span className="text-sm text-gray-500">{distance}</span>
+          <span className={cn(
+            'text-sm',
+            isAssignedOther ? 'text-gray-400' : 'text-gray-500'
+          )}>
+            {distance}
+          </span>
         )}
-        <ChevronRight className="h-5 w-5 text-gray-400" />
+        {isAssignedOther ? (
+          <Lock className="h-5 w-5 text-gray-400" />
+        ) : isClaimable ? (
+          <UserPlus className="h-5 w-5 text-amber-500" />
+        ) : (
+          <ChevronRight className="h-5 w-5 text-gray-400" />
+        )}
       </div>
     </button>
   )

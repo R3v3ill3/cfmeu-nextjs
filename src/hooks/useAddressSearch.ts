@@ -1,6 +1,14 @@
 import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 
+/**
+ * Access status for a project relative to the current user
+ * - 'owned': User has access via patch assignment, lead assignment, or claim
+ * - 'claimable': Project has no patch or patch has no organiser - user can claim it
+ * - 'assigned_other': Project is assigned to other organisers - user cannot access
+ */
+export type ProjectAccessStatus = 'owned' | 'claimable' | 'assigned_other'
+
 export interface NearbyProject {
   project_id: string
   project_name: string
@@ -16,6 +24,11 @@ export interface NearbyProject {
   organising_universe: string | null
   stage_class: string | null
   project_value: number | null
+  // Access control fields - from find_nearby_projects_with_access RPC
+  access_status: ProjectAccessStatus
+  assigned_to_names: string[] | null
+  patch_id: string | null
+  patch_name: string | null
 }
 
 interface UseAddressSearchParams {
@@ -128,7 +141,7 @@ export function useAddressSearch({
         throw new Error('Coordinates are required')
       }
 
-      console.log('[useAddressSearch] Calling find_nearby_projects RPC', {
+      console.log('[useAddressSearch] Calling find_nearby_projects_with_access RPC', {
         search_lat: lat,
         search_lng: lng,
         search_address: address,
@@ -136,7 +149,8 @@ export function useAddressSearch({
         max_distance_km: maxDistanceKm
       })
 
-      const rpcPromise = (supabase.rpc as any)('find_nearby_projects', {
+      // Use the access-aware RPC that returns access_status for each project
+      const rpcPromise = (supabase.rpc as any)('find_nearby_projects_with_access', {
         search_lat: lat,
         search_lng: lng,
         search_address: address,
