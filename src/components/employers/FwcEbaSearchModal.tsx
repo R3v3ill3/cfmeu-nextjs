@@ -278,7 +278,7 @@ export function FwcEbaSearchModal({ isOpen, onClose, employerId, employerName, o
                           {idx + 1}
                         </div>
                         <div className="ml-2 text-xs truncate">{label}</div>
-                        {idx < jobSteps.length - 1 && (
+                        {idx < FWC_JOB_STEPS.length - 1 && (
                           <div className={`mx-2 h-0.5 flex-1 ${idx < currentStepIndex ? 'bg-green-600' : 'bg-gray-200'}`} />
                         )}
                       </div>
