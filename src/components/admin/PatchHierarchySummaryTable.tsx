@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useMemo } from "react"
+import { Fragment, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -105,6 +105,7 @@ const chunkArray = <T,>(values: T[], size: number) => {
 
 export default function PatchHierarchySummaryTable() {
   const effectiveDateValue = new Date().toISOString().slice(0, 10)
+  const [expandedTier1Patches, setExpandedTier1Patches] = useState<Set<string>>(new Set())
   const { data: patches = [], isLoading: patchesLoading } = useQuery({
     queryKey: ["admin-patch-summary", "patches"],
     queryFn: async () => {
@@ -492,6 +493,7 @@ export default function PatchHierarchySummaryTable() {
         organiserLabels,
         leadLabels,
         tier1List,
+        tier1Count: tier1Names.size,
         tier2Count: tier2Active.size,
         tier3Count: tier3Active.size,
         organiserIds,
@@ -710,8 +712,29 @@ export default function PatchHierarchySummaryTable() {
                         </TableCell>
                         <TableCell className="align-top">{row.patchCode}</TableCell>
                         <TableCell className="align-top font-medium">{row.patchName}</TableCell>
-                        <TableCell className="align-top text-sm text-muted-foreground whitespace-normal">
-                          {row.tier1List}
+                        <TableCell className="align-top">
+                          <div className="flex items-center gap-2">
+                            <span>{row.tier1Count}</span>
+                            <button
+                              type="button"
+                              className="text-xs text-blue-700 underline"
+                              onClick={() =>
+                                setExpandedTier1Patches((prev) => {
+                                  const next = new Set(prev)
+                                  if (next.has(row.patchId)) next.delete(row.patchId)
+                                  else next.add(row.patchId)
+                                  return next
+                                })
+                              }
+                            >
+                              {expandedTier1Patches.has(row.patchId) ? "Hide names" : "Show names"}
+                            </button>
+                          </div>
+                          {expandedTier1Patches.has(row.patchId) && (
+                            <div className="text-xs text-muted-foreground mt-1 whitespace-normal">
+                              {row.tier1List}
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell className="align-top text-right">{row.tier2Count}</TableCell>
                         <TableCell className="align-top text-right">{row.tier3Count}</TableCell>
