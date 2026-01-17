@@ -61,50 +61,7 @@ export function EbaView({ projectId, projectName }: EbaViewProps) {
   
   const lastStatusRef = useRef<ScraperJobStatus | null>(null)
 
-  // Real-time job updates
-  const {
-    job,
-    events: jobEvents,
-    error: jobError,
-  } = useScraperJobRealtime({
-    jobId,
-    enabled: !!jobId,
-    pollingInterval: 2000,
-    onJobComplete: useCallback(
-      (jobData: ScraperJob) => {
-        if (lastStatusRef.current === jobData.status) return
-        lastStatusRef.current = jobData.status
-
-        if (jobData.status === "succeeded") {
-          setErrorMessage(null)
-          toast({
-            title: "FWC lookup completed",
-            description: "EBA data has been updated. Refreshing...",
-          })
-          // Refetch EBA data after a short delay to allow database to update
-          setTimeout(() => {
-            refetch()
-          }, 1000)
-        } else if (jobData.status === "failed") {
-          toast({
-            title: "FWC lookup failed",
-            description: "The search encountered an error. Please try again.",
-            variant: "destructive",
-          })
-        }
-      },
-      [refetch, toast]
-    ),
-  })
-
-  // Update error message if job error occurs
-  useEffect(() => {
-    if (jobError) {
-      setErrorMessage(jobError.message)
-    }
-  }, [jobError])
-  
-  // Fetch builder EBA status
+  // Fetch builder EBA status - must be defined before useScraperJobRealtime since refetch is used in callback
   const { data: ebaData, isLoading, refetch } = useQuery({
     queryKey: ['wizard-eba-status', projectId],
     queryFn: async () => {
@@ -160,15 +117,49 @@ export function EbaView({ projectId, projectName }: EbaViewProps) {
     },
     staleTime: 30000,
   })
-  
-  const clearPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current)
-      pollRef.current = null
-    }
-  }, [])
 
-  // Cleanup polling on unmount
+  // Real-time job updates - refetch is now defined above
+  const {
+    job,
+    events: jobEvents,
+    error: jobError,
+  } = useScraperJobRealtime({
+    jobId,
+    enabled: !!jobId,
+    pollingInterval: 2000,
+    onJobComplete: useCallback(
+      (jobData: ScraperJob) => {
+        if (lastStatusRef.current === jobData.status) return
+        lastStatusRef.current = jobData.status
+
+        if (jobData.status === "succeeded") {
+          setErrorMessage(null)
+          toast({
+            title: "FWC lookup completed",
+            description: "EBA data has been updated. Refreshing...",
+          })
+          // Refetch EBA data after a short delay to allow database to update
+          setTimeout(() => {
+            refetch()
+          }, 1000)
+        } else if (jobData.status === "failed") {
+          toast({
+            title: "FWC lookup failed",
+            description: "The search encountered an error. Please try again.",
+            variant: "destructive",
+          })
+        }
+      },
+      [refetch, toast]
+    ),
+  })
+
+  // Update error message if job error occurs
+  useEffect(() => {
+    if (jobError) {
+      setErrorMessage(jobError.message)
+    }
+  }, [jobError])
 
   const handleQueueLookup = async () => {
     if (!ebaData?.builderId || !ebaData?.builderName) {
