@@ -139,13 +139,10 @@ export default function ProjectDetailPage() {
   const isMobile = useIsMobile()
   const [tab, setTab] = useState(sp.get("tab") || "mappingsheets")
   const tabsRef = useRef<HTMLDivElement>(null)
-  const [isTabsSticky, setIsTabsSticky] = useState(false)
-  const [tabsHeight, setTabsHeight] = useState<number>(60) // Default height, will be measured
   const [headerHeight, setHeaderHeight] = useState<number>(64) // Default header height, will be measured
 
-  // Track scroll position to make tabs sticky and measure height
+  // Measure header height for sticky tabs positioning
   useEffect(() => {
-    // Measure actual header height including safe area insets and border
     const measureHeaderHeight = () => {
       const header = document.querySelector('header')
       if (header) {
@@ -169,54 +166,13 @@ export default function ProjectDetailPage() {
       }
     }
     
-    // Measure tabs height when component mounts or when not sticky
-    const measureTabsHeight = () => {
-      if (tabsRef.current) {
-        const height = tabsRef.current.offsetHeight
-        if (height > 0) {
-          setTabsHeight(height)
-        }
-      }
-    }
-    
-    const handleScroll = () => {
-      if (tabsRef.current) {
-        const rect = tabsRef.current.getBoundingClientRect()
-        // Use measured header height for accurate positioning
-        const shouldBeSticky = rect.top <= headerHeight
-        setIsTabsSticky(shouldBeSticky)
-        // Measure height when not sticky to use for placeholder
-        if (!shouldBeSticky) {
-          measureTabsHeight()
-        }
-      }
-    }
-    // Use requestAnimationFrame for smoother scroll detection on mobile
-    let ticking = false
-    const optimizedScroll = () => {
-      if (!ticking) {
-        window.requestAnimationFrame(() => {
-          handleScroll()
-          ticking = false
-        })
-        ticking = true
-      }
-    }
-    window.addEventListener('scroll', optimizedScroll, { passive: true })
-    // Initial check and measurement
+    // Measure on mount and resize
     measureHeaderHeight()
-    measureTabsHeight()
-    handleScroll()
-    // Also measure on resize
-    window.addEventListener('resize', () => {
-      measureHeaderHeight()
-      measureTabsHeight()
-    }, { passive: true })
+    window.addEventListener('resize', measureHeaderHeight, { passive: true })
     return () => {
-      window.removeEventListener('scroll', optimizedScroll)
-      window.removeEventListener('resize', measureTabsHeight)
+      window.removeEventListener('resize', measureHeaderHeight)
     }
-  }, [headerHeight])
+  }, [])
 
   // Get user's accessible patches for access control
   const { patches: accessiblePatches, isLoading: accessiblePatchesLoading, role } = useAccessiblePatches()
@@ -1011,21 +967,12 @@ export default function ProjectDetailPage() {
         ) : null}
       </div>
 
-      {/* Tabs Navigation - Sticky at the top for easy access */}
+      {/* Tabs Navigation - Sticky below header */}
       <Tabs value={tab} onValueChange={setTab}>
-        {/* Placeholder to maintain layout when tabs become fixed */}
-        {isTabsSticky && <div style={{ height: `${tabsHeight}px` }} />}
         <div 
           ref={tabsRef}
-          className={`bg-white dark:bg-gray-950 border-b shadow-md transition-all ${
-            isTabsSticky 
-              ? 'fixed left-0 right-0 px-6 z-30 py-2' 
-              : 'rounded-lg border mx-0 p-2'
-          }`}
-          style={isTabsSticky ? { 
-            top: `${headerHeight}px`, 
-            zIndex: 30,
-          } : undefined}
+          className="bg-white dark:bg-gray-950 border-b shadow-md -mx-6 px-6 py-2 sticky z-30"
+          style={{ top: `${headerHeight}px` }}
         >
           <TabsList className="h-auto bg-transparent p-0 gap-1.5 w-full flex-wrap border-0">
           {/* Sites tab trigger hidden; accessible via Overview 'Sites' link */}
