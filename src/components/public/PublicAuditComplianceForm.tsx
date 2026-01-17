@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { AlertCircle, CheckCircle, Clock, Building2 } from "lucide-react";
+import { AlertCircle, CheckCircle, Clock, Building2, X } from "lucide-react";
 import { EmployerSelectionDashboard } from "./EmployerSelectionDashboard";
 import { IndividualEmployerAssessment } from "./IndividualEmployerAssessment";
 import { useAuditFormProgress } from "@/hooks/useAuditFormProgress";
@@ -289,6 +289,24 @@ export function PublicAuditComplianceForm({ formData }: PublicAuditComplianceFor
     }
   };
 
+  // Handle close button for standalone share forms
+  const handleClose = () => {
+    // Check if this window was opened by a script (can be closed)
+    if (window.opener) {
+      window.close();
+      return;
+    }
+    
+    // Check if there's browser history to go back to
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    
+    // Fallback: Show a toast/message that form is complete
+    toast.info('You can now close this tab');
+  };
+
   const expiryInfo = hasEmployers ? formatExpiryTime(formData.expiresAt) : { text: 'Expired', variant: 'destructive' as const };
   const singleEmployer = hasEmployers && formData.employers.length === 1;
 
@@ -361,6 +379,14 @@ export function PublicAuditComplianceForm({ formData }: PublicAuditComplianceFor
         <div className="max-w-6xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex items-center gap-2 sm:gap-3">
+              {/* Close button for standalone share forms */}
+              <button
+                onClick={handleClose}
+                className="flex items-center justify-center w-10 h-10 sm:w-9 sm:h-9 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 active:bg-gray-200 transition-colors"
+                aria-label="Close form"
+              >
+                <X className="h-5 w-5 text-gray-600" />
+              </button>
               <Building2 className="h-8 w-8 text-primary" />
               <div>
                 <h1 className="text-base sm:text-xl font-bold leading-tight">
