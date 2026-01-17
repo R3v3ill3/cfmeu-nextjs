@@ -176,7 +176,7 @@ export function useScraperJobRealtime(
       console.error('Failed to fetch initial job status:', err)
     })
 
-    // Setup real-time subscription
+    // Setup real-time subscription for both jobs and events tables
     const channel = supabase
       .channel(`scraper_job_${jobId}`)
       .on(
@@ -212,6 +212,21 @@ export function useScraperJobRealtime(
               console.error('Failed to refetch job after real-time update:', err)
             })
           }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'scraper_job_events',
+          filter: `job_id=eq.${jobId}`,
+        },
+        (payload) => {
+          console.log('[realtime] Job event received:', payload.new)
+          const newEvent = payload.new as ScraperJobEvent & { job_id: string }
+          // Add new event to the list (prepend since we sort by created_at desc)
+          setEvents((prev) => [newEvent, ...prev])
         }
       )
       .subscribe((status) => {
