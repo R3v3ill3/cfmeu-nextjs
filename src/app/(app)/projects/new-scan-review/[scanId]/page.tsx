@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { Loader2, AlertCircle } from "lucide-react"
@@ -16,6 +17,7 @@ interface PageProps {
 
 export default function NewProjectScanReviewPage({ params }: PageProps) {
   const { scanId } = params
+  const router = useRouter()
   const { startNavigation } = useNavigationLoading()
   const queryClient = useQueryClient()
 
@@ -100,8 +102,10 @@ export default function NewProjectScanReviewPage({ params }: PageProps) {
       existingContacts={[]}
       allowProjectCreation
       onCancel={() => {
+        // NOTE: Previously used window.location.assign which destroys the React tree
+        // and can cause session loss. Using router.push preserves the React tree.
         startNavigation("/projects")
-        setTimeout(() => window.location.assign("/projects"), 50)
+        router.push("/projects")
       }}
     />
   )

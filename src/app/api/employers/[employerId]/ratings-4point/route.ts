@@ -150,10 +150,15 @@ export async function GET(request: NextRequest, { params }: { params: { employer
       });
     }
     if (!user) {
-      console.warn('[ratings-4point] No authenticated user - RLS policies may fail', { employerId, hasAuthError: !!authError });
-      Sentry.addBreadcrumb({ category: 'ratings-4point', message: 'No authenticated user', level: 'warning', data: { employerId, hasAuthError: !!authError } });
-      // Don't return 401 - let the queries proceed and fail naturally with RLS
-      // This preserves existing behavior but adds visibility
+      // NOTE: Previously this let unauthenticated requests through to fail via RLS.
+      // This caused confusing "permission denied" errors instead of clear 401s.
+      // Now returning 401 consistent with other API routes for better error handling.
+      console.warn('[ratings-4point] No authenticated user - returning 401', { employerId, hasAuthError: !!authError });
+      Sentry.addBreadcrumb({ category: 'ratings-4point', message: 'No authenticated user - 401', level: 'warning', data: { employerId, hasAuthError: !!authError } });
+      return NextResponse.json(
+        { error: 'Unauthorized', message: 'Authentication required to access employer ratings' },
+        { status: 401 }
+      );
     } else {
       debugLog('route.ts:auth', 'User authenticated', { employerId, userId: user.id }, 'A');
     }

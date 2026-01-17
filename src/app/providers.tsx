@@ -87,6 +87,25 @@ export default function Providers({ children }: ProvidersProps) {
   useEffect(() => {
     if (typeof window === 'undefined') return
 
+    // Helper to preserve session state before reload
+    // This ensures the AuthProvider can recover the session after reload
+    const preserveSessionBeforeReload = () => {
+      try {
+        // Check if we have session data to preserve
+        const existingData = localStorage.getItem('cfmeu-had-session')
+        if (existingData) {
+          // Update the timestamp to ensure it's not considered stale
+          const parsed = JSON.parse(existingData)
+          parsed.timestamp = Date.now()
+          parsed.preservedBeforeChunkErrorReload = true
+          localStorage.setItem('cfmeu-had-session', JSON.stringify(parsed))
+          console.log('[ChunkError] Session state preserved before reload')
+        }
+      } catch (e) {
+        console.warn('[ChunkError] Failed to preserve session state:', e)
+      }
+    }
+
     // Handle chunk loading errors (common after deployments)
     const handleChunkError = (event: ErrorEvent) => {
       const message = event.message || ''
@@ -99,6 +118,10 @@ export default function Providers({ children }: ProvidersProps) {
       if (isChunkError) {
         console.error('[ChunkError] Dynamic import failed, will reload:', message)
         Sentry.captureException(new Error(`Chunk loading failed: ${message}`))
+        
+        // CRITICAL: Preserve session state BEFORE clearing caches and reloading
+        // This prevents session loss when chunk errors trigger page reload
+        preserveSessionBeforeReload()
         
         // Clear caches and reload
         if ('caches' in window) {
@@ -129,6 +152,9 @@ export default function Providers({ children }: ProvidersProps) {
       if (isChunkError) {
         console.error('[ChunkError] Dynamic import promise rejected:', reason)
         event.preventDefault() // Prevent default handling
+        
+        // CRITICAL: Preserve session state BEFORE clearing caches and reloading
+        preserveSessionBeforeReload()
         
         // Clear caches and reload
         if ('caches' in window) {

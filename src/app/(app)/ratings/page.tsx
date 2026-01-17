@@ -81,9 +81,12 @@ export default function RatingsPage() {
     router.push(`/employers/${employer.id}`)
   }
 
-  // Handle new rating
+  // Handle new rating - navigate to employers page to select an employer to rate
+  // NOTE: Previously navigated to /mobile/ratings/wizard which caused cross-route-group
+  // session loss. Now stays within (app) route group by going to employers list.
   const handleNewRating = () => {
-    router.push(`/mobile/ratings/wizard`)
+    startNavigation("/employers")
+    router.push("/employers?action=rate")
   }
 
   // Handle view all employers
