@@ -35,12 +35,31 @@ type ProfileRow = { id: string; full_name: string | null; email: string | null; 
 
 type PendingUserRow = { id: string; full_name: string | null; email: string | null; role: string | null; status: string | null }
 
+type RoleHierarchyLink = { parent_user_id: string; child_user_id: string; is_active: boolean | null; end_date: string | null; start_date: string }
+type LeadDraftOrganiserLink = { lead_user_id: string; pending_user_id: string; is_active: boolean | null; end_date: string | null; start_date: string }
+type DraftLeadOrganiserLink = {
+  draft_lead_pending_user_id: string
+  organiser_user_id: string | null
+  organiser_pending_user_id: string | null
+  is_active: boolean | null
+  end_date: string | null
+  start_date: string
+}
+type OrganiserPatchAssignment = { organiser_id: string; patch_id: string; effective_to: string | null }
+
 const formatLabel = (row?: { full_name: string | null; email: string | null; id: string }) =>
   row?.full_name?.trim() || row?.email?.trim() || row?.id || "Unknown"
+
+const compareLabels = (a: string, b: string) => {
+  const primary = a.localeCompare(b, undefined, { sensitivity: "base" })
+  if (primary !== 0) return primary
+  return a.localeCompare(b)
+}
 
 export default function PatchTeamsManager() {
   const qc = useQueryClient()
   const { toast } = useToast()
+  const effectiveDateValue = new Date().toISOString().slice(0, 10)
   const [newTeamName, setNewTeamName] = useState("")
   const [editing, setEditing] = useState<Record<string, { name: string; sort_order: number }>>({})
 
@@ -122,6 +141,74 @@ export default function PatchTeamsManager() {
     }
   })
 
+  const { data: pendingOrganisers = [], isLoading: pendingOrganisersLoading } = useQuery({
+    queryKey: ["admin-patch-team-pending-organisers"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("pending_users")
+        .select("id,full_name,email,role,status,assigned_patch_ids")
+        .in("role", ["organiser"])
+        .in("status", ["draft", "invited"])
+        .order("created_at", { ascending: false })
+      if (error) throw error
+      return (data || []) as Array<PendingUserRow & { assigned_patch_ids?: string[] | null }>
+    }
+  })
+
+  const { data: organiserAssignments = [], isLoading: organiserAssignmentsLoading } = useQuery({
+    queryKey: ["admin-patch-team-organiser-assignments"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("organiser_patch_assignments")
+        .select("organiser_id, patch_id, effective_to")
+        .is("effective_to", null)
+      if (error) throw error
+      return (data || []) as OrganiserPatchAssignment[]
+    }
+  })
+
+  const { data: roleHierarchyLinks = [], isLoading: hierarchyLoading } = useQuery({
+    queryKey: ["admin-patch-team-role-hierarchy"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("role_hierarchy")
+        .select("parent_user_id, child_user_id, is_active, end_date, start_date")
+        .eq("is_active", true)
+        .lte("start_date", effectiveDateValue)
+        .or(`end_date.is.null,end_date.gte.${effectiveDateValue}`)
+      if (error) throw error
+      return (data || []) as RoleHierarchyLink[]
+    }
+  })
+
+  const { data: leadDraftLinks = [], isLoading: leadDraftLoading } = useQuery({
+    queryKey: ["admin-patch-team-lead-draft-links"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("lead_draft_organiser_links")
+        .select("lead_user_id, pending_user_id, is_active, end_date, start_date")
+        .eq("is_active", true)
+        .lte("start_date", effectiveDateValue)
+        .or(`end_date.is.null,end_date.gte.${effectiveDateValue}`)
+      if (error) throw error
+      return (data || []) as LeadDraftOrganiserLink[]
+    }
+  })
+
+  const { data: draftLeadLinks = [], isLoading: draftLeadLoading } = useQuery({
+    queryKey: ["admin-patch-team-draft-lead-links"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("draft_lead_organiser_links")
+        .select("draft_lead_pending_user_id, organiser_user_id, organiser_pending_user_id, is_active, end_date, start_date")
+        .eq("is_active", true)
+        .lte("start_date", effectiveDateValue)
+        .or(`end_date.is.null,end_date.gte.${effectiveDateValue}`)
+      if (error) throw error
+      return (data || []) as DraftLeadOrganiserLink[]
+    }
+  })
+
   useEffect(() => {
     if (teams.length > 0) {
       const next: Record<string, { name: string; sort_order: number }> = {}
@@ -138,11 +225,82 @@ export default function PatchTeamsManager() {
     return map
   }, [memberships])
 
+  const roleHierarchyMap = useMemo(() => {
+    const map = new Map<string, Set<string>>()
+    roleHierarchyLinks.forEach((link) => {
+      if (!map.has(link.child_user_id)) map.set(link.child_user_id, new Set())
+      map.get(link.child_user_id)!.add(link.parent_user_id)
+    })
+    return map
+  }, [roleHierarchyLinks])
+
+  const leadDraftMap = useMemo(() => {
+    const map = new Map<string, Set<string>>()
+    leadDraftLinks.forEach((link) => {
+      if (!map.has(link.pending_user_id)) map.set(link.pending_user_id, new Set())
+      map.get(link.pending_user_id)!.add(link.lead_user_id)
+    })
+    return map
+  }, [leadDraftLinks])
+
+  const draftLeadForPendingMap = useMemo(() => {
+    const map = new Map<string, Set<string>>()
+    draftLeadLinks.forEach((link) => {
+      if (!link.organiser_pending_user_id) return
+      if (!map.has(link.organiser_pending_user_id)) map.set(link.organiser_pending_user_id, new Set())
+      map.get(link.organiser_pending_user_id)!.add(link.draft_lead_pending_user_id)
+    })
+    return map
+  }, [draftLeadLinks])
+
+  const draftLeadForLiveMap = useMemo(() => {
+    const map = new Map<string, Set<string>>()
+    draftLeadLinks.forEach((link) => {
+      if (!link.organiser_user_id) return
+      if (!map.has(link.organiser_user_id)) map.set(link.organiser_user_id, new Set())
+      map.get(link.organiser_user_id)!.add(link.draft_lead_pending_user_id)
+    })
+    return map
+  }, [draftLeadLinks])
+
   const coordinatorMap = useMemo(() => {
     const map = new Map<string, PatchTeamCoordinator>()
     coordinators.forEach((row) => map.set(row.team_id, row))
     return map
   }, [coordinators])
+
+  const profileMap = useMemo(() => {
+    const map = new Map<string, ProfileRow>()
+    leads.forEach((lead) => map.set(lead.id, lead))
+    return map
+  }, [leads])
+
+  const pendingLeadMap = useMemo(() => {
+    const map = new Map<string, PendingUserRow>()
+    pendingLeads.forEach((lead) => map.set(lead.id, lead))
+    return map
+  }, [pendingLeads])
+
+  const organiserByPatch = useMemo(() => {
+    const map = new Map<string, string[]>()
+    organiserAssignments.forEach((row) => {
+      if (!map.has(row.patch_id)) map.set(row.patch_id, [])
+      map.get(row.patch_id)!.push(row.organiser_id)
+    })
+    return map
+  }, [organiserAssignments])
+
+  const pendingOrganiserByPatch = useMemo(() => {
+    const map = new Map<string, string[]>()
+    pendingOrganisers.forEach((pending) => {
+      const ids = Array.isArray(pending.assigned_patch_ids) ? pending.assigned_patch_ids : []
+      ids.forEach((patchId) => {
+        if (!map.has(patchId)) map.set(patchId, [])
+        map.get(patchId)!.push(pending.id)
+      })
+    })
+    return map
+  }, [pendingOrganisers])
 
   const isLoading =
     teamsLoading ||
@@ -150,7 +308,64 @@ export default function PatchTeamsManager() {
     coordinatorsLoading ||
     patchesLoading ||
     leadsLoading ||
-    pendingLoading
+    pendingLoading ||
+    pendingOrganisersLoading ||
+    organiserAssignmentsLoading ||
+    hierarchyLoading ||
+    leadDraftLoading ||
+    draftLeadLoading
+
+  const getPrimaryLead = (candidates: Array<{ type: "live" | "pending"; id: string; label: string }>) => {
+    if (candidates.length === 0) return null
+    const sorted = [...candidates].sort((a, b) => {
+      const labelCompare = compareLabels(a.label, b.label)
+      if (labelCompare !== 0) return labelCompare
+      return a.id.localeCompare(b.id)
+    })
+    return sorted[0]
+  }
+
+  const resolvePrimaryLeadForLiveOrganiser = (organiserId: string) => {
+    const candidates: Array<{ type: "live" | "pending"; id: string; label: string }> = []
+    const liveLeadIds = roleHierarchyMap.get(organiserId) || new Set<string>()
+    liveLeadIds.forEach((leadId) => {
+      candidates.push({
+        type: "live",
+        id: leadId,
+        label: formatLabel(profileMap.get(leadId))
+      })
+    })
+    const pendingLeadIds = draftLeadForLiveMap.get(organiserId) || new Set<string>()
+    pendingLeadIds.forEach((leadId) => {
+      candidates.push({
+        type: "pending",
+        id: leadId,
+        label: formatLabel(pendingLeadMap.get(leadId))
+      })
+    })
+    return getPrimaryLead(candidates)
+  }
+
+  const resolvePrimaryLeadForPendingOrganiser = (pendingId: string) => {
+    const candidates: Array<{ type: "live" | "pending"; id: string; label: string }> = []
+    const liveLeadIds = leadDraftMap.get(pendingId) || new Set<string>()
+    liveLeadIds.forEach((leadId) => {
+      candidates.push({
+        type: "live",
+        id: leadId,
+        label: formatLabel(profileMap.get(leadId))
+      })
+    })
+    const pendingLeadIds = draftLeadForPendingMap.get(pendingId) || new Set<string>()
+    pendingLeadIds.forEach((leadId) => {
+      candidates.push({
+        type: "pending",
+        id: leadId,
+        label: formatLabel(pendingLeadMap.get(leadId))
+      })
+    })
+    return getPrimaryLead(candidates)
+  }
 
   const handleTeamSave = async (teamId: string) => {
     const values = editing[teamId]
@@ -352,23 +567,61 @@ export default function PatchTeamsManager() {
                   <TableBody>
                     {patches.map((patch) => {
                       const teamId = membershipMap.get(patch.id) || "none"
+                      const teamCoordinator = teamId !== "none" ? coordinatorMap.get(teamId) : null
+                      const coordinatorIdentity = teamCoordinator?.coordinator_profile_id
+                        ? { type: "live" as const, id: teamCoordinator.coordinator_profile_id }
+                        : teamCoordinator?.coordinator_pending_user_id
+                          ? { type: "pending" as const, id: teamCoordinator.coordinator_pending_user_id }
+                          : null
+                      const liveOrganiserIds = organiserByPatch.get(patch.id) || []
+                      const pendingOrganiserIds = pendingOrganiserByPatch.get(patch.id) || []
+                      let mismatch = false
+
+                      if (coordinatorIdentity) {
+                        liveOrganiserIds.forEach((organiserId) => {
+                          const primaryLead = resolvePrimaryLeadForLiveOrganiser(organiserId)
+                          if (primaryLead && (primaryLead.type !== coordinatorIdentity.type || primaryLead.id !== coordinatorIdentity.id)) {
+                            mismatch = true
+                          }
+                        })
+                        pendingOrganiserIds.forEach((pendingId) => {
+                          const primaryLead = resolvePrimaryLeadForPendingOrganiser(pendingId)
+                          if (primaryLead && (primaryLead.type !== coordinatorIdentity.type || primaryLead.id !== coordinatorIdentity.id)) {
+                            mismatch = true
+                          }
+                        })
+                      }
                       return (
                         <TableRow key={patch.id}>
                           <TableCell>{patch.code || "—"}</TableCell>
                           <TableCell className="font-medium">{patch.name}</TableCell>
                           <TableCell>
-                            <select
-                              className="border rounded h-10 w-full px-2"
-                              value={teamId}
-                              onChange={(e) => handleSetMembership(patch.id, e.target.value)}
-                            >
-                              <option value="none">Unassigned</option>
-                              {teams.map((team) => (
-                                <option key={team.id} value={team.id}>
-                                  {team.name}
-                                </option>
-                              ))}
-                            </select>
+                            <div className="space-y-1">
+                              <select
+                                className="border rounded h-10 w-full px-2"
+                                value={teamId}
+                                onChange={(e) => handleSetMembership(patch.id, e.target.value)}
+                              >
+                                <option value="none">Unassigned</option>
+                                {teams.map((team) => (
+                                  <option key={team.id} value={team.id}>
+                                    {team.name}
+                                  </option>
+                                ))}
+                              </select>
+                              {mismatch && (
+                                <div className="text-xs text-amber-700">
+                                  Hierarchy mismatch.{" "}
+                                  <a className="underline" href="/admin?tab=hierarchy">
+                                    Fix hierarchy
+                                  </a>{" "}
+                                  |{" "}
+                                  <a className="underline" href="/admin?tab=patches#patch-teams">
+                                    Fix team
+                                  </a>
+                                </div>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       )

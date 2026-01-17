@@ -89,6 +89,12 @@ const formatProfileLabel = (profile?: ProfileRow) =>
 const formatPendingLabel = (pending?: PendingUserRow) =>
   pending?.full_name?.trim() || pending?.email?.trim() || pending?.id || "Unknown"
 
+const compareLabels = (a: string, b: string) => {
+  const primary = a.localeCompare(b, undefined, { sensitivity: "base" })
+  if (primary !== 0) return primary
+  return a.localeCompare(b)
+}
+
 const chunkArray = <T,>(values: T[], size: number) => {
   const chunks: T[][] = []
   for (let i = 0; i < values.length; i += size) {
@@ -421,6 +427,7 @@ export default function PatchHierarchySummaryTable() {
           pending.role === "lead_organiser" &&
           (pending.assigned_patch_ids || []).includes(patch.id)
       )
+      const pendingOrganiserIds = pendingOrganisers.map((pending) => pending.id)
 
       const leadLabelsFromLiveOrganisers = new Set<string>()
       organiserIds.forEach((organiserId) => {
@@ -486,7 +493,9 @@ export default function PatchHierarchySummaryTable() {
         leadLabels,
         tier1List,
         tier2Count: tier2Active.size,
-        tier3Count: tier3Active.size
+        tier3Count: tier3Active.size,
+        organiserIds,
+        pendingOrganiserIds
       }
     })
   }, [
@@ -509,6 +518,60 @@ export default function PatchHierarchySummaryTable() {
       teamMap.set(team.id, { name: team.name, sort_order: team.sort_order ?? 0 })
     })
 
+    const getPrimaryLead = (candidates: Array<{ type: "live" | "pending"; id: string; label: string }>) => {
+      if (candidates.length === 0) return null
+      const sorted = [...candidates].sort((a, b) => {
+        const labelCompare = compareLabels(a.label, b.label)
+        if (labelCompare !== 0) return labelCompare
+        return a.id.localeCompare(b.id)
+      })
+      return sorted[0]
+    }
+
+    const resolvePrimaryLeadForLiveOrganiser = (organiserId: string) => {
+      const candidates: Array<{ type: "live" | "pending"; id: string; label: string }> = []
+      const liveLeadIds = roleHierarchyMap.get(organiserId) || new Set<string>()
+      liveLeadIds.forEach((leadId) => {
+        candidates.push({
+          type: "live",
+          id: leadId,
+          label: formatProfileLabel(profileMap.get(leadId))
+        })
+      })
+      const pendingLeadIds = draftLeadForLiveMap.get(organiserId) || new Set<string>()
+      pendingLeadIds.forEach((leadId) => {
+        const pendingLead = pendingLeadMap.get(leadId)
+        candidates.push({
+          type: "pending",
+          id: leadId,
+          label: formatPendingLabel(pendingLead)
+        })
+      })
+      return getPrimaryLead(candidates)
+    }
+
+    const resolvePrimaryLeadForPendingOrganiser = (pendingId: string) => {
+      const candidates: Array<{ type: "live" | "pending"; id: string; label: string }> = []
+      const liveLeadIds = leadDraftMap.get(pendingId) || new Set<string>()
+      liveLeadIds.forEach((leadId) => {
+        candidates.push({
+          type: "live",
+          id: leadId,
+          label: formatProfileLabel(profileMap.get(leadId))
+        })
+      })
+      const pendingLeadIds = draftLeadForPendingMap.get(pendingId) || new Set<string>()
+      pendingLeadIds.forEach((leadId) => {
+        const pendingLead = pendingLeadMap.get(leadId)
+        candidates.push({
+          type: "pending",
+          id: leadId,
+          label: formatPendingLabel(pendingLead)
+        })
+      })
+      return getPrimaryLead(candidates)
+    }
+
     const coordinatorLabelForTeam = (teamId: string) => {
       const row = patchTeamCoordinatorMap.get(teamId)
       if (!row) return "Unassigned"
@@ -520,6 +583,14 @@ export default function PatchHierarchySummaryTable() {
         return `${formatPendingLabel(pendingLead)} (pending)`
       }
       return "Unassigned"
+    }
+
+    const coordinatorIdentityForTeam = (teamId: string) => {
+      const row = patchTeamCoordinatorMap.get(teamId)
+      if (!row) return null
+      if (row.coordinator_profile_id) return { type: "live" as const, id: row.coordinator_profile_id }
+      if (row.coordinator_pending_user_id) return { type: "pending" as const, id: row.coordinator_pending_user_id }
+      return null
     }
 
     const groups = new Map<string, { teamName: string; sort_order: number; coordinator: string; items: typeof rows }>()
@@ -535,7 +606,27 @@ export default function PatchHierarchySummaryTable() {
           items: []
         })
       }
-      groups.get(teamId)!.items.push(row)
+      const teamCoordinator = coordinatorIdentityForTeam(teamId)
+      const organiserIds = row.organiserIds || []
+      const pendingOrganiserIds = row.pendingOrganiserIds || []
+      let mismatch = false
+
+      if (teamCoordinator) {
+        organiserIds.forEach((organiserId) => {
+          const primaryLead = resolvePrimaryLeadForLiveOrganiser(organiserId)
+          if (primaryLead && (primaryLead.type !== teamCoordinator.type || primaryLead.id !== teamCoordinator.id)) {
+            mismatch = true
+          }
+        })
+        pendingOrganiserIds.forEach((pendingId) => {
+          const primaryLead = resolvePrimaryLeadForPendingOrganiser(pendingId)
+          if (primaryLead && (primaryLead.type !== teamCoordinator.type || primaryLead.id !== teamCoordinator.id)) {
+            mismatch = true
+          }
+        })
+      }
+
+      groups.get(teamId)!.items.push({ ...row, mismatch })
     })
 
     const teamOrder = Array.from(groups.entries()).sort((a, b) => {
@@ -551,7 +642,18 @@ export default function PatchHierarchySummaryTable() {
       coordinator: data.coordinator,
       items: data.items
     }))
-  }, [rows, patchTeams, patchTeamMembershipMap, patchTeamCoordinatorMap, profileMap, pendingLeadMap])
+  }, [
+    rows,
+    patchTeams,
+    patchTeamMembershipMap,
+    patchTeamCoordinatorMap,
+    profileMap,
+    pendingLeadMap,
+    roleHierarchyMap,
+    leadDraftMap,
+    draftLeadForLiveMap,
+    draftLeadForPendingMap
+  ])
 
   return (
     <Card>
@@ -591,7 +693,21 @@ export default function PatchHierarchySummaryTable() {
                     </TableRow>
                     {group.items.map((row) => (
                       <TableRow key={row.patchId}>
-                        <TableCell className="align-top">{row.organiserLabels}</TableCell>
+                        <TableCell className="align-top">
+                          <div>{row.organiserLabels}</div>
+                          {row.mismatch && (
+                            <div className="text-xs text-amber-700 mt-1">
+                              Hierarchy mismatch.{" "}
+                              <a className="underline" href="/admin?tab=hierarchy">
+                                Fix hierarchy
+                              </a>{" "}
+                              |{" "}
+                              <a className="underline" href="/admin?tab=patches#patch-teams">
+                                Fix team
+                              </a>
+                            </div>
+                          )}
+                        </TableCell>
                         <TableCell className="align-top">{row.patchCode}</TableCell>
                         <TableCell className="align-top font-medium">{row.patchName}</TableCell>
                         <TableCell className="align-top text-sm text-muted-foreground whitespace-normal">

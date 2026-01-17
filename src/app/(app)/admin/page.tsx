@@ -842,11 +842,11 @@ export default function AdminPage() {
           {/* Patch Management Group */}
           <TabsContent value="patch-management" className="space-y-8">
             <Suspense fallback={<TabLoadingState />}>
-              <div>
+              <div id="patch-summary">
                 <h3 className="text-lg font-semibold mb-4">Patch Summary</h3>
                 <PatchHierarchySummaryTable />
               </div>
-              <div>
+              <div id="patch-teams">
                 <h3 className="text-lg font-semibold mb-4">Patch Teams</h3>
                 <PatchTeamsManager />
               </div>
