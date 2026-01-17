@@ -98,15 +98,21 @@ export function CorrelationAnalytics({
         {!isLoading && !error && (
           <>
             <TabsContent value="working_together" className="mt-0">
-              <WorkingTogetherView data={data} startNavigation={startNavigation} />
+              {activeMode === 'working_together' ? (
+                <WorkingTogetherView data={data} startNavigation={startNavigation} />
+              ) : null}
             </TabsContent>
 
             <TabsContent value="builder_networks" className="mt-0">
-              <BuilderNetworksView data={data} startNavigation={startNavigation} />
+              {activeMode === 'builder_networks' ? (
+                <BuilderNetworksView data={data} startNavigation={startNavigation} />
+              ) : null}
             </TabsContent>
 
             <TabsContent value="compliance_patterns" className="mt-0">
-              <CompliancePatternsView data={data} />
+              {activeMode === 'compliance_patterns' ? (
+                <CompliancePatternsView data={data} />
+              ) : null}
             </TabsContent>
           </>
         )}
@@ -253,12 +259,17 @@ function CompliancePatternsView({ data }: any) {
       {sortedData.map((pattern: any, idx: number) => (
         <Card key={idx}>
           <CardContent className="p-4">
+            {(() => {
+              const ratingValue = pattern.rating ?? 'no_rating'
+              const confidenceLabel = (pattern.confidence ?? 'unknown').replace('_', ' ')
+              return (
+                <>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  {pattern.rating !== 'no_rating' ? (
+                  {ratingValue !== 'no_rating' ? (
                     <TrafficLightRatingDisplay
-                      rating={pattern.rating}
+                      rating={ratingValue}
                       size="sm"
                       showLabel
                     />
@@ -266,7 +277,7 @@ function CompliancePatternsView({ data }: any) {
                     <Badge variant="outline" className="text-xs">No Rating</Badge>
                   )}
                   <Badge variant="secondary" className="capitalize text-xs">
-                    {pattern.confidence.replace('_', ' ')} confidence
+                    {confidenceLabel} confidence
                   </Badge>
                 </div>
                 <Badge variant="outline">
@@ -288,6 +299,9 @@ function CompliancePatternsView({ data }: any) {
                 </div>
               )}
             </div>
+                </>
+              )
+            })()}
           </CardContent>
         </Card>
       ))}

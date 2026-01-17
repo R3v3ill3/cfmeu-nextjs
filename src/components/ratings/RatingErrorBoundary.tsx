@@ -62,7 +62,8 @@ export class RatingErrorBoundary extends Component<Props, State> {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          error: error.message,
+          error: error.name || "RatingErrorBoundary",
+          message: error.message,
           stack: error.stack,
           componentStack: errorInfo.componentStack,
           timestamp: new Date().toISOString(),
@@ -212,7 +213,8 @@ export function useRatingErrorHandler() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          error: error.message,
+          error: context || "RatingError",
+          message: error.message,
           stack: error.stack,
           context,
           timestamp: new Date().toISOString(),

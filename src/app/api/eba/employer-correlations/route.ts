@@ -252,12 +252,14 @@ async function getCompliancePatternsAnalysis(
   }> = {}
 
   ;(ratings || []).forEach((r: any) => {
-    const key = `${r.final_rating}|${r.overall_confidence || 'unknown'}`
+    const rating = r.final_rating || 'no_rating'
+    const confidence = r.overall_confidence || 'unknown'
+    const key = `${rating}|${confidence}`
     
     if (!patterns[key]) {
       patterns[key] = {
-        rating: r.final_rating,
-        confidence: r.overall_confidence || 'unknown',
+        rating,
+        confidence,
         employers: [],
         count: 0
       }
