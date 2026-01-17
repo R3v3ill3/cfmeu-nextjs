@@ -15,6 +15,49 @@ const SESSION_RECOVERY_TIMEOUT = 5000; // 5 seconds
 const HAD_SESSION_STORAGE_KEY = "cfmeu-had-session";
 const HAD_SESSION_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
+export type IosPwaContext = {
+  isIOS: boolean;
+  isStandalone: boolean;
+  isMobileSafari: boolean;
+  isPWA: boolean;
+  cookieAccessible: boolean;
+  sbCookieCount: number;
+  userAgent?: string;
+};
+
+export function getIosPwaContext(): IosPwaContext | null {
+  if (typeof window === "undefined") return null;
+
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isStandalone =
+    window.matchMedia?.("(display-mode: standalone)")?.matches ||
+    (navigator as unknown as { standalone?: boolean }).standalone === true;
+  const isMobileSafari =
+    isIOS && /Safari/.test(navigator.userAgent) && !/Chrome|CriOS|FxiOS/.test(navigator.userAgent);
+
+  // Check if cookies are accessible (iOS PWA isolation check)
+  let cookieAccessible = false;
+  let sbCookieCount = 0;
+  try {
+    cookieAccessible = document.cookie !== undefined;
+    // Count Supabase cookies
+    const cookies = document.cookie.split(";").filter((c) => c.trim().startsWith("sb-"));
+    sbCookieCount = cookies.length;
+  } catch {
+    cookieAccessible = false;
+  }
+
+  return {
+    isIOS,
+    isStandalone,
+    isMobileSafari,
+    isPWA: isStandalone && isIOS,
+    cookieAccessible,
+    sbCookieCount,
+    userAgent: navigator.userAgent?.slice(0, 100),
+  };
+}
+
 // Helper to persist hadSession state to localStorage (survives React tree destruction)
 function persistHadSession(userId: string): void {
   if (typeof window === "undefined") return;
@@ -240,37 +283,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [attemptSessionRecovery, logAuthEvent]);
 
   // Detect iOS PWA environment for diagnostic purposes
-  const detectIosPwaContext = useCallback(() => {
-    if (typeof window === "undefined") return null;
-    
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-    const isStandalone = window.matchMedia?.("(display-mode: standalone)")?.matches || 
-                        (navigator as unknown as { standalone?: boolean }).standalone === true;
-    const isMobileSafari = isIOS && /Safari/.test(navigator.userAgent) && 
-                          !/Chrome|CriOS|FxiOS/.test(navigator.userAgent);
-    
-    // Check if cookies are accessible (iOS PWA isolation check)
-    let cookieAccessible = false;
-    let sbCookieCount = 0;
-    try {
-      cookieAccessible = document.cookie !== undefined;
-      // Count Supabase cookies
-      const cookies = document.cookie.split(";").filter(c => c.trim().startsWith("sb-"));
-      sbCookieCount = cookies.length;
-    } catch {
-      cookieAccessible = false;
-    }
-    
-    return {
-      isIOS,
-      isStandalone,
-      isMobileSafari,
-      isPWA: isStandalone && isIOS,
-      cookieAccessible,
-      sbCookieCount,
-      userAgent: navigator.userAgent?.slice(0, 100),
-    };
-  }, []);
+  const detectIosPwaContext = useCallback(() => getIosPwaContext(), []);
   
   // Log iOS/PWA context on mount for debugging session loss
   useEffect(() => {

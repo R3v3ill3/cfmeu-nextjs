@@ -8,7 +8,7 @@ import { PatchMap } from "@/components/patch/PatchMap"
 import AddressLookupDialog from "@/components/AddressLookupDialog"
 import { useAccessiblePatches } from "@/hooks/useAccessiblePatches"
 import { usePatchInfo } from "@/hooks/usePatchInfo"
-import { useAuth } from "@/hooks/useAuth"
+import { getIosPwaContext, useAuth } from "@/hooks/useAuth"
 import { useOrganizingUniverseMetrics } from "@/hooks/useOrganizingUniverseMetrics"
 import { usePatchProjects } from "@/hooks/usePatchProjects"
 import { PatchProjectsFilterBar, PatchProjectFilters } from "@/components/patch/PatchProjectsFilterBar"
@@ -36,7 +36,15 @@ export default function PatchPage() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const { user } = useAuth()
-  const { patches, role, isLoading: loadingPatches } = useAccessiblePatches()
+  const {
+    patches,
+    role,
+    isLoading: loadingPatches,
+    error: patchesError,
+    errorKind: patchesErrorKind,
+    errorMessage: patchesErrorMessage,
+    refetch: refetchPatches,
+  } = useAccessiblePatches()
   const adminPatchContext = useAdminPatchContext()
   const [lookupOpen, setLookupOpen] = useState(false)
   const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null)
@@ -45,6 +53,10 @@ export default function PatchPage() {
   const handleOpenEmployer = useCallback((employerId: string) => {
     setSelectedEmployerId(employerId)
   }, [])
+
+  const handleRetryPatches = useCallback(() => {
+    refetchPatches()
+  }, [refetchPatches])
 
   const patchParam = searchParams.get("patch") || ""
   const patchIdFromQuery = patchParam.split(",").map((value) => value.trim()).filter(Boolean)[0] || null
@@ -157,6 +169,11 @@ export default function PatchPage() {
   })
 
   const disablePatchSelect = patchOptions.length <= 1
+
+  const hasPatchLoadError = !!patchesError
+  const isAuthMissing = patchesErrorKind === "auth_missing"
+  const iosPwaContext = hasPatchLoadError ? getIosPwaContext() : null
+  const showPwaCookieHelp = isAuthMissing && iosPwaContext?.isPWA && iosPwaContext.sbCookieCount === 0
 
   const { data: patchInfo } = usePatchInfo(selectedPatchId ?? undefined)
 
@@ -363,7 +380,44 @@ export default function PatchPage() {
           />
         </div>
 
-        {loadingPatches && (
+        {hasPatchLoadError && (
+          <Card className="p-4 sm:p-6 text-center text-sm text-muted-foreground">
+            <div className="space-y-3">
+              <div className="text-sm font-semibold text-foreground">Unable to load patches</div>
+              <p>
+                {isAuthMissing
+                  ? "Your session is missing or expired. Please sign in again."
+                  : patchesErrorKind === "rls"
+                    ? "You do not have permission to access patch data."
+                    : "We could not load patch data. Please try again."}
+              </p>
+              {showPwaCookieHelp && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs text-amber-900">
+                  <p className="font-semibold">iOS PWA install mismatch detected</p>
+                  <p className="mt-1">
+                    Delete the web app, open <span className="font-medium">/auth</span> in Safari, install from the
+                    Share menu, then sign in inside the web app.
+                  </p>
+                </div>
+              )}
+              {patchesErrorMessage && patchesErrorKind === "unknown" && (
+                <p className="text-xs text-muted-foreground">{patchesErrorMessage}</p>
+              )}
+              <div className="flex flex-col items-center justify-center gap-2 sm:flex-row">
+                {isAuthMissing && (
+                  <Button asChild className="w-full sm:w-auto">
+                    <Link href="/auth">Sign in</Link>
+                  </Button>
+                )}
+                <Button variant="outline" onClick={handleRetryPatches} className="w-full sm:w-auto">
+                  Retry
+                </Button>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {loadingPatches && !hasPatchLoadError && (
           <Card className="p-4 sm:p-6 text-center text-sm text-muted-foreground">
             <div className="flex items-center justify-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -372,7 +426,7 @@ export default function PatchPage() {
           </Card>
         )}
 
-        {!loadingPatches && !selectedPatchId && (
+        {!loadingPatches && !selectedPatchId && !hasPatchLoadError && (
           <Card className="p-4 sm:p-6 text-center text-sm text-muted-foreground">
             Select a patch to view its overview.
           </Card>

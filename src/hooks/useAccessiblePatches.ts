@@ -2,7 +2,8 @@
 import { useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth, getIosPwaContext } from "@/hooks/useAuth"
+import * as Sentry from "@sentry/nextjs"
 
 export type AccessiblePatch = {
   id: string
@@ -14,10 +15,70 @@ export interface AccessiblePatchesResult {
   patches: AccessiblePatch[]
   isLoading: boolean
   error: Error | null
+  errorKind: AccessiblePatchesErrorKind | null
+  errorMessage: string | null
+  refetch: () => void
 }
+
+export type AccessiblePatchesErrorKind = "auth_missing" | "rls" | "network" | "unknown"
 
 // How far in advance to refresh the session (1 minute before expiry)
 const SESSION_REFRESH_BUFFER_MS = 60 * 1000;
+
+function getErrorMessage(error: unknown): string {
+  if (!error) return "Unknown error"
+  if (error instanceof Error) return error.message
+  if (typeof error === "string") return error
+  return String(error)
+}
+
+function getErrorCode(error: unknown): string | null {
+  if (error && typeof error === "object" && "code" in error) {
+    return String((error as { code?: string }).code ?? "")
+  }
+  return null
+}
+
+function getAccessiblePatchesErrorKind(error: unknown): AccessiblePatchesErrorKind {
+  const message = getErrorMessage(error).toLowerCase()
+  const code = getErrorCode(error)
+
+  if (
+    message.includes("session expired") ||
+    message.includes("auth session missing") ||
+    message.includes("jwt") ||
+    message.includes("not authenticated")
+  ) {
+    return "auth_missing"
+  }
+
+  if (message.includes("permission denied") || message.includes("row-level security") || code === "42501") {
+    return "rls"
+  }
+
+  if (message.includes("timeout") || message.includes("network") || message.includes("fetch") || code === "ETIMEDOUT") {
+    return "network"
+  }
+
+  return "unknown"
+}
+
+function addPatchesBreadcrumb(
+  message: string,
+  data?: Record<string, unknown>,
+  level: "info" | "warning" | "error" = "info"
+): void {
+  if (typeof window === "undefined") return
+  Sentry.addBreadcrumb({
+    category: "patches",
+    level,
+    message,
+    data: {
+      ...data,
+      timestamp: new Date().toISOString(),
+    },
+  })
+}
 
 /**
  * Helper to ensure the session is valid before making an authenticated query.
@@ -115,6 +176,11 @@ export function useAccessiblePatches(): AccessiblePatchesResult {
         return { role: null, patches: [] }
       }
 
+      addPatchesBreadcrumb("Loading accessible patches", {
+        userIdSuffix: user.id.slice(-6),
+        iosContext: getIosPwaContext(),
+      })
+
       // Ensure session is valid before querying
       const supabase = await ensureValidSessionForPatches();
       if (!supabase) {
@@ -166,7 +232,7 @@ export function useAccessiblePatches(): AccessiblePatchesResult {
         if (ownError) {
           console.error("Error fetching organiser's own patches:", ownError)
           // Return empty patches rather than throwing to prevent page crash
-          return { role, patches: [] }
+        return { role, patches: [] }
         }
 
         const pushPatch = (patch: any) => {
@@ -347,15 +413,42 @@ export function useAccessiblePatches(): AccessiblePatchesResult {
       }
 
       return { role, patches: [] }
-    }
+    },
+    onSuccess: (data) => {
+      addPatchesBreadcrumb("Accessible patches loaded", {
+        role: data?.role ?? null,
+        patchCount: data?.patches?.length ?? 0,
+        iosContext: getIosPwaContext(),
+      })
+    },
+    onError: (error) => {
+      const errorMessage = getErrorMessage(error)
+      addPatchesBreadcrumb(
+        "Accessible patches failed",
+        {
+          errorKind: getAccessiblePatchesErrorKind(error),
+          errorMessage,
+          errorCode: getErrorCode(error),
+          iosContext: getIosPwaContext(),
+        },
+        "error"
+      )
+    },
   })
+
+  const error = (query.error as Error) ?? null
+  const errorMessage = error ? getErrorMessage(error) : null
+  const errorKind = error ? getAccessiblePatchesErrorKind(error) : null
 
   const result = useMemo<AccessiblePatchesResult>(() => ({
     role: (query.data as any)?.role ?? null,
     patches: (query.data as any)?.patches ?? [],
     isLoading: query.isLoading,
-    error: (query.error as Error) ?? null
-  }), [query.data, query.error, query.isLoading])
+    error,
+    errorKind,
+    errorMessage,
+    refetch: query.refetch,
+  }), [error, errorKind, errorMessage, query.data, query.isLoading, query.refetch])
 
   return result
 }

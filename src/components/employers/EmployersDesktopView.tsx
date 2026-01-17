@@ -212,6 +212,11 @@ export function EmployersDesktopView() {
 
   const { refetch: refetchEmployers } = serverSideResult
 
+  // Conditional data selection based on feature flag
+  // NOTE: Must be declared before useMemo hooks that depend on it
+  const employersData = (USE_SERVER_SIDE || sort === 'project_count') ? serverSideResult.data : allEmployersData
+  const isFetching = USE_SERVER_SIDE ? serverSideResult.isFetching : clientFetching
+
   const tradeFilterActive = selectedTradeCodes.length > 0
   const employerIdsForTradeFilter = useMemo(() => {
     if (USE_SERVER_SIDE || !tradeFilterActive) return []
@@ -237,10 +242,6 @@ export function EmployersDesktopView() {
       return map
     },
   })
-
-  // Conditional data selection based on feature flag
-  const employersData = (USE_SERVER_SIDE || sort === 'project_count') ? serverSideResult.data : allEmployersData
-  const isFetching = USE_SERVER_SIDE ? serverSideResult.isFetching : clientFetching
 
   const [selectedEmployerId, setSelectedEmployerId] = useState<string | null>(null)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
