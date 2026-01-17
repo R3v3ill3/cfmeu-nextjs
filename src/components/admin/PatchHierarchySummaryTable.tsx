@@ -43,6 +43,13 @@ type DraftLeadOrganiserLink = {
   end_date: string | null
 }
 
+type RoleHierarchyLink = {
+  parent_user_id: string
+  child_user_id: string
+  is_active: boolean | null
+  end_date: string | null
+}
+
 type ProjectRow = {
   id: string | null
   name: string | null
@@ -50,10 +57,9 @@ type ProjectRow = {
   organising_universe: string | null
 }
 
-type PatchProjectRow = {
+type PatchProjectMappingRow = {
   patch_id: string | null
   project_id: string | null
-  projects: ProjectRow | null
 }
 
 const REPORTS_TO_LABEL = "Karma Lord"
@@ -64,7 +70,16 @@ const formatProfileLabel = (profile?: ProfileRow) =>
 const formatPendingLabel = (pending?: PendingUserRow) =>
   pending?.full_name?.trim() || pending?.email?.trim() || pending?.id || "Unknown"
 
+const chunkArray = <T,>(values: T[], size: number) => {
+  const chunks: T[][] = []
+  for (let i = 0; i < values.length; i += size) {
+    chunks.push(values.slice(i, i + size))
+  }
+  return chunks
+}
+
 export default function PatchHierarchySummaryTable() {
+  const effectiveDateValue = new Date().toISOString().slice(0, 10)
   const { data: patches = [], isLoading: patchesLoading } = useQuery({
     queryKey: ["admin-patch-summary", "patches"],
     queryFn: async () => {
@@ -93,6 +108,8 @@ export default function PatchHierarchySummaryTable() {
       const { data, error } = await (supabase as any)
         .from("pending_users")
         .select("id, full_name, email, role, status, assigned_patch_ids")
+        .in("role", ["organiser", "lead_organiser"])
+        .in("status", ["draft", "invited"])
       if (error) throw error
       return (data || []) as PendingUserRow[]
     }
@@ -103,8 +120,10 @@ export default function PatchHierarchySummaryTable() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("lead_draft_organiser_links")
-        .select("lead_user_id, pending_user_id, is_active, end_date")
+        .select("lead_user_id, pending_user_id, is_active, end_date, start_date")
         .eq("is_active", true)
+        .lte("start_date", effectiveDateValue)
+        .or(`end_date.is.null,end_date.gte.${effectiveDateValue}`)
       if (error) throw error
       return (data || []) as LeadDraftOrganiserLink[]
     }
@@ -115,10 +134,26 @@ export default function PatchHierarchySummaryTable() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("draft_lead_organiser_links")
-        .select("draft_lead_pending_user_id, organiser_pending_user_id, organiser_user_id, is_active, end_date")
+        .select("draft_lead_pending_user_id, organiser_pending_user_id, organiser_user_id, is_active, end_date, start_date")
         .eq("is_active", true)
+        .lte("start_date", effectiveDateValue)
+        .or(`end_date.is.null,end_date.gte.${effectiveDateValue}`)
       if (error) throw error
       return (data || []) as DraftLeadOrganiserLink[]
+    }
+  })
+
+  const { data: roleHierarchyLinks = [], isLoading: hierarchyLoading } = useQuery({
+    queryKey: ["admin-patch-summary", "role-hierarchy"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("role_hierarchy")
+        .select("parent_user_id, child_user_id, is_active, end_date, start_date")
+        .eq("is_active", true)
+        .lte("start_date", effectiveDateValue)
+        .or(`end_date.is.null,end_date.gte.${effectiveDateValue}`)
+      if (error) throw error
+      return (data || []) as RoleHierarchyLink[]
     }
   })
 
@@ -156,14 +191,55 @@ export default function PatchHierarchySummaryTable() {
     }
   })
 
-  const { data: patchProjects = [], isLoading: projectsLoading } = useQuery({
-    queryKey: ["admin-patch-summary", "patch-projects"],
+  const { data: patchProjectMappings = [], isLoading: mappingLoading } = useQuery({
+    queryKey: ["admin-patch-summary", "patch-project-mappings"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      let { data, error } = await (supabase as any)
         .from("patch_project_mapping_view")
-        .select("patch_id, project_id, projects ( id, name, tier, organising_universe )")
+        .select("patch_id, project_id")
+
       if (error) throw error
-      return (data || []) as PatchProjectRow[]
+
+      if (!data || data.length === 0) {
+        const fallback = await (supabase as any)
+          .from("job_sites")
+          .select("patch_id, project_id")
+          .not("project_id", "is", null)
+        if (fallback.error) throw fallback.error
+        data = fallback.data || []
+      }
+
+      return (data || []) as PatchProjectMappingRow[]
+    }
+  })
+
+  const projectIds = useMemo(() => {
+    const ids = new Set<string>()
+    patchProjectMappings.forEach((row) => {
+      if (row.project_id) ids.add(row.project_id)
+    })
+    return Array.from(ids)
+  }, [patchProjectMappings])
+
+  const { data: projects = [], isLoading: projectsLoading } = useQuery({
+    queryKey: ["admin-patch-summary", "projects", projectIds],
+    enabled: projectIds.length > 0,
+    queryFn: async () => {
+      const chunks = chunkArray(projectIds, 500)
+      const results = await Promise.all(
+        chunks.map((chunk) =>
+          (supabase as any)
+            .from("project_list_comprehensive_view")
+            .select("id, name, tier, organising_universe")
+            .in("id", chunk)
+        )
+      )
+      const combined: ProjectRow[] = []
+      results.forEach((result) => {
+        if (result.error) throw result.error
+        combined.push(...((result.data || []) as ProjectRow[]))
+      })
+      return combined
     }
   })
 
@@ -173,8 +249,10 @@ export default function PatchHierarchySummaryTable() {
     pendingLoading ||
     leadDraftLoading ||
     draftLeadLoading ||
+    hierarchyLoading ||
     assignmentsLoading ||
     leadAssignmentsLoading ||
+    mappingLoading ||
     projectsLoading
 
   const profileMap = useMemo(() => {
@@ -201,7 +279,7 @@ export default function PatchHierarchySummaryTable() {
     return map
   }, [leadDraftLinks])
 
-  const draftLeadMap = useMemo(() => {
+  const draftLeadForPendingMap = useMemo(() => {
     const map = new Map<string, Set<string>>()
     draftLeadLinks.forEach((link) => {
       if (!link.organiser_pending_user_id || !link.draft_lead_pending_user_id) return
@@ -211,18 +289,42 @@ export default function PatchHierarchySummaryTable() {
     return map
   }, [draftLeadLinks])
 
-  const patchProjectsMap = useMemo(() => {
-    const map = new Map<string, Map<string, ProjectRow>>()
-    patchProjects.forEach((row) => {
-      if (!row.patch_id || !row.project_id || !row.projects?.id) return
-      if (!map.has(row.patch_id)) map.set(row.patch_id, new Map())
-      const projectsByPatch = map.get(row.patch_id)!
-      if (!projectsByPatch.has(row.project_id)) {
-        projectsByPatch.set(row.project_id, row.projects)
-      }
+  const draftLeadForLiveMap = useMemo(() => {
+    const map = new Map<string, Set<string>>()
+    draftLeadLinks.forEach((link) => {
+      if (!link.organiser_user_id || !link.draft_lead_pending_user_id) return
+      if (!map.has(link.organiser_user_id)) map.set(link.organiser_user_id, new Set())
+      map.get(link.organiser_user_id)!.add(link.draft_lead_pending_user_id)
     })
     return map
-  }, [patchProjects])
+  }, [draftLeadLinks])
+
+  const roleHierarchyMap = useMemo(() => {
+    const map = new Map<string, Set<string>>()
+    roleHierarchyLinks.forEach((link) => {
+      if (!link.child_user_id || !link.parent_user_id) return
+      if (!map.has(link.child_user_id)) map.set(link.child_user_id, new Set())
+      map.get(link.child_user_id)!.add(link.parent_user_id)
+    })
+    return map
+  }, [roleHierarchyLinks])
+
+  const patchProjectsMap = useMemo(() => {
+    const map = new Map<string, Map<string, ProjectRow>>()
+    const projectMap = new Map<string, ProjectRow>()
+    projects.forEach((project) => {
+      if (project.id) projectMap.set(project.id, project)
+    })
+    patchProjectMappings.forEach((row) => {
+      if (!row.patch_id || !row.project_id) return
+      const project = projectMap.get(row.project_id)
+      if (!project) return
+      if (!map.has(row.patch_id)) map.set(row.patch_id, new Map())
+      const projectsByPatch = map.get(row.patch_id)!
+      if (!projectsByPatch.has(row.project_id)) projectsByPatch.set(row.project_id, project)
+    })
+    return map
+  }, [patchProjectMappings, projects])
 
   const rows = useMemo(() => {
     const sortedPatches = [...patches].sort((a, b) => {
@@ -248,13 +350,26 @@ export default function PatchHierarchySummaryTable() {
           (pending.assigned_patch_ids || []).includes(patch.id)
       )
 
+      const leadLabelsFromLiveOrganisers = new Set<string>()
+      organiserIds.forEach((organiserId) => {
+        const leadIds = roleHierarchyMap.get(organiserId)
+        leadIds?.forEach((leadId) => {
+          leadLabelsFromLiveOrganisers.add(formatProfileLabel(profileMap.get(leadId)))
+        })
+        const draftLeadIds = draftLeadForLiveMap.get(organiserId)
+        draftLeadIds?.forEach((leadId) => {
+          const pendingLead = pendingLeadMap.get(leadId)
+          leadLabelsFromLiveOrganisers.add(`${formatPendingLabel(pendingLead)} (pending)`)
+        })
+      })
+
       const leadLabelsFromPending = new Set<string>()
       pendingOrganisers.forEach((pending) => {
         const liveLeadIds = leadDraftMap.get(pending.id)
         liveLeadIds?.forEach((leadId) => {
           leadLabelsFromPending.add(formatProfileLabel(profileMap.get(leadId)))
         })
-        const draftLeadIds = draftLeadMap.get(pending.id)
+        const draftLeadIds = draftLeadForPendingMap.get(pending.id)
         draftLeadIds?.forEach((leadId) => {
           const pendingLead = pendingLeadMap.get(leadId)
           leadLabelsFromPending.add(`${formatPendingLabel(pendingLead)} (pending)`)
@@ -268,6 +383,7 @@ export default function PatchHierarchySummaryTable() {
       const leadLabelParts = [
         ...leadIds.map((id) => formatProfileLabel(profileMap.get(id))),
         ...pendingLeads.map((pending) => `${formatPendingLabel(pending)} (pending)`),
+        ...Array.from(leadLabelsFromLiveOrganisers),
         ...Array.from(leadLabelsFromPending)
       ].filter(Boolean)
 
@@ -309,7 +425,9 @@ export default function PatchHierarchySummaryTable() {
     profileMap,
     pendingUsers,
     leadDraftMap,
-    draftLeadMap,
+    draftLeadForPendingMap,
+    draftLeadForLiveMap,
+    roleHierarchyMap,
     pendingLeadMap
   ])
 
