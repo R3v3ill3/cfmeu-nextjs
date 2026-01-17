@@ -17,6 +17,7 @@ async function reserveNextJob(client) {
         .from(JOB_TABLE)
         .select('*')
         .eq('status', 'queued')
+        .eq('environment', config_1.config.workerEnv)
         .in('job_type', ['fwc_lookup', 'incolink_sync']) // Only pick up jobs this worker can handle
         .lte('run_at', nowIso)
         .order('priority', { ascending: true })
@@ -41,6 +42,7 @@ async function reserveNextJob(client) {
         })
             .eq('id', candidate.id)
             .eq('status', 'queued')
+            .eq('environment', config_1.config.workerEnv)
             .lte('run_at', nowIso)
             .is('lock_token', null)
             .select()

@@ -24,6 +24,11 @@ exports.config = {
     incolinkPassword: process.env.INCOLINK_PASSWORD,
     pollIntervalMs: Number(process.env.POLL_INTERVAL_MS ?? 5000),
     lockTimeoutMs: Number(process.env.LOCK_TIMEOUT_MS ?? 5 * 60000),
+    // Environment isolation:
+    // - Railway production should run with WORKER_ENV=production (default when NODE_ENV=production)
+    // - Local development should run with WORKER_ENV=development (default when NODE_ENV!=production)
+    workerEnv: process.env.WORKER_ENV ??
+        (process.env.NODE_ENV === 'production' ? 'production' : 'development'),
     // Retry configuration for FWC scraper
     retry: {
         maxAttempts: Number(process.env.RETRY_MAX_ATTEMPTS ?? 4),
