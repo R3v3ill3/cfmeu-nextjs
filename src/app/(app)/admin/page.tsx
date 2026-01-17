@@ -101,6 +101,10 @@ const PatchHierarchySummaryTable = lazyWithErrorLogging(
   () => import("@/components/admin/PatchHierarchySummaryTable"),
   "PatchHierarchySummaryTable"
 )
+const PatchTeamsManager = lazyWithErrorLogging(
+  () => import("@/components/admin/PatchTeamsManager"),
+  "PatchTeamsManager"
+)
 const SpatialAssignmentTool = lazyWithErrorLogging(
   () => import("@/components/admin/SpatialAssignmentTool"),
   "SpatialAssignmentTool"
@@ -841,6 +845,10 @@ export default function AdminPage() {
               <div>
                 <h3 className="text-lg font-semibold mb-4">Patch Summary</h3>
                 <PatchHierarchySummaryTable />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold mb-4">Patch Teams</h3>
+                <PatchTeamsManager />
               </div>
               <div>
                 <h3 className="text-lg font-semibold mb-4">Patches</h3>
