@@ -370,7 +370,7 @@ export async function GET(request: NextRequest, { params }: { params: { employer
           confidence_level,
           assessment_basis,
           organiser_id,
-          profiles!organiser_overall_expertise_ratings_organiser_id_fkey(name)
+          profiles!organiser_overall_expertise_ratings_organiser_id_fkey(full_name)
         `)
         .eq('employer_id', employerId)
         .eq('is_active', true)
@@ -507,7 +507,7 @@ export async function GET(request: NextRequest, { params }: { params: { employer
           overall_rating: assessment.overall_score || 1,
           overall_rating_label: convertNumericToLabel(assessment.overall_score || 1),
           confidence_level: assessment.confidence_level as any,
-          organiser_name: (assessment.profiles as any)?.name || 'Unknown Organiser',
+          organiser_name: (assessment.profiles as any)?.full_name || 'Unknown Organiser',
           assessment_basis: assessment.assessment_basis || 'Not specified',
           notes: null
         });

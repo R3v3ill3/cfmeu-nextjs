@@ -3,6 +3,8 @@
 import React, { useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
+import { getSupabaseBrowserClient } from "@/lib/supabase/client"
+import { useAuth } from "@/hooks/useAuth"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { GeofencingSetup } from "@/components/siteVisits/GeofencingSetup"
 import { Badge } from "@/components/ui/badge"
@@ -17,19 +19,85 @@ import { Slider } from "@/components/ui/slider"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
 
+const AGENT_DEBUG_INGEST_URL =
+  "http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2"
+const AGENT_DEBUG_RUN_ID = "pre-fix"
+
+function agentDebugEnabled(): boolean {
+  if (typeof window === "undefined") return false
+  try {
+    const url = new URL(window.location.href)
+    const enabledByParam = url.searchParams.get("__agent_debug") === "1"
+    if (enabledByParam) {
+      try {
+        sessionStorage.setItem("__agent_debug", "1")
+      } catch {}
+      return true
+    }
+    try {
+      return sessionStorage.getItem("__agent_debug") === "1"
+    } catch {
+      return false
+    }
+  } catch {
+    return false
+  }
+}
+
+function userIdSuffix(userId: string | null | undefined): string | null {
+  if (!userId) return null
+  return userId.slice(-6)
+}
+
 export default function SettingsPage() {
+  const { session, user, loading: authLoading } = useAuth()
+
   // Get current user info
   const { data: currentUser } = useQuery({
     queryKey: ["settings-current-user"],
     queryFn: async () => {
-      const { data: auth } = await supabase.auth.getUser()
+      if (agentDebugEnabled()) {
+        // #region agent log - settings current user query start
+        fetch(AGENT_DEBUG_INGEST_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,location:"src/app/(app)/settings/page.tsx:settings-current-user:start",message:"settings_current_user_query_start",data:{pathname:typeof window!=="undefined"?window.location?.pathname:null,authContext:{authLoading:authLoading,ctxHasSession:!!session,ctxUserIdSuffix:userIdSuffix(session?.user?.id??user?.id),ctxExpiresAt:session?.expires_at??null}},runId:AGENT_DEBUG_RUN_ID,hypothesisId:"H6",timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+      }
+
+      const { data: auth, error: authError } = await supabase.auth.getUser()
+      if (agentDebugEnabled()) {
+        // #region agent log - settings auth.getUser result
+        fetch(AGENT_DEBUG_INGEST_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,location:"src/app/(app)/settings/page.tsx:settings-current-user:auth",message:"settings_current_user_auth_result",data:{pathname:typeof window!=="undefined"?window.location?.pathname:null,hasAuthUser:!!auth?.user,authUserIdSuffix:userIdSuffix(auth?.user?.id),authErrorMessage:authError?authError.message:null,ctxHasSession:!!session,ctxUserIdSuffix:userIdSuffix(session?.user?.id??user?.id),sbCookieCount:(()=>{try{return (document.cookie||'').split(';').filter(c=>c.trim().startsWith('sb-')).length}catch{return null}})()},runId:AGENT_DEBUG_RUN_ID,hypothesisId:"H6",timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+      }
+
       if (!auth?.user) return null
       
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("id, full_name, email, apple_email, role")
         .eq("id", auth.user.id)
         .single()
+
+      if (agentDebugEnabled()) {
+        let browserSessionSnapshot: Record<string, unknown> | null = null
+        try {
+          const { data: browserSessionData, error: browserSessionError } =
+            await getSupabaseBrowserClient().auth.getSession()
+          browserSessionSnapshot = {
+            hasSession: !!browserSessionData?.session,
+            userIdSuffix: userIdSuffix(browserSessionData?.session?.user?.id),
+            expiresAt: browserSessionData?.session?.expires_at ?? null,
+            errorMessage: browserSessionError ? browserSessionError.message : null,
+          }
+        } catch (error) {
+          browserSessionSnapshot = {
+            exception: error instanceof Error ? error.message : String(error),
+          }
+        }
+
+        // #region agent log - settings profile query result
+        fetch(AGENT_DEBUG_INGEST_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,location:"src/app/(app)/settings/page.tsx:settings-current-user:profile",message:"settings_current_user_profile_result",data:{pathname:typeof window!=="undefined"?window.location?.pathname:null,profileHasData:!!profile,profileErrorMessage:profileError?profileError.message:null,profileErrorCode:(profileError as any)?.code??null,profileUserIdSuffix:userIdSuffix((profile as any)?.id),profileRole:(profile as any)?.role??null,ctxHasSession:!!session,ctxUserIdSuffix:userIdSuffix(session?.user?.id??user?.id),browserSession:browserSessionSnapshot},runId:AGENT_DEBUG_RUN_ID,hypothesisId:"H6",timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+      }
       
       return {
         ...profile,

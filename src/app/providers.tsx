@@ -166,6 +166,8 @@ function AuthDebugProbe({ queryClient }: { queryClient: QueryClient }) {
           accessiblePatches: getQueryStateSummary(queryClient, 'accessible-patches'),
           currentUserProfile: getQueryStateSummary(queryClient, 'current-user-profile'),
           userRole: getQueryStateSummary(queryClient, 'user-role'),
+          settingsCurrentUser: getQueryStateSummary(queryClient, 'settings-current-user'),
+          settingsPatchAssignments: getQueryStateSummary(queryClient, 'settings-patch-assignments'),
           employerDetail: getQueryStateSummary(queryClient, 'employer-detail'),
           employerWorkerCount: getQueryStateSummary(queryClient, 'employer-worker-count'),
         },
