@@ -13,6 +13,7 @@ export type AssessmentMethod =
   | "site_visit"
   | "phone_call"
   | "union_meeting"
+  | "subcontractor_meeting"
   | "worker_interview"
   | "document_review"
   | "other"

@@ -5,7 +5,7 @@ import { z } from 'zod'
 // Validation schema for Union Respect Assessment (4-point system)
 const UnionRespectAssessmentSchema = z.object({
   employer_id: z.string().uuid(),
-  project_id: z.string().uuid().optional(),
+  project_id: z.string().uuid().nullish(), // accepts string, null, or undefined
   criteria: z.object({
     right_of_entry: z.number().min(1).max(4), // 1=good, 4=terrible
     delegate_accommodation: z.number().min(1).max(4),
@@ -18,7 +18,7 @@ const UnionRespectAssessmentSchema = z.object({
   notes: z.string().optional(),
   evidence_urls: z.array(z.string()).optional(),
   follow_up_required: z.boolean().default(false),
-  follow_up_date: z.string().optional().transform(val => val ? new Date(val).toISOString() : null),
+  follow_up_date: z.string().nullish().transform(val => val ? new Date(val).toISOString() : null), // accepts string, null, or undefined
 })
 
 // POST - Create new Union Respect Assessment

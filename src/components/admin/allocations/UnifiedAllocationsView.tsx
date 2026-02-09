@@ -6,10 +6,14 @@ import { supabase } from "@/integrations/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import RoleHierarchyManager from "@/components/admin/RoleHierarchyManager"
+import { RoleHierarchyManager } from "@/components/admin/RoleHierarchyManager"
 import PatchManager from "@/components/admin/PatchManager"
 import OrganiserScopeManager from "@/components/admin/OrganiserScopeManager"
 import CoordinatorRollupSummary from "@/components/admin/allocations/CoordinatorRollupSummary"
+
+// #region agent log
+fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'UnifiedAllocationsView.tsx:imports',message:'Import check',data:{RoleHierarchyManager:typeof RoleHierarchyManager,PatchManager:typeof PatchManager,OrganiserScopeManager:typeof OrganiserScopeManager,CoordinatorRollupSummary:typeof CoordinatorRollupSummary},timestamp:Date.now(),hypothesisId:'H1-H4'})}).catch(()=>{});
+// #endregion
 
 interface UnifiedAllocationsViewProps {
   onOpenWizard?: () => void

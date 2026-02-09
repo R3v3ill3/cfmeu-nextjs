@@ -13,7 +13,7 @@ const uuidSchema = z.string().uuid('Invalid ID format - must be a valid UUID')
 // Common validation patterns
 export const commonSchemas = {
   uuid: uuidSchema,
-  optionalUuid: uuidSchema.optional(),
+  optionalUuid: uuidSchema.optional().nullable(),
   uuidArray: z.array(uuidSchema).min(1, 'At least one ID is required'),
 
   // String validations with reasonable limits
