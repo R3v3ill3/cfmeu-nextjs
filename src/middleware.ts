@@ -8,7 +8,9 @@ export async function middleware(req: NextRequest) {
   })
   const requestId = req.headers.get('x-request-id') ?? crypto.randomUUID()
   const path = req.nextUrl.pathname
-  const allowLocalDebugIngest = req.nextUrl.searchParams.get('__agent_debug') === '1'
+  const allowLocalDebugIngestParam = req.nextUrl.searchParams.get('__agent_debug') === '1'
+  const allowLocalDebugIngestCookie = req.cookies.get('__agent_debug')?.value === '1'
+  const allowLocalDebugIngest = allowLocalDebugIngestParam || allowLocalDebugIngestCookie
   const isHttps =
     req.nextUrl.protocol === 'https:' || req.headers.get('x-forwarded-proto') === 'https'
 
@@ -75,7 +77,7 @@ export async function middleware(req: NextRequest) {
     supabaseResponse.headers.set('x-nonce', nonce)
     const csp = buildCSP(nonce, { allowLocalDebugIngest })
     supabaseResponse.headers.set('Content-Security-Policy', csp)
-    if (allowLocalDebugIngest) {
+    if (allowLocalDebugIngestParam) {
       // Persist debug flag across navigations (prod-safe, short-lived).
       supabaseResponse.cookies.set('__agent_debug', '1', {
         path: '/',
@@ -286,7 +288,7 @@ export async function middleware(req: NextRequest) {
   // Build and set CSP with nonce
   const csp = buildCSP(nonce, { allowLocalDebugIngest })
   supabaseResponse.headers.set('Content-Security-Policy', csp)
-  if (allowLocalDebugIngest) {
+  if (allowLocalDebugIngestParam) {
     // Persist debug flag across navigations (prod-safe, short-lived).
     supabaseResponse.cookies.set('__agent_debug', '1', {
       path: '/',
@@ -340,6 +342,16 @@ function buildCSP(
     'https://*.sentry.io',
     'https://*.posthog.com',
   ]
+
+  if (allowLocalDebugIngest) {
+    // Allow connecting to the local debug ingest server from the browser.
+    // This is intentionally loopback-only and is only enabled when the user
+    // has opted in via `__agent_debug=1` (persisted by a short-lived cookie).
+    const localDebugOrigins = ['http://127.0.0.1:7242', 'http://localhost:7242']
+    for (const origin of localDebugOrigins) {
+      if (!connectSrc.includes(origin)) connectSrc.push(origin)
+    }
+  }
 
   const workerUrl = process.env.NEXT_PUBLIC_DASHBOARD_WORKER_URL
   if (workerUrl) {

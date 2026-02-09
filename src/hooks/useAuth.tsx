@@ -15,6 +15,37 @@ const SESSION_RECOVERY_TIMEOUT = 5000; // 5 seconds
 const HAD_SESSION_STORAGE_KEY = "cfmeu-had-session";
 const HAD_SESSION_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
+// Cursor agent debug ingest (opt-in via `__agent_debug=1`)
+const AGENT_DEBUG_INGEST_URL =
+  "http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2";
+const AGENT_DEBUG_RUN_ID = "pre-fix";
+
+function agentDebugEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const url = new URL(window.location.href);
+    const enabledByParam = url.searchParams.get("__agent_debug") === "1";
+    if (enabledByParam) {
+      try {
+        sessionStorage.setItem("__agent_debug", "1");
+      } catch {}
+      return true;
+    }
+    try {
+      return sessionStorage.getItem("__agent_debug") === "1";
+    } catch {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+}
+
+function userIdSuffix(userId: string | null | undefined): string | null {
+  if (!userId) return null;
+  return userId.slice(-6);
+}
+
 export type IosPwaContext = {
   isIOS: boolean;
   isStandalone: boolean;
@@ -192,11 +223,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           ...transition,
           source: metadata?.source ?? "unknown",
         }, "warning");
+        if (agentDebugEnabled()) {
+          // #region agent log - applyAuthState session loss
+          fetch(AGENT_DEBUG_INGEST_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,location:"src/hooks/useAuth.tsx:applyAuthState",message:"apply_auth_state_session_loss",data:{...transition,source:metadata?.source??"unknown"},runId:AGENT_DEBUG_RUN_ID,hypothesisId:"H2",timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+        }
       } else if (!prevHasSession && nextHasSession) {
         logAuthEvent("Session restored in applyAuthState", {
           ...transition,
           source: metadata?.source ?? "unknown",
         });
+        if (agentDebugEnabled()) {
+          // #region agent log - applyAuthState session restore
+          fetch(AGENT_DEBUG_INGEST_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,location:"src/hooks/useAuth.tsx:applyAuthState",message:"apply_auth_state_session_restore",data:{...transition,source:metadata?.source??"unknown"},runId:AGENT_DEBUG_RUN_ID,hypothesisId:"H2",timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+        }
       }
       
       setSession(nextSession);
@@ -239,34 +280,48 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (recoveryAttemptedRef.current || !hadSessionRef.current) {
       return null;
     }
-    
+
+    const attemptStartedAt = Date.now();
     recoveryAttemptedRef.current = true;
     logAuthEvent("Attempting session recovery", { source: "unexpected-loss" });
-    
+
+    let outcome: "success" | "error" | "no_session" | "exception" = "no_session";
+    let outcomeErrorMessage: string | null = null;
+    let recoveredSession: Session | null = null;
+
     try {
       const supabase = getSupabaseBrowserClient();
-      
+
       // Try to refresh the session
       const { data, error } = await supabase.auth.refreshSession();
-      
+
       if (error) {
+        outcome = "error";
+        outcomeErrorMessage = error.message;
         logAuthError("Session recovery failed", error, { stage: "refreshSession" });
-        return null;
-      }
-      
-      if (data.session) {
+      } else if (data.session) {
+        outcome = "success";
+        recoveredSession = data.session;
         logAuthEvent("Session recovered successfully", {
           source: "refreshSession",
           userId: data.session.user?.id ?? null,
         });
-        return data.session;
+      } else {
+        outcome = "no_session";
       }
-      
-      return null;
     } catch (error) {
+      outcome = "exception";
+      outcomeErrorMessage = error instanceof Error ? error.message : String(error);
       logAuthError("Session recovery exception", error);
-      return null;
+    } finally {
+      if (agentDebugEnabled()) {
+        // #region agent log - session recovery attempt
+        fetch(AGENT_DEBUG_INGEST_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,location:"src/hooks/useAuth.tsx:attemptSessionRecovery",message:"session_recovery_attempt",data:{instanceId:instanceIdRef.current,pathname:typeof window!=="undefined"?window.location?.pathname:null,hadSessionRef:hadSessionRef.current,outcome,outcomeErrorMessage:outcomeErrorMessage?outcomeErrorMessage.slice(0,160):null,durationMs:Date.now()-attemptStartedAt,recoveredUserIdSuffix:userIdSuffix(recoveredSession?.user?.id),recoveredExpiresAt:recoveredSession?.expires_at??null},runId:AGENT_DEBUG_RUN_ID,hypothesisId:"H5",timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+      }
     }
+
+    return recoveredSession;
   }, [logAuthError, logAuthEvent]);
 
   // Debounced recovery scheduler - prevents concurrent recovery attempts
@@ -310,6 +365,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         iosContext: context?.isPWA ? "ios-pwa" : context?.isIOS ? "ios-safari" : "other",
       });
       hadSessionRef.current = true;
+    }
+
+    if (agentDebugEnabled()) {
+      // #region agent log - useAuth mount context
+      fetch(AGENT_DEBUG_INGEST_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,location:"src/hooks/useAuth.tsx:mount",message:"auth_provider_mount",data:{instanceId:instanceIdRef.current,pathname:window.location?.pathname??null,online:navigator.onLine,visibility:document.visibilityState,persistedHadSession:persisted.hadSession,persistedUserIdSuffix:persisted.userId??null,iosContext:context?{isIOS:context.isIOS,isStandalone:context.isStandalone,isMobileSafari:context.isMobileSafari,isPWA:context.isPWA,cookieAccessible:context.cookieAccessible,sbCookieCount:context.sbCookieCount}:null,swUpdateAvailable:(()=>{try{return sessionStorage.getItem("sw-update-available")}catch{return null}})()},runId:AGENT_DEBUG_RUN_ID,hypothesisId:"H1",timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
     }
   }, [detectIosPwaContext, logAuthEvent]);
   
@@ -362,6 +423,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         
         if (isSubscribedRef.current && !initialSessionSet) {
           initialSessionSet = true;
+          if (agentDebugEnabled()) {
+            // #region agent log - initial getSession result
+            fetch(AGENT_DEBUG_INGEST_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,location:"src/hooks/useAuth.tsx:initializeSession",message:"initial_get_session",data:{instanceId:instanceIdRef.current,pathname:typeof window!=="undefined"?window.location?.pathname:null,durationMs:duration,hasSession:!!initialSession,userIdSuffix:userIdSuffix(initialSession?.user?.id),expiresAt:initialSession?.expires_at??null,errorMessage:error?error.message:null},runId:AGENT_DEBUG_RUN_ID,hypothesisId:"H2",timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
+          }
           applyAuthState(initialSession ?? null, { source: "getSession" });
           setLoading(false);
           
@@ -401,6 +467,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           hasSession: !!newSession,
           userId: newSession?.user?.id ?? null,
         });
+        if (agentDebugEnabled()) {
+          // #region agent log - onAuthStateChange event
+          fetch(AGENT_DEBUG_INGEST_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,location:"src/hooks/useAuth.tsx:onAuthStateChange",message:"auth_state_change",data:{instanceId:instanceIdRef.current,event,hasSession:!!newSession,newUserIdSuffix:userIdSuffix(newSession?.user?.id),prevUserIdSuffix:userIdSuffix(sessionRef.current?.user?.id),pathname:typeof window!=="undefined"?window.location?.pathname:null,visibility:typeof document!=="undefined"?document.visibilityState:null,online:typeof navigator!=="undefined"?navigator.onLine:null},runId:AGENT_DEBUG_RUN_ID,hypothesisId:"H2",timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+        }
 
         // Track if we've ever had a session (for recovery logic)
         if (newSession) {

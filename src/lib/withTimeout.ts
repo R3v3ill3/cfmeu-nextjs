@@ -1,5 +1,32 @@
 import * as Sentry from "@sentry/nextjs";
 
+// Cursor agent debug ingest (opt-in via `__agent_debug=1`)
+const AGENT_DEBUG_INGEST_URL =
+  "http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2";
+const AGENT_DEBUG_RUN_ID = "pre-fix";
+
+function agentDebugEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    // Persist across navigations once enabled
+    const url = new URL(window.location.href);
+    const enabledByParam = url.searchParams.get("__agent_debug") === "1";
+    if (enabledByParam) {
+      try {
+        sessionStorage.setItem("__agent_debug", "1");
+      } catch {}
+      return true;
+    }
+    try {
+      return sessionStorage.getItem("__agent_debug") === "1";
+    } catch {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Query timeout presets based on query complexity
  */
@@ -104,6 +131,22 @@ export function withTimeout<T>(
       if (telemetryEnabled) {
         console.error(`[withTimeout] Timeout occurred for ${operationLabel}`, timeoutPayload);
         addTimeoutBreadcrumb("withTimeout:timeout", timeoutPayload, "warning");
+      }
+
+      if (agentDebugEnabled() && typeof window !== "undefined") {
+        const sbCookieCount = (() => {
+          try {
+            return (document.cookie || "")
+              .split(";")
+              .filter((c) => c.trim().startsWith("sb-")).length;
+          } catch {
+            return null;
+          }
+        })();
+
+        // #region agent log - timeout edge (generic)
+        fetch(AGENT_DEBUG_INGEST_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,location:"src/lib/withTimeout.ts:timeout",message:"withTimeout_timeout",data:{label:operationLabel,timeoutMs,actualDuration:duration,pathname:window.location?.pathname??null,online:navigator.onLine,visibility:document.visibilityState,sbCookieCount,hasServiceWorkerController:("serviceWorker" in navigator)?!!navigator.serviceWorker.controller:null,swUpdateAvailable:(()=>{try{return sessionStorage.getItem("sw-update-available")}catch{return null}})()},runId:AGENT_DEBUG_RUN_ID,hypothesisId:"H4",timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
       }
 
       reject(error);
