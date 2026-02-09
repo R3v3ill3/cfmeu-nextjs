@@ -48,6 +48,36 @@ import { TrafficLightRatingDisplay } from "./TrafficLightRatingDisplay";
 import { useRouter } from "next/navigation";
 import { useNavigationLoading } from "@/hooks/useNavigationLoading";
 
+const AGENT_DEBUG_INGEST_URL =
+  "http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2";
+const AGENT_DEBUG_RUN_ID = "pre-fix";
+
+function agentDebugEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const url = new URL(window.location.href);
+    const enabledByParam = url.searchParams.get("__agent_debug") === "1";
+    if (enabledByParam) {
+      try {
+        sessionStorage.setItem("__agent_debug", "1");
+      } catch {}
+      return true;
+    }
+    try {
+      return sessionStorage.getItem("__agent_debug") === "1";
+    } catch {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+}
+
+function userIdSuffix(userId: string | null | undefined): string | null {
+  if (!userId) return null;
+  return userId.slice(-6);
+}
+
 type EmployerSite = {
   id: string;
   name: string;
@@ -229,6 +259,7 @@ export const EmployerDetailModal = ({
   const { loading: authLoading } = useAuth();
   const { role: currentUserRole } = useUserProfile();
   const { toast } = useToast();
+  const modalInstanceId = useState(() => `empmodal-${Math.random().toString(36).slice(2, 8)}`)[0];
   
   const isPendingReview = mode === 'pending_review';
 
@@ -246,6 +277,12 @@ export const EmployerDetailModal = ({
       if (!employerId) {
         console.log('[EmployerDetailModal] No employerId provided, returning null');
         return null;
+      }
+
+      if (agentDebugEnabled()) {
+        // #region agent log - employer detail query start
+        fetch(AGENT_DEBUG_INGEST_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,location:"src/components/employers/EmployerDetailModal.tsx:employer-detail:start",message:"employer_detail_query_start",data:{modalInstanceId,employerId,activeTab,isOpen,authLoading,currentUserRole},runId:AGENT_DEBUG_RUN_ID,hypothesisId:"H7",timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
       }
       
       const startTime = Date.now();
@@ -362,6 +399,11 @@ export const EmployerDetailModal = ({
           duration,
           timestamp: new Date().toISOString(),
         });
+        if (agentDebugEnabled()) {
+          // #region agent log - employer detail query exception
+          fetch(AGENT_DEBUG_INGEST_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,location:"src/components/employers/EmployerDetailModal.tsx:employer-detail:error",message:"employer_detail_query_exception",data:{modalInstanceId,employerId,activeTab,isOpen,authLoading,currentUserRole,errorCode:err?.code??null,errorMessage:err instanceof Error?err.message:String(err),isTimeout:(err as any)?.code==="ETIMEDOUT"||String(err instanceof Error?err.message:err).includes("timed out")},runId:AGENT_DEBUG_RUN_ID,hypothesisId:"H7",timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+        }
         // Don't reset Supabase client on timeout - it destroys auth state
         throw err;
       }
@@ -383,6 +425,11 @@ export const EmployerDetailModal = ({
     queryFn: async () => {
       if (!employerId) return 0;
       const supabase = getSupabaseBrowserClient();
+      if (agentDebugEnabled()) {
+        // #region agent log - worker count query start
+        fetch(AGENT_DEBUG_INGEST_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,location:"src/components/employers/EmployerDetailModal.tsx:worker-count:start",message:"employer_worker_count_query_start",data:{modalInstanceId,employerId,activeTab,isOpen,authLoading},runId:AGENT_DEBUG_RUN_ID,hypothesisId:"H7",timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+      }
       try {
         const res = await withTimeout<any>(
           supabase.rpc("get_employer_worker_count", { p_employer_id: employerId }),
@@ -395,6 +442,11 @@ export const EmployerDetailModal = ({
         }
         return res.data ?? 0;
       } catch (err: any) {
+        if (agentDebugEnabled()) {
+          // #region agent log - worker count query exception
+          fetch(AGENT_DEBUG_INGEST_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,location:"src/components/employers/EmployerDetailModal.tsx:worker-count:error",message:"employer_worker_count_query_exception",data:{modalInstanceId,employerId,activeTab,isOpen,authLoading,errorCode:err?.code??null,errorMessage:err instanceof Error?err.message:String(err),isTimeout:(err as any)?.code==="ETIMEDOUT"||String(err instanceof Error?err.message:err).includes("timed out")},runId:AGENT_DEBUG_RUN_ID,hypothesisId:"H7",timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+        }
         // Don't reset Supabase client on timeout - it destroys auth state
         throw err;
       }
@@ -517,6 +569,11 @@ export const EmployerDetailModal = ({
     queryFn: async () => {
       if (!employerId) return [];
       const supabase = getSupabaseBrowserClient();
+      if (agentDebugEnabled()) {
+        // #region agent log - employer sites query start
+        fetch(AGENT_DEBUG_INGEST_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,location:"src/components/employers/EmployerDetailModal.tsx:sites:start",message:"employer_sites_query_start",data:{modalInstanceId,employerId,activeTab,isOpen,authLoading},runId:AGENT_DEBUG_RUN_ID,hypothesisId:"H7",timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+      }
       try {
         const res = await withTimeout<any>(
           supabase.rpc("get_employer_sites", { p_employer_id: employerId }),
@@ -540,6 +597,11 @@ export const EmployerDetailModal = ({
         });
         return res.data;
       } catch (err: any) {
+        if (agentDebugEnabled()) {
+          // #region agent log - employer sites query exception
+          fetch(AGENT_DEBUG_INGEST_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,location:"src/components/employers/EmployerDetailModal.tsx:sites:error",message:"employer_sites_query_exception",data:{modalInstanceId,employerId,activeTab,isOpen,authLoading,errorCode:err?.code??null,errorMessage:err instanceof Error?err.message:String(err),isTimeout:(err as any)?.code==="ETIMEDOUT"||String(err instanceof Error?err.message:err).includes("timed out")},runId:AGENT_DEBUG_RUN_ID,hypothesisId:"H7",timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+        }
         // Don't reset Supabase client on timeout - it destroys auth state
         throw err;
       }
