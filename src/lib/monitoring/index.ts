@@ -238,58 +238,49 @@ export class MonitoringService {
     })
 
     // API performance check
-    this.registerHealthCheck('api-performance', async () => {
-      const start = Date.now()
-      try {
-        // Check API response times
-        const responseTime = Math.random() * 200 + 50 // Simulate 50-250ms response time
-        const duration = Date.now() - start
+    // NOTE: the previous `api-performance` health check has been removed.
+    // It was generating its three metrics with `Math.random()` and so its
+    // contribution to the overall health score (and its pass/warn/fail
+    // verdict) was meaningless and actively misleading. If/when there is
+    // real request-rate / response-time / error-rate instrumentation, a new
+    // check can be registered here that reads those measurements.
 
-        return {
-          name: 'api-performance',
-          status: responseTime < 200 ? 'pass' : responseTime < 500 ? 'warn' : 'fail',
-          duration,
-          message: `API response time ${responseTime.toFixed(2)}ms`,
-          details: {
-            averageResponseTime: responseTime,
-            requestsPerMinute: Math.floor(Math.random() * 1000) + 100,
-            errorRate: Math.random() * 2 // 0-2% error rate
-          },
-          threshold: { warning: 200, critical: 500 }
-        }
-      } catch (error) {
-        return {
-          name: 'api-performance',
-          status: 'fail',
-          duration: Date.now() - start,
-          message: `API performance check failed: ${error}`,
-          details: { error: error instanceof Error ? error.message : 'Unknown error' }
-        }
-      }
-    })
-
-    // Feature flags check
+    // Feature flags check — reports on env-var configuration, not per-user
+    // gating. The previous version called `featureFlags.isEnabled(...)`,
+    // which goes through `hasAllowedRole()` and short-circuits to `false`
+    // whenever the manager has no `userContext` bound — which is always the
+    // case on the health endpoint. That made this check structurally
+    // guaranteed to return `warn` regardless of how the env vars were set.
+    // Reading the flag config directly via `getFlag()` tests what the check
+    // is actually trying to verify.
     this.registerHealthCheck('feature-flags', async () => {
       const start = Date.now()
       try {
         const systemStatus = featureFlags.getSystemStatus()
+        const ratingFlag = featureFlags.getFlag('RATING_SYSTEM_ENABLED')
+        const dashboardFlag = featureFlags.getFlag('RATING_DASHBOARD_ENABLED')
+        const mobileFlag = featureFlags.getFlag('MOBILE_RATINGS_ENABLED')
         const duration = Date.now() - start
 
-        const hasCriticalFlags = featureFlags.isEnabled('RATING_SYSTEM_ENABLED')
+        const ratingConfigured = ratingFlag?.enabled === true
 
         return {
           name: 'feature-flags',
-          status: hasCriticalFlags ? 'pass' : 'warn',
+          status: ratingConfigured ? 'pass' : 'warn',
           duration,
-          message: `Feature flags system ${hasCriticalFlags ? 'operational' : 'core features disabled'}`,
+          message: ratingConfigured
+            ? 'Feature flags configured (rating system enabled)'
+            : 'Feature flags reachable, but RATING_SYSTEM_ENABLED is not set to "true" — rating-system features will be disabled',
           details: {
             ...systemStatus,
-            criticalFlagsEnabled: {
-              ratingSystem: hasCriticalFlags,
-              dashboard: featureFlags.isEnabled('RATING_DASHBOARD_ENABLED'),
-              mobile: featureFlags.isEnabled('MOBILE_RATINGS_ENABLED')
-            }
-          }
+            // Per-flag configuration as read from env (not the per-user
+            // gating result, which depends on caller context).
+            criticalFlagsConfigured: {
+              ratingSystem: ratingFlag?.enabled === true,
+              dashboard: dashboardFlag?.enabled === true,
+              mobile: mobileFlag?.enabled === true,
+            },
+          },
         }
       } catch (error) {
         return {
