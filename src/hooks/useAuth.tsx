@@ -4,12 +4,24 @@ import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { User, Session } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { coordinatedRefreshSession } from "@/lib/supabase/refresh-mutex";
+import { withTimeout, isTimeoutError, SUPABASE_AUTH_OP_TIMEOUT_MS } from "@/lib/util/withTimeout";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Sentry from "@sentry/nextjs";
 import type { SeverityLevel } from "@sentry/types";
 
 // Session recovery: if session is lost unexpectedly, wait this long before giving up
 const SESSION_RECOVERY_TIMEOUT = 5000; // 5 seconds
+
+// Recovery cooldown — once an attempt completes (success or failure), block re-entry
+// for this long. Replaces the previous "one-shot for AuthProvider lifetime" guard so
+// transient network blips no longer require a full app restart to recover.
+// (cross-ref docs/CONNECTION_STABILITY_REMEDIATION_PLAN.md P0-8)
+const RECOVERY_COOLDOWN_MS = 30_000;
+
+// Sign-out timeout — if the SDK's signOut hangs (broken auth client), fall through
+// to the local cleanup path so the user always lands back at /auth.
+const SIGN_OUT_TIMEOUT_MS = 5_000;
 
 // localStorage key for persisting session presence indicator
 const HAD_SESSION_STORAGE_KEY = "cfmeu-had-session";
@@ -154,11 +166,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // Track if we've ever had a valid session (for recovery logic)
   const instanceIdRef = useRef(`auth-${Math.random().toString(36).slice(2, 10)}`);
   const hadSessionRef = useRef(false);
-  const recoveryAttemptedRef = useRef(false);
+  // True only while a recovery attempt is currently in flight — used to prevent
+  // multiple overlapping attempts. The persistent "did we already try?" gate is
+  // now `lastRecoveryAttemptAtRef` so transient failures don't wedge recovery
+  // permanently (replaces the previous one-shot semantics).
+  const recoveryInFlightRef = useRef(false);
+  const lastRecoveryAttemptAtRef = useRef(0);
   const sessionLossReportedRef = useRef(false);
   const isSubscribedRef = useRef(true);
   const sessionRef = useRef<Session | null>(null);
   const recoveryTimeoutRef = useRef<NodeJS.Timeout>();
+
+  const recoveryCooldownActive = useCallback(() => {
+    return Date.now() - lastRecoveryAttemptAtRef.current < RECOVERY_COOLDOWN_MS;
+  }, []);
 
 
   const logAuthEvent = useCallback(
@@ -213,7 +234,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         prevUserId: prevUserId?.slice(-6) ?? null,
         nextUserId: nextUserId?.slice(-6) ?? null,
         hadSessionRef: hadSessionRef.current,
-        recoveryAttempted: recoveryAttemptedRef.current,
+        recoveryInFlight: recoveryInFlightRef.current,
+        msSinceLastRecovery: lastRecoveryAttemptAtRef.current > 0 ? Date.now() - lastRecoveryAttemptAtRef.current : null,
         pathname: typeof window !== "undefined" ? window.location?.pathname : null,
       };
       
@@ -222,6 +244,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         logAuthEvent("SESSION LOSS DETECTED - applyAuthState transitioning to null", {
           ...transition,
           source: metadata?.source ?? "unknown",
+          recoveryInFlight: recoveryInFlightRef.current,
         }, "warning");
         if (agentDebugEnabled()) {
           // #region agent log - applyAuthState session loss
@@ -275,30 +298,50 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     [logAuthEvent]
   );
 
-  // Session recovery function - attempts to refresh when session is unexpectedly lost
+  // Session recovery function - attempts to refresh when session is unexpectedly lost.
+  // Gated by:
+  //   - `hadSessionRef` — we only try to recover sessions we know we had
+  //   - `recoveryInFlightRef` — prevents overlapping attempts within one cycle
+  //   - `lastRecoveryAttemptAtRef` cooldown — after a failed attempt, wait
+  //     RECOVERY_COOLDOWN_MS before re-entering, so transient blips don't
+  //     wedge recovery permanently (P0-8)
   const attemptSessionRecovery = useCallback(async () => {
-    if (recoveryAttemptedRef.current || !hadSessionRef.current) {
-      return null;
-    }
+    if (!hadSessionRef.current) return null;
+    if (recoveryInFlightRef.current) return null;
+    if (recoveryCooldownActive()) return null;
 
     const attemptStartedAt = Date.now();
-    recoveryAttemptedRef.current = true;
+    recoveryInFlightRef.current = true;
     logAuthEvent("Attempting session recovery", { source: "unexpected-loss" });
 
-    let outcome: "success" | "error" | "no_session" | "exception" = "no_session";
+    let outcome: "success" | "error" | "no_session" | "exception" | "timeout" = "no_session";
     let outcomeErrorMessage: string | null = null;
     let recoveredSession: Session | null = null;
 
     try {
       const supabase = getSupabaseBrowserClient();
 
-      // Try to refresh the session
-      const { data, error } = await supabase.auth.refreshSession();
+      // Route through the shared single-flight mutex so concurrent paths
+      // (visibility handler, middleware-triggered re-auth, this) all dedupe
+      // to a single in-flight refresh. Inherits SUPABASE_AUTH_OP_TIMEOUT_MS.
+      const { data, error } = await coordinatedRefreshSession(supabase);
 
       if (error) {
-        outcome = "error";
-        outcomeErrorMessage = error.message;
-        logAuthError("Session recovery failed", error, { stage: "refreshSession" });
+        if (isTimeoutError(error)) {
+          outcome = "timeout";
+          outcomeErrorMessage = error.message;
+          // Do NOT treat refresh-timeout as confirmed session loss. The underlying
+          // refresh may still complete; the next real 401 from the data plane is
+          // what should drive forced logout. (OA lesson 6)
+          logAuthEvent("Session recovery timed out — soft-fail, will retry after cooldown", {
+            stage: "refreshSession",
+            errorMessage: error.message,
+          }, "warning");
+        } else {
+          outcome = "error";
+          outcomeErrorMessage = error.message;
+          logAuthError("Session recovery failed", error, { stage: "refreshSession" });
+        }
       } else if (data.session) {
         outcome = "success";
         recoveredSession = data.session;
@@ -314,6 +357,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       outcomeErrorMessage = error instanceof Error ? error.message : String(error);
       logAuthError("Session recovery exception", error);
     } finally {
+      // Always record the attempt timestamp and release the in-flight guard so
+      // a future attempt can be made after the cooldown expires.
+      lastRecoveryAttemptAtRef.current = Date.now();
+      recoveryInFlightRef.current = false;
       if (agentDebugEnabled()) {
         // #region agent log - session recovery attempt
         fetch(AGENT_DEBUG_INGEST_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,location:"src/hooks/useAuth.tsx:attemptSessionRecovery",message:"session_recovery_attempt",data:{instanceId:instanceIdRef.current,pathname:typeof window!=="undefined"?window.location?.pathname:null,hadSessionRef:hadSessionRef.current,outcome,outcomeErrorMessage:outcomeErrorMessage?outcomeErrorMessage.slice(0,160):null,durationMs:Date.now()-attemptStartedAt,recoveredUserIdSuffix:userIdSuffix(recoveredSession?.user?.id),recoveredExpiresAt:recoveredSession?.expires_at??null},runId:AGENT_DEBUG_RUN_ID,hypothesisId:"H5",timestamp:Date.now()})}).catch(()=>{});
@@ -322,12 +369,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     return recoveredSession;
-  }, [logAuthError, logAuthEvent]);
+  }, [logAuthError, logAuthEvent, recoveryCooldownActive]);
 
   // Debounced recovery scheduler - prevents concurrent recovery attempts
   const scheduleRecovery = useCallback(() => {
-    if (recoveryAttemptedRef.current) return; // Already attempted
-    if (recoveryTimeoutRef.current) return; // Already scheduled
+    if (recoveryInFlightRef.current) return;     // Already running
+    if (recoveryCooldownActive()) return;        // In cooldown window
+    if (recoveryTimeoutRef.current) return;      // Already scheduled
 
     logAuthEvent("Scheduling debounced session recovery", { delay: 1000 });
 
@@ -335,7 +383,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       attemptSessionRecovery();
       recoveryTimeoutRef.current = undefined;
     }, 1000); // 1-second debounce to prevent race conditions
-  }, [attemptSessionRecovery, logAuthEvent]);
+  }, [attemptSessionRecovery, logAuthEvent, recoveryCooldownActive]);
 
   // Detect iOS PWA environment for diagnostic purposes
   const detectIosPwaContext = useCallback(() => getIosPwaContext(), []);
@@ -382,7 +430,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const persisted = checkPersistedHadSession();
     
     // If we had a session (persisted) but now we don't have one, and loading is done
-    if (persisted.hadSession && !session && !recoveryAttemptedRef.current) {
+    if (persisted.hadSession && !session && !recoveryInFlightRef.current && !recoveryCooldownActive()) {
       logAuthEvent("Session null on mount despite persisted hadSession - attempting recovery", {
         persistedUserId: persisted.userId,
       });
@@ -400,7 +448,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
       });
     }
-  }, [loading, session, attemptSessionRecovery, logAuthEvent]);
+  }, [loading, session, attemptSessionRecovery, logAuthEvent, recoveryCooldownActive]);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -414,9 +462,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const initializeSession = async () => {
       const start = typeof performance !== "undefined" ? performance.now() : Date.now();
       try {
-        const { data: { session: initialSession }, error } = await supabase.auth.getSession();
+        // Bounded — a hung auth client must not block app initialisation
+        // indefinitely. On timeout we treat as "no session yet" and let
+        // onAuthStateChange/INITIAL_SESSION drive subsequent state.
+        const { data: { session: initialSession }, error } = await withTimeout(
+          supabase.auth.getSession(),
+          SUPABASE_AUTH_OP_TIMEOUT_MS,
+          "auth.getSession (initial)"
+        );
         const duration = Math.round((typeof performance !== "undefined" ? performance.now() : Date.now()) - start);
-        
+
         if (error) {
           logAuthError("Error getting initial session", error, { duration });
         }
@@ -445,7 +500,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }
         }
       } catch (error) {
-        logAuthError("Exception getting initial session", error);
+        if (isTimeoutError(error)) {
+          logAuthEvent("Initial getSession timed out — proceeding without cached session", {
+            errorMessage: error instanceof Error ? error.message : String(error),
+          }, "warning");
+        } else {
+          logAuthError("Exception getting initial session", error);
+        }
         if (isSubscribedRef.current && !initialSessionSet) {
           initialSessionSet = true;
           setLoading(false);
@@ -476,7 +537,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         // Track if we've ever had a session (for recovery logic)
         if (newSession) {
           hadSessionRef.current = true;
-          recoveryAttemptedRef.current = false;
+          // Reset cooldown so future losses can immediately attempt recovery.
+          lastRecoveryAttemptAtRef.current = 0;
+          recoveryInFlightRef.current = false;
           sessionLossReportedRef.current = false;
 
           // Clear any pending recovery timeout since we now have a valid session
@@ -545,10 +608,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 });
               } catch {}
             }
-            // Try recovery if we haven't already
-            if (!recoveryAttemptedRef.current) {
-              scheduleRecovery();
-            }
+            // Try recovery (gated internally by cooldown / in-flight)
+            scheduleRecovery();
           }
         }
 
@@ -621,12 +682,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
 
       const supabase = getSupabaseBrowserClient();
-      
+
       try {
-        const { data: { session: currentSession }, error } = await supabase.auth.getSession();
-        
+        const { data: { session: currentSession }, error } = await withTimeout(
+          supabase.auth.getSession(),
+          SUPABASE_AUTH_OP_TIMEOUT_MS,
+          "auth.getSession (visibility)"
+        );
+
         if (error) {
-          logAuthEvent('Visibility check: error getting session', { 
+          logAuthEvent('Visibility check: error getting session', {
             errorMessage: error.message,
           }, 'warning');
         }
@@ -645,34 +710,42 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             timeUntilExpiry: expiresAt ? Math.round((expiresAt - now) / 1000) : null,
           });
           
-          // Refresh IMMEDIATELY - don't use debounced scheduleRecovery
-          // This prevents race conditions where React Query runs before session is refreshed
-          const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
-          
+          // Route through the shared mutex so this refresh can't race the
+          // middleware-triggered refresh or the recovery path. The mutex
+          // inherits the auth-op timeout, so this call is bounded.
+          const { data: refreshData, error: refreshError } = await coordinatedRefreshSession(supabase);
+
+          // Record attempt time regardless of outcome so the cooldown applies.
+          lastRecoveryAttemptAtRef.current = Date.now();
+
           if (refreshError) {
-            logAuthEvent('Visibility check: session refresh failed', {
-              errorMessage: refreshError.message,
-            }, 'warning');
-            
-            // If refresh fails and we previously had a session, this is a real session loss
-            if (!recoveryAttemptedRef.current) {
-              recoveryAttemptedRef.current = true;
+            if (isTimeoutError(refreshError)) {
+              // Soft-fail on timeout — the underlying refresh may still settle.
+              // Do NOT mark the session as lost; let the next 401 from the data
+              // plane drive any forced logout. (OA lesson 6)
+              logAuthEvent('Visibility check: refresh timed out — soft-fail, retry after cooldown', {
+                errorMessage: refreshError.message,
+              }, 'warning');
+            } else {
+              logAuthEvent('Visibility check: session refresh failed', {
+                errorMessage: refreshError.message,
+              }, 'warning');
               sessionLossReportedRef.current = true;
               logAuthEvent('Visibility check: marking session as lost after refresh failure', {}, 'warning');
             }
           } else if (refreshData.session) {
             logAuthEvent('Visibility check: session refreshed successfully', {
               userId: refreshData.session.user?.id,
-              newExpiresAt: refreshData.session.expires_at 
-                ? new Date(refreshData.session.expires_at * 1000).toISOString() 
+              newExpiresAt: refreshData.session.expires_at
+                ? new Date(refreshData.session.expires_at * 1000).toISOString()
                 : null,
             });
-            
+
             // Apply the refreshed session immediately
             applyAuthState(refreshData.session, { source: 'visibility_refresh' });
-            
-            // Reset recovery flags since we successfully recovered
-            recoveryAttemptedRef.current = false;
+
+            // Reset cooldown since we successfully recovered
+            lastRecoveryAttemptAtRef.current = 0;
             sessionLossReportedRef.current = false;
           }
         } else if (currentSession && !sessionRef.current) {
@@ -692,7 +765,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }
         }
       } catch (err) {
-        logAuthError('Visibility check exception', err);
+        if (isTimeoutError(err)) {
+          // Bounded auth-op timed out. Per OA lesson 6 we must not escalate
+          // to forced logout — the in-flight refresh may still complete and
+          // any genuine invalidity will surface as a 401 on the next query.
+          logAuthEvent('Visibility check timeout — soft-fail', {
+            errorMessage: err instanceof Error ? err.message : String(err),
+          }, 'warning');
+        } else {
+          logAuthError('Visibility check exception', err);
+        }
       }
     };
 
@@ -706,7 +788,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signOut = async () => {
     const supabase = getSupabaseBrowserClient();
     hadSessionRef.current = false; // Reset on explicit sign out
-    recoveryAttemptedRef.current = false; // Reset recovery attempt flag
+    recoveryInFlightRef.current = false;
+    lastRecoveryAttemptAtRef.current = 0;
 
     // Clear persisted hadSession from localStorage
     clearPersistedHadSession();
@@ -718,7 +801,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     logAuthEvent("Manual sign out requested", { userId: sessionRef.current?.user?.id ?? null });
-    await supabase.auth.signOut();
+
+    // Bounded — if the SDK's signOut hangs (broken auth client), fall through
+    // to local cleanup so the user always lands back at /auth. Cookies will
+    // be cleared by the auth client when it eventually settles; in the worst
+    // case the user can use the Force Logout / hardReset path.
+    try {
+      await withTimeout(supabase.auth.signOut(), SIGN_OUT_TIMEOUT_MS, "auth.signOut");
+    } catch (err) {
+      if (isTimeoutError(err)) {
+        logAuthEvent("signOut timed out — completing local cleanup anyway", {
+          timeoutMs: SIGN_OUT_TIMEOUT_MS,
+        }, "warning");
+      } else {
+        logAuthError("signOut failed — completing local cleanup anyway", err);
+      }
+    }
+
     applyAuthState(null, { source: "signout" });
     router.replace('/auth');
   };

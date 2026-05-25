@@ -109,6 +109,10 @@ const SpatialAssignmentTool = lazyWithErrorLogging(
   () => import("@/components/admin/SpatialAssignmentTool"),
   "SpatialAssignmentTool"
 )
+const PatchAssignmentIssues = lazyWithErrorLogging(
+  () => import("@/components/admin/PatchAssignmentIssues"),
+  "PatchAssignmentIssues"
+)
 const AddressLookupDialog = lazyWithErrorLogging(
   () => import("@/components/AddressLookupDialog"),
   "AddressLookupDialog"
@@ -577,6 +581,22 @@ export default function AdminPage() {
                   </Collapsible>
                 )}
 
+                {isAdmin && (
+                  <Collapsible>
+                    <CollapsibleTrigger asChild>
+                      <Button variant="outline" className="w-full justify-between">
+                        Patch Assignment Issues
+                        <ChevronDown className="h-4 w-4" />
+                      </Button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="mt-3">
+                        <PatchAssignmentIssues />
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                )}
+
                 <Collapsible>
                   <CollapsibleTrigger asChild>
                     <Button variant="outline" className="w-full justify-between">
@@ -858,6 +878,12 @@ export default function AdminPage() {
                 <div>
                   <h3 className="text-lg font-semibold mb-4">Spatial Assignment</h3>
                   <SpatialAssignmentTool />
+                </div>
+              )}
+              {isAdmin && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">Patch Assignment Issues</h3>
+                  <PatchAssignmentIssues />
                 </div>
               )}
               <div>

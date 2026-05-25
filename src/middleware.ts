@@ -1,6 +1,12 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { trackConnection, releaseConnection, recordConnectionError, getConnectionStats } from '@/lib/db-connection-monitor'
+import { coordinatedRefreshSession } from '@/lib/supabase/refresh-mutex'
+import { withTimeout, isTimeoutError, SUPABASE_AUTH_OP_TIMEOUT_MS } from '@/lib/util/withTimeout'
+
+// Middleware runs per request on the edge — keep auth ops snappier than the
+// browser budget so a stalled Supabase backend can't blow the function timeout.
+const MIDDLEWARE_AUTH_TIMEOUT_MS = 8_000
 
 export async function middleware(req: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -131,7 +137,11 @@ export async function middleware(req: NextRequest) {
   if (hasAuthCode) {
     try {
       // Call getSession first to trigger code exchange
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      const { data: { session }, error: sessionError } = await withTimeout(
+        supabase.auth.getSession(),
+        MIDDLEWARE_AUTH_TIMEOUT_MS,
+        'middleware auth.getSession (PKCE)'
+      )
       if (sessionError) {
         logMiddleware('error', 'Session error during PKCE exchange', {
           error: sessionError,
@@ -143,17 +153,41 @@ export async function middleware(req: NextRequest) {
         });
       }
     } catch (err) {
-      logMiddleware('error', 'Exception during PKCE exchange', {
-        error: err instanceof Error ? err.message : String(err),
-      });
+      if (isTimeoutError(err)) {
+        logMiddleware('warn', 'PKCE getSession timed out — falling through to next checks', {
+          timeoutMs: MIDDLEWARE_AUTH_TIMEOUT_MS,
+        });
+      } else {
+        logMiddleware('error', 'Exception during PKCE exchange', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
   }
 
   // Get user after potential code exchange
-  let {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
+  let user: Awaited<ReturnType<typeof supabase.auth.getUser>>['data']['user'] = null
+  let authError: Awaited<ReturnType<typeof supabase.auth.getUser>>['error'] = null
+  try {
+    const result = await withTimeout(
+      supabase.auth.getUser(),
+      MIDDLEWARE_AUTH_TIMEOUT_MS,
+      'middleware auth.getUser'
+    )
+    user = result.data.user
+    authError = result.error
+  } catch (err) {
+    if (isTimeoutError(err)) {
+      // Treat timeout as "auth check inconclusive" — pass-through. Downstream
+      // pages will perform their own auth checks; forced logout here would
+      // be a worse outcome than letting the page render with stale cookies.
+      logMiddleware('warn', 'Initial auth.getUser timed out — treating as unauthenticated for this request', {
+        timeoutMs: MIDDLEWARE_AUTH_TIMEOUT_MS,
+      })
+    } else {
+      throw err
+    }
+  }
   let authDuration = Date.now() - authStartTime;
 
   // Check for Supabase auth cookies to help diagnose session issues
@@ -193,22 +227,32 @@ export async function middleware(req: NextRequest) {
         isIOS,
         isMobileSafari,
       });
-      // Try to refresh the session - this can recover from stale JWT tokens
+      // Try to refresh the session - this can recover from stale JWT tokens.
+      // Routed through coordinatedRefreshSession (single-flight + bounded timeout)
+      // so this can't race a concurrent browser-side refresh of the same token.
       logMiddleware('log', 'Attempting session refresh due to auth error with existing cookies');
       try {
         const refreshStartTime = Date.now();
-        const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+        const { data: refreshData, error: refreshError } = await coordinatedRefreshSession(supabase, {
+          timeoutMs: MIDDLEWARE_AUTH_TIMEOUT_MS,
+          label: 'middleware auth.refreshSession (auth-error)',
+        });
         const refreshDuration = Date.now() - refreshStartTime;
-        
+
         if (refreshError) {
           recordConnectionError('middleware', refreshError, 'auth.refreshSession()')
           logMiddleware('warn', 'Session refresh failed', {
             errorMessage: refreshError.message,
             refreshDuration,
+            isTimeout: isTimeoutError(refreshError),
           });
         } else if (refreshData.session) {
           // Session refreshed successfully, get user again
-          const { data: userData, error: userError } = await supabase.auth.getUser();
+          const { data: userData, error: userError } = await withTimeout(
+            supabase.auth.getUser(),
+            MIDDLEWARE_AUTH_TIMEOUT_MS,
+            'middleware auth.getUser (post-refresh)'
+          );
           if (!userError && userData.user) {
             user = userData.user;
             authError = null;
@@ -221,9 +265,15 @@ export async function middleware(req: NextRequest) {
           }
         }
       } catch (refreshException) {
-        logMiddleware('error', 'Exception during session refresh', {
-          error: refreshException instanceof Error ? refreshException.message : String(refreshException),
-        });
+        if (isTimeoutError(refreshException)) {
+          logMiddleware('warn', 'Session refresh timed out — passing through unauthenticated', {
+            timeoutMs: MIDDLEWARE_AUTH_TIMEOUT_MS,
+          });
+        } else {
+          logMiddleware('error', 'Exception during session refresh', {
+            error: refreshException instanceof Error ? refreshException.message : String(refreshException),
+          });
+        }
       }
     }
     // If no cookies, this is just an unauthenticated request (bot, preview check, etc.)
@@ -238,17 +288,25 @@ export async function middleware(req: NextRequest) {
     });
     try {
       const refreshStartTime = Date.now();
-      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+      const { data: refreshData, error: refreshError } = await coordinatedRefreshSession(supabase, {
+        timeoutMs: MIDDLEWARE_AUTH_TIMEOUT_MS,
+        label: 'middleware auth.refreshSession (no-user)',
+      });
       const refreshDuration = Date.now() - refreshStartTime;
-      
+
       if (refreshError) {
         logMiddleware('warn', 'Session refresh failed (no user)', {
           errorMessage: refreshError.message,
           refreshDuration,
+          isTimeout: isTimeoutError(refreshError),
         });
       } else if (refreshData.session) {
         // Session refreshed, get user
-        const { data: userData, error: userError } = await supabase.auth.getUser();
+        const { data: userData, error: userError } = await withTimeout(
+          supabase.auth.getUser(),
+          MIDDLEWARE_AUTH_TIMEOUT_MS,
+          'middleware auth.getUser (post-refresh-no-user)'
+        );
         if (!userError && userData.user) {
           user = userData.user;
           authDuration = Date.now() - authStartTime;
@@ -260,9 +318,15 @@ export async function middleware(req: NextRequest) {
         }
       }
     } catch (refreshException) {
-      logMiddleware('error', 'Exception during session refresh (no user)', {
-        error: refreshException instanceof Error ? refreshException.message : String(refreshException),
-      });
+      if (isTimeoutError(refreshException)) {
+        logMiddleware('warn', 'Session refresh (no-user) timed out — passing through unauthenticated', {
+          timeoutMs: MIDDLEWARE_AUTH_TIMEOUT_MS,
+        });
+      } else {
+        logMiddleware('error', 'Exception during session refresh (no user)', {
+          error: refreshException instanceof Error ? refreshException.message : String(refreshException),
+        });
+      }
     }
   } else if (authDuration > 200 || hasAuthCode) {
     // Log slow auth checks and all PKCE exchanges for debugging

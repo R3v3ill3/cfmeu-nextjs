@@ -30,6 +30,10 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# Cursor / agent debug ingest output — local-only diagnostic JSONL
+.cursor/debug.log
+.cursor/*.log
+
 # env files (can opt-in for committing if needed)
 .env*
 

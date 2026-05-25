@@ -80,13 +80,32 @@ const nextConfig = {
           },
         ],
       },
+      // /api/* Cache-Control — split by sensitivity (cross-ref P1-3).
+      //
+      // The previous blanket `public, max-age=60, swr=300` applied to every
+      // API route, including auth-bound and mutation routes. Edge caches
+      // could serve user-A's response to user-B, and forced re-fetches stayed
+      // stale for up to 5 min. Split rules:
+      //
+      //  - explicit smoke / health routes: keep public 60s
+      //  - auth-bound or admin/data routes: no-store, must-revalidate
+      //  - everything else: private 0 (browser cache only, never edge)
       {
-        source: '/api/(.*)',
+        source: '/api/:path((?:ping|health|health/.*))',
         headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=60, stale-while-revalidate=300',
-          },
+          { key: 'Cache-Control', value: 'public, max-age=60, stale-while-revalidate=300' },
+        ],
+      },
+      {
+        source: '/api/:path((?:admin|admin/.*|user|user/.*|employers|employers/.*|ratings|ratings/.*|projects|projects/.*|workers|workers/.*|assessments|assessments/.*|bci|bci/.*|fwc-search|incolink|incolink/.*|help|help/.*|debug|debug/.*))',
+        headers: [
+          { key: 'Cache-Control', value: 'no-store, must-revalidate' },
+        ],
+      },
+      {
+        source: '/api/:path(.*)',
+        headers: [
+          { key: 'Cache-Control', value: 'private, max-age=0, must-revalidate' },
         ],
       },
       {

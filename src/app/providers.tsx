@@ -195,7 +195,10 @@ export default function Providers({ children }: ProvidersProps) {
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
       queries: {
-        staleTime: 30000, // 30 seconds for regular data
+        // 60s default. Was 30s for debugging — too aggressive for production
+        // (causes excessive refetches on tab focus/visibility cycles). Pages
+        // with truly volatile data should override via `useQuery({ staleTime })`.
+        staleTime: 60_000,
         refetchOnWindowFocus: false, // Prevent unnecessary refetches
         retry: 1, // Retry failed queries once
         retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
@@ -350,6 +353,64 @@ export default function Providers({ children }: ProvidersProps) {
     }
   }, [])
   // #endregion
+
+  // P1-1: iOS PWA deferred-reload flush.
+  //
+  // Background: the service-worker controllerchange handler below sets
+  // `sw-update-available` in sessionStorage on iOS PWA instead of immediately
+  // reloading (to avoid destroying the React tree mid-session). The previous
+  // code never consumed that flag, so iOS PWA users stayed on stale code
+  // until they manually force-quit and reopened the PWA.
+  //
+  // Strategy: when the tab becomes visible after being hidden — i.e. the
+  // user backgrounded the PWA and came back — that's the safe moment to
+  // reload. They aren't mid-flow, so a reload won't destroy live state, and
+  // they get the new bundle on their next interaction.
+  //
+  // Pageshow with `event.persisted === true` (bfcache restore) is the
+  // strongest signal on iOS Safari, so we listen for that too.
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return
+
+    const flushDeferredReloadIfReady = (reason: string) => {
+      try {
+        const updateVersion = sessionStorage.getItem('sw-update-available')
+        if (!updateVersion) return
+        // Clear the flag immediately so we don't re-trigger on the next event.
+        sessionStorage.removeItem('sw-update-available')
+        Sentry.addBreadcrumb({
+          category: 'pwa',
+          level: 'info',
+          message: 'Flushing deferred SW reload',
+          data: { reason, updateVersion, pathname: window.location?.pathname },
+        })
+        window.location.reload()
+      } catch {
+        // sessionStorage can throw in private modes; harmless to ignore.
+      }
+    }
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        flushDeferredReloadIfReady('visibilitychange')
+      }
+    }
+
+    const handlePageShow = (event: PageTransitionEvent) => {
+      // `persisted` means restored from bfcache — equivalent to "tab came back".
+      if (event.persisted) {
+        flushDeferredReloadIfReady('pageshow.persisted')
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibility)
+    window.addEventListener('pageshow', handlePageShow)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility)
+      window.removeEventListener('pageshow', handlePageShow)
+    }
+  }, [])
 
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {

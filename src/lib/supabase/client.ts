@@ -1,6 +1,7 @@
 'use client'
 
 import { createBrowserClient } from '@supabase/ssr'
+import { processLock } from '@supabase/supabase-js'
 import * as Sentry from '@sentry/nextjs'
 import type { Database } from '@/types/database'
 import { connectionMonitor, trackConnection, releaseConnection, recordConnectionError } from '@/lib/db-connection-monitor'
@@ -86,7 +87,28 @@ export function getSupabaseBrowserClient(): ReturnType<typeof createBrowserClien
     urlPrefix: url.substring(0, 30),
   })
 
-  browserClient = createBrowserClient<Database>(url, key)
+  // Auth configuration rationale (cross-ref docs/CONNECTION_STABILITY_REMEDIATION_PLAN.md P0-2 + P1-7):
+  //
+  //  - `lock: processLock`
+  //    The default `navigatorLock` uses cross-tab Web Locks. A second tab can
+  //    STEAL the lock from the first while a refresh is in flight, aborting
+  //    `getSession`/`getUser`/`refreshSession` on tab 1 and corrupting auth
+  //    state. `processLock` is an in-tab mutex — cross-tab serialisation is
+  //    forfeited, but refresh tokens are single-use server-side anyway and
+  //    `BroadcastChannel` still propagates SIGNED_IN/SIGNED_OUT across tabs.
+  //
+  //  - `autoRefreshToken: false`
+  //    Middleware (`src/middleware.ts`) and the visibility handler in
+  //    `useAuth.tsx` already refresh sessions through `coordinatedRefreshSession`.
+  //    Leaving the SDK's auto-refresher enabled adds a fourth uncoordinated
+  //    refresh path that can collide with those three and rotate the refresh
+  //    token twice → "Invalid Refresh Token: Already Used".
+  browserClient = createBrowserClient<Database>(url, key, {
+    auth: {
+      lock: processLock,
+      autoRefreshToken: false,
+    },
+  })
 
   // Track connection for monitoring
   const connectionId = trackConnection('browser-client')

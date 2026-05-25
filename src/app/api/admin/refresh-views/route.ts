@@ -1,11 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
+import { createAdminClient, isCronAuthorized } from '@/lib/supabase/admin-client';
 
 export const dynamic = 'force-dynamic'
 
 /**
- * Admin endpoint for manually triggering materialized view refresh
- * This can be called by cron jobs, webhooks, or manual administration
+ * Admin endpoint for manually triggering materialized view refresh.
+ *
+ * Auth model (cross-ref docs/CONNECTION_STABILITY_REMEDIATION_PLAN.md P0-6):
+ *
+ *  1. Vercel cron path — Vercel automatically attaches
+ *     `Authorization: Bearer <CRON_SECRET>` when `CRON_SECRET` is set in the
+ *     project env. If that header matches, we use the service-role client
+ *     (cron has no user session, so `getUser()` would return null and the
+ *     refresh RPCs would no-op or partially refresh under RLS).
+ *
+ *  2. Manual admin trigger path — falls back to the cookie-based session
+ *     check, then verifies the profile role is admin/lead_organiser. Uses the
+ *     anon+cookies client (RLS-protected) for the auth check, then a
+ *     service-role client for the actual refresh so RPCs see the full schema.
  */
 
 export interface RefreshViewsRequest {
@@ -26,44 +39,52 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now();
 
   try {
-    const supabase = await createServerSupabase();
+    let triggeredBy: 'cron' | 'manual'
+    let supabase: Awaited<ReturnType<typeof createServerSupabase>> | ReturnType<typeof createAdminClient>
 
-    // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (isCronAuthorized(request)) {
+      triggeredBy = 'cron'
+      supabase = createAdminClient()
+    } else {
+      // Manual path — validate the cookie-based user session and role.
+      const sessionClient = await createServerSupabase();
+      const { data: { user }, error: authError } = await sessionClient.auth.getUser();
 
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+      if (authError || !user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
 
-    // Check if user has admin or lead_organiser role
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single();
+      const { data: profile } = await sessionClient
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
 
-    if (!profile || !['admin', 'lead_organiser'].includes(profile.role)) {
-      return NextResponse.json(
-        { error: 'Unauthorized - admin access required' },
-        { status: 403 }
-      );
+      if (!profile || !['admin', 'lead_organiser'].includes(profile.role)) {
+        return NextResponse.json(
+          { error: 'Unauthorized - admin access required' },
+          { status: 403 }
+        );
+      }
+
+      triggeredBy = 'manual'
+      // Use service-role for the actual refresh so RPCs see the full schema
+      // regardless of the calling user's RLS scope.
+      supabase = createAdminClient()
     }
 
     const body = await request.json().catch(() => ({}));
     const scope = body.scope || 'all';
     const force = body.force || false;
 
-    console.log(`🔄 Admin refresh triggered: scope=${scope}, force=${force}`);
+    console.log(`🔄 Admin refresh triggered: scope=${scope}, force=${force}, by=${triggeredBy}`);
     const refreshedViews: string[] = [];
 
     // Check staleness first (unless forced)
     if (!force) {
       const { data: staleness } = await supabase.rpc('check_materialized_view_staleness');
       const staleViews = (staleness || []).filter((v: any) => v.needs_refresh);
-      
+
       if (staleViews.length === 0) {
         return NextResponse.json({
           success: true,
@@ -71,6 +92,7 @@ export async function POST(request: NextRequest) {
           scope,
           refreshedViews: [],
           message: 'No views needed refresh (all current)',
+          triggeredBy,
           timestamp: new Date().toISOString()
         });
       }
@@ -145,13 +167,33 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET endpoint for checking view staleness without refreshing
-export async function GET() {
+// GET endpoint for checking view staleness without refreshing.
+// Accepts either Vercel cron (CRON_SECRET) or an authenticated admin/lead session.
+export async function GET(request: NextRequest) {
   try {
-    const supabase = await createServerSupabase();
-    
+    let supabase: Awaited<ReturnType<typeof createServerSupabase>> | ReturnType<typeof createAdminClient>
+
+    if (isCronAuthorized(request)) {
+      supabase = createAdminClient()
+    } else {
+      const sessionClient = await createServerSupabase();
+      const { data: { user }, error: authError } = await sessionClient.auth.getUser();
+      if (authError || !user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+      const { data: profile } = await sessionClient
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+      if (!profile || !['admin', 'lead_organiser'].includes(profile.role)) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+      supabase = createAdminClient()
+    }
+
     const { data: staleness, error } = await supabase.rpc('check_materialized_view_staleness');
-    
+
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }

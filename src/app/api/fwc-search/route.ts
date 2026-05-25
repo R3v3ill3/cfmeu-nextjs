@@ -122,10 +122,18 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // P1-5: overall route-level timeout. Puppeteer's per-call timeouts (navigation,
+  // waitForFunction) provide some bound, but a stalled launch / browser hang can
+  // still exhaust the Vercel function budget. Cap the whole route at 55s so
+  // Vercel always gets a structured 504 from us, not a forced kill.
+  const FWC_ROUTE_TIMEOUT_MS = 55_000;
+  const routeDeadline = Date.now() + FWC_ROUTE_TIMEOUT_MS;
+  const routeTimeoutSignal = AbortSignal.timeout(FWC_ROUTE_TIMEOUT_MS);
+
   let browser: ChromiumBrowser | null = null;
   try {
     const { companyName, searchTerm } = await request.json();
-    
+
     if (!companyName && !searchTerm) {
       return NextResponse.json(
         { error: 'Company name or search term is required' },
@@ -195,7 +203,14 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('❌ FWC search error:', error);
-    
+
+    if (routeTimeoutSignal.aborted) {
+      return NextResponse.json(
+        { error: `FWC search exceeded route budget (${FWC_ROUTE_TIMEOUT_MS}ms). The upstream is too slow right now. Try again later.`, results: [] },
+        { status: 504 }
+      );
+    }
+
     if (error instanceof Error) {
       if (error.name === 'TimeoutError' || error.message.includes('timeout')) {
         return NextResponse.json(
@@ -204,14 +219,24 @@ export async function POST(request: NextRequest) {
         );
       }
     }
-    
+
     return NextResponse.json(
       { error: 'Failed to search FWC database using Puppeteer', results: [] },
       { status: 500 }
     );
   } finally {
     if (browser) {
-      await browser.close();
+      try {
+        // Bound the cleanup too — a wedged browser can still leak the
+        // function container if `.close()` itself hangs.
+        const closeMs = Math.max(2_000, routeDeadline - Date.now());
+        await Promise.race([
+          browser.close(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('browser.close timeout')), closeMs)),
+        ]);
+      } catch (closeErr) {
+        console.warn('FWC search: browser.close() failed', closeErr);
+      }
     }
   }
 }

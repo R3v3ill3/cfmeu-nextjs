@@ -2505,6 +2505,8 @@ export type Database = {
           longitude: number | null
           main_builder_id: string | null
           name: string
+          overlap_patch_ids: string[] | null
+          patch_assignment_status: string
           patch_id: string | null
           project_id: string | null
           project_type: string | null
@@ -2522,6 +2524,8 @@ export type Database = {
           longitude?: number | null
           main_builder_id?: string | null
           name: string
+          overlap_patch_ids?: string[] | null
+          patch_assignment_status?: string
           patch_id?: string | null
           project_id?: string | null
           project_type?: string | null
@@ -2539,6 +2543,8 @@ export type Database = {
           longitude?: number | null
           main_builder_id?: string | null
           name?: string
+          overlap_patch_ids?: string[] | null
+          patch_assignment_status?: string
           patch_id?: string | null
           project_id?: string | null
           project_type?: string | null

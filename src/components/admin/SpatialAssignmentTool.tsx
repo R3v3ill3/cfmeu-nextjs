@@ -145,9 +145,16 @@ export default function SpatialAssignmentTool() {
           if (patches && patches.length > 0) {
             const targetPatchId = patches[0].id as string
             // Assign this specific site (not all sites of the project)
+            // Mark as 'clean' if single match, 'overlap' if multiple matches
+            const assignmentStatus = patches.length > 1 ? 'overlap' : 'clean';
+            const overlapIds = patches.length > 1 ? patches.map((p: any) => p.id) : null;
             const { error: updateError } = await supabase
               .from('job_sites')
-              .update({ patch_id: targetPatchId })
+              .update({
+                patch_id: targetPatchId,
+                patch_assignment_status: assignmentStatus,
+                overlap_patch_ids: overlapIds,
+              })
               .eq('id', project.site_id)
               .is('patch_id', null);
 

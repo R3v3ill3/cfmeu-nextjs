@@ -4,9 +4,17 @@ import { createServerSupabase } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY!,
-})
+// Lazy factory — avoid constructing the Anthropic client at module load.
+// Module-top construction runs during cold-start AND during Next.js build,
+// even for routes that aren't being invoked. It also makes per-request
+// instrumentation (Sentry tags, request-id) harder. Construct on demand.
+let _anthropic: Anthropic | null = null
+function getAnthropic(): Anthropic {
+  if (!_anthropic) {
+    _anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
+  }
+  return _anthropic
+}
 
 interface HelpContext {
   page: string
@@ -204,19 +212,26 @@ Remember: Only answer based on the documentation above. If you're not sure, say 
       },
     ]
 
-    // 11. Call Claude API with timeout
-    const claudeResponse = await Promise.race([
-      anthropic.messages.create({
-        model: "claude-sonnet-4-5-20250929",
-        max_tokens: 800, // Reduced from 1024 for faster responses
-        temperature: 0.1, // Low temperature for factual, consistent responses
-        system: systemPrompt,
-        messages: messages,
-      }),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Claude API timeout after 30s')), 30000)
-      )
-    ]) as Anthropic.Message
+    // 11. Call Claude API with an AbortController-backed timeout.
+    // 55s ceiling keeps the overall route under Vercel's 60s function limit,
+    // leaving headroom for logging + response serialisation.
+    const claudeController = new AbortController()
+    const claudeTimeout = setTimeout(() => claudeController.abort(), 55_000)
+    let claudeResponse: Anthropic.Message
+    try {
+      claudeResponse = await getAnthropic().messages.create(
+        {
+          model: "claude-sonnet-4-5-20250929",
+          max_tokens: 800, // Reduced from 1024 for faster responses
+          temperature: 0.1, // Low temperature for factual, consistent responses
+          system: systemPrompt,
+          messages: messages,
+        },
+        { signal: claudeController.signal }
+      ) as Anthropic.Message
+    } finally {
+      clearTimeout(claudeTimeout)
+    }
 
     const answer = claudeResponse.content[0].type === 'text' 
       ? claudeResponse.content[0].text 

@@ -1,6 +1,40 @@
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 
+// P1-2: simple module-scope circuit breaker for the dashboard worker.
+// After WORKER_FAILURE_THRESHOLD consecutive failures the worker is skipped
+// for WORKER_OPEN_CIRCUIT_MS, falling straight through to the Next.js API
+// route. The breaker auto-closes after the cooldown so a recovering worker
+// is retried automatically.
+const WORKER_FETCH_TIMEOUT_MS = 8_000
+const WORKER_FAILURE_THRESHOLD = 3
+const WORKER_OPEN_CIRCUIT_MS = 5 * 60_000
+let workerFailureCount = 0
+let workerCircuitOpenedAt = 0
+
+function isWorkerCircuitOpen(): boolean {
+  if (workerCircuitOpenedAt === 0) return false
+  if (Date.now() - workerCircuitOpenedAt > WORKER_OPEN_CIRCUIT_MS) {
+    // Cooldown elapsed — reset and let the next call probe the worker.
+    workerCircuitOpenedAt = 0
+    workerFailureCount = 0
+    return false
+  }
+  return true
+}
+
+function recordWorkerFailure(): void {
+  workerFailureCount += 1
+  if (workerFailureCount >= WORKER_FAILURE_THRESHOLD && workerCircuitOpenedAt === 0) {
+    workerCircuitOpenedAt = Date.now()
+  }
+}
+
+function recordWorkerSuccess(): void {
+  workerFailureCount = 0
+  workerCircuitOpenedAt = 0
+}
+
 // Types matching the API endpoint
 export interface EmployersParams {
   page: number;
@@ -199,6 +233,12 @@ export function useEmployersServerSide(params: EmployersParams) {
         return fetchApp('Worker not configured');
       }
 
+      // Circuit breaker: if the worker has been failing repeatedly, skip it
+      // and go straight to the app route until the cooldown expires.
+      if (isWorkerCircuitOpen()) {
+        return fetchApp('Worker circuit open (recent failures)');
+      }
+
       // Get current token - session may have become available since query was enabled
       const token = session?.access_token;
       if (!token) {
@@ -211,24 +251,42 @@ export function useEmployersServerSide(params: EmployersParams) {
 
       const workerEndpoint = `${workerUrl.replace(/\/$/, '')}/v1/employers${urlPath}`;
 
+      // Bounded — Railway cold-starts can be slow but the user shouldn't wait
+      // longer than ~8s before we fall back to the in-app Supabase path.
+      const workerAbort = new AbortController();
+      const workerAbortTimer = setTimeout(() => workerAbort.abort(), WORKER_FETCH_TIMEOUT_MS);
+
       try {
-        const response = await fetch(workerEndpoint, { method: 'GET', headers: workerHeaders });
+        const response = await fetch(workerEndpoint, {
+          method: 'GET',
+          headers: workerHeaders,
+          signal: workerAbort.signal,
+        });
 
         if (!response.ok) {
           const errorText = await response.text();
           const status = response.status;
           // Fall back to app route for server errors or auth issues
           if (status >= 500 || status === 429 || status === 401 || status === 403) {
+            recordWorkerFailure();
             return fetchApp(`Worker responded with ${status}`);
           }
           throw new Error(`Failed to fetch employers: ${status} ${errorText}`);
         }
 
         const data = await response.json();
+        recordWorkerSuccess();
         return enrichDebug(data, 'worker');
       } catch (error) {
-        // Network errors - fall back to app route
-        return fetchApp(`Worker request failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        recordWorkerFailure();
+        const isAbort =
+          error instanceof DOMException && error.name === 'AbortError'
+        const reason = isAbort
+          ? `Worker timed out after ${WORKER_FETCH_TIMEOUT_MS}ms`
+          : `Worker request failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+        return fetchApp(reason);
+      } finally {
+        clearTimeout(workerAbortTimer);
       }
     },
     

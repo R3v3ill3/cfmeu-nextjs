@@ -332,7 +332,7 @@ export function EditProjectDialog({
           try {
             const { data: jobSiteWithPatch, error: patchCheckErr } = await supabase
               .from("job_sites")
-              .select("patch_id, patches:patch_id(name)")
+              .select("patch_id, patch_assignment_status, patches:patch_id(name)")
               .eq("id", updatedJobSiteId)
               .single();
 
@@ -341,8 +341,20 @@ export function EditProjectDialog({
                 ? jobSiteWithPatch.patches[0] 
                 : jobSiteWithPatch.patches;
               
-              if (patchData?.name) {
-                // Patch was automatically assigned!
+              const assignStatus = (jobSiteWithPatch as any).patch_assignment_status;
+
+              if (assignStatus === 'overlap') {
+                toast.warning(`Assigned to patch: ${patchData?.name || 'Unknown'}`, {
+                  description: "This location falls in overlapping patch boundaries. An admin may need to confirm the correct patch.",
+                  duration: 6000,
+                });
+              } else if (assignStatus === 'fallback' || assignStatus === 'gap') {
+                toast.warning(`No matching patch found for this location`, {
+                  description: "Assigned to fallback patch. An admin may need to manually assign the correct patch.",
+                  duration: 6000,
+                });
+              } else if (patchData?.name) {
+                // Clean assignment
                 toast.success(`Automatically assigned to patch: ${patchData.name}`, {
                   description: "Based on project location coordinates",
                   duration: 4000,

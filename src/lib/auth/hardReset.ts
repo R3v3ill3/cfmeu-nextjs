@@ -46,6 +46,9 @@ export async function performHardReset(): Promise<void> {
       'admin-patch-context',
       'eba-employers-display-mode',
       'eba-employers-analytics-mode',
+      // P2-1: clear the persisted hadSession indicator so the next mount of
+      // useAuth does NOT attempt a recovery for the session we just nuked.
+      'cfmeu-had-session',
     ]
     appKeys.forEach(key => {
       if (localStorage.getItem(key)) {
