@@ -98,21 +98,14 @@ interface EmployerRating4PointResponse {
 }
 
 export async function GET(request: NextRequest, { params }: { params: { employerId: string } }) {
-  // #region agent log
-  const DEBUG_ENDPOINT = 'http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2';
   const debugLog = (location: string, message: string, data: any, hypothesisId: string) => {
-    // Log to Sentry breadcrumbs in production and local debug endpoint in dev
     Sentry.addBreadcrumb({ category: 'ratings-4point', message, data: { ...data, location, hypothesisId }, level: 'info' });
-    if (process.env.NODE_ENV === 'development') {
-      fetch(DEBUG_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location, message, data, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId }) }).catch(() => {});
-    }
   };
   const serializeError = (err: any): Record<string, unknown> => {
     if (!err) return { raw: err };
     if (typeof err !== 'object') return { raw: err };
     return { message: err.message, code: err.code, details: err.details, hint: err.hint, status: err.status, statusCode: err.statusCode };
   };
-  // #endregion
   const apiStartTime = Date.now();
   try {
     const { employerId } = params;

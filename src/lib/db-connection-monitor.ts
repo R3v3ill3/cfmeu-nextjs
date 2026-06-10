@@ -1,14 +1,21 @@
 /**
- * Database Connection Monitor - Prevents connection pool exhaustion
+ * Supabase Client Activity Monitor
  *
- * This utility tracks database connections across all services to prevent
- * pool exhaustion that could cause session loss and system instability.
+ * This utility tracks Supabase client instances / logical request handles and
+ * related errors. It does NOT observe real Postgres pool connections (the
+ * browser client speaks HTTP to Supabase/PostgREST, and server clients are
+ * short-lived per request), so it must not raise "pool exhaustion" alarms.
+ *
+ * Public export names are kept for API compatibility with existing imports.
  */
 
 export interface ConnectionMetrics {
   serviceName: string
+  /** Logical client/request handles currently tracked, not DB pool connections. */
   activeConnections: number
+  /** Total logical handles tracked since process start. */
   totalConnections: number
+  /** Deprecated compatibility field; not a real pool size. */
   maxPoolSize: number
   connectionAge: number[]
   lastActivity: number
@@ -40,6 +47,7 @@ export interface ConnectionStats {
     timestamp: number
     connections: number
   }
+  /** Deprecated compatibility field; always 0 because this is not pool telemetry. */
   poolUtilization: number
   healthStatus: 'healthy' | 'warning' | 'critical'
 }
@@ -49,9 +57,9 @@ class ConnectionMonitor {
   private connections: Map<string, ConnectionMetrics> = new Map()
   private alerts: ConnectionAlert[] = []
   private peakUsage = { timestamp: Date.now(), connections: 0 }
-  private readonly WARNING_THRESHOLD = 0.8 // 80%
-  private readonly CRITICAL_THRESHOLD = 0.95 // 95%
-  private readonly DEFAULT_MAX_POOL_SIZE = 25 // Supabase default
+  private readonly WARNING_THRESHOLD = 0.8 // retained for compatibility-only diagnostics
+  private readonly CRITICAL_THRESHOLD = 0.95 // retained for compatibility-only diagnostics
+  private readonly DEFAULT_MAX_POOL_SIZE = 1 // deprecated compatibility field; not a real pool size
   private readonly CLEANUP_INTERVAL = 30000 // 30 seconds
   private readonly ALERT_RETENTION = 24 * 60 * 60 * 1000 // 24 hours
   private cleanupTimer?: NodeJS.Timeout
@@ -68,7 +76,7 @@ class ConnectionMonitor {
   }
 
   /**
-   * Track a new database connection
+   * Track a logical Supabase client/request handle.
    */
   trackConnection(serviceName: string, connectionId?: string): string {
     const id = connectionId || `${serviceName}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
@@ -104,7 +112,9 @@ class ConnectionMonitor {
       serviceActive: metrics.activeConnections
     })
 
-    // Check thresholds
+    // No threshold checks here: this is logical client activity, not real DB
+    // pool telemetry. Alerting on these counts produced false "pool
+    // exhaustion" signals during auth/session debugging.
     this.checkThresholds(serviceName)
 
     return id
@@ -190,11 +200,13 @@ class ConnectionMonitor {
     const totalConnections = this.getTotalConnections()
     const poolUtilization = this.getPoolUtilization()
 
-    // Determine health status
+    // This monitor does not observe database pool capacity. Keep health
+    // status tied to recorded errors/recent activity, not handle counts.
     let healthStatus: 'healthy' | 'warning' | 'critical' = 'healthy'
-    if (poolUtilization >= this.CRITICAL_THRESHOLD) {
-      healthStatus = 'critical'
-    } else if (poolUtilization >= this.WARNING_THRESHOLD) {
+    const recentErrors = Array.from(this.connections.values()).some((metrics) =>
+      metrics.errors.some((error) => Date.now() - error.timestamp < 5 * 60 * 1000)
+    )
+    if (recentErrors) {
       healthStatus = 'warning'
     }
 
@@ -217,14 +229,11 @@ class ConnectionMonitor {
   }
 
   /**
-   * Get overall pool utilization percentage
+   * Deprecated compatibility shim. This monitor cannot know real Supabase /
+   * Postgres pool utilization, so return 0 instead of a misleading ratio.
    */
   getPoolUtilization(): number {
-    const totalActive = this.getTotalActiveConnections()
-    const maxPoolSize = Array.from(this.connections.values())
-      .reduce((sum, metrics) => sum + metrics.maxPoolSize, 0)
-
-    return maxPoolSize > 0 ? totalActive / maxPoolSize : 0
+    return 0
   }
 
   /**
@@ -243,7 +252,7 @@ class ConnectionMonitor {
         return now - timestamp < staleThreshold
       })
 
-      // Estimate active connections based on recent activity
+      // Estimate active logical handles based on recent activity
       const recentConnections = metrics.connectionAge.filter(timestamp =>
         now - timestamp < staleThreshold
       ).length
@@ -316,41 +325,11 @@ class ConnectionMonitor {
     const metrics = this.connections.get(serviceName)
     if (!metrics) return
 
-    const utilization = metrics.activeConnections / metrics.maxPoolSize
-    const totalUtilization = this.getPoolUtilization()
-
-    // Service-level threshold check
-    if (utilization >= this.CRITICAL_THRESHOLD) {
-      this.triggerAlert({
-        type: 'critical',
-        serviceName,
-        message: `Service connection pool at ${Math.round(utilization * 100)}% capacity`,
-        usage: utilization,
-        threshold: this.CRITICAL_THRESHOLD,
-        timestamp: Date.now()
-      })
-    } else if (utilization >= this.WARNING_THRESHOLD) {
-      this.triggerAlert({
-        type: 'warning',
-        serviceName,
-        message: `Service connection pool at ${Math.round(utilization * 100)}% capacity`,
-        usage: utilization,
-        threshold: this.WARNING_THRESHOLD,
-        timestamp: Date.now()
-      })
-    }
-
-    // Global threshold check
-    if (totalUtilization >= this.CRITICAL_THRESHOLD) {
-      this.triggerAlert({
-        type: 'critical',
-        serviceName: 'global',
-        message: `Global connection pool at ${Math.round(totalUtilization * 100)}% capacity`,
-        usage: totalUtilization,
-        threshold: this.CRITICAL_THRESHOLD,
-        timestamp: Date.now()
-      })
-    }
+    // Intentionally no-op. This class tracks logical client/request handles,
+    // not real DB pool connections, so count-based capacity alerts are false
+    // positives. Errors are still recorded via recordConnectionError().
+    void serviceName
+    void metrics
   }
 
   private triggerAlert(alert: ConnectionAlert): void {
@@ -396,22 +375,13 @@ class ConnectionMonitor {
     const recommendations: string[] = []
     const stats = this.getConnectionStats()
 
-    if (stats.poolUtilization >= this.CRITICAL_THRESHOLD) {
-      recommendations.push('URGENT: Connection pool at critical capacity - immediate investigation required')
-      recommendations.push('Consider implementing connection pooling or reducing concurrent operations')
-      recommendations.push('Check for connection leaks in application code')
-    } else if (stats.poolUtilization >= this.WARNING_THRESHOLD) {
-      recommendations.push('Monitor connection pool usage - approaching capacity limits')
-      recommendations.push('Review connection lifecycle management')
-    }
-
     const servicesWithHighErrors = Object.entries(stats.services)
       .filter(([, metrics]) => metrics.errors.length > 5)
       .map(([name]) => name)
 
     if (servicesWithHighErrors.length > 0) {
       recommendations.push(`High error rates detected in: ${servicesWithHighErrors.join(', ')}`)
-      recommendations.push('Review database connectivity and error handling')
+      recommendations.push('Review Supabase/auth/API error handling for these services')
     }
 
     const inactiveServices = Object.entries(stats.services)
@@ -419,12 +389,12 @@ class ConnectionMonitor {
       .map(([name]) => name)
 
     if (inactiveServices.length > 0) {
-      recommendations.push(`Inactive services with open connections: ${inactiveServices.join(', ')}`)
-      recommendations.push('Consider implementing connection timeout for inactive services')
+      recommendations.push(`Inactive tracked logical handles: ${inactiveServices.join(', ')}`)
+      recommendations.push('Review lifecycle cleanup for stale client/request tracking')
     }
 
     if (recommendations.length === 0) {
-      recommendations.push('Connection pool usage within normal parameters')
+      recommendations.push('Supabase client activity is within normal parameters')
     }
 
     return recommendations
@@ -432,7 +402,7 @@ class ConnectionMonitor {
 
   private logConnectionEvent(event: string, serviceName: string, connectionId: string, data: any): void {
     if (process.env.NODE_ENV !== 'test') {
-      console.log(`[ConnectionMonitor] ${event.toUpperCase()}`, {
+      console.log(`[SupabaseActivityMonitor] ${event.toUpperCase()}`, {
         serviceName,
         connectionId: connectionId.substring(0, 20),
         timestamp: new Date().toISOString(),
@@ -443,7 +413,7 @@ class ConnectionMonitor {
 
   private logAlert(alert: ConnectionAlert): void {
     const logLevel = alert.type === 'critical' ? 'error' : 'warn'
-    console[logLevel](`[ConnectionMonitor] ALERT ${alert.type.toUpperCase()}`, {
+    console[logLevel](`[SupabaseActivityMonitor] ALERT ${alert.type.toUpperCase()}`, {
       service: alert.serviceName,
       message: alert.message,
       usage: `${Math.round(alert.usage * 100)}%`,

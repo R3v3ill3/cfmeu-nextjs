@@ -20,11 +20,15 @@ interface UserProfile {
   is_active: boolean | null
 }
 
+type ProfileFetchResult =
+  | { kind: 'ok'; profile: UserProfile | null }
+  | { kind: 'fetch_error' }
+
 async function getUserProfile(
   supabase: Awaited<ReturnType<typeof createServerSupabase>>,
   userId: string,
   context?: { requestId: string; path?: string }
-): Promise<UserProfile | null> {
+): Promise<ProfileFetchResult> {
   const startTime = Date.now()
   try {
     const { data, error } = await supabase
@@ -37,7 +41,10 @@ async function getUserProfile(
     if (error) {
       console.error('[AppLayout] Error fetching user profile:', 
         `userId=${userId}, error=${error.message}, code=${error.code}, duration=${duration}ms, requestId=${context?.requestId}`)
-      return null
+      // IMPORTANT: a fetch ERROR (network blip, DB timeout, transient RLS/JWT
+      // race) is NOT the same as "this user has no profile". Callers must not
+      // sign the user out / redirect on a transient failure.
+      return { kind: 'fetch_error' }
     }
     
     if (duration > 200) {
@@ -47,12 +54,12 @@ async function getUserProfile(
       console.warn('[AppLayout] Slow profile fetch:', logMessage)
     }
     
-    return data as UserProfile | null
+    return { kind: 'ok', profile: data as UserProfile | null }
   } catch (err) {
     const duration = Date.now() - startTime
     console.error('[AppLayout] Exception fetching user profile:',
       `userId=${userId}, error=${err instanceof Error ? err.message : String(err)}, duration=${duration}ms, requestId=${context?.requestId}`)
-    return null
+    return { kind: 'fetch_error' }
   }
 }
 
@@ -99,17 +106,27 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   
   // Step 2: Single profile fetch (reuses same supabase client, gets all needed fields)
   // This eliminates the duplicate profile fetch that was happening before
-  const profile = await getUserProfile(supabase, user.id, {
+  const profileResult = await getUserProfile(supabase, user.id, {
     requestId,
     path: currentPath || '/',
   })
+  const profile = profileResult.kind === 'ok' ? profileResult.profile : null
   const role = profile?.role ?? null
   const layoutDuration = Date.now() - layoutStartTime
 
-  // SECURITY: Validate user has a valid profile with a role
-  // This prevents unauthorized OAuth users from accessing the app
-  if (!profile) {
-    // No profile at all - redirect to auth
+  if (profileResult.kind === 'fetch_error') {
+    // Transient failure fetching the profile (network/DB blip, JWT race).
+    // Do NOT redirect or sign out — that converts a momentary hiccup into a
+    // full logout, which is the "randomly logged out" symptom organisers
+    // report. Render the shell with role=null; client-side guards (RoleGuard,
+    // useUserRole) and RLS still protect all data access.
+    logAppLayout('Profile fetch failed transiently - rendering without server role', {
+      requestId,
+      userId: user.id,
+    })
+  } else if (!profile) {
+    // Profile fetch SUCCEEDED and definitively found no profile row -
+    // unauthorized user, redirect to auth
     logAppLayout('User has no profile, redirecting to auth', {
       requestId,
       userId: user.id,

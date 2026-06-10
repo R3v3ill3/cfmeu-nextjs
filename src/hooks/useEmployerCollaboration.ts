@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { useToast } from '@/hooks/use-toast'
 import { useEmployerVersioning } from './useEmployerVersioning'
 import { useEmployerConflicts } from './useEmployerConflicts'
@@ -75,7 +75,7 @@ export function useEmployerCollaboration(
   const [collaborationEvents, setCollaborationEvents] = useState<CollaborationEvent[]>([])
   const [isRealtimeEnabled, setIsRealtimeEnabled] = useState(false)
 
-  const supabase = createClientComponentClient()
+  const supabase = getSupabaseBrowserClient()
   const { toast } = useToast()
 
   const versioning = useEmployerVersioning(employerId, {

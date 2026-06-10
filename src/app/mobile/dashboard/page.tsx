@@ -63,8 +63,6 @@ export default function MobileDashboardPage() {
   const { toast } = useToast()
 
   const {
-    debounce,
-    isMobile,
     isLowEndDevice,
   } = useMobileOptimizations({
     enableDebouncing: true,
@@ -74,6 +72,8 @@ export default function MobileDashboardPage() {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [usingCachedData, setUsingCachedData] = useState(false)
 
   const {
     data: cachedData,
@@ -102,6 +102,8 @@ export default function MobileDashboardPage() {
           if (response.ok) {
             const data = await response.json()
             setDashboardData(data)
+            setLoadError(null)
+            setUsingCachedData(false)
           } else {
             throw new Error('Failed to fetch dashboard data')
           }
@@ -109,9 +111,12 @@ export default function MobileDashboardPage() {
           // Use cached data when offline
           if (cachedData && cachedData.length > 0) {
             setDashboardData(cachedData[0])
+            setLoadError(null)
+            setUsingCachedData(true)
           } else {
-            // Use mock data as last resort
-            setDashboardData(getMockDashboardData())
+            setDashboardData(null)
+            setLoadError('You are offline and no cached dashboard is available yet.')
+            setUsingCachedData(false)
           }
         }
       } catch (error) {
@@ -120,16 +125,20 @@ export default function MobileDashboardPage() {
         // Fallback to cached data
         if (cachedData && cachedData.length > 0) {
           setDashboardData(cachedData[0])
+          setLoadError(null)
+          setUsingCachedData(true)
           toast({
             title: "Using cached data",
             description: "Offline mode. Showing previously loaded dashboard.",
           })
         } else {
-          // Use mock data
-          setDashboardData(getMockDashboardData())
+          setDashboardData(null)
+          setLoadError(error instanceof Error ? error.message : 'Unable to load dashboard data.')
+          setUsingCachedData(false)
           toast({
-            title: "Sample data",
-            description: "Showing sample dashboard data.",
+            title: "Dashboard unavailable",
+            description: "Unable to load dashboard data. Please try again when the connection is stable.",
+            variant: "destructive",
           })
         }
       } finally {
@@ -202,10 +211,12 @@ export default function MobileDashboardPage() {
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="text-center">
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Dashboard unavailable</h2>
-          <p className="text-gray-600 mb-4">Unable to load dashboard data.</p>
+          <p className="text-gray-600 mb-4">
+            {loadError ?? 'Unable to load dashboard data.'}
+          </p>
           <button
             onClick={() => window.location.reload()}
-            className="text-blue-600 hover:text-blue-700"
+            className="min-h-[44px] rounded-md bg-red-600 px-4 py-2 text-white hover:bg-red-700"
           >
             Try again
           </button>
@@ -226,6 +237,15 @@ export default function MobileDashboardPage() {
         </div>
       )}
 
+      {isOnline && usingCachedData && (
+        <div className="bg-blue-50 border-b border-blue-200 p-2">
+          <div className="flex items-center justify-center gap-2 text-sm text-blue-800">
+            <div className="w-2 h-2 bg-blue-600 rounded-full" />
+            <span>Showing cached dashboard - latest data unavailable</span>
+          </div>
+        </div>
+      )}
+
       <MobileDashboard
         data={dashboardData}
         onRefresh={handleRefresh}
@@ -237,159 +257,4 @@ export default function MobileDashboardPage() {
       />
     </div>
   )
-}
-
-// Mock dashboard data generator
-// Use deterministic selection to prevent hydration mismatch
-function getMockDashboardData(): DashboardData {
-  const userRoles: Array<'organiser' | 'lead_organiser' | 'official' | 'admin'> = ['organiser', 'lead_organiser', 'official', 'admin']
-  // Use index 0 as default to ensure consistent server/client render
-  const randomRole = userRoles[0]
-
-  return {
-    userRole: randomRole,
-    metrics: {
-      totalProjects: 24,
-      activeProjects: 18,
-      completedMappings: 15,
-      pendingAudits: 6,
-      unionDensity: 78,
-      membersCount: 342,
-      recentActivity: 12,
-      alertsCount: 3
-    },
-    recentProjects: [
-      {
-        id: '1',
-        name: 'Sydney Metro Expansion',
-        address: '123 Construction St, Sydney NSW',
-        status: 'active',
-        lastVisit: '2024-01-15',
-        complianceRating: 'green',
-        workforceSize: 150,
-        unionPercentage: 82
-      },
-      {
-        id: '2',
-        name: 'Parramatta High Rise',
-        address: '456 Tower Rd, Parramatta NSW',
-        status: 'active',
-        lastVisit: '2024-01-12',
-        complianceRating: 'amber',
-        workforceSize: 75,
-        unionPercentage: 65
-      },
-      {
-        id: '3',
-        name: 'Northern Beaches Hospital',
-        address: '789 Health Way, Manly NSW',
-        status: 'active',
-        lastVisit: '2024-01-10',
-        complianceRating: 'green',
-        workforceSize: 200,
-        unionPercentage: 91
-      }
-    ],
-    alerts: [
-      {
-        id: '1',
-        type: 'safety',
-        title: 'Safety Concern at Parramatta High Rise',
-        message: 'Multiple safety incidents reported this week',
-        projectId: '2',
-        priority: 'high',
-        timestamp: '2024-01-16T09:30:00Z'
-      },
-      {
-        id: '2',
-        type: 'compliance',
-        title: 'Union Access Issue',
-        message: 'Delegate access restricted at construction site',
-        projectId: '4',
-        priority: 'medium',
-        timestamp: '2024-01-15T14:20:00Z'
-      },
-      {
-        id: '3',
-        type: 'urgent',
-        title: 'Worker Dispute',
-        message: 'Payment dispute requires immediate attention',
-        projectId: '5',
-        priority: 'high',
-        timestamp: '2024-01-16T08:00:00Z'
-      }
-    ],
-    tasks: [
-      {
-        id: '1',
-        title: 'Complete site mapping for Barangang Project',
-        type: 'mapping',
-        priority: 'high',
-        dueDate: '2024-01-20',
-        projectId: '6',
-        completed: false
-      },
-      {
-        id: '2',
-        title: 'Follow up on safety concerns',
-        type: 'follow_up',
-        priority: 'high',
-        dueDate: '2024-01-17',
-        projectId: '2',
-        completed: false
-      },
-      {
-        id: '3',
-        title: 'Monthly compliance audit',
-        type: 'audit',
-        priority: 'medium',
-        dueDate: '2024-01-25',
-        projectId: '1',
-        completed: false
-      },
-      {
-        id: '4',
-        title: 'Delegate meeting',
-        type: 'meeting',
-        priority: 'medium',
-        dueDate: '2024-01-18',
-        projectId: '3',
-        completed: false
-      }
-    ],
-    quickActions: [
-      {
-        id: '1',
-        title: 'Start Mapping',
-        description: 'Begin mapping a new project',
-        icon: 'map',
-        route: '/mobile/map/discovery',
-        color: 'bg-blue-500'
-      },
-      {
-        id: '2',
-        title: 'Compliance Audit',
-        description: 'Conduct compliance assessment',
-        icon: 'audit',
-        route: '/mobile/projects',
-        color: 'bg-green-500'
-      },
-      {
-        id: '3',
-        title: 'View Projects',
-        description: 'See all your projects',
-        icon: 'projects',
-        route: '/mobile/projects',
-        color: 'bg-purple-500'
-      },
-      {
-        id: '4',
-        title: 'Add Member',
-        description: 'Register new union member',
-        icon: 'member',
-        route: '/mobile/members/add',
-        color: 'bg-orange-500'
-      }
-    ]
-  }
 }

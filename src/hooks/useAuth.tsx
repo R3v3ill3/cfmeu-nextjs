@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { User, Session } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { coordinatedRefreshSession } from "@/lib/supabase/refresh-mutex";
+import { clearCachedUserRole } from "@/lib/auth/role-cache";
 import { withTimeout, isTimeoutError, SUPABASE_AUTH_OP_TIMEOUT_MS } from "@/lib/util/withTimeout";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Sentry from "@sentry/nextjs";
@@ -26,37 +27,6 @@ const SIGN_OUT_TIMEOUT_MS = 5_000;
 // localStorage key for persisting session presence indicator
 const HAD_SESSION_STORAGE_KEY = "cfmeu-had-session";
 const HAD_SESSION_TTL = 24 * 60 * 60 * 1000; // 24 hours
-
-// Cursor agent debug ingest (opt-in via `__agent_debug=1`)
-const AGENT_DEBUG_INGEST_URL =
-  "http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2";
-const AGENT_DEBUG_RUN_ID = "pre-fix";
-
-function agentDebugEnabled(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    const url = new URL(window.location.href);
-    const enabledByParam = url.searchParams.get("__agent_debug") === "1";
-    if (enabledByParam) {
-      try {
-        sessionStorage.setItem("__agent_debug", "1");
-      } catch {}
-      return true;
-    }
-    try {
-      return sessionStorage.getItem("__agent_debug") === "1";
-    } catch {
-      return false;
-    }
-  } catch {
-    return false;
-  }
-}
-
-function userIdSuffix(userId: string | null | undefined): string | null {
-  if (!userId) return null;
-  return userId.slice(-6);
-}
 
 export type IosPwaContext = {
   isIOS: boolean;
@@ -246,21 +216,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           source: metadata?.source ?? "unknown",
           recoveryInFlight: recoveryInFlightRef.current,
         }, "warning");
-        if (agentDebugEnabled()) {
-          // #region agent log - applyAuthState session loss
-          fetch(AGENT_DEBUG_INGEST_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,location:"src/hooks/useAuth.tsx:applyAuthState",message:"apply_auth_state_session_loss",data:{...transition,source:metadata?.source??"unknown"},runId:AGENT_DEBUG_RUN_ID,hypothesisId:"H2",timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
-        }
       } else if (!prevHasSession && nextHasSession) {
         logAuthEvent("Session restored in applyAuthState", {
           ...transition,
           source: metadata?.source ?? "unknown",
         });
-        if (agentDebugEnabled()) {
-          // #region agent log - applyAuthState session restore
-          fetch(AGENT_DEBUG_INGEST_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,location:"src/hooks/useAuth.tsx:applyAuthState",message:"apply_auth_state_session_restore",data:{...transition,source:metadata?.source??"unknown"},runId:AGENT_DEBUG_RUN_ID,hypothesisId:"H2",timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
-        }
       }
       
       setSession(nextSession);
@@ -361,11 +321,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       // a future attempt can be made after the cooldown expires.
       lastRecoveryAttemptAtRef.current = Date.now();
       recoveryInFlightRef.current = false;
-      if (agentDebugEnabled()) {
-        // #region agent log - session recovery attempt
-        fetch(AGENT_DEBUG_INGEST_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,location:"src/hooks/useAuth.tsx:attemptSessionRecovery",message:"session_recovery_attempt",data:{instanceId:instanceIdRef.current,pathname:typeof window!=="undefined"?window.location?.pathname:null,hadSessionRef:hadSessionRef.current,outcome,outcomeErrorMessage:outcomeErrorMessage?outcomeErrorMessage.slice(0,160):null,durationMs:Date.now()-attemptStartedAt,recoveredUserIdSuffix:userIdSuffix(recoveredSession?.user?.id),recoveredExpiresAt:recoveredSession?.expires_at??null},runId:AGENT_DEBUG_RUN_ID,hypothesisId:"H5",timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-      }
     }
 
     return recoveredSession;
@@ -415,11 +370,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       hadSessionRef.current = true;
     }
 
-    if (agentDebugEnabled()) {
-      // #region agent log - useAuth mount context
-      fetch(AGENT_DEBUG_INGEST_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,location:"src/hooks/useAuth.tsx:mount",message:"auth_provider_mount",data:{instanceId:instanceIdRef.current,pathname:window.location?.pathname??null,online:navigator.onLine,visibility:document.visibilityState,persistedHadSession:persisted.hadSession,persistedUserIdSuffix:persisted.userId??null,iosContext:context?{isIOS:context.isIOS,isStandalone:context.isStandalone,isMobileSafari:context.isMobileSafari,isPWA:context.isPWA,cookieAccessible:context.cookieAccessible,sbCookieCount:context.sbCookieCount}:null,swUpdateAvailable:(()=>{try{return sessionStorage.getItem("sw-update-available")}catch{return null}})()},runId:AGENT_DEBUG_RUN_ID,hypothesisId:"H1",timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-    }
   }, [detectIosPwaContext, logAuthEvent]);
   
   // Mount-time session recovery: if we previously had a session but now it's null,
@@ -478,11 +428,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         
         if (isSubscribedRef.current && !initialSessionSet) {
           initialSessionSet = true;
-          if (agentDebugEnabled()) {
-            // #region agent log - initial getSession result
-            fetch(AGENT_DEBUG_INGEST_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,location:"src/hooks/useAuth.tsx:initializeSession",message:"initial_get_session",data:{instanceId:instanceIdRef.current,pathname:typeof window!=="undefined"?window.location?.pathname:null,durationMs:duration,hasSession:!!initialSession,userIdSuffix:userIdSuffix(initialSession?.user?.id),expiresAt:initialSession?.expires_at??null,errorMessage:error?error.message:null},runId:AGENT_DEBUG_RUN_ID,hypothesisId:"H2",timestamp:Date.now()})}).catch(()=>{});
-            // #endregion
-          }
           applyAuthState(initialSession ?? null, { source: "getSession" });
           setLoading(false);
           
@@ -528,12 +473,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           hasSession: !!newSession,
           userId: newSession?.user?.id ?? null,
         });
-        if (agentDebugEnabled()) {
-          // #region agent log - onAuthStateChange event
-          fetch(AGENT_DEBUG_INGEST_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,location:"src/hooks/useAuth.tsx:onAuthStateChange",message:"auth_state_change",data:{instanceId:instanceIdRef.current,event,hasSession:!!newSession,newUserIdSuffix:userIdSuffix(newSession?.user?.id),prevUserIdSuffix:userIdSuffix(sessionRef.current?.user?.id),pathname:typeof window!=="undefined"?window.location?.pathname:null,visibility:typeof document!=="undefined"?document.visibilityState:null,online:typeof navigator!=="undefined"?navigator.onLine:null},runId:AGENT_DEBUG_RUN_ID,hypothesisId:"H2",timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
-        }
-
         // Track if we've ever had a session (for recovery logic)
         if (newSession) {
           hadSessionRef.current = true;
@@ -575,6 +514,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         // TOKEN_REFRESHED should NOT invalidate caches - it's just a token refresh, user is still the same
         if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
           logAuthEvent("Invalidating auth-dependent caches", { reason: event });
+          if (event === 'SIGNED_OUT') {
+            // Real sign-out: clear the per-tab role cache (it is intentionally
+            // NOT cleared on transient null-user blips — see useUserRole).
+            clearCachedUserRole();
+          }
           queryClient.invalidateQueries({ queryKey: ['user-role'] });
           queryClient.invalidateQueries({ queryKey: ['accessible-patches'] });
           queryClient.invalidateQueries({ queryKey: ['current-user-profile'] });
@@ -785,14 +729,60 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [applyAuthState, logAuthEvent, logAuthError]);
 
+  // Proactive token refresh for long-lived visible tabs.
+  //
+  // The SDK's auto-refresher is disabled (`autoRefreshToken: false` in
+  // client.ts) so all refreshes stay coordinated through the mutex. But that
+  // leaves a gap: a tab that stays visible and in use for longer than the
+  // access-token lifetime never fires visibilitychange and may not navigate
+  // (middleware refresh), so the token expires mid-session and every query
+  // starts failing. This timer is the coordinated replacement for the SDK
+  // auto-refresher — it checks every minute and refreshes (via the mutex)
+  // when expiry is within 2 minutes.
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+
+    const PROACTIVE_REFRESH_CHECK_MS = 60_000;
+    const PROACTIVE_REFRESH_BUFFER_MS = 2 * 60_000;
+
+    const interval = setInterval(async () => {
+      if (document.visibilityState !== 'visible') return;
+      const current = sessionRef.current;
+      if (!current?.expires_at) return;
+
+      const msUntilExpiry = current.expires_at * 1000 - Date.now();
+      if (msUntilExpiry > PROACTIVE_REFRESH_BUFFER_MS) return;
+
+      try {
+        const supabase = getSupabaseBrowserClient();
+        const { data, error } = await coordinatedRefreshSession(supabase, {
+          label: 'auth.refreshSession (proactive expiry)',
+        });
+        if (!error && data.session) {
+          applyAuthState(data.session, { source: 'proactive_refresh' });
+        } else if (error && !isTimeoutError(error)) {
+          logAuthEvent('Proactive refresh failed — deferring to data-plane recovery', {
+            errorMessage: error.message,
+            msUntilExpiry,
+          }, 'warning');
+        }
+      } catch (error) {
+        logAuthError('Proactive refresh exception', error);
+      }
+    }, PROACTIVE_REFRESH_CHECK_MS);
+
+    return () => clearInterval(interval);
+  }, [applyAuthState, logAuthEvent, logAuthError]);
+
   const signOut = async () => {
     const supabase = getSupabaseBrowserClient();
     hadSessionRef.current = false; // Reset on explicit sign out
     recoveryInFlightRef.current = false;
     lastRecoveryAttemptAtRef.current = 0;
 
-    // Clear persisted hadSession from localStorage
+    // Clear persisted hadSession from localStorage and the per-tab role cache
     clearPersistedHadSession();
+    clearCachedUserRole();
 
     // Clear any pending recovery timeout on sign out
     if (recoveryTimeoutRef.current) {

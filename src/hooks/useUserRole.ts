@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query"
 import { useAuth } from "@/hooks/useAuth"
 import { useHelpContext } from "@/context/HelpContext"
 import { supabase } from "@/integrations/supabase/client"
+import { readCachedUserRole, writeCachedUserRole } from "@/lib/auth/role-cache"
 import * as Sentry from "@sentry/nextjs"
 
 interface UseUserRoleResult {
@@ -12,8 +13,6 @@ interface UseUserRoleResult {
   error: unknown
   refetch: () => Promise<unknown>
 }
-
-const STORAGE_KEY = "cfmeu:user-role"
 
 /**
  * Centralized hook for fetching and caching user role.
@@ -30,10 +29,8 @@ export function useUserRole(): UseUserRoleResult {
   
   const lastUserIdRef = useRef<string | null>(null)
   const [cachedRole, setCachedRole] = useState<string | null>(() => {
-    if (typeof window === "undefined") return serverProvidedRole ?? null
-    const stored = window.sessionStorage.getItem(STORAGE_KEY)
     // Prefer server-provided role over cached if available
-    return serverProvidedRole ?? (stored ? stored : null)
+    return serverProvidedRole ?? readCachedUserRole()
   })
 
   // Update cached role when server-provided role changes
@@ -45,23 +42,17 @@ export function useUserRole(): UseUserRoleResult {
         timestamp: new Date().toISOString(),
       });
       setCachedRole(serverProvidedRole);
-      if (typeof window !== "undefined") {
-        window.sessionStorage.setItem(STORAGE_KEY, serverProvidedRole);
-      }
+      writeCachedUserRole(serverProvidedRole);
     }
   }, [serverProvidedRole, cachedRole]);
 
+  // NOTE: we deliberately do NOT clear the cached role when `user` becomes
+  // transiently null — auth refresh races and getSession timeouts briefly
+  // null the user, and clearing here made role-gated navigation vanish
+  // mid-session. The cache is cleared on real sign-out by useAuth
+  // (signOut() / SIGNED_OUT event) via clearCachedUserRole().
   useEffect(() => {
-    const nextUserId = user?.id ?? null
-    const prevUserId = lastUserIdRef.current
-    lastUserIdRef.current = nextUserId
-
-    if (!nextUserId) {
-      setCachedRole(null)
-      if (typeof window !== "undefined") {
-        window.sessionStorage.removeItem(STORAGE_KEY)
-      }
-    }
+    lastUserIdRef.current = user?.id ?? null
   }, [user?.id])
 
   const query = useQuery({
@@ -158,65 +149,70 @@ export function useUserRole(): UseUserRoleResult {
         throw error;
       }
     },
-    onSuccess: (role) => {
-      const normalized = role ?? null;
-      const previousRole = cachedRole;
-      setCachedRole(normalized);
-      
-      if (typeof window !== "undefined") {
-        if (normalized) {
-          window.sessionStorage.setItem(STORAGE_KEY, normalized);
-        } else {
-          window.sessionStorage.removeItem(STORAGE_KEY);
-        }
-      }
-      
+  })
+
+  // Persist the fetched role to the per-tab cache.
+  // (React Query v5 removed per-query onSuccess/onError callbacks — the
+  // previous implementation passed them as options and they were silently
+  // ignored, so the sessionStorage cache was never actually written.)
+  useEffect(() => {
+    if (query.data === undefined) return
+    const normalized = (query.data as string | null) ?? null
+    setCachedRole((previousRole) => {
       if (previousRole !== normalized) {
         console.log('[useUserRole] Role updated', {
           previousRole,
           newRole: normalized,
           timestamp: new Date().toISOString(),
-        });
+        })
       }
-    },
-    onError: (error) => {
-      console.error('[useUserRole] Query error:', {
-        error,
-        userId: user?.id,
-        cachedRole,
-        errorMessage: error instanceof Error ? error.message : String(error),
-        timestamp: new Date().toISOString(),
-      });
-      // Capture a low-volume, high-signal signal in production for session/permission loss.
-      // Avoid capturing every transient network error.
-      try {
-        const errorMessage = error instanceof Error ? error.message : String(error)
-        const errorCode = (error as any)?.code ?? null
-        const shouldCapture =
-          errorCode === 'PGRST116' ||
-          errorCode === '42501' ||
-          (typeof errorMessage === 'string' &&
-            (errorMessage.includes('Auth session missing') ||
-              errorMessage.includes('JWT') ||
-              errorMessage.includes('row-level security') ||
-              errorMessage.includes('permission denied')))
+      return normalized
+    })
+    writeCachedUserRole(normalized)
+  }, [query.data])
 
-        if (shouldCapture) {
-          Sentry.withScope((scope) => {
-            scope.setLevel('warning')
-            scope.setTag('component', 'useUserRole')
-            if (errorCode) scope.setTag('supabase_code', String(errorCode))
-            scope.setExtra('path', typeof window !== 'undefined' ? window.location?.pathname : null)
-            scope.setExtra('userIdSuffix', user?.id ? user.id.slice(-6) : null)
-            scope.setExtra('cachedRole', cachedRole)
-            scope.setExtra('serverProvidedRole', serverProvidedRole ?? null)
-            scope.setExtra('errorMessage', errorMessage)
-            Sentry.captureMessage('[Auth] useUserRole query error')
-          })
-        }
-      } catch {}
-    },
-  })
+  // Capture a low-volume, high-signal event in production for session/permission loss.
+  // Avoid capturing every transient network error.
+  useEffect(() => {
+    const error = query.error
+    if (!error) return
+
+    console.error('[useUserRole] Query error:', {
+      error,
+      userId: user?.id,
+      cachedRole,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      timestamp: new Date().toISOString(),
+    });
+    try {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      const errorCode = (error as any)?.code ?? null
+      const shouldCapture =
+        errorCode === 'PGRST116' ||
+        errorCode === 'PGRST301' ||
+        errorCode === '42501' ||
+        (typeof errorMessage === 'string' &&
+          (errorMessage.includes('Auth session missing') ||
+            errorMessage.includes('JWT') ||
+            errorMessage.includes('row-level security') ||
+            errorMessage.includes('permission denied')))
+
+      if (shouldCapture) {
+        Sentry.withScope((scope) => {
+          scope.setLevel('warning')
+          scope.setTag('component', 'useUserRole')
+          if (errorCode) scope.setTag('supabase_code', String(errorCode))
+          scope.setExtra('path', typeof window !== 'undefined' ? window.location?.pathname : null)
+          scope.setExtra('userIdSuffix', user?.id ? user.id.slice(-6) : null)
+          scope.setExtra('cachedRole', cachedRole)
+          scope.setExtra('serverProvidedRole', serverProvidedRole ?? null)
+          scope.setExtra('errorMessage', errorMessage)
+          Sentry.captureMessage('[Auth] useUserRole query error')
+        })
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query.error])
 
   // Prefer query data, then cached role, then server-provided role
   const role = query.data ?? cachedRole ?? serverProvidedRole ?? null

@@ -1,7 +1,8 @@
 "use client"
-import { useMemo } from "react"
+import { useEffect, useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
+import { ensureFreshSession } from "@/lib/supabase/session-guard"
 import { useAuth, getIosPwaContext } from "@/hooks/useAuth"
 import * as Sentry from "@sentry/nextjs"
 
@@ -21,9 +22,6 @@ export interface AccessiblePatchesResult {
 }
 
 export type AccessiblePatchesErrorKind = "auth_missing" | "rls" | "network" | "unknown"
-
-// How far in advance to refresh the session (1 minute before expiry)
-const SESSION_REFRESH_BUFFER_MS = 60 * 1000;
 
 function getErrorMessage(error: unknown): string {
   if (!error) return "Unknown error"
@@ -78,49 +76,6 @@ function addPatchesBreadcrumb(
       timestamp: new Date().toISOString(),
     },
   })
-}
-
-/**
- * Helper to ensure the session is valid before making an authenticated query.
- * If the session is expired or about to expire, it proactively refreshes it.
- * Returns the supabase client to use for queries.
- */
-async function ensureValidSessionForPatches(): Promise<ReturnType<typeof getSupabaseBrowserClient> | null> {
-  const supabase = getSupabaseBrowserClient();
-  
-  try {
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    
-    if (sessionError) {
-      console.warn('[useAccessiblePatches] Error getting session:', sessionError.message);
-    }
-    
-    // Check if session is missing or expired/about to expire
-    const now = Date.now();
-    const expiresAt = session?.expires_at ? session.expires_at * 1000 : 0;
-    const isExpiredOrStale = !session || expiresAt < now + SESSION_REFRESH_BUFFER_MS;
-    
-    if (isExpiredOrStale) {
-      console.log('[useAccessiblePatches] Session expired or stale, attempting refresh', {
-        hasSession: !!session,
-        expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
-      });
-      
-      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
-      
-      if (refreshError || !refreshData.session) {
-        console.error('[useAccessiblePatches] Session refresh failed:', refreshError?.message);
-        return null;
-      }
-      
-      console.log('[useAccessiblePatches] Session refreshed successfully');
-    }
-    
-    return supabase;
-  } catch (error) {
-    console.error('[useAccessiblePatches] Exception in ensureValidSession:', error);
-    return null;
-  }
 }
 
 /**
@@ -181,11 +136,14 @@ export function useAccessiblePatches(): AccessiblePatchesResult {
         iosContext: getIosPwaContext(),
       })
 
-      // Ensure session is valid before querying
-      const supabase = await ensureValidSessionForPatches();
-      if (!supabase) {
+      // Ensure session is valid before querying — routed through the
+      // coordinated refresh mutex (session-guard) so this can't race other
+      // refresh paths and double-rotate the single-use refresh token.
+      const sessionValid = await ensureFreshSession('useAccessiblePatches');
+      if (!sessionValid) {
         throw new Error('Session expired - please sign in again');
       }
+      const supabase = getSupabaseBrowserClient();
 
       const userId = user.id
       const { data: profile, error: profileError } = await supabase
@@ -414,31 +372,37 @@ export function useAccessiblePatches(): AccessiblePatchesResult {
 
       return { role, patches: [] }
     },
-    onSuccess: (data) => {
-      addPatchesBreadcrumb("Accessible patches loaded", {
-        role: data?.role ?? null,
-        patchCount: data?.patches?.length ?? 0,
-        iosContext: getIosPwaContext(),
-      })
-    },
-    onError: (error) => {
-      const errorMessage = getErrorMessage(error)
-      addPatchesBreadcrumb(
-        "Accessible patches failed",
-        {
-          errorKind: getAccessiblePatchesErrorKind(error),
-          errorMessage,
-          errorCode: getErrorCode(error),
-          iosContext: getIosPwaContext(),
-        },
-        "error"
-      )
-    },
   })
 
   const error = (query.error as Error) ?? null
   const errorMessage = error ? getErrorMessage(error) : null
   const errorKind = error ? getAccessiblePatchesErrorKind(error) : null
+
+  // Breadcrumbs for Sentry diagnostics. (React Query v5 removed per-query
+  // onSuccess/onError options — the previous implementation passed them and
+  // they were silently ignored.)
+  useEffect(() => {
+    if (!query.data) return
+    addPatchesBreadcrumb("Accessible patches loaded", {
+      role: (query.data as any)?.role ?? null,
+      patchCount: (query.data as any)?.patches?.length ?? 0,
+      iosContext: getIosPwaContext(),
+    })
+  }, [query.data])
+
+  useEffect(() => {
+    if (!error) return
+    addPatchesBreadcrumb(
+      "Accessible patches failed",
+      {
+        errorKind,
+        errorMessage,
+        errorCode: getErrorCode(error),
+        iosContext: getIosPwaContext(),
+      },
+      "error"
+    )
+  }, [error, errorKind, errorMessage])
 
   const result = useMemo<AccessiblePatchesResult>(() => ({
     role: (query.data as any)?.role ?? null,

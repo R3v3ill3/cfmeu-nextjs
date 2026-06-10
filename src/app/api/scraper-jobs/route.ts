@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
-import * as Sentry from '@sentry/nextjs'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,23 +16,6 @@ function normalizePriority(priority: unknown) {
 }
 
 export async function POST(request: NextRequest) {
-  const debugEnabled = request.cookies.get('__agent_debug')?.value === '1'
-  const sbCookieCount = request.cookies.getAll().filter((c) => c.name.startsWith('sb-')).length
-  if (debugEnabled) {
-    // #region agent log
-    try {
-      Sentry.withScope((scope) => {
-        scope.setLevel('info')
-        scope.setTag('component', 'scraper-jobs')
-        scope.setTag('method', 'POST')
-        scope.setExtra('path', request.nextUrl.pathname)
-        scope.setExtra('sbCookieCount', sbCookieCount)
-        Sentry.captureMessage('[AgentDebug] scraper-jobs POST request')
-      })
-    } catch {}
-    // #endregion
-  }
-
   // Tag jobs with an environment so workers can be isolated (local vs production).
   // - On Vercel: VERCEL_ENV is 'production' | 'preview' | 'development'
   // - Locally: VERCEL_ENV is undefined; NODE_ENV is usually 'development'
@@ -53,60 +35,15 @@ export async function POST(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   if (authError) {
-    if (debugEnabled) {
-      // #region agent log
-      try {
-        Sentry.withScope((scope) => {
-          scope.setLevel('warning')
-          scope.setTag('component', 'scraper-jobs')
-          scope.setTag('method', 'POST')
-          scope.setExtra('path', request.nextUrl.pathname)
-          scope.setExtra('sbCookieCount', sbCookieCount)
-          scope.setExtra('authErrorMessage', authError.message)
-          scope.setExtra('authErrorStatus', (authError as any)?.status ?? null)
-          Sentry.captureMessage('[AgentDebug] scraper-jobs authError')
-        })
-      } catch {}
-      // #endregion
-    }
     return NextResponse.json({ error: authError.message }, { status: 401 })
   }
 
   if (!user) {
-    if (debugEnabled) {
-      // #region agent log
-      try {
-        Sentry.withScope((scope) => {
-          scope.setLevel('warning')
-          scope.setTag('component', 'scraper-jobs')
-          scope.setTag('method', 'POST')
-          scope.setExtra('path', request.nextUrl.pathname)
-          scope.setExtra('sbCookieCount', sbCookieCount)
-          Sentry.captureMessage('[AgentDebug] scraper-jobs no user')
-        })
-      } catch {}
-      // #endregion
-    }
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
   }
 
   const body = await request.json().catch(() => null)
   if (!body || typeof body !== 'object') {
-    if (debugEnabled) {
-      // #region agent log
-      try {
-        Sentry.withScope((scope) => {
-          scope.setLevel('warning')
-          scope.setTag('component', 'scraper-jobs')
-          scope.setTag('method', 'POST')
-          scope.setExtra('path', request.nextUrl.pathname)
-          scope.setExtra('sbCookieCount', sbCookieCount)
-          scope.setExtra('userIdSuffix', user.id.slice(-6))
-          Sentry.captureMessage('[AgentDebug] scraper-jobs invalid payload')
-        })
-      } catch {}
-      // #endregion
-    }
     return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
   }
 
@@ -120,42 +57,10 @@ export async function POST(request: NextRequest) {
   }
 
   if (!jobType || !SUPPORTED_JOB_TYPES.includes(jobType as SupportedJobType)) {
-    if (debugEnabled) {
-      // #region agent log
-      try {
-        Sentry.withScope((scope) => {
-          scope.setLevel('warning')
-          scope.setTag('component', 'scraper-jobs')
-          scope.setTag('method', 'POST')
-          scope.setExtra('path', request.nextUrl.pathname)
-          scope.setExtra('sbCookieCount', sbCookieCount)
-          scope.setExtra('userIdSuffix', user.id.slice(-6))
-          scope.setExtra('jobType', jobType ?? null)
-          Sentry.captureMessage('[AgentDebug] scraper-jobs unsupported job type')
-        })
-      } catch {}
-      // #endregion
-    }
     return NextResponse.json({ error: 'Unsupported job type' }, { status: 400 })
   }
 
   if (payload === undefined || payload === null) {
-    if (debugEnabled) {
-      // #region agent log
-      try {
-        Sentry.withScope((scope) => {
-          scope.setLevel('warning')
-          scope.setTag('component', 'scraper-jobs')
-          scope.setTag('method', 'POST')
-          scope.setExtra('path', request.nextUrl.pathname)
-          scope.setExtra('sbCookieCount', sbCookieCount)
-          scope.setExtra('userIdSuffix', user.id.slice(-6))
-          scope.setExtra('jobType', jobType)
-          Sentry.captureMessage('[AgentDebug] scraper-jobs missing payload')
-        })
-      } catch {}
-      // #endregion
-    }
     return NextResponse.json({ error: 'Missing payload' }, { status: 400 })
   }
 
@@ -188,28 +93,6 @@ export async function POST(request: NextRequest) {
     insertPayload.progress_total = Math.max(0, progressTotal as number)
   }
 
-  if (debugEnabled) {
-    // #region agent log
-    try {
-      const payloadAny = payload as any
-      const employerIdsCount = Array.isArray(payloadAny?.employerIds) ? payloadAny.employerIds.length : null
-      Sentry.withScope((scope) => {
-        scope.setLevel('info')
-        scope.setTag('component', 'scraper-jobs')
-        scope.setTag('method', 'POST')
-        scope.setExtra('path', request.nextUrl.pathname)
-        scope.setExtra('sbCookieCount', sbCookieCount)
-        scope.setExtra('userIdSuffix', user.id.slice(-6))
-        scope.setExtra('jobType', jobType)
-        scope.setExtra('priority', priorityValue)
-        scope.setExtra('progressTotal', Number.isInteger(progressTotal) ? progressTotal : null)
-        scope.setExtra('employerIdsCount', employerIdsCount)
-        Sentry.captureMessage('[AgentDebug] scraper-jobs validated request')
-      })
-    } catch {}
-    // #endregion
-  }
-
   const { data, error } = await supabase
     .from('scraper_jobs')
     .insert(insertPayload)
@@ -217,24 +100,6 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (error) {
-    if (debugEnabled) {
-      // #region agent log
-      try {
-        Sentry.withScope((scope) => {
-          scope.setLevel('error')
-          scope.setTag('component', 'scraper-jobs')
-          scope.setTag('method', 'POST')
-          scope.setExtra('path', request.nextUrl.pathname)
-          scope.setExtra('sbCookieCount', sbCookieCount)
-          scope.setExtra('userIdSuffix', user.id.slice(-6))
-          scope.setExtra('jobType', jobType)
-          scope.setExtra('errorMessage', error.message)
-          scope.setExtra('errorCode', (error as any)?.code ?? null)
-          Sentry.captureMessage('[AgentDebug] scraper-jobs insert failed')
-        })
-      } catch {}
-      // #endregion
-    }
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
@@ -246,38 +111,12 @@ export async function POST(request: NextRequest) {
       payload: { createdBy: user.id },
     })
 
-  if (eventInsert.error && debugEnabled) {
-    // #region agent log
-    try {
-      Sentry.withScope((scope) => {
-        scope.setLevel('warning')
-        scope.setTag('component', 'scraper-jobs')
-        scope.setTag('method', 'POST')
-        scope.setExtra('path', request.nextUrl.pathname)
-        scope.setExtra('sbCookieCount', sbCookieCount)
-        scope.setExtra('userIdSuffix', user.id.slice(-6))
-        scope.setExtra('jobIdSuffix', data.id.slice(-6))
-        scope.setExtra('errorMessage', eventInsert.error?.message ?? null)
-        scope.setExtra('errorCode', (eventInsert.error as any)?.code ?? null)
-        Sentry.captureMessage('[AgentDebug] scraper-jobs event insert failed')
-      })
-    } catch {}
-    // #endregion
-  } else if (debugEnabled) {
-    // #region agent log
-    try {
-      Sentry.withScope((scope) => {
-        scope.setLevel('info')
-        scope.setTag('component', 'scraper-jobs')
-        scope.setTag('method', 'POST')
-        scope.setExtra('path', request.nextUrl.pathname)
-        scope.setExtra('sbCookieCount', sbCookieCount)
-        scope.setExtra('userIdSuffix', user.id.slice(-6))
-        scope.setExtra('jobIdSuffix', data.id.slice(-6))
-        Sentry.captureMessage('[AgentDebug] scraper-jobs created')
-      })
-    } catch {}
-    // #endregion
+  if (eventInsert.error) {
+    console.warn('[scraper-jobs] Failed to insert queued event', {
+      jobId: data.id,
+      error: eventInsert.error.message,
+      code: (eventInsert.error as any)?.code ?? null,
+    })
   }
 
   return NextResponse.json({ job: data })

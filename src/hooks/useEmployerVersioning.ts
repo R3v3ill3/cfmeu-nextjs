@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { useToast } from '@/hooks/use-toast'
 
 interface EmployerVersionInfo {
@@ -88,7 +88,7 @@ export function useEmployerVersioning(
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState(false)
 
-  const supabase = createClientComponentClient()
+  const supabase = getSupabaseBrowserClient()
   const { toast } = useToast()
 
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null)

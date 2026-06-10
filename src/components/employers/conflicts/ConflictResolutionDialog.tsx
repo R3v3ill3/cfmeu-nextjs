@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import {
   Dialog,
   DialogContent,
@@ -97,7 +97,7 @@ export function ConflictResolutionDialog({
   const [resolutionNotes, setResolutionNotes] = useState('')
   const [manualResolutions, setManualResolutions] = useState<Record<string, string>>({})
 
-  const supabase = createClientComponentClient()
+  const supabase = getSupabaseBrowserClient()
   const { toast } = useToast()
 
   // Fetch conflict details

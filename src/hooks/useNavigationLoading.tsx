@@ -37,13 +37,51 @@ export function NavigationLoadingProvider({ children }: { children: ReactNode })
   const cancelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const navigationStartTimeRef = useRef<number | null>(null)
   const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const originPathRef = useRef<string | null>(null)
 
   // Clear navigation loading when pathname changes
   useEffect(() => {
     if (isNavigating && targetPath) {
       // Extract the base path (without query params) from targetPath
       const targetBasePath = targetPath.split('?')[0]
-      
+
+      // If the route settled on a DIFFERENT path than the target (middleware
+      // or layout redirect, e.g. to /auth), the old behaviour left the
+      // overlay covering the screen until the 8s safety timeout. Clear it
+      // immediately — the navigation is over, just not where we expected.
+      if (
+        pathname !== targetBasePath &&
+        pathname !== targetPath &&
+        originPathRef.current !== null &&
+        pathname !== originPathRef.current
+      ) {
+        logNavigationEvent('Navigation redirected — clearing overlay', {
+          from: originPathRef.current,
+          intendedTarget: targetPath,
+          landedOn: pathname,
+        })
+        if (typeof navigator !== 'undefined' && navigator.serviceWorker?.controller) {
+          try {
+            navigator.serviceWorker.controller.postMessage({ type: 'NAVIGATION_END', pathname })
+          } catch {
+            // Ignore errors - SW may not be available
+          }
+        }
+        setIsNavigating(false)
+        setTargetPath(null)
+        navigationStartTimeRef.current = null
+        originPathRef.current = null
+        if (cancelTimerRef.current) {
+          clearTimeout(cancelTimerRef.current)
+          cancelTimerRef.current = null
+        }
+        if (clearTimerRef.current) {
+          clearTimeout(clearTimerRef.current)
+          clearTimerRef.current = null
+        }
+        return
+      }
+
       // Check if the current pathname matches the target (with or without query params)
       if (pathname === targetBasePath || pathname === targetPath) {
         // Clear any existing clear timer
@@ -89,6 +127,7 @@ export function NavigationLoadingProvider({ children }: { children: ReactNode })
           setIsNavigating(false)
           setTargetPath(null)
           navigationStartTimeRef.current = null
+          originPathRef.current = null
           if (cancelTimerRef.current) {
             clearTimeout(cancelTimerRef.current)
             cancelTimerRef.current = null
@@ -116,6 +155,7 @@ export function NavigationLoadingProvider({ children }: { children: ReactNode })
         setIsNavigating(false)
         setTargetPath(null)
         navigationStartTimeRef.current = null
+        originPathRef.current = null
         cancelTimerRef.current = null
         if (clearTimerRef.current) {
           clearTimeout(clearTimerRef.current)
@@ -187,6 +227,7 @@ export function NavigationLoadingProvider({ children }: { children: ReactNode })
       
       // Track when navigation starts for minimum display time calculation
       navigationStartTimeRef.current = Date.now()
+      originPathRef.current = currentBasePath
       setTargetPath(path)
       setIsNavigating(true)
     }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import {
   Card,
   CardContent,
@@ -132,7 +132,7 @@ export function EmployerChangeAnalytics({
   const [selectedUserId, setSelectedUserId] = useState<string>('')
   const [isPerformingAction, setIsPerformingAction] = useState(false)
 
-  const supabase = createClientComponentClient()
+  const supabase = getSupabaseBrowserClient()
   const { toast } = useToast()
 
   // Get date range based on selection

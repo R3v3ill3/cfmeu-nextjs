@@ -1,6 +1,7 @@
 'use client';
 import { useQuery } from "@tanstack/react-query";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { ensureFreshSession } from "@/lib/supabase/session-guard";
 import { QUERY_TIMEOUTS, withTimeout } from "@/lib/withTimeout";
 import { useAuth } from "./useAuth";
 import * as Sentry from "@sentry/nextjs";
@@ -16,63 +17,6 @@ export interface UserProfileRecord {
 }
 
 export const CURRENT_USER_PROFILE_QUERY_KEY = ["current-user-profile"] as const;
-
-// How far in advance to refresh the session (1 minute before expiry)
-const SESSION_REFRESH_BUFFER_MS = 60 * 1000;
-
-/**
- * Helper to ensure the session is valid before making an authenticated query.
- * If the session is expired or about to expire, it proactively refreshes it.
- * Returns true if session is valid and query can proceed, false if session recovery failed.
- */
-async function ensureValidSession(): Promise<boolean> {
-  const supabase = getSupabaseBrowserClient();
-  
-  try {
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    
-    if (sessionError) {
-      console.warn('[useUserProfile] Error getting session:', sessionError.message);
-    }
-    
-    // Check if session is missing or expired/about to expire
-    const now = Date.now();
-    const expiresAt = session?.expires_at ? session.expires_at * 1000 : 0;
-    const isExpiredOrStale = !session || expiresAt < now + SESSION_REFRESH_BUFFER_MS;
-    
-    if (isExpiredOrStale) {
-      console.log('[useUserProfile] Session expired or stale, attempting refresh', {
-        hasSession: !!session,
-        expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
-        now: new Date(now).toISOString(),
-      });
-      
-      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
-      
-      if (refreshError) {
-        console.error('[useUserProfile] Session refresh failed:', refreshError.message);
-        return false;
-      }
-      
-      if (!refreshData.session) {
-        console.error('[useUserProfile] Session refresh returned no session');
-        return false;
-      }
-      
-      console.log('[useUserProfile] Session refreshed successfully', {
-        userId: refreshData.session.user?.id?.slice(-6),
-        newExpiresAt: refreshData.session.expires_at 
-          ? new Date(refreshData.session.expires_at * 1000).toISOString() 
-          : null,
-      });
-    }
-    
-    return true;
-  } catch (error) {
-    console.error('[useUserProfile] Exception in ensureValidSession:', error);
-    return false;
-  }
-}
 
 export function useUserProfile(staleTime = 5 * 60 * 1000) {
   const { session, loading } = useAuth();
@@ -163,8 +107,10 @@ export function useUserProfile(staleTime = 5 * 60 * 1000) {
       const userIdSuffix = userId.slice(-6);
       
       // Ensure session is valid before querying - this prevents timeout errors
-      // when the session has expired while the tab was backgrounded
-      const sessionValid = await ensureValidSession();
+      // when the session has expired while the tab was backgrounded.
+      // Routed through the coordinated refresh mutex (session-guard) so this
+      // can't race middleware/visibility refreshes and double-rotate the token.
+      const sessionValid = await ensureFreshSession('useUserProfile');
       if (!sessionValid) {
         throw new Error('Session expired - please sign in again');
       }

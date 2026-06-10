@@ -141,7 +141,11 @@ export function getSupabaseBrowserClient(): ReturnType<typeof createBrowserClien
             } catch (e) {
               // Ignore monitoring errors
             }
-            return onRejected ? onRejected(error) : error
+            // Re-throw when the caller didn't supply a rejection handler —
+            // returning the error here would convert the rejection into a
+            // RESOLUTION and silently swallow query failures downstream.
+            if (onRejected) return onRejected(error)
+            throw error
           }
         )
       }
@@ -178,7 +182,9 @@ export function getSupabaseBrowserClient(): ReturnType<typeof createBrowserClien
               } catch (e) {
                 // Ignore monitoring errors
               }
-              return onRejected ? onRejected(error) : error
+              // Re-throw when no rejection handler was supplied (see above).
+              if (onRejected) return onRejected(error)
+              throw error
             }
           )
         }

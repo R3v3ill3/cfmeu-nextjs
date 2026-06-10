@@ -1,13 +1,12 @@
 'use client'
 
 import React, { useEffect, useState, Suspense, useCallback } from 'react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { usePathname } from 'next/navigation'
+import { QueryClient, QueryClientProvider, QueryCache, MutationCache } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
 import type { ReactNode } from 'react'
 import { PostHogProvider } from '@/providers/PostHogProvider'
-import { AuthProvider, useAuth } from '@/hooks/useAuth'
-import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import { AuthProvider } from '@/hooks/useAuth'
+import { isAuthSessionError, recoverFromAuthError } from '@/lib/supabase/session-guard'
 import * as Sentry from '@sentry/nextjs'
 import { EmployerDetailModal } from '@/components/employers/EmployerDetailModal'
 
@@ -21,193 +20,64 @@ const SHOULD_EXPOSE_QUERY_DEBUG =
 const SHOULD_ENABLE_E2E_HELPERS =
   process.env.NEXT_PUBLIC_ENABLE_E2E_HELPERS === 'true' || process.env.NODE_ENV !== 'production'
 
-const AGENT_DEBUG_INGEST_URL = 'http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2'
-const AGENT_DEBUG_RUN_ID = 'pre-fix'
-
-function agentDebugEnabled(): boolean {
-  if (typeof window === 'undefined') return false
-  try {
-    const url = new URL(window.location.href)
-    const enabledByParam = url.searchParams.get('__agent_debug') === '1'
-    if (enabledByParam) {
-      try {
-        sessionStorage.setItem('__agent_debug', '1')
-      } catch {}
-      return true
-    }
-    try {
-      return sessionStorage.getItem('__agent_debug') === '1'
-    } catch {
-      return false
-    }
-  } catch {
-    return false
-  }
-}
-
-function userIdSuffix(userId: string | null | undefined): string | null {
-  if (!userId) return null
-  return userId.slice(-6)
-}
-
-function getQueryStateSummary(queryClient: QueryClient, keyPrefix: string) {
-  try {
-    const cache = queryClient.getQueryCache()
-    const matches = (cache.findAll({ queryKey: [keyPrefix] as any } as any) as any[]) || []
-    const q = matches[0]
-    if (!q) return { present: false }
-    const s = q.state || {}
-    const now = Date.now()
-    const errorMessage =
-      s.error instanceof Error ? s.error.message : s.error ? String(s.error) : null
-    return {
-      present: true,
-      status: s.status ?? null,
-      fetchStatus: s.fetchStatus ?? null,
-      hasData: s.data !== undefined && s.data !== null,
-      dataUpdatedMsAgo: typeof s.dataUpdatedAt === 'number' && s.dataUpdatedAt > 0 ? now - s.dataUpdatedAt : null,
-      errorUpdatedMsAgo: typeof s.errorUpdatedAt === 'number' && s.errorUpdatedAt > 0 ? now - s.errorUpdatedAt : null,
-      errorMessage: errorMessage ? errorMessage.slice(0, 140) : null,
-    }
-  } catch (error) {
-    return {
-      present: false,
-      exception: error instanceof Error ? error.message : String(error),
-    }
-  }
-}
-
-function AuthDebugProbe({ queryClient }: { queryClient: QueryClient }) {
-  const pathname = usePathname()
-  const { session, user, loading } = useAuth()
-
-  useEffect(() => {
-    if (!agentDebugEnabled() || typeof window === 'undefined') return
-
-    let cancelled = false
-
-    const run = async () => {
-      const startedAt = Date.now()
-      const supabase = getSupabaseBrowserClient()
-
-      let browserSessionHasSession: boolean | null = null
-      let browserSessionUserSuffix: string | null = null
-      let browserSessionExpiresAt: number | null = null
-      let browserSessionError: string | null = null
-
-      try {
-        const { data, error } = await supabase.auth.getSession()
-        browserSessionHasSession = !!data?.session
-        browserSessionUserSuffix = userIdSuffix(data?.session?.user?.id)
-        browserSessionExpiresAt = data?.session?.expires_at ?? null
-        browserSessionError = error ? error.message : null
-      } catch (error) {
-        browserSessionError = error instanceof Error ? error.message : String(error)
-      }
-
-      let serverDiagnostics: Record<string, unknown> | null = null
-      let serverDiagnosticsError: string | null = null
-      try {
-        const res = await fetch('/api/debug/vercel-diagnostics', { cache: 'no-store' })
-        const json = await res.json().catch(() => null)
-        serverDiagnostics = {
-          ok: res.ok,
-          status: res.status,
-          authHasUser: json?.auth?.hasUser ?? null,
-          authUserIdSuffix: userIdSuffix(json?.auth?.userId ?? null),
-          authError: json?.auth?.error ?? null,
-          totalDuration: json?.performance?.totalDuration ?? null,
-        }
-      } catch (error) {
-        serverDiagnosticsError = error instanceof Error ? error.message : String(error)
-      }
-
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
-      const isStandalone =
-        window.matchMedia?.('(display-mode: standalone)')?.matches ||
-        (navigator as unknown as { standalone?: boolean }).standalone === true
-
-      const swUpdateAvailable = (() => {
-        try {
-          return sessionStorage.getItem('sw-update-available')
-        } catch {
-          return null
-        }
-      })()
-
-      const data = {
-        pathname,
-        online: navigator.onLine,
-        visibility: document.visibilityState,
-        userAgentPrefix: navigator.userAgent?.slice(0, 80) ?? null,
-        pwa: {
-          isIOS,
-          isStandalone,
-        },
-        sw: {
-          hasController: 'serviceWorker' in navigator ? !!navigator.serviceWorker.controller : null,
-          updateAvailable: swUpdateAvailable,
-        },
-        authContext: {
-          loading,
-          ctxHasSession: !!session,
-          ctxUserIdSuffix: userIdSuffix(session?.user?.id ?? user?.id),
-          ctxExpiresAt: session?.expires_at ?? null,
-        },
-        supabaseGetSession: {
-          hasSession: browserSessionHasSession,
-          userIdSuffix: browserSessionUserSuffix,
-          expiresAt: browserSessionExpiresAt,
-          errorMessage: browserSessionError ? browserSessionError.slice(0, 160) : null,
-        },
-        serverDiagnostics: serverDiagnostics ?? { error: serverDiagnosticsError },
-        reactQuery: {
-          totalQueries: queryClient.getQueryCache().getAll().length,
-          accessiblePatches: getQueryStateSummary(queryClient, 'accessible-patches'),
-          currentUserProfile: getQueryStateSummary(queryClient, 'current-user-profile'),
-          userRole: getQueryStateSummary(queryClient, 'user-role'),
-          settingsCurrentUser: getQueryStateSummary(queryClient, 'settings-current-user'),
-          settingsPatchAssignments: getQueryStateSummary(queryClient, 'settings-patch-assignments'),
-          employerDetail: getQueryStateSummary(queryClient, 'employer-detail'),
-          employerWorkerCount: getQueryStateSummary(queryClient, 'employer-worker-count'),
-        },
-        durationMs: Date.now() - startedAt,
-      }
-
-      if (cancelled) return
-
-      // #region agent log - route probe (client vs server auth)
-      fetch(AGENT_DEBUG_INGEST_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`log_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,location:'src/app/providers.tsx:route_probe',message:'route_probe',data,runId:AGENT_DEBUG_RUN_ID,hypothesisId:'H3',timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-    }
-
-    run()
-
-    return () => {
-      cancelled = true
-    }
-  }, [pathname, queryClient, session, user, loading])
-
-  return null
+function AppSuspenseFallback() {
+  return (
+    <div className="min-h-screen bg-white flex items-center justify-center px-6">
+      <div className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 text-center shadow-sm">
+        <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-gray-200 border-t-red-600" />
+        <h2 className="text-base font-semibold text-gray-900">Loading app</h2>
+        <p className="mt-1 text-sm text-gray-600">
+          Preparing your workspace...
+        </p>
+      </div>
+    </div>
+  )
 }
 
 export default function Providers({ children }: ProvidersProps) {
-  const [queryClient] = useState(() => new QueryClient({
-    defaultOptions: {
-      queries: {
-        // 60s default. Was 30s for debugging — too aggressive for production
-        // (causes excessive refetches on tab focus/visibility cycles). Pages
-        // with truly volatile data should override via `useQuery({ staleTime })`.
-        staleTime: 60_000,
-        refetchOnWindowFocus: false, // Prevent unnecessary refetches
-        retry: 1, // Retry failed queries once
-        retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+  const [queryClient] = useState(() => {
+    // Data-plane auth-error bridge (cross-ref docs/CONNECTION_STABILITY_REMEDIATION_PLAN.md):
+    // the auth layer soft-fails refresh timeouts on the assumption that "the
+    // next 401 from the data plane drives recovery". This is that listener:
+    // any query/mutation failing with a JWT/session error triggers ONE
+    // coordinated session refresh (single-flight + cooldown inside
+    // recoverFromAuthError), then refetches the queries that errored.
+    let client: QueryClient | undefined
+    const handleAuthError = (error: unknown, source: string) => {
+      if (!isAuthSessionError(error)) return
+      recoverFromAuthError(source).then((recovered) => {
+        if (recovered && client) {
+          client.refetchQueries({
+            predicate: (query) => query.state.status === 'error',
+          })
+        }
+      })
+    }
+
+    client = new QueryClient({
+      queryCache: new QueryCache({
+        onError: (error) => handleAuthError(error, 'query'),
+      }),
+      mutationCache: new MutationCache({
+        onError: (error) => handleAuthError(error, 'mutation'),
+      }),
+      defaultOptions: {
+        queries: {
+          // 60s default. Was 30s for debugging — too aggressive for production
+          // (causes excessive refetches on tab focus/visibility cycles). Pages
+          // with truly volatile data should override via `useQuery({ staleTime })`.
+          staleTime: 60_000,
+          refetchOnWindowFocus: false, // Prevent unnecessary refetches
+          retry: 1, // Retry failed queries once
+          retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+        },
+        mutations: {
+          retry: 1,
+        },
       },
-      mutations: {
-        retry: 1,
-      },
-    },
-  }))
+    })
+    return client
+  })
 
   useEffect(() => {
     if (!SHOULD_EXPOSE_QUERY_DEBUG || typeof window === 'undefined') {
@@ -508,7 +378,6 @@ export default function Providers({ children }: ProvidersProps) {
 
         // Track if we're in the middle of a navigation to avoid mid-navigation reloads
         let refreshing = false
-        let pendingReload = false
         
         // When a new service worker takes over, be careful about reloading
         navigator.serviceWorker.addEventListener('controllerchange', () => {
@@ -536,9 +405,11 @@ export default function Providers({ children }: ProvidersProps) {
             logPwaEvent('iOS PWA detected - deferring reload to preserve session', { 
               timestamp: Date.now(),
             })
-            pendingReload = true
-            // Instead of reloading, just log that an update is available
-            // The next natural page load will pick up the new SW
+            try {
+              sessionStorage.setItem('sw-update-available', 'controllerchange')
+            } catch {}
+            // The existing visibility/pageshow handler will flush this at a
+            // safer moment, instead of reloading while the organiser is mid-flow.
             return
           }
           
@@ -601,8 +472,7 @@ export default function Providers({ children }: ProvidersProps) {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <AuthDebugProbe queryClient={queryClient} />
-        <Suspense fallback={null}>
+        <Suspense fallback={<AppSuspenseFallback />}>
           <PostHogProvider>
             {children}
             {SHOULD_ENABLE_E2E_HELPERS ? <DevTestHarness /> : null}

@@ -35,13 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'subcontractor-4-point-new/route.ts:POST',message:'Raw request body received',data:{project_id:body.project_id,follow_up_date:body.follow_up_date,follow_up_required:body.follow_up_required,project_id_type:typeof body.project_id,follow_up_date_type:typeof body.follow_up_date},timestamp:Date.now(),runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     const validatedData = SubcontractorAssessmentSchema.parse(body)
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'subcontractor-4-point-new/route.ts:POST',message:'Zod validation passed',data:{project_id:validatedData.project_id,follow_up_date:validatedData.follow_up_date,employer_id:validatedData.employer_id},timestamp:Date.now(),runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
 
     // Check if employer exists
     const { data: employer, error: employerError } = await supabase
@@ -103,18 +97,11 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('Error creating Subcontractor assessment:', error)
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'subcontractor-4-point-new/route.ts:POST',message:'DB insert failed',data:{error:error.message,code:error.code},timestamp:Date.now(),runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
       return NextResponse.json(
         { success: false, message: 'Failed to create assessment', error: error.message },
         { status: 500 }
       )
     }
-
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'subcontractor-4-point-new/route.ts:POST',message:'Assessment created successfully',data:{assessmentId:assessment.id,employer_id:validatedData.employer_id},timestamp:Date.now(),runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
 
     // Trigger rating calculation for this employer
     try {
@@ -153,9 +140,6 @@ export async function POST(request: NextRequest) {
 
     if (error instanceof z.ZodError) {
       const fieldErrors = error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join('; ')
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/b23848a9-6360-4993-af9d-8e53783219d2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'subcontractor-4-point-new/route.ts:POST',message:'ZodError caught (should not happen post-fix)',data:{fieldErrors,errors:error.errors},timestamp:Date.now(),runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       return NextResponse.json(
         { success: false, message: `Validation error: ${fieldErrors}`, errors: error.errors },
         { status: 400 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import {
   Table,
   TableBody,
@@ -100,7 +100,7 @@ export function ChangeHistoryViewer({
   const [selectedChange, setSelectedChange] = useState<EmployerChange | null>(null)
   const [showDetails, setShowDetails] = useState(false)
 
-  const supabase = createClientComponentClient()
+  const supabase = getSupabaseBrowserClient()
   const { toast } = useToast()
 
   // Fetch changes

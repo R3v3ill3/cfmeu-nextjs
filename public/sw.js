@@ -1,13 +1,13 @@
 // Service Worker for CFMEU Employer Rating System PWA
 // Enhanced with Mobile Performance Optimizations
-// Version 2.4.0 - Fixed iOS PWA session loss by deferring SW updates during navigation
+// Version 2.4.1 - Network-first app shells to avoid stale HTML/chunk mismatches after deploys
 
-const CACHE_NAME = 'cfmeu-ratings-v2.4.0'
-const STATIC_CACHE = 'cfmeu-static-v2.4.0'
-const API_CACHE = 'cfmeu-api-v2.4.0'
-const DYNAMIC_CACHE = 'cfmeu-dynamic-v2.4.0'
-const MOBILE_CACHE = 'cfmeu-mobile-v2.4.0'
-const CRITICAL_DATA_CACHE = 'cfmeu-critical-v2.4.0'
+const CACHE_NAME = 'cfmeu-ratings-v2.4.1'
+const STATIC_CACHE = 'cfmeu-static-v2.4.1'
+const API_CACHE = 'cfmeu-api-v2.4.1'
+const DYNAMIC_CACHE = 'cfmeu-dynamic-v2.4.1'
+const MOBILE_CACHE = 'cfmeu-mobile-v2.4.1'
+const CRITICAL_DATA_CACHE = 'cfmeu-critical-v2.4.1'
 
 // Track navigation state to prevent mid-navigation disruption
 let isNavigating = false
@@ -48,7 +48,7 @@ const MOBILE_ASSETS = [
 
 // Install event - cache ONLY truly static assets (no auth-protected routes)
 self.addEventListener('install', (event) => {
-  console.log('[SW] Installing service worker v2.4.0')
+    console.log('[SW] Installing service worker v2.4.1')
 
   event.waitUntil(
     // Only cache truly static assets that don't require authentication
@@ -92,7 +92,7 @@ self.addEventListener('install', (event) => {
 
 // Activate event - clean up old caches
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activating service worker v2.4.0')
+  console.log('[SW] Activating service worker v2.4.1')
 
   // List of current cache names to keep
   const currentCaches = [STATIC_CACHE, API_CACHE, DYNAMIC_CACHE, MOBILE_CACHE, CRITICAL_DATA_CACHE]
@@ -111,7 +111,7 @@ self.addEventListener('activate', (event) => {
         )
       })
       .then(() => {
-        console.log('[SW] Service worker v2.4.0 activated - claiming clients carefully')
+        console.log('[SW] Service worker v2.4.1 activated - claiming clients carefully')
         // Claim clients so the new SW takes control
         return self.clients.claim()
       })
@@ -123,7 +123,7 @@ self.addEventListener('activate', (event) => {
           clients.forEach(client => {
             client.postMessage({
               type: 'SW_UPDATED',
-              version: '2.4.0',
+              version: '2.4.1',
               message: 'Service worker updated. Refresh when ready for best experience.',
               // Include flag to indicate client should NOT auto-reload
               deferReload: true
@@ -274,7 +274,7 @@ self.addEventListener('message', (event) => {
   
   if (event.data?.type === 'GET_VERSION') {
     // Client is checking SW version
-    event.ports?.[0]?.postMessage({ version: '2.4.0' })
+    event.ports?.[0]?.postMessage({ version: '2.4.1' })
   }
 })
 
@@ -574,10 +574,14 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // Dynamic content - stale while revalidate
+  // App shell / rating pages - network first.
+  // Serving stale shell HTML after a deploy can pair an old RSC payload with
+  // new chunks (or vice versa), which presents as chunk crashes and lost auth
+  // state in the iOS PWA. Keep these routes fresh and only fall back to cache
+  // when truly offline.
   if (url.pathname === '/' ||
       url.pathname.includes('/ratings')) {
-    event.respondWith(staleWhileRevalidate(request))
+    event.respondWith(networkFirstForNavigation(request))
     return
   }
 

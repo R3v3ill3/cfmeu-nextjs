@@ -214,7 +214,7 @@ export default function ProjectDetailPage() {
   // Use the 'enabled' option in useQuery to control when queries actually run
 
   // Project data query
-  const { data: project, isLoading: projectLoading, isFetching: projectFetching, error: projectError } = useQuery<ProjectDetailData | null>({
+  const { data: project, isLoading: projectLoading, isFetching: projectFetching, error: projectError, refetch: refetchProject } = useQuery<ProjectDetailData | null>({
     queryKey: ["project-detail", projectId],
     enabled: !!projectId,
     staleTime: 30000,
@@ -865,6 +865,28 @@ export default function ProjectDetailPage() {
           <Button onClick={() => router.push('/projects')}>
             Back to Projects
           </Button>
+        </div>
+      </div>
+    )
+  }
+
+  // Surface project load failures explicitly. Previously `projectError` was
+  // captured but never rendered, so a failed fetch left an empty page that
+  // users read as "the database disconnected".
+  if (projectError && !projectLoading) {
+    return (
+      <div className="p-6">
+        <div className="text-center py-12">
+          <h2 className="text-xl font-semibold text-red-600 mb-4">Couldn&apos;t load this project</h2>
+          <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+            There was a problem loading the project details. This is usually temporary — please try again.
+          </p>
+          <div className="flex items-center justify-center gap-3">
+            <Button onClick={() => refetchProject()}>Try Again</Button>
+            <Button variant="outline" onClick={() => router.push('/projects')}>
+              Back to Projects
+            </Button>
+          </div>
         </div>
       </div>
     )
